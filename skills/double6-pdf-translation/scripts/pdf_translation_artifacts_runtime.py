@@ -231,6 +231,86 @@ def build_standard_bilingual_output(
     return {**manifest, "manifest_path": str(manifest_path)}
 
 
+def _copy_pdf_for_delivery(source: Path, target: Path) -> str | None:
+    if not source.is_file():
+        return None
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if source.resolve() != target.resolve():
+        shutil.copy2(source, target)
+    return str(target)
+
+
+def finalize_delivery_pdf_outputs(
+    input_pdf: Path,
+    output_dir: Path,
+    selected_outputs: dict[str, str | None],
+    candidate_pdfs: list[str] | None = None,
+) -> dict[str, Any]:
+    mono_source = Path(str(selected_outputs.get("mono_pdf") or selected_outputs.get("translated_pdf") or ""))
+    bilingual_source = Path(
+        str(
+            selected_outputs.get("standard_bilingual_pdf")
+            or selected_outputs.get("dual_pdf")
+            or ""
+        )
+    )
+    mono_target = output_dir / f"{input_pdf.stem}.zh.pdf"
+    bilingual_target = output_dir / f"{input_pdf.stem}.bilingual.pdf"
+    delivery: dict[str, str | None] = {
+        "mono_pdf": _copy_pdf_for_delivery(mono_source, mono_target),
+        "bilingual_pdf": _copy_pdf_for_delivery(bilingual_source, bilingual_target),
+    }
+    kept = {Path(path).resolve() for path in delivery.values() if path}
+    input_resolved = input_pdf.resolve() if input_pdf.exists() else None
+    removed: list[str] = []
+    preserved: list[str] = []
+    cleanup_candidates = {Path(path).expanduser() for path in candidate_pdfs or [] if path}
+    cleanup_candidates.update(Path(str(value)) for value in selected_outputs.values() if value and str(value).endswith(".pdf"))
+    for pdf in sorted(cleanup_candidates):
+        if not pdf.is_absolute():
+            pdf = output_dir / pdf
+        if not pdf.is_file():
+            continue
+        try:
+            resolved = pdf.resolve()
+        except OSError:
+            continue
+        try:
+            resolved.relative_to(output_dir.resolve())
+        except ValueError:
+            preserved.append(str(pdf))
+            continue
+        if resolved in kept:
+            continue
+        if input_resolved and resolved == input_resolved:
+            preserved.append(str(pdf))
+            continue
+        try:
+            pdf.unlink()
+            removed.append(str(pdf))
+        except OSError as exc:
+            preserved.append(f"{pdf} ({exc})")
+    selected_outputs.update(
+        {
+            "translated_pdf": delivery["mono_pdf"],
+            "mono_pdf": delivery["mono_pdf"],
+            "dual_pdf": delivery["bilingual_pdf"],
+            "standard_bilingual_pdf": delivery["bilingual_pdf"],
+            "backend_dual_pdf": None,
+            "backend_dual_pdf_role": None,
+        }
+    )
+    return {
+        "version": 1,
+        "status": "ok" if delivery["mono_pdf"] and delivery["bilingual_pdf"] else "partial",
+        "contract": "current-run PDF artifacts are collapsed to the Chinese monolingual PDF and bilingual PDF; unrelated pre-existing PDFs are preserved.",
+        "outputs": delivery,
+        "removed_pdf_count": len(removed),
+        "removed_pdfs": removed,
+        "preserved_pdfs": preserved,
+    }
+
+
 def maybe_build_visual_repair_output(
     args: argparse.Namespace,
     input_pdf: Path,

@@ -24,6 +24,10 @@ from pdf_translation_runtime import (
     DEFAULT_MODEL,
     DEFAULT_PDF2ZH_BACKEND,
     PDF2ZH_BINARY_ENV,
+    provider_base_url_candidates,
+    resolve_api_key,
+    resolve_base_url,
+    resolve_base_url_inference,
     redacted_command,
     resolved_pdf2zh_backend,
 )
@@ -94,6 +98,15 @@ def run_command(command: list[str], timeout_seconds: float, env: dict[str, str] 
             "stderr_excerpt": (exc.stderr or "")[:2000] if isinstance(exc.stderr, str) else "",
             "timed_out": True,
         }
+    except OSError as exc:
+        return {
+            "command": command,
+            "returncode": 127,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+            "stdout_excerpt": "",
+            "stderr_excerpt": str(exc),
+            "timed_out": False,
+        }
 
 
 def check_python() -> dict[str, Any]:
@@ -158,7 +171,7 @@ def check_pdf2zh(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, An
             message=message,
             details={
                 "backend": backend,
-                "command": redacted_command(command, os.environ.get("LOCAL_TRANSLATION_API_KEY", DEFAULT_API_KEY)),
+                "command": redacted_command(command, str(getattr(args, "api_key", "") or DEFAULT_API_KEY)),
                 "returncode": result["returncode"],
                 "stdout_excerpt": result.get("stdout_excerpt", ""),
                 "stderr_excerpt": result.get("stderr_excerpt", ""),
@@ -196,8 +209,28 @@ def _chat_completions_url(base_url: str) -> str:
     return f"{value}/chat/completions"
 
 
-def check_endpoint(args: argparse.Namespace) -> dict[str, Any]:
+def check_endpoint_config(args: argparse.Namespace) -> dict[str, Any]:
     base_url = str(args.base_url or "").rstrip("/")
+    model = str(args.model or "").strip()
+    api_key = str(args.api_key or "").strip()
+    missing = [
+        name
+        for name, value in (
+            ("base_url", base_url),
+            ("model", model),
+            ("api_key", api_key),
+        )
+        if not value
+    ]
+    if missing:
+        return check_result(
+            "openai_endpoint",
+            "fail",
+            severity="required",
+            message="Translation model API configuration is incomplete.",
+            details={"missing": missing, "base_url": base_url, "model": model},
+            remediation="首次运行前必须设置 --model 和 API key；base_url 可通过 --base-url / LOCAL_TRANSLATION_BASE_URL 显式设置，或由单一厂商专属 API key 按 provider-base-urls.md 推断。",
+        )
     parsed = urlparse(base_url)
     if not parsed.scheme or not parsed.netloc:
         return check_result(
@@ -208,6 +241,22 @@ def check_endpoint(args: argparse.Namespace) -> dict[str, Any]:
             details={"base_url": base_url},
             remediation="Set LOCAL_TRANSLATION_BASE_URL or --base-url to a valid OpenAI-compatible endpoint.",
         )
+    return check_result(
+        "openai_endpoint_config",
+        "pass",
+        severity="required",
+        message="Translation model API configuration is complete.",
+        details={"base_url": base_url, "model": model},
+        remediation="Keep --model and API key explicit; base_url may remain inferred from provider-base-urls.md.",
+    )
+
+
+def check_endpoint(args: argparse.Namespace) -> dict[str, Any]:
+    config_check = check_endpoint_config(args)
+    if config_check["status"] == "fail":
+        return config_check
+    base_url = str(args.base_url or "").rstrip("/")
+    parsed = urlparse(base_url)
     if "api.deepseek.com" in parsed.netloc or base_url.endswith("/chat/completions"):
         endpoint = _chat_completions_url(base_url)
         payload = {
@@ -239,7 +288,7 @@ def check_endpoint(args: argparse.Namespace) -> dict[str, Any]:
                     severity="required",
                     message=f"DeepSeek/OpenAI-compatible chat endpoint responded with HTTP {status}.",
                     details={"base_url": base_url, "endpoint": endpoint, "status": status, "model": args.model},
-                    remediation="Check DEEPSEEK_API_KEY, LOCAL_TRANSLATION_MODEL, and LOCAL_TRANSLATION_BASE_URL.",
+                    remediation="Check LOCAL_TRANSLATION_API_KEY, LOCAL_TRANSLATION_MODEL, and LOCAL_TRANSLATION_BASE_URL.",
                 )
         except URLError as exc:
             return check_result(
@@ -248,7 +297,7 @@ def check_endpoint(args: argparse.Namespace) -> dict[str, Any]:
                 severity="required",
                 message=f"DeepSeek/OpenAI-compatible chat endpoint is not reachable: {exc}.",
                 details={"base_url": base_url, "endpoint": endpoint, "model": args.model, "error": str(exc)},
-                remediation="Set DEEPSEEK_API_KEY or LOCAL_TRANSLATION_API_KEY and allow outbound access to https://api.deepseek.com.",
+                remediation="Set LOCAL_TRANSLATION_API_KEY and allow outbound access to the configured endpoint.",
             )
     request = Request(
         base_url + "/models",
@@ -315,7 +364,10 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     checks.append(check_module("reportlab", required=release_qa, remediation="Install reportlab to render QA repaired readable PDFs."))
     checks.append(check_pymupdf(required=release_qa))
     checks.append(check_poppler(required=release_qa))
-    if not args.skip_endpoint_check:
+    endpoint_config_check = check_endpoint_config(args)
+    if endpoint_config_check["status"] == "fail":
+        checks.append(endpoint_config_check)
+    elif not args.skip_endpoint_check:
         checks.append(check_endpoint(args))
     else:
         checks.append(
@@ -339,7 +391,13 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "python": {"executable": sys.executable, "version": sys.version},
         "backend": backend,
-        "endpoint": {"base_url": args.base_url, "model": args.model},
+        "endpoint": {
+            "base_url": args.base_url,
+            "model": args.model,
+            "provider": getattr(args, "provider", None),
+            "base_url_inference": getattr(args, "inferred_translation_provider", None),
+            "base_url_candidates": provider_base_url_candidates(),
+        },
         "summary": {
             "check_count": len(checks),
             "required_failure_count": len(required_failures),
@@ -357,9 +415,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", help="Optional JSON report path.")
     parser.add_argument("--pdf2zh-binary", default=os.environ.get(PDF2ZH_BINARY_ENV), help="Explicit pdf2zh executable path.")
     parser.add_argument("--pdf2zh-backend", choices=["path", "module"], default=os.environ.get("PAPER_TRANSLATION_PDF2ZH_BACKEND", DEFAULT_PDF2ZH_BACKEND))
-    parser.add_argument("--base-url", default=os.environ.get("LOCAL_TRANSLATION_BASE_URL", DEFAULT_BASE_URL))
-    parser.add_argument("--model", default=os.environ.get("LOCAL_TRANSLATION_MODEL", DEFAULT_MODEL))
-    parser.add_argument("--api-key", default=os.environ.get("LOCAL_TRANSLATION_API_KEY", DEFAULT_API_KEY))
+    parser.add_argument("--provider", default=os.environ.get("LOCAL_TRANSLATION_PROVIDER", ""), help="Optional provider alias used to infer base URL, e.g. deepseek, openai, qwen, kimi, siliconflow, glm, openrouter, ark.")
+    parser.add_argument("--base-url", default=os.environ.get("LOCAL_TRANSLATION_BASE_URL") or DEFAULT_BASE_URL)
+    parser.add_argument("--model", default=os.environ.get("LOCAL_TRANSLATION_MODEL") or DEFAULT_MODEL)
+    parser.add_argument("--api-key", default=os.environ.get("LOCAL_TRANSLATION_API_KEY") or DEFAULT_API_KEY)
     parser.add_argument("--hymt-compat-proxy-port", type=int, default=int(os.environ.get("PAPER_TRANSLATION_HYMT_COMPAT_PROXY_PORT", str(DEFAULT_HYMT_COMPAT_PROXY_PORT))))
     parser.add_argument("--engine-home", default=os.environ.get("PAPER_TRANSLATION_ENGINE_HOME", str(default_engine_home())))
     parser.add_argument("--command-timeout", type=float, default=10.0)
@@ -370,6 +429,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    raw_base_url = args.base_url
+    args.base_url = resolve_base_url(args.provider, args.base_url)
+    args.api_key = resolve_api_key(args.provider, args.api_key)
+    args.inferred_translation_provider = resolve_base_url_inference(args.provider, raw_base_url)
     report = build_report(args)
     text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     print(text, end="")

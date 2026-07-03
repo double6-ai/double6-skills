@@ -9,7 +9,14 @@ description: Layout-preserving English PDF and academic paper translation into S
 
 ## 运行
 
-在新机器或新 agent 安装后，先在 skill 根目录运行：
+在新机器或新 agent 安装后，先配置 OpenAI-compatible Chat Completions 服务。不要假设用户已经部署本地模型，也不要使用内置默认模型。模型名必须由用户通过参数或环境变量明确指定；如果设置了 `LOCAL_TRANSLATION_PROVIDER` / `--provider`，或只检测到一个厂商专属 API key，运行时可以按 `references/provider-base-urls.md` 的候选表自动推断 `base_url`。
+
+```bash
+export DEEPSEEK_API_KEY="your-api-key"
+export LOCAL_TRANSLATION_MODEL="your-model-name"
+```
+
+然后在 skill 根目录运行：
 
 ```bash
 python scripts/preflight_runtime.py --strict
@@ -22,7 +29,7 @@ python scripts/run_pdf_translation.py <input-file.pdf> \
   --output-dir <output-dir>
 ```
 
-大模型调用使用 OpenAI-compatible Chat Completions 接口。默认推荐 endpoint 为 `https://api.deepseek.com`、模型为 `deepseek-v4-flash`，但任何兼容 OpenAI 接口的商业、本地或自托管服务都可通过 CLI 参数或 `LOCAL_TRANSLATION_BASE_URL`、`LOCAL_TRANSLATION_MODEL`、`LOCAL_TRANSLATION_API_KEY` 覆盖。密钥解析优先级为 `LOCAL_TRANSLATION_API_KEY`、`OPENAI_API_KEY`、`DEEPSEEK_API_KEY`。
+也可以直接在命令中传入 `--provider`、`--base-url`、`--model`、`--api-key`。`--base-url` 和 `LOCAL_TRANSLATION_BASE_URL` 永远优先于候选表推断；`LOCAL_TRANSLATION_API_KEY` 是泛用 key，只有搭配 `LOCAL_TRANSLATION_PROVIDER` / `--provider` 时才会推断厂商 URL。没有可推断或显式的 `base_url`、没有 `model` 或没有 API key 时，preflight 会阻止正式翻译。
 
 ## 最小依赖
 
@@ -36,7 +43,12 @@ pdf2zh --help
 
 ## 输出
 
-输出目录包含 `translated.pdf`、可选双语 PDF、`translation.md`、`render_manifest.json`、后端元数据、版式/审计报告，以及术语和 protected span 证据。
+普通交付只保留两份 PDF：
+
+- `<原文件名>.zh.pdf`：最终中文单语 PDF。
+- `<原文件名>.bilingual.pdf`：英文原文在左、中文译文在右的双语 PDF。
+
+输出目录还会保留 `render_manifest.json`、`backend_run_manifest.json`、`translation.md`、版式/审计报告、术语和 protected span 证据，供 agent 或开发者排查使用。面向普通用户汇报时，只列两份 PDF 和 manifest 路径；不要把 `backend_quality`、`tracking_incomplete`、`rerender_candidates`、术语表补全建议等内部 gate 明细当成“建议下一步”输出，除非用户明确要求调试或交付失败。
 
 ## LaTeX 源码优先
 
@@ -74,6 +86,7 @@ pdf2zh --help
 - 人工修订术语时，使用 `references/glossary-template.tsv`。
 - 查看命令参数和失败处理时，阅读 `references/workflow.md`。
 - 安装或审查本地运行时要求时，阅读 `references/runtime-dependencies.md`。
+- 查看厂商 API key 到 `base_url` 的候选映射时，阅读 `references/provider-base-urls.md`。
 
 ## 边界
 

@@ -70,6 +70,9 @@ from pdf_translation_runtime import (
     default_engine_home,
     default_output_dir,
     external_pdf2zh_skill_root,
+    resolve_api_key,
+    resolve_base_url,
+    resolve_base_url_inference,
     redacted_command,
     resolve_pdf_layout_profile,
     resolved_pdf2zh_backend,
@@ -106,6 +109,12 @@ from pdf_translation_delivery_runtime import *  # noqa: F401,F403
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
     started = time.monotonic()
+    raw_base_url = getattr(args, "base_url", "")
+    args.provider = getattr(args, "provider", os.environ.get("LOCAL_TRANSLATION_PROVIDER", ""))
+    args.base_url = resolve_base_url(args.provider, raw_base_url)
+    args.api_key = resolve_api_key(args.provider, getattr(args, "api_key", ""))
+    if not hasattr(args, "inferred_translation_provider"):
+        args.inferred_translation_provider = resolve_base_url_inference(args.provider, raw_base_url)
     input_pdf = Path(args.input_pdf).expanduser().resolve()
     args.input_pdf = str(input_pdf)
     output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else default_output_dir(input_pdf).resolve()
@@ -131,9 +140,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             output=str(preflight_path),
             pdf2zh_binary=getattr(args, "pdf2zh_binary", None),
             pdf2zh_backend=getattr(args, "pdf2zh_backend", DEFAULT_PDF2ZH_BACKEND),
+            provider=getattr(args, "provider", ""),
             base_url=getattr(args, "base_url", DEFAULT_BASE_URL),
             model=getattr(args, "model", DEFAULT_MODEL),
             api_key=getattr(args, "api_key", DEFAULT_API_KEY),
+            inferred_translation_provider=getattr(args, "inferred_translation_provider", None),
             hymt_compat_proxy_port=getattr(args, "hymt_compat_proxy_port", DEFAULT_HYMT_COMPAT_PROXY_PORT),
             command_timeout=10.0,
             endpoint_timeout=3.0,
@@ -655,7 +666,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "backend_unsupported_options": list(getattr(args, "backend_unsupported_options", []) or []),
         "translation_cache": translation_cache,
         "model": args.model,
+        "provider": getattr(args, "provider", ""),
         "base_url": original_base_url,
+        "base_url_inference": getattr(args, "inferred_translation_provider", None),
         "backend_base_url": proxy_info["proxy_base_url"] or original_base_url,
         "openai_reasoning_effort": args.openai_reasoning_effort,
         "translator_mode": "qwen-cli" if should_use_qwen_cli_adapter(args) else "openai",
@@ -748,7 +761,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "document_memory": str(output_dir / "document_memory.json"),
         "render_manifest": str(render_path),
         "model": args.model,
+        "provider": getattr(args, "provider", ""),
         "base_url": original_base_url,
+        "base_url_inference": getattr(args, "inferred_translation_provider", None),
         "backend_base_url": proxy_info["proxy_base_url"] or original_base_url,
         "local_max_concurrency": args.local_max_concurrency,
         "pdf_layout_profile": getattr(args, "resolved_pdf_layout_profile", getattr(args, "pdf_layout_profile", "auto")),
@@ -943,9 +958,35 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     render_manifest["outputs"]["readable_repaired_pdf"] = readable_manifest.get("output") if readable_manifest.get("status") == "ok" else None
     render_manifest["outputs"]["readable_repaired_pdf_manifest"] = readable_manifest.get("manifest_path") if readable_manifest.get("status") == "ok" else None
     render_manifest["qa_repaired_pdf"] = readable_manifest
+    cleanup_candidates = list(render_manifest.get("all_pdf_outputs", []) or [])
+    if readable_manifest.get("output"):
+        cleanup_candidates.append(str(readable_manifest["output"]))
+    delivery_pdf_outputs = finalize_delivery_pdf_outputs(
+        input_pdf,
+        output_dir,
+        selected_outputs,
+        candidate_pdfs=cleanup_candidates,
+    )
+    if readable_manifest.get("output") and not Path(str(readable_manifest["output"])).exists():
+        readable_manifest["status"] = "pruned"
+        readable_manifest["reason"] = "delivery_pdf_contract_keeps_only_two_pdfs"
+        render_manifest["outputs"]["readable_repaired_pdf"] = None
+        render_manifest["outputs"]["readable_repaired_pdf_manifest"] = None
+    render_manifest["outputs"].update(selected_outputs)
+    render_manifest["all_pdf_outputs"] = [
+        path
+        for path in (
+            selected_outputs.get("mono_pdf"),
+            selected_outputs.get("standard_bilingual_pdf"),
+        )
+        if path
+    ]
+    render_manifest["delivery_pdf_outputs"] = delivery_pdf_outputs
     render_path.write_text(json.dumps(render_manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     backend_manifest["qa_repaired_pdf"] = readable_manifest
     backend_manifest["delivery_gates"] = render_manifest["validation"]["gates"]
+    backend_manifest["outputs"] = dict(selected_outputs)
+    backend_manifest["delivery_pdf_outputs"] = delivery_pdf_outputs
     (output_dir / "backend_run_manifest.json").write_text(
         json.dumps(backend_manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -968,9 +1009,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--preflight-only", action="store_true", help="Run runtime dependency preflight, write preflight/render manifests, and exit before translation.")
     parser.add_argument("--skip-preflight", action="store_true", help="Diagnostic only: skip strict runtime preflight before translation.")
-    parser.add_argument("--model", default=os.environ.get("LOCAL_TRANSLATION_MODEL", DEFAULT_MODEL))
-    parser.add_argument("--base-url", default=os.environ.get("LOCAL_TRANSLATION_BASE_URL", DEFAULT_BASE_URL))
-    parser.add_argument("--api-key", default=os.environ.get("LOCAL_TRANSLATION_API_KEY", DEFAULT_API_KEY))
+    parser.add_argument("--provider", default=os.environ.get("LOCAL_TRANSLATION_PROVIDER", ""), help="可选厂商别名，用于按候选表推断 base URL，例如 deepseek、openai、qwen、kimi、siliconflow、glm、openrouter、ark。")
+    parser.add_argument("--model", default=os.environ.get("LOCAL_TRANSLATION_MODEL") or DEFAULT_MODEL)
+    parser.add_argument("--base-url", default=os.environ.get("LOCAL_TRANSLATION_BASE_URL") or DEFAULT_BASE_URL)
+    parser.add_argument("--api-key", default=os.environ.get("LOCAL_TRANSLATION_API_KEY") or DEFAULT_API_KEY)
     parser.add_argument("--translator-mode", choices=["auto", "openai", "qwen-cli"], default=os.environ.get("PDF_TRANSLATION_TRANSLATOR_MODE", DEFAULT_TRANSLATOR_MODE))
     parser.add_argument(
         "--hymt-compat-proxy",
@@ -1047,7 +1089,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--latex-skip-glossary", action="store_true", help="调试用：LaTeX 直译路径跳过术语抽取。")
     parser.add_argument("--latex-skip-consistency-review", action="store_true", help="调试用：LaTeX 直译路径跳过一致性复审。")
     parser.add_argument("--skip-pdf-backend-when-latex-direct", action="store_true", help="LaTeX direct case 只重跑 LaTeX 主路径，PDFMathTranslate-next 旧产物仅作为 fallback/对照。")
-    parser.add_argument("--post-qa-repair", choices=["auto", "off"], default=os.environ.get("PAPER_TRANSLATION_POST_QA_REPAIR", "auto"), help="是否默认渲染 QA 修复后的可读 PDF。")
+    parser.add_argument("--post-qa-repair", choices=["auto", "off"], default=os.environ.get("PAPER_TRANSLATION_POST_QA_REPAIR", "off"), help="是否额外渲染 QA 修复后的可读 PDF；默认关闭，普通交付只保留中文单语和双语 PDF。")
     parser.add_argument("--strict-delivery-gates", action="store_true", default=os.environ.get("PAPER_TRANSLATION_STRICT_DELIVERY_GATES", "0") in {"1", "true", "True"}, help="启用评测级交付 gate；warn 级问题也会把主交付标为 partial。")
     parser.add_argument(
         "--pdf-layout-profile",
@@ -1120,10 +1162,37 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_console_summary(manifest: dict[str, Any]) -> dict[str, Any]:
+    render_manifest = str(manifest.get("render_manifest") or "")
+    output_dir = str(Path(render_manifest).parent) if render_manifest else None
+    outputs = manifest.get("outputs") if isinstance(manifest.get("outputs"), dict) else {}
+    delivery = manifest.get("delivery_pdf_outputs") if isinstance(manifest.get("delivery_pdf_outputs"), dict) else {}
+    delivery_outputs = delivery.get("outputs") if isinstance(delivery.get("outputs"), dict) else {}
+    pdfs = {
+        "chinese_pdf": delivery_outputs.get("mono_pdf") or outputs.get("mono_pdf") or outputs.get("translated_pdf"),
+        "bilingual_pdf": delivery_outputs.get("bilingual_pdf") or outputs.get("standard_bilingual_pdf") or outputs.get("dual_pdf"),
+    }
+    summary = {
+        "status": manifest.get("status"),
+        "output_dir": output_dir,
+        "pdfs": {key: value for key, value in pdfs.items() if value},
+        "manifest": render_manifest or None,
+    }
+    preflight = manifest.get("preflight") if isinstance(manifest.get("preflight"), dict) else {}
+    if manifest.get("status") == "preflight_failed":
+        summary["message"] = "运行前配置或依赖检查未通过；请先查看 preflight_report.json。"
+        summary["preflight_report"] = preflight.get("report")
+    elif manifest.get("status") in {"ok", "partial"}:
+        summary["message"] = "翻译流程已结束；普通用户只需要打开 pdfs 中的两份交付 PDF。"
+    else:
+        summary["message"] = "翻译流程未完成；详细错误见 manifest。"
+    return summary
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     manifest = run(args)
-    print(json.dumps(manifest, ensure_ascii=False, indent=2))
+    print(json.dumps(build_console_summary(manifest), ensure_ascii=False, indent=2))
     if manifest.get("status") == "preflight_failed":
         return 2
     return 0

@@ -18,9 +18,9 @@ import layout_role_policy
 import policy_utils
 
 
-DEFAULT_MODEL = "hy-mt2-30b-a3b-mlx"
-DEFAULT_UPSTREAM_BASE_URL = "http://127.0.0.1:1234/v1"
-DEFAULT_API_KEY = "local-dummy"
+DEFAULT_MODEL = ""
+DEFAULT_UPSTREAM_BASE_URL = ""
+DEFAULT_API_KEY = ""
 HYMT2_30B_OFFICIAL_GENERATION_DEFAULTS: dict[str, Any] = {
     "temperature": 0.7,
     "top_p": 1.0,
@@ -596,6 +596,8 @@ class HyMTCompatServer(ThreadingHTTPServer):
 
 
 def start_hymt_compat_proxy(config: ProxyConfig) -> HyMTCompatServer:
+    if not config.model.strip() or not config.upstream_base_url.strip() or not config.api_key.strip():
+        raise ValueError("hymt compatibility proxy requires model, upstream_base_url, and api_key.")
     config.stats.clear()
     try:
         server = HyMTCompatServer((config.host, config.port), _HyMTJsonCompatHandler)
@@ -639,6 +641,8 @@ def main(argv: list[str] | None = None) -> int:
     if not args.serve:
         parser.print_help()
         return 0
+    if not args.model.strip() or not args.upstream_base_url.strip() or not args.api_key.strip():
+        parser.error("--model, --upstream-base-url, and --api-key are required when --serve is used.")
     server = start_hymt_compat_proxy(
         ProxyConfig(
             model=args.model,
