@@ -18,7 +18,7 @@ cp -R skills/double6-pdf-translation <agent-skills-dir>/
 安装后可按名称调用。Codex、Claude Code 或其它支持本地 shell 执行的 agent 可使用各自的 skill 目录或适配器配置：
 
 ```text
-Use $double6-pdf-translation to translate this PDF into accurate, readable Simplified Chinese.
+请使用 $double6-pdf-translation 将这个 PDF 翻译成准确、可读的简体中文，并尽量保持原始版式。
 ```
 
 ## 许可
