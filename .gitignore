@@ -1,0 +1,40 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local secrets and environment
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Local Codex runtime/install state
+.codex/
+
+# Runtime outputs
+.cache/
+.release-sandbox/
+skills/*/dist/
+daily_runs/
+projects/*/runs/
+outputs/
+translated_pdf_bundle/
+*_translation_output/
+double6-pdf-translation-zh/
+paper-translation-zh/
+
+# Large generated artifacts
+*.log
+*.tmp
+*.bak
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.tiff
