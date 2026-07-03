@@ -32,6 +32,14 @@ The preflight report is the runtime contract: required failures block real trans
 - TeX Live or Docker for LaTeX direct-render compile checks.
 - Network access to `https://arxiv.org/e-print/<id>` when arXiv source auto-download is enabled and no local LaTeX source is found.
 
+## Third-Party Notice
+
+This skill does not vendor or redistribute PDF backend runtime code. Users provide compatible runtime dependencies outside this repository.
+
+Depending on the selected backend and optional diagnostics, third-party components may include a `pdf2zh` executable, a compatible `pdf2zh_next` Python module, PDFMathTranslate-next, PDFMathTranslate, BabelDOC, PyMuPDF, Poppler tools, LaTeX tooling, Docker images, or compatible components required by the user's backend installation.
+
+All third-party dependencies are governed by their own licenses and are not redistributed in this repository.
+
 ## Review Notes
 
 - Missing optional audit tools reduce observability; they do not lower the expected final layout quality.
