@@ -23,4 +23,4 @@ Use $double6-pdf-translation to translate this PDF into accurate, readable Simpl
 
 ## 许可
 
-本仓库使用 MIT License 发布。运行时依赖不随仓库分发，详见 `THIRD_PARTY_NOTICES.md`。
+本仓库使用 MIT License 发布。运行时依赖不随仓库分发，详见 `skills/double6-pdf-translation/references/runtime-dependencies.md`。
