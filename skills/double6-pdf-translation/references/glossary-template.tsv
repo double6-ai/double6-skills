@@ -1,0 +1,6 @@
+source_term	translation	action	note	confidence	first_seen_block	review_status	term_type	noise_reason	notes
+LLMs	LLMs（大型语言模型）	keep+explain	缩写保留，首次出现时解释；不要译为法学硕士。	high	block-0001	reviewed	abbreviation	-	-
+LitLLMs	LitLLMs	keep	论文自造名、系统名或数据集名默认保留原文；可在正文解释含义。	high	block-0001	reviewed	name	-	-
+Literature Review	文献综述	translate	学术语境下通常译为文献综述，不译为文学评论。	high	block-0001	reviewed	concept	-	-
+Human-Centered AI	以人为本人工智能	translate	AI Index / HAI 语境下避免直译为人类中心人工智能。	high	block-0001	reviewed	concept	-	-
+Hong Kong Polytechnic University	香港理工大学	translate	机构专名，不要误译为香港大学。	high	block-0001	reviewed	organization	-	-
