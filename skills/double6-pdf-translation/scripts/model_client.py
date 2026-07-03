@@ -93,8 +93,6 @@ def post_chat(
     headers = {"Content-Type": "application/json"}
     if provider_name in {"openai", "openai_compatible", "deepseek"}:
         api_key = resolve_api_key(api_key_env, api_key_file)
-        if not api_key and ("localhost" in endpoint or "127.0.0.1" in endpoint):
-            api_key = os.environ.get("LOCAL_TRANSLATION_API_KEY", "local-dummy")
         if not api_key:
             key_hint = api_key_env or api_key_file or "API key"
             raise RuntimeError(f"Missing API key for {provider_name}: {key_hint}")

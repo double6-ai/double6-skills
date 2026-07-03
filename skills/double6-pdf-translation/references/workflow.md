@@ -4,7 +4,14 @@ This workflow targets high-fidelity PDF layout preservation. The skill repositor
 
 ## Command
 
-Fresh installs should run preflight first from the installed skill root:
+Fresh installs must configure an OpenAI-compatible model before preflight. The skill has no built-in default model, because users may use different commercial, local, or self-hosted providers. If `LOCAL_TRANSLATION_PROVIDER` / `--provider` is set, or exactly one provider-specific API key is present, the runtime can infer `base_url` from `references/provider-base-urls.md`; otherwise set `LOCAL_TRANSLATION_BASE_URL` or pass `--base-url`.
+
+```bash
+export LOCAL_TRANSLATION_MODEL="your-model-name"
+export DEEPSEEK_API_KEY="your-api-key"
+```
+
+Then run preflight from the installed skill root:
 
 ```bash
 python scripts/preflight_runtime.py --strict
@@ -21,9 +28,10 @@ Options:
 - `--pdf2zh-backend`: backend launch mode. `path` uses a CLI executable; `module` uses `scripts/pdf2zh_backend.py` with an installed `pdf2zh_next` module. Default can be set with `PAPER_TRANSLATION_PDF2ZH_BACKEND`.
 - `--preflight-only`: run runtime checks and write manifests without starting translation.
 - `--skip-preflight`: diagnostic escape hatch; real release evidence should not use it.
-- `--base-url`: OpenAI-compatible Chat Completions endpoint. Recommended default: `https://api.deepseek.com`, but any compatible commercial, local, or self-hosted service can be used.
-- `--model`: translation model for that endpoint. Recommended default: `deepseek-v4-flash`.
-- `--api-key`: API key. Resolution prefers `LOCAL_TRANSLATION_API_KEY`, then `OPENAI_API_KEY`, then `DEEPSEEK_API_KEY`; this flag can override all environment defaults.
+- `--provider`: optional provider alias used to infer `base_url`, such as `deepseek`, `openai`, `qwen`, `kimi`, `siliconflow`, `glm`, `openrouter`, or `ark`.
+- `--base-url`: OpenAI-compatible Chat Completions endpoint. Required unless `LOCAL_TRANSLATION_BASE_URL`, provider selection, or exactly one provider-specific API key can infer it.
+- `--model`: translation model for that endpoint. Required unless `LOCAL_TRANSLATION_MODEL` is set.
+- `--api-key`: API key. Resolution prefers `LOCAL_TRANSLATION_API_KEY`; if exactly one provider-specific key is set, that key is used. This flag overrides all environment defaults.
 - `--timeout`: backend command timeout in seconds. Default: `3600`.
 - `--temperature`: translation temperature. Default: `0.7`.
 - `--latex-render-mode`: LaTeX-source primary rendering mode. `auto` keeps PDF backend fallback.
@@ -35,10 +43,17 @@ Options:
 Environment overrides:
 
 - `LOCAL_TRANSLATION_BASE_URL`
+- `LOCAL_TRANSLATION_PROVIDER`
 - `LOCAL_TRANSLATION_MODEL`
 - `LOCAL_TRANSLATION_API_KEY`
 - `OPENAI_API_KEY`
 - `DEEPSEEK_API_KEY`
+- `DASHSCOPE_API_KEY`
+- `MOONSHOT_API_KEY`
+- `SILICONFLOW_API_KEY`
+- `ZHIPUAI_API_KEY`
+- `OPENROUTER_API_KEY`
+- `ARK_API_KEY`
 - `PAPER_TRANSLATION_PDF2ZH_BINARY`
 - `PAPER_TRANSLATION_PDF2ZH_BACKEND`
 - `PAPER_TRANSLATION_ENGINE_HOME`
@@ -91,12 +106,15 @@ Recommended optional tools:
 
 ## Output Contract
 
-- `translated.pdf`: selected high-fidelity Chinese PDF.
+- `<input-stem>.zh.pdf`: final high-fidelity Chinese monolingual PDF.
+- `<input-stem>.bilingual.pdf`: final bilingual PDF with original English on the left and Chinese translation on the right.
 - `render_manifest.json`: selected outputs, backend command, quality gates, visual reports, and error evidence.
-- `backend_manifest.json`: backend status and translation metadata.
+- `backend_run_manifest.json`: backend status and translation metadata.
 - `layout_map.json`, `block_bridge.json`: layout and block correspondence evidence when backend tracking is available.
 - `visual_layout_report.json`, `pymupdf_layout_audit.json`, `layout_structure_gate.json`: visual and structural audit evidence when checks are enabled.
 - `translation.md`, `term_policy.json`, `entity_map.json`, `protected_spans.json`: text and terminology evidence.
+
+Normal user-facing responses should mention only the two delivery PDFs and the manifest path. Do not surface internal `backend_quality`, `tracking_incomplete`, `rerender_candidates`, or glossary-completion recommendations as user next steps unless the user asks for diagnostics or the run failed.
 
 ## Failure Handling
 

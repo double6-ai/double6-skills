@@ -18,9 +18,84 @@ import visual_layout
 SCRIPT_INTERFACE = "internal-module"
 SCRIPT_INTERFACE_REASON = "Imported by run_pdf_translation.py for path resolution, backend command construction, and runtime defaults."
 
-DEFAULT_MODEL = "deepseek-v4-flash"
-DEFAULT_BASE_URL = "https://api.deepseek.com"
-DEFAULT_API_KEY = os.environ.get("LOCAL_TRANSLATION_API_KEY") or os.environ.get("OPENAI_API_KEY") or os.environ.get("DEEPSEEK_API_KEY", "")
+DEFAULT_MODEL = ""
+DEFAULT_BASE_URL = ""
+PROVIDER_BASE_URL_CANDIDATES = [
+    {
+        "provider": "deepseek",
+        "display_name": "DeepSeek",
+        "base_url": "https://api.deepseek.com",
+        "api_key_envs": ["DEEPSEEK_API_KEY"],
+        "aliases": ["deepseek"],
+        "notes": "OpenAI-compatible endpoint.",
+    },
+    {
+        "provider": "openai",
+        "display_name": "OpenAI",
+        "base_url": "https://api.openai.com/v1",
+        "api_key_envs": ["OPENAI_API_KEY"],
+        "aliases": ["openai"],
+        "notes": "OpenAI official API endpoint.",
+    },
+    {
+        "provider": "dashscope",
+        "display_name": "Alibaba Cloud Model Studio / DashScope",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "api_key_envs": ["DASHSCOPE_API_KEY"],
+        "aliases": ["dashscope", "aliyun", "qwen"],
+        "notes": "Generic compatible-mode endpoint; workspace-specific endpoints can override this.",
+    },
+    {
+        "provider": "moonshot",
+        "display_name": "Moonshot / Kimi",
+        "base_url": "https://api.moonshot.cn/v1",
+        "api_key_envs": ["MOONSHOT_API_KEY", "KIMI_API_KEY"],
+        "aliases": ["moonshot", "kimi"],
+        "notes": "OpenAI SDK compatible endpoint.",
+    },
+    {
+        "provider": "siliconflow",
+        "display_name": "SiliconFlow",
+        "base_url": "https://api.siliconflow.cn/v1",
+        "api_key_envs": ["SILICONFLOW_API_KEY"],
+        "aliases": ["siliconflow"],
+        "notes": "OpenAI-compatible chat completions endpoint.",
+    },
+    {
+        "provider": "zhipu",
+        "display_name": "Zhipu / Z.ai",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "api_key_envs": ["ZHIPUAI_API_KEY", "ZHIPU_API_KEY", "BIGMODEL_API_KEY"],
+        "aliases": ["zhipu", "zai", "bigmodel", "glm"],
+        "notes": "OpenAI-style chat completions endpoint.",
+    },
+    {
+        "provider": "openrouter",
+        "display_name": "OpenRouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "api_key_envs": ["OPENROUTER_API_KEY"],
+        "aliases": ["openrouter"],
+        "notes": "OpenAI SDK compatible model router.",
+    },
+    {
+        "provider": "volcengine_ark",
+        "display_name": "Volcengine Ark",
+        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+        "api_key_envs": ["ARK_API_KEY", "VOLCENGINE_API_KEY"],
+        "aliases": ["volcengine_ark", "ark", "volcengine", "doubao"],
+        "notes": "Common Ark OpenAI-compatible endpoint; override for non-Beijing regions if needed.",
+    },
+]
+_CONFIGURED_PROVIDER_API_KEYS = [
+    (env_name, os.environ.get(env_name, "").strip())
+    for candidate in PROVIDER_BASE_URL_CANDIDATES
+    for env_name in candidate["api_key_envs"]
+    if os.environ.get(env_name, "").strip()
+]
+DEFAULT_API_KEY = (
+    os.environ.get("LOCAL_TRANSLATION_API_KEY", "").strip()
+    or (_CONFIGURED_PROVIDER_API_KEYS[0][1] if len(_CONFIGURED_PROVIDER_API_KEYS) == 1 else "")
+)
 DEFAULT_REASONING_EFFORT = "none"
 DEFAULT_TRANSLATOR_MODE = "auto"
 DEFAULT_CLI_MAX_TOKENS = 4096
@@ -60,6 +135,95 @@ LATEX_MAIN_NAME_HINTS = {"main", "paper", "acl_latex", "ms", "article"}
 LATEX_BAD_NAME_HINTS = {"merge_中文", "merge_english", "output", "template", "test"}
 LATEX_REFLOW_LINE_WIDTH_CJK = 38.0
 LATEX_REFLOW_LINES_PER_PAGE = 84
+
+
+def provider_base_url_candidates() -> list[dict[str, Any]]:
+    return [dict(candidate) for candidate in PROVIDER_BASE_URL_CANDIDATES]
+
+
+def provider_candidate(provider: str | None) -> dict[str, Any] | None:
+    normalized = re.sub(r"[^a-z0-9]+", "", str(provider or "").lower())
+    if not normalized:
+        return None
+    for candidate in PROVIDER_BASE_URL_CANDIDATES:
+        names = [str(candidate["provider"]), str(candidate["display_name"]), *[str(alias) for alias in candidate.get("aliases", [])]]
+        if normalized in {re.sub(r"[^a-z0-9]+", "", name.lower()) for name in names}:
+            return candidate
+    return None
+
+
+def configured_provider_api_key_envs() -> list[dict[str, str]]:
+    configured: list[dict[str, str]] = []
+    for candidate in PROVIDER_BASE_URL_CANDIDATES:
+        for env_name in candidate["api_key_envs"]:
+            if os.environ.get(env_name, "").strip():
+                configured.append(
+                    {
+                        "provider": str(candidate["provider"]),
+                        "display_name": str(candidate["display_name"]),
+                        "api_key_env": env_name,
+                        "base_url": str(candidate["base_url"]),
+                    }
+                )
+    return configured
+
+
+def infer_base_url_from_api_key_env() -> str:
+    if os.environ.get("LOCAL_TRANSLATION_BASE_URL", "").strip():
+        return os.environ["LOCAL_TRANSLATION_BASE_URL"].strip()
+    # LOCAL_TRANSLATION_API_KEY is intentionally generic and does not imply a provider.
+    configured = configured_provider_api_key_envs()
+    if len(configured) == 1:
+        return configured[0]["base_url"]
+    return DEFAULT_BASE_URL
+
+
+def resolve_base_url(provider: str | None = None, base_url: str | None = None) -> str:
+    if str(base_url or "").strip():
+        return str(base_url).strip()
+    if os.environ.get("LOCAL_TRANSLATION_BASE_URL", "").strip():
+        return os.environ["LOCAL_TRANSLATION_BASE_URL"].strip()
+    candidate = provider_candidate(provider or os.environ.get("LOCAL_TRANSLATION_PROVIDER"))
+    if candidate:
+        return str(candidate["base_url"])
+    return infer_base_url_from_api_key_env()
+
+
+def resolve_api_key(provider: str | None = None, api_key: str | None = None) -> str:
+    if str(api_key or "").strip():
+        return str(api_key).strip()
+    if os.environ.get("LOCAL_TRANSLATION_API_KEY", "").strip():
+        return os.environ["LOCAL_TRANSLATION_API_KEY"].strip()
+    candidate = provider_candidate(provider or os.environ.get("LOCAL_TRANSLATION_PROVIDER"))
+    if candidate:
+        for env_name in candidate["api_key_envs"]:
+            if os.environ.get(str(env_name), "").strip():
+                return os.environ[str(env_name)].strip()
+    return DEFAULT_API_KEY
+
+
+def infer_provider_from_api_key_env() -> dict[str, str] | None:
+    configured = configured_provider_api_key_envs()
+    return configured[0] if len(configured) == 1 else None
+
+
+def resolve_base_url_inference(provider: str | None = None, base_url: str | None = None) -> dict[str, str] | None:
+    if str(base_url or "").strip() or os.environ.get("LOCAL_TRANSLATION_BASE_URL", "").strip():
+        return None
+    selected = provider_candidate(provider or os.environ.get("LOCAL_TRANSLATION_PROVIDER"))
+    if selected:
+        return {
+            "provider": str(selected["provider"]),
+            "display_name": str(selected["display_name"]),
+            "source": "provider",
+            "base_url": str(selected["base_url"]),
+        }
+    inferred = infer_provider_from_api_key_env()
+    if inferred:
+        inferred = dict(inferred)
+        inferred["source"] = "single_provider_api_key_env"
+        return inferred
+    return None
 
 
 def repo_root() -> Path:
@@ -205,7 +369,9 @@ def should_use_qwen_cli_adapter(args: argparse.Namespace) -> bool:
         return True
     if mode == "openai":
         return False
-    return "qwen" in args.model.lower() and ("localhost" in args.base_url or "127.0.0.1" in args.base_url)
+    model = str(getattr(args, "model", "") or "").lower()
+    base_url = str(getattr(args, "base_url", "") or "")
+    return "qwen" in model and ("localhost" in base_url or "127.0.0.1" in base_url)
 
 
 def should_enable_hymt_compat_proxy(args: argparse.Namespace) -> bool:
@@ -214,7 +380,7 @@ def should_enable_hymt_compat_proxy(args: argparse.Namespace) -> bool:
         return False
     if mode == "on":
         return not should_use_qwen_cli_adapter(args)
-    model = str(args.model).lower()
+    model = str(getattr(args, "model", "") or "").lower()
     return ("hy-mt" in model or "deepseek" in model) and not should_use_qwen_cli_adapter(args)
 
 

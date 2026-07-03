@@ -2,7 +2,14 @@
 
 This skill does not vendor full PDFMathTranslate-next, BabelDOC, pdf2zh-skill, Poppler, PyMuPDF, TeX Live, Docker, or model-serving projects. Treat those as external runtime tools configured by the user environment.
 
-Run this first from the installed skill root on every fresh install:
+Set the model API information before the first real run. The skill intentionally ships without a default model. If `LOCAL_TRANSLATION_PROVIDER` / `--provider` is set, or exactly one provider-specific API key is present, the runtime can infer `base_url` from `references/provider-base-urls.md`; otherwise set `LOCAL_TRANSLATION_BASE_URL` or pass `--base-url`.
+
+```bash
+export LOCAL_TRANSLATION_MODEL="your-model-name"
+export DEEPSEEK_API_KEY="your-api-key"
+```
+
+Then run this from the installed skill root on every fresh install:
 
 ```bash
 python scripts/preflight_runtime.py --strict
@@ -18,9 +25,9 @@ The preflight report is the runtime contract: required failures block real trans
   - `PAPER_TRANSLATION_PDF2ZH_BINARY=/path/to/pdf2zh`, or
   - installed `pdf2zh_next` module used through `scripts/pdf2zh_backend.py`, or
   - `pdf2zh` executable on `PATH`.
-- OpenAI-compatible Chat Completions endpoint. DeepSeek at `https://api.deepseek.com` is the default recommendation, not a hard dependency.
-- Translation model configured by `LOCAL_TRANSLATION_MODEL`, defaulting to `deepseek-v4-flash`.
-- API key from `LOCAL_TRANSLATION_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, or `--api-key`.
+- OpenAI-compatible Chat Completions endpoint configured by `LOCAL_TRANSLATION_BASE_URL` / `--base-url`, inferred from `LOCAL_TRANSLATION_PROVIDER` / `--provider`, or inferred from a single provider-specific API key.
+- Translation model configured by `LOCAL_TRANSLATION_MODEL` or `--model`.
+- API key from `LOCAL_TRANSLATION_API_KEY`, provider-specific API key env vars such as `DEEPSEEK_API_KEY`, or `--api-key`.
 
 ## Optional Diagnostic Tools
 
@@ -45,5 +52,5 @@ All third-party dependencies are governed by their own licenses and are not redi
 - Missing optional audit tools reduce observability; they do not lower the expected final layout quality.
 - Agent-side vision is not a runtime requirement. Non-vision agents should rely on generated audit artifacts and delivery gates.
 - Runtime caches and generated backend working directories must stay outside the open-source skill package.
-- API keys should be provided through environment variables such as `LOCAL_TRANSLATION_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, or CLI flags and must not be committed.
+- API keys should be provided through environment variables such as `LOCAL_TRANSLATION_API_KEY`, provider-specific API key env vars, or CLI flags and must not be committed.
 - `render_manifest.json` records the resolved backend and preflight report path so release evidence can be reproduced on another machine.

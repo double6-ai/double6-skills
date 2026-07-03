@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -12,9 +13,9 @@ from typing import Any
 
 import policy_utils
 
-DEFAULT_BASE_URL = "http://localhost:1234/v1"
-DEFAULT_MODEL = "qwen/qwen3.6-35b-a3b"
-DEFAULT_API_KEY = "local-dummy"
+DEFAULT_BASE_URL = ""
+DEFAULT_MODEL = ""
+DEFAULT_API_KEY = ""
 DEFAULT_REASONING_EFFORT = "none"
 DEFAULT_SYSTEM_PROMPT = (
     "/no_think You are a professional, authentic machine translation engine. "
@@ -151,9 +152,9 @@ def translate(text: str, args: argparse.Namespace) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="stdin/stdout Qwen translator adapter for pdf2zh-next CLITranslator.")
-    parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
-    parser.add_argument("--model", default=DEFAULT_MODEL)
-    parser.add_argument("--api-key", default=DEFAULT_API_KEY)
+    parser.add_argument("--base-url", default=os.environ.get("LOCAL_TRANSLATION_BASE_URL") or DEFAULT_BASE_URL)
+    parser.add_argument("--model", default=os.environ.get("LOCAL_TRANSLATION_MODEL") or DEFAULT_MODEL)
+    parser.add_argument("--api-key", default=os.environ.get("LOCAL_TRANSLATION_API_KEY") or DEFAULT_API_KEY)
     parser.add_argument("--reasoning-effort", default=DEFAULT_REASONING_EFFORT)
     parser.add_argument("--temperature", type=float, default=0.1)
     parser.add_argument("--max-tokens", type=int, default=4096)
@@ -164,7 +165,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if not args.base_url.strip() or not args.model.strip() or not args.api_key.strip():
+        parser.error("--base-url, --model, and --api-key are required.")
     source = sys.stdin.read()
     if not source.strip():
         return 0

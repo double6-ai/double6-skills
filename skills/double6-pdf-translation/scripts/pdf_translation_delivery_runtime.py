@@ -268,7 +268,7 @@ def build_rerender_candidates(
             layer="translation_execution",
             severity="blocking",
             evidence=json.dumps(backend_quality, ensure_ascii=False),
-            recommendation="后端 fallback 比例或 JSON 错误过高，确认 hy-mt 兼容代理后重跑 full pipeline。",
+            recommendation="后端 fallback 比例或 JSON 错误过高，确认模型 endpoint、API key、模型名和兼容代理配置后重跑 full pipeline。",
             rerender_mode="full_pipeline",
         )
     payload = {
