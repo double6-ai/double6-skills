@@ -361,23 +361,33 @@ def _table_caption_plans(fitz: Any, source_doc: Any) -> list[dict[str, Any]]:
 
 
 def _looks_like_reference_text(text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", str(text or "")).strip()
     years = len(re.findall(r"(?:19|20)\d{2}", text))
     urls = len(re.findall(r"https?://|doi\.org|arXiv", text, flags=re.I))
     authors = len(re.findall(r"\b[A-Z][A-Za-z'’-]+,\s+[A-Z]|\bet\s+al\.?", text))
     venues = len(re.findall(r"\b(?:Transl|Linguist|Commun|Comput|Survey|Press|Journal|Review|Proc)\b", text, flags=re.I))
+    if re.match(r"^(?:References|参考文献)\b", normalized, flags=re.I):
+        return years >= 1 and (authors >= 1 or urls >= 1 or venues >= 1)
     return years >= 4 and (urls >= 1 or authors >= 3 or venues >= 3)
+
+
+def _is_references_heading_line(text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not normalized:
+        return False
+    return bool(re.fullmatch(r"(?:\d+\.?\s*)?(?:References|参考文献)", normalized, flags=re.I))
 
 
 def _references_region_clone_plans(fitz: Any, source_doc: Any) -> list[dict[str, Any]]:
     plans: list[dict[str, Any]] = []
     in_references = False
     for page_index, page in enumerate(source_doc):
-        heading_words = [word for word in _words(page) if str(word.get("text") or "").strip().lower() in {"references", "参考文献"}]
-        heading = min(heading_words, key=lambda item: float(item["y0"])) if heading_words else None
+        heading_lines = [line for line in _line_groups(page) if _is_references_heading_line(str(line.get("text") or ""))]
+        heading = min(heading_lines, key=lambda item: float(item["rect"].y0)) if heading_lines else None
         page_text = page.get_text("text")
         if heading:
             in_references = True
-            start_y = max(page.rect.y0 + 30, float(heading["y0"]) - 6)
+            start_y = max(page.rect.y0 + 30, float(heading["rect"].y0) - 6)
         elif in_references and _looks_like_reference_text(page_text):
             start_y = page.rect.y0 + 35
         else:
@@ -397,6 +407,49 @@ def _references_region_clone_plans(fitz: Any, source_doc: Any) -> list[dict[str,
             }
         )
     return plans
+
+
+def _text_in_rect(page: Any, rect: Any) -> str:
+    try:
+        return str(page.get_textbox(rect) or "")
+    except Exception:
+        return ""
+
+
+def _looks_like_body_region(text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not normalized:
+        return False
+    if re.search(r"\b(?:Introduction|Abstract|Preprint)\b", normalized, flags=re.I):
+        return True
+    words = re.findall(r"[A-Za-z]{4,}", normalized)
+    lower_words = [word for word in words if word[:1].islower()]
+    citations = re.findall(r"\([A-Z][A-Za-z'’-]+ et al\.,\s*(?:19|20)\d{2}", normalized)
+    return len(words) >= 18 and (len(lower_words) >= 10 or bool(citations))
+
+
+def _source_region_clone_safety(fitz: Any, source_page: Any, action: dict[str, Any]) -> dict[str, Any]:
+    source_rect = fitz.Rect(action["source_bbox"])
+    page_number = int(action.get("page") or 0)
+    role = str(action.get("role") or "")
+    region_text = _text_in_rect(source_page, source_rect)
+    unsafe = False
+    reason = None
+    if role == "references_region":
+        if page_number == 1:
+            unsafe = True
+            reason = "references_region_on_critical_page"
+        elif not _looks_like_reference_text(region_text):
+            unsafe = True
+            reason = "references_region_lacks_reference_evidence"
+    if not unsafe and page_number == 1 and source_rect.y0 > source_page.rect.height * 0.25 and _looks_like_body_region(region_text):
+        unsafe = True
+        reason = "source_region_clone_hits_critical_page_body"
+    return {
+        "safe": not unsafe,
+        "reason": reason,
+        "region_text_sample": re.sub(r"\s+", " ", region_text).strip()[:240],
+    }
 
 
 def _example_block_clone_plans(fitz: Any, source_doc: Any) -> list[dict[str, Any]]:
@@ -542,6 +595,18 @@ def _apply_journal_header_footer(fitz: Any, page: Any, action: dict[str, Any], m
 def _apply_source_region_clone(fitz: Any, source_page: Any, target_page: Any, action: dict[str, Any]) -> dict[str, Any]:
     source_rect = fitz.Rect(action["source_bbox"])
     target_rect = fitz.Rect(action["target_bbox"])
+    safety = _source_region_clone_safety(fitz, source_page, action)
+    if not safety.get("safe"):
+        return {
+            "kind": action["kind"],
+            "role": action.get("role"),
+            "page": action["page"],
+            "status": "skipped_unsafe_clone",
+            "reason": safety.get("reason"),
+            "target_bbox": action["target_bbox"],
+            "source_bbox": action["source_bbox"],
+            "region_text_sample": safety.get("region_text_sample"),
+        }
     pixmap = source_page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=source_rect, alpha=False)
     if action.get("redact_before_clone"):
         target_page.add_redact_annot(target_rect, fill=(1, 1, 1))
@@ -704,6 +769,8 @@ def apply_metadata_label_repair(
         "plan": None,
         "applied_action_count": 0,
         "skipped_action_count": 0,
+        "unsafe_clone_skipped_count": 0,
+        "selected_as_delivery": False,
         "actions": [],
     }
     if mode == "off":
@@ -750,6 +817,8 @@ def apply_metadata_label_repair(
                 manifest["applied_action_count"] += 1
             else:
                 manifest["skipped_action_count"] += 1
+                if outcome.get("status") == "skipped_unsafe_clone":
+                    manifest["unsafe_clone_skipped_count"] += 1
         for outcome in _style_tag_cleanup_actions(fitz, doc, mode, engine_home):
             manifest["actions"].append(outcome)
             if outcome.get("status") == "applied":
@@ -766,9 +835,19 @@ def apply_metadata_label_repair(
             doc.save(output_pdf, garbage=4, deflate=True)
             manifest["output_pdf"] = str(output_pdf)
             manifest["status"] = "applied" if not manifest["skipped_action_count"] else "partial"
+            if manifest["unsafe_clone_skipped_count"]:
+                manifest["reason"] = "unsafe_clone_skipped"
+                manifest["delivery_status"] = "not_selected_for_delivery"
+            else:
+                manifest["selected_as_delivery"] = True
+                manifest["delivery_status"] = "selected_for_delivery"
         else:
             manifest["status"] = "skipped"
-            manifest["reason"] = "no_actions_applied"
+            if manifest["unsafe_clone_skipped_count"]:
+                manifest["reason"] = "unsafe_clone_skipped"
+                manifest["delivery_status"] = "not_selected_for_delivery"
+            else:
+                manifest["reason"] = "no_actions_applied"
     except Exception as exc:
         manifest["status"] = "failed"
         manifest["error"] = repr(exc)

@@ -89,6 +89,7 @@ pdf2zh --help
 - 查看命令参数和失败处理时，阅读 `references/workflow.md`。
 - 安装或审查本地运行时要求时，阅读 `references/runtime-dependencies.md`。
 - 查看厂商 API key 到 `base_url` 的候选映射时，阅读 `references/provider-base-urls.md`。
+- 同步 metadata 修复与可见残留候选清理优化时，阅读 `references/metadata-visible-residue-optimization.md`。
 
 ## 边界
 
