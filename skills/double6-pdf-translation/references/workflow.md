@@ -33,10 +33,12 @@ Options:
 - `--model`: translation model for that endpoint. Required unless `LOCAL_TRANSLATION_MODEL` is set.
 - `--api-key`: API key. Resolution prefers `LOCAL_TRANSLATION_API_KEY`; if exactly one provider-specific key is set, that key is used. This flag overrides all environment defaults.
 - `--timeout`: backend command timeout in seconds. Default: `3600`.
-- `--temperature`: translation temperature. Default: `0.7`.
+- `--temperature`: translation temperature. Default: `0.1`.
+- `--translation-compat-proxy`: internal translation compatibility proxy mode, `auto`, `on`, or `off`. It is an in-process adapter for PDF backend requests, not a requirement to run a local model server.
+- `--translation-compat-proxy-port`: local port used by the internal compatibility proxy. Default: `18082`.
 - `--latex-render-mode`: LaTeX-source primary rendering mode. `auto` keeps PDF backend fallback.
 - `--latex-source-root`: additional local roots to scan for `.tex` source.
-- `--no-arxiv-source-autodownload`: disable the fallback that extracts arXiv IDs from the PDF and downloads `https://arxiv.org/e-print/<id>`.
+- `--no-arxiv-source-autodownload`: disable the fallback that extracts the primary arXiv ID from PDF metadata/page 1 and downloads `https://arxiv.org/e-print/<id>`.
 - `--visual-check-pages`: visual/layout audit page selection.
 - `--skip-visual-eval`: skip expensive visual checks only when the user explicitly accepts draft-level observability.
 
@@ -59,6 +61,8 @@ Environment overrides:
 - `PAPER_TRANSLATION_ENGINE_HOME`
 - `PAPER_TRANSLATION_PDF2ZH_SKILL_PATH`
 - `PAPER_TRANSLATION_ARXIV_SOURCE_AUTODOWNLOAD`
+- `PAPER_TRANSLATION_COMPAT_PROXY`
+- `PAPER_TRANSLATION_COMPAT_PROXY_PORT`
 
 ## LaTeX Source Selection
 
@@ -67,8 +71,9 @@ Normal runs are LaTeX-first when source is available:
 1. Manual `--latex-source` / `--source-override` wins.
 2. Environment hints and explicit `--latex-source-root` roots are scanned.
 3. Adjacent PDF directories are scanned: the PDF directory plus `source/`, `paper_source/`, `latex/`, and `arxiv/`.
-4. If local discovery misses, the skill extracts PDF text, looks for arXiv IDs, downloads `https://arxiv.org/e-print/<id>`, unpacks it under the output directory, and chooses the highest-scoring main `.tex`.
-5. If no usable source is found or LaTeX direct rendering fails in `auto` mode, the pipeline records the failure evidence and falls back to normal PDF backend parsing/rendering.
+4. If local discovery misses, the skill only inspects PDF metadata and page 1 for a unique primary arXiv ID. It must not scan references or full-body text for source candidates. When one primary ID is found, it downloads `https://arxiv.org/e-print/<id>`, unpacks it under the output directory, and chooses the highest-scoring main `.tex`.
+5. If no unique primary arXiv ID is found, or if the primary arXiv source download fails, the skill records the reason in `source_manifest.json` and falls back to the PDF backend without trying IDs from references.
+6. If no usable source is found or LaTeX direct rendering fails in `auto` mode, the pipeline records the failure evidence and falls back to normal PDF backend parsing/rendering.
 
 Use `--latex-render-mode required` only when LaTeX direct rendering must succeed and PDF fallback should be treated as a failure.
 
@@ -121,5 +126,6 @@ Normal user-facing responses should mention only the two delivery PDFs and the m
 - If the PDF backend is missing, install or expose a compatible backend rather than switching to a low-fidelity overlay path.
 - If preflight fails, inspect `preflight_report.json`; do not use `--skip-preflight` unless you are intentionally bypassing diagnostics for a known-good environment.
 - If the local model endpoint is unreachable, verify the model server outside Codex sandboxing before changing prompts.
+- If `backend_quality.status` is `partial` or delivery gates are blocking, treat retained PDFs as diagnostic artifacts rather than accepted final delivery.
 - If visual or structural gates report layout risk, inspect the manifest and repair candidates before treating the PDF as final.
 - If the document is scanned, OCR/layout recognition must be supplied before high-fidelity translation can be expected.

@@ -20,7 +20,7 @@ from pdf_translation_runtime import (
     DEFAULT_API_KEY,
     DEFAULT_BASE_URL,
     default_engine_home,
-    DEFAULT_HYMT_COMPAT_PROXY_PORT,
+    DEFAULT_TRANSLATION_COMPAT_PROXY_PORT,
     DEFAULT_MODEL,
     DEFAULT_PDF2ZH_BACKEND,
     PDF2ZH_BINARY_ENV,
@@ -328,27 +328,27 @@ def check_endpoint(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def check_proxy_port(args: argparse.Namespace) -> dict[str, Any]:
-    port = int(args.hymt_compat_proxy_port)
+    port = int(args.translation_compat_proxy_port)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         sock.bind(("127.0.0.1", port))
         sock.listen(1)
         return check_result(
-            "hymt_proxy_port",
+            "translation_proxy_port",
             "pass",
             severity="optional",
-            message=f"hy-mt compatibility proxy port {port} can be bound.",
+            message=f"translation compatibility proxy port {port} can be bound.",
             details={"host": "127.0.0.1", "port": port},
             remediation="",
         )
     except OSError as exc:
         return check_result(
-            "hymt_proxy_port",
+            "translation_proxy_port",
             "warn",
             severity="optional",
-            message=f"hy-mt compatibility proxy port {port} cannot be bound: {exc}.",
+            message=f"translation compatibility proxy port {port} cannot be bound: {exc}.",
             details={"host": "127.0.0.1", "port": port, "error": str(exc)},
-            remediation="Use --hymt-compat-proxy off, choose another PAPER_TRANSLATION_HYMT_COMPAT_PROXY_PORT, or run outside a sandbox that blocks binding.",
+            remediation="Use --translation-compat-proxy off, choose another PAPER_TRANSLATION_COMPAT_PROXY_PORT, or run outside a sandbox that blocks binding.",
         )
     finally:
         sock.close()
@@ -419,7 +419,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-url", default=os.environ.get("LOCAL_TRANSLATION_BASE_URL") or DEFAULT_BASE_URL)
     parser.add_argument("--model", default=os.environ.get("LOCAL_TRANSLATION_MODEL") or DEFAULT_MODEL)
     parser.add_argument("--api-key", default=os.environ.get("LOCAL_TRANSLATION_API_KEY") or DEFAULT_API_KEY)
-    parser.add_argument("--hymt-compat-proxy-port", type=int, default=int(os.environ.get("PAPER_TRANSLATION_HYMT_COMPAT_PROXY_PORT", str(DEFAULT_HYMT_COMPAT_PROXY_PORT))))
+    parser.add_argument("--translation-compat-proxy-port", type=int, default=int(os.environ.get("PAPER_TRANSLATION_COMPAT_PROXY_PORT", str(DEFAULT_TRANSLATION_COMPAT_PROXY_PORT))))
     parser.add_argument("--engine-home", default=os.environ.get("PAPER_TRANSLATION_ENGINE_HOME", str(default_engine_home())))
     parser.add_argument("--command-timeout", type=float, default=10.0)
     parser.add_argument("--endpoint-timeout", type=float, default=3.0)

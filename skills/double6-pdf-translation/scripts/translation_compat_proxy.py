@@ -22,7 +22,7 @@ DEFAULT_MODEL = ""
 DEFAULT_UPSTREAM_BASE_URL = ""
 DEFAULT_API_KEY = ""
 HYMT2_30B_OFFICIAL_GENERATION_DEFAULTS: dict[str, Any] = {
-    "temperature": 0.7,
+    "temperature": 0.1,
     "top_p": 1.0,
     "top_k": -1,
     "repetition_penalty": 1.0,
@@ -85,24 +85,26 @@ def normalize_jsonish_content(content: str) -> str:
     return json.dumps(parsed, ensure_ascii=False)
 
 
-def normalize_hymt_payload_for_upstream(payload: dict[str, Any]) -> dict[str, Any]:
-    """把上层 OpenAI-compatible 请求改写成本地 hy-mt2 接受的形态。"""
+def normalize_proxy_payload_for_upstream(payload: dict[str, Any]) -> dict[str, Any]:
+    """把上层 OpenAI-compatible 请求改写成上游接口可接受的形态。"""
     normalized = dict(payload)
     normalized.pop("thinking", None)
     if should_apply_hymt2_official_generation_defaults(normalized):
         for key, value in HYMT2_30B_OFFICIAL_GENERATION_DEFAULTS.items():
             normalized.setdefault(key, value)
-    response_format = normalized.get("response_format")
-    if isinstance(response_format, dict) and response_format.get("type") == "json_object":
-        normalized["response_format"] = {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "response",
-                "schema": {"type": "object"},
-                "strict": False,
-            },
-        }
     return normalized
+
+
+def is_response_format_rejection(status: int, body: bytes) -> bool:
+    if status != 400:
+        return False
+    text = body.decode("utf-8", errors="replace").lower()
+    return "response_format" in text and (
+        "unavailable" in text
+        or "invalid_request_error" in text
+        or "must be one of" in text
+        or "unsupported" in text
+    )
 
 
 def should_apply_hymt2_official_generation_defaults(payload: dict[str, Any]) -> bool:
@@ -249,6 +251,18 @@ def looks_partially_untranslated(source: str, translated: str) -> bool:
     return False
 
 
+def looks_like_task_explanation(text: str) -> bool:
+    stripped = visible_text_for_quality(text)
+    return bool(
+        re.search(
+            r"\b(?:we\s+(?:need|are asked|required)|the\s+user\s+provides|given\s+the\s+text|"
+            r"task\s+is\s+to\s+translate)\b|(?:我们(?:需要|被要求|要做的是|的任务是)|用户(?:提供|给出)|给定的文本)",
+            stripped,
+            flags=re.I,
+        )
+    )
+
+
 def visible_text_for_quality(text: str) -> str:
     value = re.sub(r"</?style\b[^>]*>", " ", str(text or ""), flags=re.I)
     value = re.sub(r"\{v\d+\}", " ", value)
@@ -317,7 +331,13 @@ def _item_sample_metadata(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _request_plain_translation(text: str, config: ProxyConfig, policy_prompt: str, retry: bool = False) -> str:
+def _request_plain_translation(text: str, config: ProxyConfig, policy_prompt: str, retry: bool = False, role: str = "") -> str:
+    role_instruction = (
+        "This item is ordinary body prose. Translate every human-readable English word or sentence into natural Simplified Chinese. "
+        "Do not preserve bibliography-style English unless the input is explicitly a reference entry. "
+        if role in {"body_prose", "plain text", "text", "paragraph_hybrid", ""}
+        else ""
+    )
     retry_instruction = (
         "The previous attempt returned unchanged or partially untranslated source text. Translate all ordinary English prose now. "
         "If the input contains <style id='...'> tags, placeholders, or LaTeX commands, keep those wrappers exactly "
@@ -330,9 +350,9 @@ def _request_plain_translation(text: str, config: ProxyConfig, policy_prompt: st
         "Translate the following academic PDF text into Simplified Chinese. "
         "Preserve placeholders such as {v1}, citations like [12], URLs, code, LaTeX commands, "
         "XML/HTML-style tags, model names, and file names exactly. Output only the translation.\n\n"
-        "Preserve Latin personal names in the original alphabet. Keep bibliography entries and "
-        "language-comparison examples unchanged unless the caller provides a role-specific mapping. "
-        "Keep numbered lists as separate items.\n\n"
+        "Preserve Latin personal names in the original alphabet. Keep numbered lists as separate items. "
+        "Never explain the task, never mention these instructions, and never output analysis.\n\n"
+        + role_instruction
         + retry_instruction
         + (policy_prompt.strip() + "\n\n" if policy_prompt.strip() else "")
         + f"{text}"
@@ -343,7 +363,7 @@ def _request_plain_translation(text: str, config: ProxyConfig, policy_prompt: st
         "stream": False,
         "max_tokens": min(4096, max(256, len(text) * 3)),
     }
-    payload = normalize_hymt_payload_for_upstream(payload)
+    payload = normalize_proxy_payload_for_upstream(payload)
     request = urllib.request.Request(
         chat_completions_url(config.upstream_base_url),
         data=json.dumps(payload).encode("utf-8"),
@@ -359,7 +379,7 @@ def _request_plain_translation(text: str, config: ProxyConfig, policy_prompt: st
     return clean_plain_translation(message.get("content") or message.get("reasoning_content") or "")
 
 
-def call_hymt_plain_translation(text: str, config: ProxyConfig | None = None, policy_prompt: str = "") -> str:
+def call_plain_translation(text: str, config: ProxyConfig | None = None, policy_prompt: str = "") -> str:
     active = config or ProxyConfig(
         model=os.environ.get("LOCAL_TRANSLATION_MODEL", DEFAULT_MODEL),
         upstream_base_url=os.environ.get("LOCAL_TRANSLATION_BASE_URL", DEFAULT_UPSTREAM_BASE_URL).rstrip("/"),
@@ -375,12 +395,21 @@ def call_hymt_plain_translation(text: str, config: ProxyConfig | None = None, po
         return text
     if not should_translate_to_chinese(text):
         return text
-    translated = _request_plain_translation(text, active, policy_prompt)
-    if translated and (is_same_as_input_translation(text, translated) or looks_partially_untranslated(text, translated)):
+    translated = _request_plain_translation(text, active, policy_prompt, role=role)
+    if translated and (
+        is_same_as_input_translation(text, translated)
+        or looks_partially_untranslated(text, translated)
+        or looks_like_task_explanation(translated)
+    ):
         _append_stat_sample(active, "same_as_input_candidates", {"source": text[:160], "output": translated[:160]})
         _increment_stat(active, "same_as_input_retry")
-        retry_translated = _request_plain_translation(text, active, policy_prompt, retry=True)
-        if retry_translated and not is_same_as_input_translation(text, retry_translated) and not looks_partially_untranslated(text, retry_translated):
+        retry_translated = _request_plain_translation(text, active, policy_prompt, retry=True, role=role)
+        if (
+            retry_translated
+            and not is_same_as_input_translation(text, retry_translated)
+            and not looks_partially_untranslated(text, retry_translated)
+            and not looks_like_task_explanation(retry_translated)
+        ):
             _increment_stat(active, "same_as_input_retry_success")
             translated = retry_translated
         else:
@@ -432,10 +461,14 @@ def synthesize_babeldoc_json_response(payload: dict[str, Any], items: list[dict[
         policy_prompt = policy_utils.build_policy_context_prompt(policy_context, source_text=source)
         role_prompt = layout_role_policy.role_prompt(role)
         policy_prompt = "\n".join(part for part in [policy_prompt, role_prompt] if part.strip())
-        output = call_hymt_plain_translation(source, active, policy_prompt=policy_prompt)
+        output = call_plain_translation(source, active, policy_prompt=policy_prompt)
         output = layout_role_policy.postprocess_translation_for_role(role, source, output)
         output = layout_role_policy.strip_rich_text_tags(output)
-        if should_translate_to_chinese(source) and (is_same_as_input_translation(source, output) or looks_partially_untranslated(source, output)):
+        if should_translate_to_chinese(source) and (
+            is_same_as_input_translation(source, output)
+            or looks_partially_untranslated(source, output)
+            or looks_like_task_explanation(output)
+        ):
             _increment_stat(active, "json_batch_same_as_input_after_retry")
             _append_stat_sample(
                 active,
@@ -444,7 +477,7 @@ def synthesize_babeldoc_json_response(payload: dict[str, Any], items: list[dict[
             )
         translated.append({"id": item["id"], "output": output})
     response = {
-        "id": "hymt-json-compat-proxy",
+        "id": "translation-json-compat-proxy",
         "object": "chat.completion",
         "created": int(time.time()),
         "model": payload.get("model", active.model),
@@ -463,7 +496,7 @@ def synthesize_babeldoc_json_response(payload: dict[str, Any], items: list[dict[
 def synthesize_plain_role_response(payload: dict[str, Any], source: str, output: str, config: ProxyConfig) -> bytes:
     _increment_stat(config, "plain_layout_role_intercept")
     response = {
-        "id": "hymt-plain-layout-role-proxy",
+        "id": "translation-plain-layout-role-proxy",
         "object": "chat.completion",
         "created": int(time.time()),
         "model": payload.get("model", config.model),
@@ -480,8 +513,8 @@ def synthesize_plain_role_response(payload: dict[str, Any], source: str, output:
     return json.dumps(response, ensure_ascii=False).encode("utf-8")
 
 
-class _HyMTJsonCompatHandler(BaseHTTPRequestHandler):
-    server_version = "HyMTJsonCompatProxy/1.0"
+class _TranslationCompatHandler(BaseHTTPRequestHandler):
+    server_version = "TranslationCompatProxy/1.0"
 
     @property
     def config(self) -> ProxyConfig:
@@ -535,30 +568,25 @@ class _HyMTJsonCompatHandler(BaseHTTPRequestHandler):
                 _record_layout_role(self.config, role, {"id": "plain_fallback", "input": plain_source, "layout_label": "plain_fallback"})
                 self._send_json_bytes(synthesize_plain_role_response(payload, plain_source, direct_output, self.config))
                 return
-        payload = normalize_hymt_payload_for_upstream(payload)
+        payload = normalize_proxy_payload_for_upstream(payload)
         requested_json = bool(payload.get("response_format"))
         _increment_stat(self.config, "passthrough_requests")
         if requested_json:
             _increment_stat(self.config, "passthrough_json_requests")
-        request = urllib.request.Request(
-            chat_completions_url(self.config.upstream_base_url),
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": self.headers.get("Authorization", f"Bearer {self.config.api_key}"),
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=7200) as response:
-                body = response.read()
-                status = response.status
-        except urllib.error.HTTPError as exc:
-            body = exc.read()
-            status = exc.code
+        status, body = self._post_upstream_payload(payload)
+        if is_response_format_rejection(status, body) and requested_json:
+            retry_payload = dict(payload)
+            retry_payload.pop("response_format", None)
+            _increment_stat(self.config, "passthrough_json_text_fallback_requests")
+            self.config.stats["last_response_format_error_body"] = body.decode("utf-8", errors="replace")[:1000]
+            status, body = self._post_upstream_payload(retry_payload)
+            self.config.stats[f"passthrough_json_text_fallback_status_{status}"] = (
+                int(self.config.stats.get(f"passthrough_json_text_fallback_status_{status}", 0)) + 1
+            )
+        self.config.stats[f"passthrough_status_{status}"] = int(self.config.stats.get(f"passthrough_status_{status}", 0)) + 1
+        if status >= 400:
             self.config.stats["last_upstream_error_status"] = status
             self.config.stats["last_upstream_error_body"] = body.decode("utf-8", errors="replace")[:1000]
-        self.config.stats[f"passthrough_status_{status}"] = int(self.config.stats.get(f"passthrough_status_{status}", 0)) + 1
         if status == 200:
             body = self._normalize_openai_response(body, requested_json)
         self.send_response(status)
@@ -573,6 +601,22 @@ class _HyMTJsonCompatHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _post_upstream_payload(self, payload: dict[str, Any]) -> tuple[int, bytes]:
+        request = urllib.request.Request(
+            chat_completions_url(self.config.upstream_base_url),
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": self.headers.get("Authorization", f"Bearer {self.config.api_key}"),
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=7200) as response:
+                return response.status, response.read()
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read()
 
     def _normalize_openai_response(self, body: bytes, requested_json: bool) -> bytes:
         try:
@@ -590,22 +634,22 @@ class _HyMTJsonCompatHandler(BaseHTTPRequestHandler):
             return body
 
 
-class HyMTCompatServer(ThreadingHTTPServer):
+class TranslationCompatServer(ThreadingHTTPServer):
     config: ProxyConfig
     stats: dict[str, Any]
 
 
-def start_hymt_compat_proxy(config: ProxyConfig) -> HyMTCompatServer:
+def start_translation_compat_proxy(config: ProxyConfig) -> TranslationCompatServer:
     if not config.model.strip() or not config.upstream_base_url.strip() or not config.api_key.strip():
-        raise ValueError("hymt compatibility proxy requires model, upstream_base_url, and api_key.")
+        raise ValueError("translation compatibility proxy requires model, upstream_base_url, and api_key.")
     config.stats.clear()
     try:
-        server = HyMTCompatServer((config.host, config.port), _HyMTJsonCompatHandler)
+        server = TranslationCompatServer((config.host, config.port), _TranslationCompatHandler)
     except OSError:
         if config.port == 0:
             raise
         config.stats["port_fallback_from"] = config.port
-        server = HyMTCompatServer((config.host, 0), _HyMTJsonCompatHandler)
+        server = TranslationCompatServer((config.host, 0), _TranslationCompatHandler)
         config.port = int(server.server_address[1])
         config.stats["port_fallback_to"] = config.port
     else:
@@ -619,7 +663,7 @@ def start_hymt_compat_proxy(config: ProxyConfig) -> HyMTCompatServer:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run the local hy-mt JSON compatibility proxy used by the PDF translation pipeline.",
+        description="Run the local translation compatibility proxy used by the PDF translation pipeline.",
     )
     parser.add_argument("--host", default="127.0.0.1", help="Local host to bind.")
     parser.add_argument("--port", type=int, default=18082, help="Local port to bind; falls back to a free port if busy.")
@@ -643,7 +687,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if not args.model.strip() or not args.upstream_base_url.strip() or not args.api_key.strip():
         parser.error("--model, --upstream-base-url, and --api-key are required when --serve is used.")
-    server = start_hymt_compat_proxy(
+    server = start_translation_compat_proxy(
         ProxyConfig(
             model=args.model,
             upstream_base_url=args.upstream_base_url,
@@ -653,7 +697,7 @@ def main(argv: list[str] | None = None) -> int:
             policy_context_path=args.policy_context_path,
         )
     )
-    print(f"hy-mt compatibility proxy listening at http://{server.config.host}:{server.config.port}/v1", flush=True)
+    print(f"translation compatibility proxy listening at http://{server.config.host}:{server.config.port}/v1", flush=True)
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda _signum, _frame: stop.set())
     try:

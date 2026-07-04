@@ -35,7 +35,7 @@ import repair_quality_issues
 import layout_role_policy
 import policy_utils
 import visual_layout
-from hymt_compat_proxy import ProxyConfig, start_hymt_compat_proxy
+from translation_compat_proxy import ProxyConfig, start_translation_compat_proxy
 
 from delivery_gate_runtime import (
     build_delivery_gates,
@@ -53,7 +53,7 @@ from pdf_translation_runtime import (
     DEFAULT_BASE_URL,
     DEFAULT_CLI_MAX_TOKENS,
     DEFAULT_HYMT2_TEMPERATURE,
-    DEFAULT_HYMT_COMPAT_PROXY_PORT,
+    DEFAULT_TRANSLATION_COMPAT_PROXY_PORT,
     DEFAULT_LATEX_DOCKER_IMAGE,
     DEFAULT_LATEX_PROJECT_MODE,
     DEFAULT_LATEX_RENDER_MODE,
@@ -74,7 +74,7 @@ from pdf_translation_runtime import (
     redacted_command,
     resolve_pdf_layout_profile,
     resolved_pdf2zh_backend,
-    should_enable_hymt_compat_proxy,
+    should_enable_translation_compat_proxy,
     should_use_qwen_cli_adapter,
 )
 
@@ -185,10 +185,10 @@ def enrich_translation_cache_stats(cache_stats: dict[str, Any], proxy_info: dict
         enriched["proxy_json_batch_items"] = proxy_items
     if proxy_requests and int(enriched.get("total_translate_calls") or 0) <= 0:
         calls = dict(enriched.get("translate_call_count") or {})
-        calls["hymt_proxy_json_batch_requests"] = proxy_requests
+        calls["translation_proxy_json_batch_requests"] = proxy_requests
         enriched["translate_call_count"] = calls
         enriched["total_translate_calls"] = proxy_requests
-        enriched["call_count_source"] = "hymt_proxy_stats"
+        enriched["call_count_source"] = "translation_proxy_stats"
         total_cache_hits = int(enriched.get("total_cache_hits") or 0)
         enriched["cache_hit_ratio"] = round(float(total_cache_hits / proxy_requests), 4) if proxy_requests else 0.0
     return enriched

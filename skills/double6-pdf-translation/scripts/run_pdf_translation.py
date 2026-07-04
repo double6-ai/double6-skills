@@ -34,7 +34,7 @@ import metadata_label_repair_runtime
 import policy_utils
 import toc_repair_runtime
 import visual_layout
-from hymt_compat_proxy import ProxyConfig, start_hymt_compat_proxy
+from translation_compat_proxy import ProxyConfig, start_translation_compat_proxy
 
 from delivery_gate_runtime import (
     build_delivery_gates,
@@ -52,7 +52,7 @@ from pdf_translation_runtime import (
     DEFAULT_BASE_URL,
     DEFAULT_CLI_MAX_TOKENS,
     DEFAULT_HYMT2_TEMPERATURE,
-    DEFAULT_HYMT_COMPAT_PROXY_PORT,
+    DEFAULT_TRANSLATION_COMPAT_PROXY_PORT,
     DEFAULT_LATEX_DOCKER_IMAGE,
     DEFAULT_LATEX_PROJECT_MODE,
     DEFAULT_LATEX_RENDER_MODE,
@@ -76,7 +76,7 @@ from pdf_translation_runtime import (
     redacted_command,
     resolve_pdf_layout_profile,
     resolved_pdf2zh_backend,
-    should_enable_hymt_compat_proxy,
+    should_enable_translation_compat_proxy,
     should_use_qwen_cli_adapter,
 )
 
@@ -145,7 +145,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             model=getattr(args, "model", DEFAULT_MODEL),
             api_key=getattr(args, "api_key", DEFAULT_API_KEY),
             inferred_translation_provider=getattr(args, "inferred_translation_provider", None),
-            hymt_compat_proxy_port=getattr(args, "hymt_compat_proxy_port", DEFAULT_HYMT_COMPAT_PROXY_PORT),
+            translation_compat_proxy_port=getattr(args, "translation_compat_proxy_port", DEFAULT_TRANSLATION_COMPAT_PROXY_PORT),
             command_timeout=10.0,
             endpoint_timeout=3.0,
             skip_endpoint_check=False,
@@ -255,25 +255,25 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     )
     proxy_server = None
     proxy_info: dict[str, Any] = {
-        "mode": getattr(args, "hymt_compat_proxy", "auto"),
+        "mode": getattr(args, "translation_compat_proxy", "auto"),
         "enabled": False,
         "upstream_base_url": original_base_url,
         "proxy_base_url": None,
     }
-    if should_enable_hymt_compat_proxy(args) and not skip_pdf_backend:
+    if should_enable_translation_compat_proxy(args) and not skip_pdf_backend:
         proxy_config = ProxyConfig(
             model=args.model,
             upstream_base_url=original_base_url.rstrip("/"),
             api_key=args.api_key,
-            port=int(getattr(args, "hymt_compat_proxy_port", DEFAULT_HYMT_COMPAT_PROXY_PORT)),
+            port=int(getattr(args, "translation_compat_proxy_port", DEFAULT_TRANSLATION_COMPAT_PROXY_PORT)),
             policy_context_path=str(context_file),
         )
         try:
-            proxy_server = start_hymt_compat_proxy(proxy_config)
+            proxy_server = start_translation_compat_proxy(proxy_config)
             args.base_url = proxy_config.base_url
             proxy_info.update({"enabled": True, "proxy_base_url": proxy_config.base_url})
         except OSError as exc:
-            if getattr(args, "hymt_compat_proxy", "auto") == "on":
+            if getattr(args, "translation_compat_proxy", "auto") == "on":
                 raise
             proxy_info.update({"enabled": False, "error": f"proxy_start_failed: {exc}"})
     command = build_pdf2zh_command(args, output_dir, context_file=context_file)
@@ -287,7 +287,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             log.write("COMMAND: " + " ".join(redacted_command(command, args.api_key)) + "\n")
             log.write(f"MODEL: {args.model}\n")
             log.write(f"BASE_URL: {args.base_url}\n")
-            log.write(f"HYMT_COMPAT_PROXY: {json.dumps(proxy_info, ensure_ascii=False)}\n")
+            log.write(f"TRANSLATION_COMPAT_PROXY: {json.dumps(proxy_info, ensure_ascii=False)}\n")
             log.write(f"LOCAL_MAX_CONCURRENCY: {args.local_max_concurrency}\n")
             log.write(f"OPENAI_JSON_MODE: {args.openai_json_mode}\n")
             log.write(f"PDF_LAYOUT_PROFILE: {args.resolved_pdf_layout_profile}\n")
@@ -334,8 +334,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             status = "partial"
     backend_quality = annotate_backend_quality_origin(backend_quality, proxy_info)
     backend_tracking_path = copy_backend_tracking_artifact(output_dir, input_pdf, engine_home)
-    hymt_proxy_stats_path = output_dir / "hymt_proxy_stats.json"
-    hymt_proxy_stats_path.write_text(
+    translation_proxy_stats_path = output_dir / "translation_proxy_stats.json"
+    translation_proxy_stats_path.write_text(
         json.dumps(
             {
                 "version": 1,
@@ -676,7 +676,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "local_max_concurrency": args.local_max_concurrency,
         "openai_json_mode": args.openai_json_mode,
         "disable_same_text_fallback": bool(getattr(args, "disable_same_text_fallback", True)),
-        "hymt_compat_proxy": proxy_info,
+        "translation_compat_proxy": proxy_info,
         "backend_quality": backend_quality,
         "backend_retry_failures": str(backend_retry_failures_path),
         "pdf_backend_skipped": skip_pdf_backend,
@@ -723,7 +723,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "dual_visual_report": dual_visual_report,
         "dual_visual_report_path": str(dual_visual_report_path),
         "paragraph_label_audit": str(paragraph_audit_path),
-        "hymt_proxy_stats": str(hymt_proxy_stats_path),
+        "translation_proxy_stats": str(translation_proxy_stats_path),
         "backend_retry_failures": str(backend_retry_failures_path),
         "backend_translate_tracking": str(backend_tracking_path) if backend_tracking_path else None,
         "validation": {
@@ -772,8 +772,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "ignore_translation_cache": bool(getattr(args, "ignore_translation_cache", False)),
         "backend_debug_artifacts": bool(getattr(args, "backend_debug_artifacts", True)),
         "translation_cache": translation_cache,
-        "hymt_compat_proxy": proxy_info,
-        "hymt_proxy_stats": str(hymt_proxy_stats_path),
+        "translation_compat_proxy": proxy_info,
+        "translation_proxy_stats": str(translation_proxy_stats_path),
         "backend_retry_failures": str(backend_retry_failures_path),
         "backend_translate_tracking": str(backend_tracking_path) if backend_tracking_path else None,
         "backend_quality": backend_quality,
@@ -967,6 +967,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         selected_outputs,
         candidate_pdfs=cleanup_candidates,
     )
+    if status == "partial":
+        delivery_pdf_outputs["status"] = "partial"
+        delivery_pdf_outputs["contract"] = (
+            "PDF artifacts were retained for diagnosis, but delivery gates are partial/blocking; "
+            "do not treat these PDFs as final accepted output."
+        )
     if readable_manifest.get("output") and not Path(str(readable_manifest["output"])).exists():
         readable_manifest["status"] = "pruned"
         readable_manifest["reason"] = "delivery_pdf_contract_keeps_only_two_pdfs"
@@ -1015,16 +1021,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--api-key", default=os.environ.get("LOCAL_TRANSLATION_API_KEY") or DEFAULT_API_KEY)
     parser.add_argument("--translator-mode", choices=["auto", "openai", "qwen-cli"], default=os.environ.get("PDF_TRANSLATION_TRANSLATOR_MODE", DEFAULT_TRANSLATOR_MODE))
     parser.add_argument(
-        "--hymt-compat-proxy",
+        "--translation-compat-proxy",
         choices=["auto", "on", "off"],
-        default=os.environ.get("PAPER_TRANSLATION_HYMT_COMPAT_PROXY", "auto"),
-        help="hy-mt JSON 兼容代理开关；auto 会在 hy-mt OpenAI 模式下自动启用。",
+        default=os.environ.get("PAPER_TRANSLATION_COMPAT_PROXY", "auto"),
+        help="翻译兼容代理开关；auto 会在需要 PDF 后端翻译兼容层的模型模式下自动启用。",
     )
     parser.add_argument(
-        "--hymt-compat-proxy-port",
+        "--translation-compat-proxy-port",
         type=int,
-        default=int(os.environ.get("PAPER_TRANSLATION_HYMT_COMPAT_PROXY_PORT", str(DEFAULT_HYMT_COMPAT_PROXY_PORT))),
-        help="hy-mt JSON 兼容代理本地端口。",
+        default=int(os.environ.get("PAPER_TRANSLATION_COMPAT_PROXY_PORT", str(DEFAULT_TRANSLATION_COMPAT_PROXY_PORT))),
+        help="翻译兼容代理本地端口。",
     )
     parser.add_argument("--local-max-concurrency", type=int, default=int(os.environ.get("LOCAL_MODEL_MAX_CONCURRENCY", str(DEFAULT_LOCAL_MAX_CONCURRENCY))))
     parser.add_argument("--openai-json-mode", action=argparse.BooleanOptionalAction, default=os.environ.get("PDF_TRANSLATION_OPENAI_JSON_MODE", "1") not in {"0", "false", "False"})
@@ -1182,8 +1188,13 @@ def build_console_summary(manifest: dict[str, Any]) -> dict[str, Any]:
     if manifest.get("status") == "preflight_failed":
         summary["message"] = "运行前配置或依赖检查未通过；请先查看 preflight_report.json。"
         summary["preflight_report"] = preflight.get("report")
-    elif manifest.get("status") in {"ok", "partial"}:
+    elif manifest.get("status") == "ok":
         summary["message"] = "翻译流程已结束；普通用户只需要打开 pdfs 中的两份交付 PDF。"
+    elif manifest.get("status") == "partial":
+        summary["message"] = "翻译流程产出了诊断 PDF，但质量门未通过；不要把 pdfs 中的文件当作最终合格交付。"
+        gates = manifest.get("delivery_gates") if isinstance(manifest.get("delivery_gates"), dict) else {}
+        summary["delivery_gate_status"] = gates.get("status")
+        summary["worst_gate"] = gates.get("worst_gate")
     else:
         summary["message"] = "翻译流程未完成；详细错误见 manifest。"
     return summary
@@ -1195,6 +1206,10 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(build_console_summary(manifest), ensure_ascii=False, indent=2))
     if manifest.get("status") == "preflight_failed":
         return 2
+    if manifest.get("status") == "partial":
+        return 3
+    if manifest.get("status") == "error":
+        return 1
     return 0
 
 
