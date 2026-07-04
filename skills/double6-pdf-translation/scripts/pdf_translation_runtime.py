@@ -100,12 +100,12 @@ DEFAULT_REASONING_EFFORT = "none"
 DEFAULT_TRANSLATOR_MODE = "auto"
 DEFAULT_CLI_MAX_TOKENS = 4096
 DEFAULT_LOCAL_MAX_CONCURRENCY = 3
-DEFAULT_HYMT_COMPAT_PROXY_PORT = 18082
+DEFAULT_TRANSLATION_COMPAT_PROXY_PORT = 18082
 DEFAULT_PDF2ZH_BACKEND = "path"
 DEFAULT_LATEX_RENDER_MODE = "auto"
 DEFAULT_LATEX_PROJECT_MODE = "in-place"
 DEFAULT_LATEX_DOCKER_IMAGE = "paper-translation-tex:2026-05-21"
-DEFAULT_HYMT2_TEMPERATURE = 0.7
+DEFAULT_HYMT2_TEMPERATURE = 0.1
 PDF2ZH_BINARY_ENV = "PAPER_TRANSLATION_PDF2ZH_BINARY"
 LATEX_SOURCE_HINT_ENV = "PAPER_TRANSLATION_LATEX_SOURCE_HINT"
 LATEX_SOURCE_ROOTS_ENV = "PAPER_TRANSLATION_LATEX_SOURCE_ROOTS"
@@ -374,8 +374,8 @@ def should_use_qwen_cli_adapter(args: argparse.Namespace) -> bool:
     return "qwen" in model and ("localhost" in base_url or "127.0.0.1" in base_url)
 
 
-def should_enable_hymt_compat_proxy(args: argparse.Namespace) -> bool:
-    mode = str(getattr(args, "hymt_compat_proxy", "auto") or "auto")
+def should_enable_translation_compat_proxy(args: argparse.Namespace) -> bool:
+    mode = str(getattr(args, "translation_compat_proxy", "auto") or "auto")
     if mode == "off":
         return False
     if mode == "on":

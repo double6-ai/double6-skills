@@ -31,6 +31,8 @@ python scripts/run_pdf_translation.py <input-file.pdf> \
 
 也可以直接在命令中传入 `--provider`、`--base-url`、`--model`、`--api-key`。`--base-url` 和 `LOCAL_TRANSLATION_BASE_URL` 永远优先于候选表推断；`LOCAL_TRANSLATION_API_KEY` 是泛用 key，只有搭配 `LOCAL_TRANSLATION_PROVIDER` / `--provider` 时才会推断厂商 URL。没有可推断或显式的 `base_url`、没有 `model` 或没有 API key 时，preflight 会阻止正式翻译。
 
+运行时可能会自动启动内部 `translation_compat_proxy.py`，用于把 PDF 后端的碎片翻译请求接入已配置的 OpenAI-compatible 服务，并执行 JSON 输出兼容、正文翻译重试和质量统计。它不是要求用户本地部署模型；如需调试，可用 `--translation-compat-proxy on|off|auto` 或 `PAPER_TRANSLATION_COMPAT_PROXY` 控制。
+
 ## 最小依赖
 
 需要暴露一个兼容的外部 PDF 后端：
@@ -56,8 +58,8 @@ pdf2zh --help
 
 - 如果用户显式传入 `--latex-source` / `--source-override`，优先使用该 `.tex`。
 - 否则扫描 `PAPER_TRANSLATION_LATEX_SOURCE_HINT`、`PAPER_TRANSLATION_LATEX_SOURCE_ROOTS`、`--latex-source-root` 和 PDF 相邻的 `source/`、`paper_source/`、`latex/`、`arxiv/` 等目录。
-- 如果本地没有找到主 `.tex`，先抽取 PDF 文本并识别 arXiv 编号；识别成功时尝试下载 `https://arxiv.org/e-print/<id>` 并选择主 `.tex`。
-- 如果没有 arXiv 编号、下载失败、解包失败或源码不可编译，就记录 `source_manifest.json` / `direct_latex_render_manifest.json` 中的原因，并回退到正常 PDF 解析/后端路径。
+- 如果本地没有找到主 `.tex`，只从 PDF 元数据和首页文本识别主 arXiv 编号；唯一主 ID 识别成功时尝试下载 `https://arxiv.org/e-print/<id>` 并选择主 `.tex`。不要从参考文献或全文正文中提取 arXiv ID 作为源码候选。
+- 如果首页/元数据没有唯一 arXiv 编号、主 ID 下载失败、解包失败或源码不可编译，就记录 `source_manifest.json` / `direct_latex_render_manifest.json` 中的原因，并回退到正常 PDF 解析/后端路径。
 - 可用 `--no-latex-autodiscovery` 关闭 LaTeX 自动发现；可用 `--no-arxiv-source-autodownload` 或 `PAPER_TRANSLATION_ARXIV_SOURCE_AUTODOWNLOAD=0` 禁止 arXiv 源码下载。
 
 ## Agent 能力适配
@@ -78,7 +80,7 @@ pdf2zh --help
 - 常见缩写首次出现时可按需展开，例如 `LLMs（大型语言模型）`。
 - 保留目录/章节索引的换行边界、页码列和数字顺序。
 - 如果提取出的文本很少或为空，应报告需要 OCR，不要编造内容。
-- 如果版式保真度不足，应输出诊断和修复证据，不要接受退化 PDF。
+- 如果版式保真度不足、正文存在大段英文同文回退或 delivery gate 为 partial/blocking，应输出诊断和修复证据，不要接受退化 PDF。
 
 ## 参考
 

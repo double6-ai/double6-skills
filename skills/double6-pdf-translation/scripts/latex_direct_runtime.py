@@ -32,9 +32,9 @@ from delivery_gate_runtime import (
     write_latex_paragraph_structure_repair_manifest,
     write_latex_segment_repair_plan,
 )
-from hymt_compat_proxy import ProxyConfig, start_hymt_compat_proxy
+from translation_compat_proxy import ProxyConfig, start_translation_compat_proxy
 from pdf_translation_runtime import (
-    DEFAULT_HYMT_COMPAT_PROXY_PORT,
+    DEFAULT_TRANSLATION_COMPAT_PROXY_PORT,
     DEFAULT_LATEX_DOCKER_IMAGE,
     DEFAULT_LATEX_PROJECT_MODE,
     DEFAULT_LATEX_RENDER_MODE,
@@ -45,7 +45,7 @@ from pdf_translation_runtime import (
     LATEX_SOURCE_ROOTS_ENV,
     external_pdf2zh_skill_root,
     redacted_command,
-    should_enable_hymt_compat_proxy,
+    should_enable_translation_compat_proxy,
 )
 
 SCRIPT_INTERFACE = "internal-module"
@@ -57,6 +57,7 @@ ARXIV_ID_PATTERNS = (
     re.compile(r"arXiv\s*:\s*([a-z-]+(?:\.[A-Z]{2})?/[0-9]{7}(?:v[0-9]+)?)", re.IGNORECASE),
     re.compile(r"arxiv\.org/(?:abs|pdf|e-print)/([a-z-]+(?:\.[A-Z]{2})?/[0-9]{7})(?:v[0-9]+)?(?:\.pdf)?", re.IGNORECASE),
 )
+ARXIV_VERSION_RE = re.compile(r"v\d+$", re.IGNORECASE)
 
 def build_latex_direct_requirement(output_dir: Path) -> str:
     def compact_term_policy(payload: dict[str, Any]) -> dict[str, Any]:
@@ -639,8 +640,8 @@ def run_latex_direct_render(
         "run_summary": None,
         "log_path": str(output_dir / "latex_direct.log"),
         "errors": [],
-        "hymt_compat_proxy": {
-            "mode": getattr(args, "hymt_compat_proxy", "auto"),
+        "translation_compat_proxy": {
+            "mode": getattr(args, "translation_compat_proxy", "auto"),
             "enabled": False,
             "upstream_base_url": args.base_url,
             "proxy_base_url": None,
@@ -671,29 +672,29 @@ def run_latex_direct_render(
     log_path = output_dir / "latex_direct.log"
     original_base_url = args.base_url
     proxy_server = None
-    if should_enable_hymt_compat_proxy(args):
+    if should_enable_translation_compat_proxy(args):
         proxy_config = ProxyConfig(
             model=args.model,
             upstream_base_url=original_base_url.rstrip("/"),
             api_key=args.api_key,
-            port=int(getattr(args, "hymt_compat_proxy_port", DEFAULT_HYMT_COMPAT_PROXY_PORT)),
+            port=int(getattr(args, "translation_compat_proxy_port", DEFAULT_TRANSLATION_COMPAT_PROXY_PORT)),
             policy_context_path=str(output_dir / "document_memory.json"),
         )
         try:
-            proxy_server = start_hymt_compat_proxy(proxy_config)
+            proxy_server = start_translation_compat_proxy(proxy_config)
             args.base_url = proxy_config.base_url
-            manifest["hymt_compat_proxy"] = {
-                "mode": getattr(args, "hymt_compat_proxy", "auto"),
+            manifest["translation_compat_proxy"] = {
+                "mode": getattr(args, "translation_compat_proxy", "auto"),
                 "enabled": True,
                 "upstream_base_url": original_base_url,
                 "proxy_base_url": proxy_config.base_url,
                 "stats": {},
             }
         except OSError as exc:
-            if getattr(args, "hymt_compat_proxy", "auto") == "on":
+            if getattr(args, "translation_compat_proxy", "auto") == "on":
                 raise
-            manifest["hymt_compat_proxy"] = {
-                "mode": getattr(args, "hymt_compat_proxy", "auto"),
+            manifest["translation_compat_proxy"] = {
+                "mode": getattr(args, "translation_compat_proxy", "auto"),
                 "enabled": False,
                 "upstream_base_url": original_base_url,
                 "proxy_base_url": None,
@@ -723,7 +724,7 @@ def run_latex_direct_render(
             log.write("COMMAND: " + " ".join(redacted_command(command, args.api_key)) + "\n")
             log.write(f"MODEL: {args.model}\n")
             log.write(f"BASE_URL: {args.base_url}\n")
-            log.write(f"LATEX_DIRECT_HYMT_COMPAT_PROXY: {json.dumps(manifest['hymt_compat_proxy'], ensure_ascii=False)}\n")
+            log.write(f"LATEX_DIRECT_TRANSLATION_COMPAT_PROXY: {json.dumps(manifest['translation_compat_proxy'], ensure_ascii=False)}\n")
             log.write(f"LOCAL_MAX_CONCURRENCY: {args.local_max_concurrency}\n")
             log.write(f"LATEX_COMPILE_RUNTIME: {json.dumps(compile_runtime, ensure_ascii=False)}\n")
             log.flush()
@@ -747,8 +748,8 @@ def run_latex_direct_render(
         if proxy_server is not None:
             stats = dict(getattr(proxy_server, "stats", {}) or {})
             manifest["latex_direct_proxy_stats"] = stats
-            if isinstance(manifest.get("hymt_compat_proxy"), dict):
-                manifest["hymt_compat_proxy"]["stats"] = stats
+            if isinstance(manifest.get("translation_compat_proxy"), dict):
+                manifest["translation_compat_proxy"]["stats"] = stats
             proxy_server.shutdown()
         args.base_url = original_base_url
 
@@ -897,6 +898,107 @@ def extract_arxiv_ids(text: str) -> list[str]:
                 seen.add(value)
                 ids.append(value)
     return ids
+
+
+def arxiv_base_id(arxiv_id: str) -> str:
+    return ARXIV_VERSION_RE.sub("", arxiv_id.strip())
+
+
+def dedupe_arxiv_ids_by_base(ids: list[str]) -> list[str]:
+    seen: set[str] = set()
+    values: list[str] = []
+    for arxiv_id in ids:
+        base_id = arxiv_base_id(arxiv_id)
+        if not base_id or base_id in seen:
+            continue
+        seen.add(base_id)
+        values.append(arxiv_id)
+    return values
+
+
+def extract_pdf_metadata_text(path: Path) -> tuple[str, str]:
+    parts: list[str] = []
+    try:
+        try:
+            import fitz  # type: ignore
+        except Exception:
+            import pymupdf as fitz  # type: ignore
+        with fitz.open(str(path)) as doc:  # type: ignore[attr-defined]
+            metadata = getattr(doc, "metadata", {}) or {}
+            parts.extend(str(value) for value in metadata.values() if value)
+    except Exception:
+        pass
+    try:
+        from pypdf import PdfReader  # type: ignore
+
+        reader = PdfReader(str(path))
+        metadata = reader.metadata or {}
+        parts.extend(str(value) for value in metadata.values() if value)
+    except Exception:
+        pass
+    return "\n".join(parts).strip(), "pdf_metadata"
+
+
+def extract_pdf_frontmatter_text(path: Path, max_pages: int = 1) -> tuple[str, str]:
+    attempts: list[tuple[str, str]] = []
+    try:
+        try:
+            import fitz  # type: ignore
+        except Exception:
+            import pymupdf as fitz  # type: ignore
+        with fitz.open(str(path)) as doc:  # type: ignore[attr-defined]
+            pages = []
+            for index in range(min(max_pages, len(doc))):
+                pages.append(doc[index].get_text("text") or "")
+            text = "\n".join(pages).strip()
+            if text:
+                attempts.append(("pymupdf_frontmatter", text))
+    except Exception:
+        pass
+    try:
+        from pypdf import PdfReader  # type: ignore
+
+        reader = PdfReader(str(path))
+        pages = []
+        for index in range(min(max_pages, len(reader.pages))):
+            pages.append(reader.pages[index].extract_text() or "")
+        text = "\n".join(pages).strip()
+        if text:
+            attempts.append(("pypdf_frontmatter", text))
+    except Exception:
+        pass
+    binary = shutil.which("pdftotext")
+    if binary:
+        result = subprocess.run(
+            [binary, "-f", "1", "-l", str(max_pages), "-layout", str(path), "-"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            attempts.append(("pdftotext_frontmatter", result.stdout.strip()))
+    if not attempts:
+        return "", "frontmatter_text_extraction_failed"
+    attempts.sort(key=lambda item: len(item[1]), reverse=True)
+    return attempts[0][1], attempts[0][0]
+
+
+def extract_primary_arxiv_ids(input_pdf: Path) -> dict[str, Any]:
+    metadata_text, metadata_method = extract_pdf_metadata_text(input_pdf)
+    frontmatter_text, frontmatter_method = extract_pdf_frontmatter_text(input_pdf, max_pages=1)
+    metadata_ids = extract_arxiv_ids(metadata_text)
+    frontmatter_ids = extract_arxiv_ids(frontmatter_text)
+    primary_ids = dedupe_arxiv_ids_by_base(metadata_ids + frontmatter_ids)
+    return {
+        "method": "primary_metadata_frontmatter",
+        "metadata_method": metadata_method,
+        "frontmatter_method": frontmatter_method,
+        "scope": "pdf_metadata_and_page_1",
+        "metadata_ids": metadata_ids,
+        "frontmatter_ids": frontmatter_ids,
+        "ids": primary_ids,
+    }
 
 
 def _safe_write_archive_member(target_root: Path, member_name: str, data: bytes) -> None:
@@ -1058,13 +1160,13 @@ def discover_latex_source(input_pdf: Path, args: argparse.Namespace, output_dir:
     if not scored:
         selection: dict[str, Any] = {"policy": "latex_first_auto", "status": "not_found", "searched_roots": [str(root) for root in roots]}
         if output_dir is not None and _arxiv_autodownload_enabled(args):
-            text, method = extract_pdf_text(input_pdf)
-            arxiv_ids = extract_arxiv_ids(text)
-            selection["arxiv_pdf_inspection"] = {"method": method, "ids": arxiv_ids}
-            attempts = []
-            for arxiv_id in arxiv_ids[:3]:
+            inspection = extract_primary_arxiv_ids(input_pdf)
+            arxiv_ids = inspection.get("ids") if isinstance(inspection.get("ids"), list) else []
+            selection["arxiv_pdf_inspection"] = inspection
+            if len(arxiv_ids) == 1:
+                arxiv_id = str(arxiv_ids[0])
                 attempt = _download_arxiv_source(arxiv_id, output_dir)
-                attempts.append(attempt)
+                selection["arxiv_source_attempts"] = [attempt]
                 if attempt.get("status") == "ok" and attempt.get("source_path"):
                     source = Path(str(attempt["source_path"]))
                     selection.update(
@@ -1073,11 +1175,18 @@ def discover_latex_source(input_pdf: Path, args: argparse.Namespace, output_dir:
                             "source_path": str(source),
                             "source_of_truth": "latex_source",
                             "arxiv_id": arxiv_id,
-                            "arxiv_source_attempts": attempts,
+                            "arxiv_source_attempts": [attempt],
                         }
                     )
                     return source, selection
-            selection["arxiv_source_attempts"] = attempts
+                selection["status"] = "primary_arxiv_download_failed"
+                selection["primary_arxiv_id"] = arxiv_id
+            elif arxiv_ids:
+                selection["status"] = "primary_arxiv_ambiguous"
+                selection["reason"] = "multiple_arxiv_ids_in_pdf_metadata_or_first_page"
+            else:
+                selection["status"] = "primary_arxiv_not_found"
+                selection["reason"] = "no_arxiv_id_in_pdf_metadata_or_first_page"
         elif output_dir is not None:
             selection["arxiv_pdf_inspection"] = {"status": "disabled"}
         return None, selection

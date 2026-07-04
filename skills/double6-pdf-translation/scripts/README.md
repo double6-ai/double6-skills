@@ -13,7 +13,7 @@
 
 - `policy_utils.py`：术语、实体、protected span、禁用译法和 canonical check 的共享层。
 - `layout_role_policy.py`：PDF 后端进入翻译前的 layout role 分类与 passthrough 策略。
-- `model_client.py`、`hymt_compat_proxy.py`、`qwen_pdf2zh_cli_translator.py`：商业 OpenAI-compatible API、本地/自托管模型与 PDF 后端适配；正式运行前必须配置 model 和 API key，不假设本地模型存在；显式 provider 或单一厂商专属 key 可按 `references/provider-base-urls.md` 推断 endpoint。
+- `model_client.py`、`translation_compat_proxy.py`、`qwen_pdf2zh_cli_translator.py`：商业 OpenAI-compatible API、本地/自托管模型与 PDF 后端适配；`translation_compat_proxy.py` 是内部请求适配层，不代表用户必须本地部署模型；正式运行前必须配置 model 和 API key，显式 provider 或单一厂商专属 key 可按 `references/provider-base-urls.md` 推断 endpoint。
 
 ## PDF 证据层
 

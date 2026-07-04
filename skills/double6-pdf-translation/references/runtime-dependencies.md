@@ -29,6 +29,8 @@ The preflight report is the runtime contract: required failures block real trans
 - Translation model configured by `LOCAL_TRANSLATION_MODEL` or `--model`.
 - API key from `LOCAL_TRANSLATION_API_KEY`, provider-specific API key env vars such as `DEEPSEEK_API_KEY`, or `--api-key`.
 
+The runtime may start `scripts/translation_compat_proxy.py` automatically as an internal adapter for PDF backend calls. This proxy forwards to the configured Chat Completions endpoint and records translation retry/quality evidence; it does not require the user to deploy a local model server.
+
 ## Optional Diagnostic Tools
 
 - PyMuPDF for text extraction, layout inspection, and visual reports.
