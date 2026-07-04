@@ -94,6 +94,7 @@ def build_delivery_gates(
     block_bridge: dict[str, Any] | None = None,
     pymupdf_layout_audit: dict[str, Any] | None = None,
     layout_structure_gate: dict[str, Any] | None = None,
+    visible_residue_audit: dict[str, Any] | None = None,
     actual_render_source: str | None = None,
     latex_direct_quality_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -331,6 +332,47 @@ def build_delivery_gates(
         "页眉页脚、DOI、邮箱和联系信息不能中英混排、断裂或漂移到错误 y-band。",
     )
     visual_rule_gate("body_prose_direct_output", {"body_prose_partial_direct_output"}, "普通正文不能只做短标签局部替换；需完整翻译或阻断写回。")
+    residue_audit = visible_residue_audit if isinstance(visible_residue_audit, dict) else {}
+    if is_latex_direct:
+        add("critical_page_visible_residue", "ok", "skipped_for_latex_direct_primary_render", "LaTeX 主路径不使用 PDF backend 可见残留 gate。")
+    elif residue_audit:
+        residue_findings = residue_audit.get("findings") if isinstance(residue_audit.get("findings"), list) else []
+        critical_residue = [
+            item
+            for item in residue_findings
+            if isinstance(item, dict)
+            and item.get("critical_page")
+            and (
+                item.get("ordinary_body_residue")
+                or str(item.get("failure_type") or "") in {"style_tag_leak", "translated_but_source_visible"}
+                or item.get("delivery_blocking")
+            )
+        ]
+        if critical_residue:
+            add(
+                "critical_page_visible_residue",
+                "blocking",
+                json.dumps(critical_residue[:3], ensure_ascii=False),
+                "首页普通正文不能残留可见英文；需修 PDF backend writeback/paint，或输出 readable fallback 并保持主 PDF partial。",
+            )
+        elif residue_audit.get("status") in {"warn", "partial"}:
+            add(
+                "critical_page_visible_residue",
+                "warn",
+                json.dumps(
+                    {
+                        "status": residue_audit.get("status"),
+                        "finding_count": residue_audit.get("finding_count"),
+                        "counts_by_failure_type": residue_audit.get("counts_by_failure_type"),
+                    },
+                    ensure_ascii=False,
+                ),
+                "存在非首页或非正文可见残留诊断，需按 pdf_backend_repair_plan 复核。",
+            )
+        else:
+            add("critical_page_visible_residue", "ok", "no critical page visible residue", "无需额外动作。")
+    else:
+        add("critical_page_visible_residue", "warn", "visible_residue_audit missing", "缺少可见英文残留统一审计时需人工复核首页截图。")
     visual_rule_gate(
         "person_name_passthrough",
         {"protected_person_name_translation_drift", "person_name_passthrough_coverage_low", "person_name_translated_with_parenthetical_english"},

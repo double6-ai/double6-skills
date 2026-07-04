@@ -40,6 +40,7 @@ Options:
 - `--latex-source-root`: additional local roots to scan for `.tex` source.
 - `--no-arxiv-source-autodownload`: disable the fallback that extracts the primary arXiv ID from PDF metadata/page 1 and downloads `https://arxiv.org/e-print/<id>`.
 - `--visual-check-pages`: visual/layout audit page selection.
+- `--visible-residue-repair-mode`: visible English residue repair mode, `auto`, `candidate-only`, or `off`. `auto` only promotes a repaired candidate after post-repair OCR/text gates pass.
 - `--skip-visual-eval`: skip expensive visual checks only when the user explicitly accepts draft-level observability.
 
 Environment overrides:
@@ -63,6 +64,7 @@ Environment overrides:
 - `PAPER_TRANSLATION_ARXIV_SOURCE_AUTODOWNLOAD`
 - `PAPER_TRANSLATION_COMPAT_PROXY`
 - `PAPER_TRANSLATION_COMPAT_PROXY_PORT`
+- `PAPER_TRANSLATION_VISIBLE_RESIDUE_REPAIR_MODE`
 
 ## LaTeX Source Selection
 
@@ -117,9 +119,27 @@ Recommended optional tools:
 - `backend_run_manifest.json`: backend status and translation metadata.
 - `layout_map.json`, `block_bridge.json`: layout and block correspondence evidence when backend tracking is available.
 - `visual_layout_report.json`, `pymupdf_layout_audit.json`, `layout_structure_gate.json`: visual and structural audit evidence when checks are enabled.
+- `translation_proxy_ledger.json`: item-level source/output ledger used for visible residue matching. It must not contain API keys or full upstream request payloads.
+- `visible_residue_pre_repair_audit.json`, `visible_residue_audit.json`, `visible_residue_repair_manifest.json`: pre/post visible English residue evidence and conservative repair candidate status.
+- `pdf_backend_repair_plan.json`, `visible_residue_readable_fallback.md`: PDF backend repair targets and readable fallback notes when the main PDF still exposes source text after translation.
 - `translation.md`, `term_policy.json`, `entity_map.json`, `protected_spans.json`: text and terminology evidence.
 
 Normal user-facing responses should mention only the two delivery PDFs and the manifest path. Do not surface internal `backend_quality`, `tracking_incomplete`, `rerender_candidates`, or glossary-completion recommendations as user next steps unless the user asks for diagnostics or the run failed.
+
+## Translation API Probe
+
+When `translation_proxy_stats.json` or `backend_retry_failures.json` shows high same-as-input, non-Chinese, or partial-untranslated fallback counts, run a diagnostic probe before changing the main translation strategy:
+
+```bash
+python scripts/translation_api_probe.py \
+  --input <output-dir>/backend_retry_failures.json \
+  --input <output-dir>/translation_proxy_stats.json \
+  --output-dir <output-dir>/deepseek_probe \
+  --thinking disabled \
+  --concurrency 4
+```
+
+The probe compares prompt variants, temperatures, DeepSeek thinking mode, and call paths against real PDF fragments plus built-in synthetic controls. It writes `probe_results.json`, `probe_summary.md`, and `probe_cases.jsonl`; it does not modify delivery manifests or PDFs. Use `--dry-run` to collect and inspect cases without calling the model API. For DeepSeek v4 models, keep `thinking` disabled for translation probes unless deliberately running an A/B comparison; `<style>` tag cleanup and `{v*}` placeholder loss are reported separately.
 
 ## Failure Handling
 
@@ -127,5 +147,7 @@ Normal user-facing responses should mention only the two delivery PDFs and the m
 - If preflight fails, inspect `preflight_report.json`; do not use `--skip-preflight` unless you are intentionally bypassing diagnostics for a known-good environment.
 - If the local model endpoint is unreachable, verify the model server outside Codex sandboxing before changing prompts.
 - If `backend_quality.status` is `partial` or delivery gates are blocking, treat retained PDFs as diagnostic artifacts rather than accepted final delivery.
+- If `critical_page_visible_residue` is blocking, do not use the main PDF as a final accepted output. Inspect `visible_residue_pre_repair_audit.json`, `visible_residue_repair_manifest.json`, `visible_residue_audit.json`, and `pdf_backend_repair_plan.json`; use `visible_residue_readable_fallback.md` only as a review/readability fallback.
+- If `visible_residue_repair_manifest.json` is `candidate_rejected` or `rejected`, keep delivery status `partial`; rejected candidates must not replace the main PDF.
 - If visual or structural gates report layout risk, inspect the manifest and repair candidates before treating the PDF as final.
 - If the document is scanned, OCR/layout recognition must be supplied before high-fidelity translation can be expected.

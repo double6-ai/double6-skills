@@ -33,6 +33,8 @@ import layout_role_policy
 import metadata_label_repair_runtime
 import policy_utils
 import toc_repair_runtime
+import visible_residue_audit
+import visible_residue_repair
 import visual_layout
 from translation_compat_proxy import ProxyConfig, start_translation_compat_proxy
 
@@ -334,16 +336,41 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             status = "partial"
     backend_quality = annotate_backend_quality_origin(backend_quality, proxy_info)
     backend_tracking_path = copy_backend_tracking_artifact(output_dir, input_pdf, engine_home)
+    raw_proxy_stats = proxy_info.get("stats") if isinstance(proxy_info.get("stats"), dict) else {}
+    translation_proxy_ledger = raw_proxy_stats.get("_translation_ledger") if isinstance(raw_proxy_stats, dict) else []
+    public_proxy_stats = {
+        key: value
+        for key, value in raw_proxy_stats.items()
+        if not str(key).startswith("_")
+    } if isinstance(raw_proxy_stats, dict) else {}
+    if isinstance(proxy_info.get("stats"), dict):
+        proxy_info["stats"] = public_proxy_stats
     translation_proxy_stats_path = output_dir / "translation_proxy_stats.json"
+    translation_proxy_ledger_path = output_dir / "translation_proxy_ledger.json"
     translation_proxy_stats_path.write_text(
         json.dumps(
             {
                 "version": 1,
                 "status": "ok" if proxy_info.get("enabled") else "skipped",
                 "proxy": proxy_info,
-                "stats": proxy_info.get("stats") if isinstance(proxy_info.get("stats"), dict) else {},
+                "stats": public_proxy_stats,
                 "backend_quality_same_as_input_origin": backend_quality.get("same_as_input_origin"),
                 "stats_owner": "run_pdf_translation.py",
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    translation_proxy_ledger_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "status": "ok" if translation_proxy_ledger else ("skipped" if not proxy_info.get("enabled") else "empty"),
+                "entry_count": len(translation_proxy_ledger) if isinstance(translation_proxy_ledger, list) else 0,
+                "entries": translation_proxy_ledger if isinstance(translation_proxy_ledger, list) else [],
+                "notes": ["本文件只记录翻译 item 级输入/输出和质量状态，不包含 API key 或完整请求体。"],
             },
             ensure_ascii=False,
             indent=2,
@@ -472,6 +499,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         encoding="utf-8",
     )
     visual_check_pages = visual_layout.parse_page_selection(getattr(args, "visual_check_pages", "auto"))
+    if visual_check_pages is not None and 1 not in visual_check_pages:
+        visual_check_pages = [1, *visual_check_pages]
     skip_visual_eval = bool(getattr(args, "skip_visual_eval", False))
     visual_report_path = output_dir / "visual_layout_report.json"
     dropped_text_audit_path = output_dir / "dropped_text_audit.json"
@@ -622,6 +651,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         quality_report_text=(output_dir / "quality_report.md").read_text(encoding="utf-8", errors="replace") if (output_dir / "quality_report.md").exists() else "",
         pdf_rerender_plan=policy_utils.load_json(output_dir / "pdf_rerender_plan.json"),
         pdf_direct_text_repair=pdf_direct_text_repair,
+        visible_residue_audit={"version": 1, "status": "ok", "findings": []},
     )
     if skip_visual_eval:
         delivery_gates = build_fast_full_translation_draft_gates(
@@ -724,6 +754,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "dual_visual_report_path": str(dual_visual_report_path),
         "paragraph_label_audit": str(paragraph_audit_path),
         "translation_proxy_stats": str(translation_proxy_stats_path),
+        "translation_proxy_ledger": str(translation_proxy_ledger_path),
         "backend_retry_failures": str(backend_retry_failures_path),
         "backend_translate_tracking": str(backend_tracking_path) if backend_tracking_path else None,
         "validation": {
@@ -774,6 +805,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "translation_cache": translation_cache,
         "translation_compat_proxy": proxy_info,
         "translation_proxy_stats": str(translation_proxy_stats_path),
+        "translation_proxy_ledger": str(translation_proxy_ledger_path),
         "backend_retry_failures": str(backend_retry_failures_path),
         "backend_translate_tracking": str(backend_tracking_path) if backend_tracking_path else None,
         "backend_quality": backend_quality,
@@ -873,6 +905,78 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         json.dumps(structured_writeback_manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    proxy_ledger_payload = policy_utils.load_json(translation_proxy_ledger_path)
+    visible_residue_pre_repair_audit = visible_residue_audit.build_visible_residue_audit(
+        pymupdf_audit=pymupdf_layout_audit,
+        poppler_audit=poppler_text_bbox_audit,
+        visual_report=visual_report,
+        tracking_payload=policy_utils.load_json(backend_tracking_path),
+        proxy_ledger=proxy_ledger_payload,
+        output_dir=output_dir,
+    )
+    visible_residue_audit_path = output_dir / "visible_residue_audit.json"
+    visible_residue_pre_repair_audit_path = output_dir / "visible_residue_pre_repair_audit.json"
+    pdf_backend_repair_plan_path = output_dir / "pdf_backend_repair_plan.json"
+    visible_residue_fallback_manifest_path = output_dir / "visible_residue_readable_fallback_manifest.json"
+    visible_residue_pre_repair_audit_path.write_text(
+        json.dumps(visible_residue_pre_repair_audit, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    visible_residue_repair_manifest = visible_residue_repair.apply_visible_residue_repair(
+        audit=visible_residue_pre_repair_audit,
+        translated_pdf=Path(selected_outputs["translated_pdf"]) if selected_outputs.get("translated_pdf") else None,
+        source_pdf=input_pdf,
+        output_dir=output_dir,
+        mode=getattr(args, "visible_residue_repair_mode", "auto"),
+        proxy_ledger=proxy_ledger_payload,
+        poppler_audit=poppler_text_bbox_audit,
+    )
+    quality_artifacts["visible_residue_repair"] = visible_residue_repair_manifest
+    backend_quality["visible_residue_repaired_count"] = int(visible_residue_repair_manifest.get("repair_count") or 0)
+    backend_quality["visible_residue_unrepaired_count"] = int(visible_residue_pre_repair_audit.get("ordinary_body_critical_count") or 0) - int(visible_residue_repair_manifest.get("repair_count") or 0)
+    backend_quality["visible_residue_unrepaired_count"] = max(0, int(backend_quality["visible_residue_unrepaired_count"]))
+    backend_quality["repair_candidate_rejected_count"] = int(visible_residue_repair_manifest.get("rejected_count") or 0) + (0 if visible_residue_repair_manifest.get("selected_as_delivery") else int(bool(visible_residue_repair_manifest.get("repair_count"))))
+    visible_residue_audit_payload = visible_residue_pre_repair_audit
+    if visible_residue_repair_manifest.get("selected_as_delivery") and visible_residue_repair_manifest.get("output_pdf"):
+        repaired_pdf = Path(str(visible_residue_repair_manifest["output_pdf"]))
+        if repaired_pdf.exists():
+            selected_outputs["translated_pdf"] = str(repaired_pdf)
+            selected_outputs["mono_pdf"] = str(repaired_pdf)
+            selected_outputs["visible_residue_repaired_pdf"] = str(repaired_pdf)
+            bilingual_manifest = build_standard_bilingual_output(
+                input_pdf,
+                output_dir,
+                selected_outputs,
+                enabled=bool(args.dual and args.bilingual_layout == "en-left-zh-right"),
+                render_mode=args.bilingual_render_mode,
+                raster_dpi=args.bilingual_raster_dpi,
+            )
+            if bilingual_manifest.get("status") == "ok" and bilingual_manifest.get("output_pdf"):
+                selected_outputs["dual_pdf"] = str(bilingual_manifest["output_pdf"])
+                selected_outputs["standard_bilingual_pdf"] = str(bilingual_manifest["output_pdf"])
+            render_manifest["bilingual_pdf"] = bilingual_manifest
+            backend_manifest["bilingual_pdf"] = bilingual_manifest
+            post_audit = visible_residue_repair_manifest.get("post_repair_audit")
+            if isinstance(post_audit, dict):
+                visible_residue_audit_payload = post_audit
+    pdf_backend_repair_plan = visible_residue_audit.build_pdf_backend_repair_plan(visible_residue_audit_payload)
+    visible_residue_fallback = visible_residue_audit.write_readable_fallback_markdown(
+        visible_residue_audit_payload,
+        output_dir,
+    )
+    visible_residue_audit_path.write_text(
+        json.dumps(visible_residue_audit_payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    pdf_backend_repair_plan_path.write_text(
+        json.dumps(pdf_backend_repair_plan, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    visible_residue_fallback_manifest_path.write_text(
+        json.dumps(visible_residue_fallback, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     for issue in [] if latex_direct_primary else layout_structure_gate.get("issues", []) if isinstance(layout_structure_gate.get("issues"), list) else []:
         if not isinstance(issue, dict):
             continue
@@ -908,6 +1012,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         block_bridge=block_bridge,
         pymupdf_layout_audit=pymupdf_layout_audit,
         layout_structure_gate=layout_structure_gate,
+        visible_residue_audit=visible_residue_audit_payload,
         actual_render_source="latex_direct" if latex_direct_primary else None,
         latex_direct_quality_gate=latex_quality_gate,
     )
@@ -937,6 +1042,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     render_manifest["table_region_map"] = str(output_dir / "table_region_map.json")
     render_manifest["structured_writeback_manifest"] = str(output_dir / "structured_writeback_manifest.json")
     render_manifest["block_bridge"] = str(output_dir / "block_bridge.json")
+    render_manifest["visible_residue_pre_repair_audit"] = str(visible_residue_pre_repair_audit_path)
+    render_manifest["visible_residue_audit"] = str(visible_residue_audit_path)
+    render_manifest["pdf_backend_repair_plan"] = str(pdf_backend_repair_plan_path)
+    render_manifest["visible_residue_repair"] = visible_residue_repair_manifest
+    render_manifest["visible_residue_repair_manifest"] = str(output_dir / "visible_residue_repair_manifest.json")
+    render_manifest["visible_residue_readable_fallback"] = visible_residue_fallback
     if skip_visual_eval:
         render_manifest["delivery_mode"] = "fast_full_translation_draft"
         backend_manifest["delivery_mode"] = "fast_full_translation_draft"
@@ -947,6 +1058,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     backend_manifest["structured_writeback_manifest"] = str(output_dir / "structured_writeback_manifest.json")
     backend_manifest["table_region_map"] = str(output_dir / "table_region_map.json")
     backend_manifest["block_bridge"] = str(output_dir / "block_bridge.json")
+    backend_manifest["visible_residue_pre_repair_audit"] = str(visible_residue_pre_repair_audit_path)
+    backend_manifest["visible_residue_audit"] = str(visible_residue_audit_path)
+    backend_manifest["pdf_backend_repair_plan"] = str(pdf_backend_repair_plan_path)
+    backend_manifest["visible_residue_repair"] = visible_residue_repair_manifest
+    backend_manifest["visible_residue_repair_manifest"] = str(output_dir / "visible_residue_repair_manifest.json")
+    backend_manifest["visible_residue_readable_fallback"] = visible_residue_fallback
     backend_manifest["status"] = status
     render_path.write_text(json.dumps(render_manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (output_dir / "backend_run_manifest.json").write_text(
@@ -973,6 +1090,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "PDF artifacts were retained for diagnosis, but delivery gates are partial/blocking; "
             "do not treat these PDFs as final accepted output."
         )
+        if visible_residue_fallback.get("status") == "ok":
+            delivery_pdf_outputs["visible_residue_readable_fallback"] = visible_residue_fallback.get("markdown")
+            delivery_pdf_outputs["contract"] = (
+                "PDF artifacts were retained for diagnosis and a readable visible-residue fallback was generated; "
+                "do not treat the main PDFs as final accepted output until visible English residue gates pass."
+            )
     if readable_manifest.get("output") and not Path(str(readable_manifest["output"])).exists():
         readable_manifest["status"] = "pruned"
         readable_manifest["reason"] = "delivery_pdf_contract_keeps_only_two_pdfs"
@@ -1127,6 +1250,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="可见质量候选层；auto/candidate 只生成候选和人工复核清单，不自动替换标准双语右页。",
     )
     parser.add_argument(
+        "--visible-residue-repair-mode",
+        choices=["auto", "candidate-only", "off"],
+        default=os.environ.get("PAPER_TRANSLATION_VISIBLE_RESIDUE_REPAIR_MODE", "auto"),
+        help="首页可见英文残留候选修复；auto 仅在 post-repair OCR gate 通过时替换主 PDF。",
+    )
+    parser.add_argument(
         "--toc-repair",
         choices=["auto", "off", "force"],
         default=os.environ.get("PAPER_TRANSLATION_TOC_REPAIR", "auto"),
@@ -1191,7 +1320,12 @@ def build_console_summary(manifest: dict[str, Any]) -> dict[str, Any]:
     elif manifest.get("status") == "ok":
         summary["message"] = "翻译流程已结束；普通用户只需要打开 pdfs 中的两份交付 PDF。"
     elif manifest.get("status") == "partial":
-        summary["message"] = "翻译流程产出了诊断 PDF，但质量门未通过；不要把 pdfs 中的文件当作最终合格交付。"
+        fallback = manifest.get("visible_residue_readable_fallback") if isinstance(manifest.get("visible_residue_readable_fallback"), dict) else {}
+        if fallback.get("status") == "ok":
+            summary["message"] = "翻译流程产出了诊断 PDF 和可见残留 readable fallback，但质量门未通过；不要把 pdfs 中的文件当作最终合格交付。"
+            summary["visible_residue_readable_fallback"] = fallback.get("markdown")
+        else:
+            summary["message"] = "翻译流程产出了诊断 PDF，但质量门未通过；不要把 pdfs 中的文件当作最终合格交付。"
         gates = manifest.get("delivery_gates") if isinstance(manifest.get("delivery_gates"), dict) else {}
         summary["delivery_gate_status"] = gates.get("status")
         summary["worst_gate"] = gates.get("worst_gate")

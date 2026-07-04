@@ -149,12 +149,18 @@ def _page_info_for_line(line: ET.Element, parents: dict[int, ET.Element], pages:
 
 
 def _parse_xml_lenient(content: str) -> ET.Element:
+    def strip_invalid_xml_chars(value: str) -> str:
+        return re.sub(
+            r"[^\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD]",
+            "",
+            value,
+        )
     try:
-        return ET.fromstring(content)
+        return ET.fromstring(strip_invalid_xml_chars(content))
     except ET.ParseError:
         # pdftotext normally emits XHTML. If a local build emits named HTML
         # entities not accepted by XML, unescape them and try one more time.
-        return ET.fromstring(html.unescape(content))
+        return ET.fromstring(strip_invalid_xml_chars(html.unescape(content)))
 
 
 def parse_bbox_layout(content: str) -> list[dict[str, Any]]:
