@@ -451,7 +451,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         engine_home=engine_home,
     )
     quality_artifacts["metadata_label_repair"] = metadata_label_repair_manifest
-    if metadata_label_repair_manifest.get("status") in {"applied", "partial"} and metadata_label_repair_manifest.get("output_pdf"):
+    if metadata_label_repair_manifest.get("selected_as_delivery") and metadata_label_repair_manifest.get("output_pdf"):
         repaired_pdf = Path(str(metadata_label_repair_manifest["output_pdf"]))
         if repaired_pdf.exists():
             selected_outputs["translated_pdf"] = str(repaired_pdf)
@@ -1078,6 +1078,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     cleanup_candidates = list(render_manifest.get("all_pdf_outputs", []) or [])
     if readable_manifest.get("output"):
         cleanup_candidates.append(str(readable_manifest["output"]))
+    for repair_manifest in (metadata_label_repair_manifest, visible_residue_repair_manifest):
+        if isinstance(repair_manifest, dict) and repair_manifest.get("output_pdf"):
+            cleanup_candidates.append(str(repair_manifest["output_pdf"]))
     delivery_pdf_outputs = finalize_delivery_pdf_outputs(
         input_pdf,
         output_dir,
@@ -1329,6 +1332,8 @@ def build_console_summary(manifest: dict[str, Any]) -> dict[str, Any]:
         gates = manifest.get("delivery_gates") if isinstance(manifest.get("delivery_gates"), dict) else {}
         summary["delivery_gate_status"] = gates.get("status")
         summary["worst_gate"] = gates.get("worst_gate")
+        if delivery.get("contract"):
+            summary["delivery_contract"] = delivery.get("contract")
     else:
         summary["message"] = "翻译流程未完成；详细错误见 manifest。"
     return summary
