@@ -241,6 +241,8 @@ def infer_latex_direct_failure_stage(log_text: str, manifest: dict[str, Any]) ->
     if manifest.get("status") == "ok":
         return {"failure_stage": None, "api_stage_status": "ok", "compile_stage_status": "ok"}
     lowered = log_text.lower()
+    if "modulenotfounderror" in lowered or "no module named 'pdf2zh_skill'" in lowered:
+        return {"failure_stage": "dependency", "api_stage_status": "not_started", "compile_stage_status": "not_started"}
     if "translation api request failed" in lowered or "httperror" in lowered or "400 client error" in lowered:
         if re.search(r"(?m)^Glossary:", log_text) and not re.search(r"(?m)^Translate:", log_text):
             return {"failure_stage": "glossary_api", "api_stage_status": "error", "compile_stage_status": "not_started"}
@@ -667,6 +669,27 @@ def run_latex_direct_render(
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return manifest
 
+    external_root = external_pdf2zh_skill_root()
+    if not external_root or not (external_root / "pdf2zh_skill").is_dir():
+        output_dir.mkdir(parents=True, exist_ok=True)
+        manifest["reason"] = "missing_external_pdf2zh_skill"
+        manifest["failure_stage"] = "dependency"
+        manifest["api_stage_status"] = "not_started"
+        manifest["compile_stage_status"] = "not_started"
+        manifest["errors"].append(
+            {
+                "error_type": "missing_external_pdf2zh_skill",
+                "message": "Set PAPER_TRANSLATION_PDF2ZH_SKILL_PATH to a directory that contains the pdf2zh_skill package to enable LaTeX direct rendering.",
+            }
+        )
+        Path(manifest["log_path"]).write_text(
+            "LATEX_DIRECT_SKIPPED: missing external pdf2zh_skill dependency. "
+            "Set PAPER_TRANSLATION_PDF2ZH_SKILL_PATH to a directory containing pdf2zh_skill.\n",
+            encoding="utf-8",
+        )
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return manifest
+
     latex_output_dir = output_dir / "latex_direct"
     latex_output_dir.mkdir(parents=True, exist_ok=True)
     log_path = output_dir / "latex_direct.log"
@@ -703,10 +726,8 @@ def run_latex_direct_render(
             }
     command = build_latex_direct_command(args, input_pdf, source_tex, latex_output_dir)
     latex_env = env.copy()
-    external_root = external_pdf2zh_skill_root()
     existing_pythonpath = latex_env.get("PYTHONPATH", "")
-    if external_root:
-        latex_env["PYTHONPATH"] = str(external_root) + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
+    latex_env["PYTHONPATH"] = str(external_root) + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
     compile_runtime = select_latex_compile_runtime(args)
     manifest["compile_runtime"] = compile_runtime
     if compile_runtime["selected"] == "docker":

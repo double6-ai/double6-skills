@@ -247,7 +247,6 @@ def visible_text(text: str) -> str:
 
 def strip_rich_text_tags(text: str) -> str:
     value = STYLE_TAG_RE.sub("", str(text or ""))
-    value = re.sub(r"\{v\d+\}", "", value)
     return re.sub(r"[ \t]+", " ", value).strip()
 
 

@@ -28,6 +28,11 @@ def should_apply_hymt2_official_generation_defaults(model: str) -> bool:
     return "hy-mt2-30b-a3b" in model.lower()
 
 
+def is_deepseek_chat_target(endpoint: str, model: str, provider: str | None = None) -> bool:
+    value = f"{provider or ''} {endpoint} {model}".lower()
+    return "deepseek" in value or "api.deepseek.com" in value
+
+
 def infer_chat_provider(endpoint: str, provider: str | None = None) -> str:
     if provider:
         return provider
@@ -112,6 +117,8 @@ def post_chat(
             payload["response_format"] = response_format
         if extra_body:
             payload.update(extra_body)
+        if is_deepseek_chat_target(endpoint, model, provider):
+            payload.setdefault("thinking", {"type": "disabled"})
         if should_apply_hymt2_official_generation_defaults(model):
             for key, value in HYMT2_30B_OFFICIAL_GENERATION_DEFAULTS.items():
                 payload.setdefault(key, value)

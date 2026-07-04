@@ -81,6 +81,7 @@ PROTECTED_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("url", re.compile(r"https?://[^\s)>\]]+")),
     ("doi", re.compile(r"(?i)\b10\.\d{4,9}/[-._;()/:A-Z0-9]+")),
     ("citation", re.compile(r"\[[0-9,\-\s]{1,30}\]")),
+    ("placeholder", re.compile(r"\{v\d+\}")),
     ("inline_code", re.compile(r"`[^`\n]{1,200}`")),
     ("model_name", re.compile(r"\b(?:OpenAI-o1|ChatGPT-4o|GPT-4o|GPT-o1|LLM-o1|LLM-4o)\b")),
 ]
