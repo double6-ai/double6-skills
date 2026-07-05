@@ -337,23 +337,22 @@ def build_delivery_gates(
         add("critical_page_visible_residue", "ok", "skipped_for_latex_direct_primary_render", "LaTeX 主路径不使用 PDF backend 可见残留 gate。")
     elif residue_audit:
         residue_findings = residue_audit.get("findings") if isinstance(residue_audit.get("findings"), list) else []
-        critical_residue = [
+        blocking_residue = [
             item
             for item in residue_findings
             if isinstance(item, dict)
-            and item.get("critical_page")
             and (
-                item.get("ordinary_body_residue")
+                item.get("delivery_blocking")
+                or (item.get("critical_page") and item.get("ordinary_body_residue"))
                 or str(item.get("failure_type") or "") in {"style_tag_leak", "translated_but_source_visible"}
-                or item.get("delivery_blocking")
             )
         ]
-        if critical_residue:
+        if blocking_residue:
             add(
                 "critical_page_visible_residue",
                 "blocking",
-                json.dumps(critical_residue[:3], ensure_ascii=False),
-                "首页普通正文不能残留可见英文；需修 PDF backend writeback/paint，或输出 readable fallback 并保持主 PDF partial。",
+                json.dumps(blocking_residue[:3], ensure_ascii=False),
+                "主 PDF 普通正文不能残留可见英文或提示词；需修 PDF backend writeback/paint，或输出 readable fallback 并保持主 PDF partial。",
             )
         elif residue_audit.get("status") in {"warn", "partial"}:
             add(

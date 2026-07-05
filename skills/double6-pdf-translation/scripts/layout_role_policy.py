@@ -397,6 +397,8 @@ def classify_babeldoc_item(item: dict[str, Any], *, references_mode: bool = Fals
         return "author_line"
     if is_numbered_question_list(source):
         return "numbered_question_list"
+    if references_mode and not is_open_access_license(source) and looks_like_body_prose_fragment(source):
+        return "body_prose"
     if references_mode and not is_open_access_license(source):
         return "references_entry"
     if looks_like_reference_entry(source):
@@ -557,8 +559,30 @@ def looks_like_reference_entry(text: str) -> bool:
     if len(value) < 45:
         return False
     year_or_doi = bool(re.search(r"\(\d{4}\)|\b\d{4}\.\s+https?://doi\.org|\bdoi\.org/", value, flags=re.I))
-    author_signal = bool(re.match(r"[A-Z][A-Za-z'’-]+,\s+[A-Z]", value)) or " et al" in value.lower()
+    author_signal = bool(re.match(r"[A-Z][A-Za-z'’-]+,\s+[A-Z]", value)) or bool(
+        re.match(r"[A-Z][A-Za-z'’-]+(?:\s+et\s+al\.?)?\s*\(?\d{4}\)?\s*[:.,]", value, flags=re.I)
+    )
     return year_or_doi and author_signal
+
+
+def looks_like_body_prose_fragment(text: str) -> bool:
+    value = visible_text(text)
+    if looks_like_reference_entry(value):
+        return False
+    words = re.findall(r"\b[A-Za-z][A-Za-z-]{2,}\b", value)
+    if len(words) < 10:
+        return False
+    if re.match(r"[A-Z][A-Za-z'’-]+,\s+[A-Z]", value):
+        return False
+    return bool(
+        re.search(r"\b(?:the|this|these|those|usually|before|however|therefore|water|organic|anthropogenic|aerosol)\b", value, re.I)
+        and re.search(
+            r"\b(?:is|are|was|were|has|have|had|used?|found|showed|shown|claimed|estimated|"
+            r"targets?|controls?|changes?|increases?|forms?|depends?|suggests?|shows?)\b",
+            value,
+            re.I,
+        )
+    )
 
 
 def is_open_access_license(text: str) -> bool:

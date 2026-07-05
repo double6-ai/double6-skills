@@ -17,6 +17,11 @@ SCRIPT_INTERFACE_REASON = "Imported by run_pdf_translation.py and tests to aggre
 
 CRITICAL_PAGES = {1}
 ORDINARY_BODY_ROLES = {"body_prose", "plain text", "text", "paragraph_hybrid", "unknown_visible_line", ""}
+PROMPT_LEAK_RE = re.compile(
+    r"以下是(?:根据|依据).*?(?:要求|翻译)|仅输出翻译|不要输出(?:解释|分析)|"
+    r"保留(?:占位符|拉丁)|论文级别术语|Translate ordinary English prose",
+    re.I,
+)
 
 
 def load_json(path: Path | None) -> dict[str, Any]:
@@ -51,6 +56,18 @@ def has_long_ordinary_english(value: str) -> bool:
     if re.search(r"\b(?:the|this|that|these|those|we|our|agent|agents|method|methods|model|models|task|tasks|learn|learning|memory|performance|trajectory|trajectories)\b", text, re.I):
         return True
     return bool(re.search(r"[A-Za-z]{4,}(?:[\s,;:()\\/-]+[A-Za-z]{4,}){3,}", text))
+
+
+def english_word_count(value: str) -> int:
+    return len(re.findall(r"\b[A-Za-z][A-Za-z-]{3,}\b", str(value or "")))
+
+
+def cjk_count(value: str) -> int:
+    return len(re.findall(r"[\u4e00-\u9fff]", str(value or "")))
+
+
+def has_prompt_leak(value: str) -> bool:
+    return bool(PROMPT_LEAK_RE.search(str(value or "")))
 
 
 def is_protected_visible_text(text: str, *, page: int | None = None) -> bool:
@@ -120,17 +137,21 @@ def normalize_finding(raw: dict[str, Any], *, source: str) -> dict[str, Any] | N
     failure_type = ""
     if "style_tag" in rule or re.search(r"</?style\b", text, re.I):
         failure_type = "style_tag_leak"
+    elif "prompt_leak" in rule or has_prompt_leak(text):
+        failure_type = "prompt_leak"
     elif "visible_text_not_tracked" in rule:
         failure_type = "visible_text_not_tracked"
     elif "translated_but_source_visible" in rule or "tracking_translated_but_source_visible" in rule:
         failure_type = "translated_but_source_visible"
     elif "ocr_critical_page_english_residue" in rule:
         failure_type = "translated_but_source_visible"
+    elif "english_residue" in rule:
+        failure_type = "translated_but_source_visible"
     elif raw.get("fallback_to_translate") or "fallback" in rule:
         failure_type = "fallback_without_writeback"
     else:
         return None
-    if failure_type != "style_tag_leak" and text and is_protected_visible_text(text, page=page):
+    if failure_type not in {"style_tag_leak", "prompt_leak"} and text and is_protected_visible_text(text, page=page):
         return None
     severity = str(raw.get("severity") or ("blocking" if failure_type in {"translated_but_source_visible", "style_tag_leak"} else "warn"))
     item = {
@@ -146,13 +167,16 @@ def normalize_finding(raw: dict[str, Any], *, source: str) -> dict[str, Any] | N
         "paragraph_debug_id": raw.get("paragraph_debug_id") or raw.get("debug_id"),
         "failure_stage": raw.get("failure_stage") or ("paint" if failure_type != "visible_text_not_tracked" else "paragraph_finder"),
         "evidence_source": source,
-        "repair_target": _repair_target_for_failure(failure_type, role),
+        "repair_target": "translation_output_filter_required" if failure_type == "prompt_leak" else _repair_target_for_failure(failure_type, role),
     }
     item["critical_page"] = page in CRITICAL_PAGES
     item["ordinary_body_residue"] = _ordinary_body_residue(item)
     item["delivery_blocking"] = bool(
-        item["critical_page"]
-        and (item["ordinary_body_residue"] or failure_type in {"style_tag_leak", "translated_but_source_visible"})
+        failure_type in {"prompt_leak", "style_tag_leak"}
+        or (
+            item["critical_page"]
+            and (item["ordinary_body_residue"] or failure_type == "translated_but_source_visible")
+        )
     )
     return item
 
@@ -215,6 +239,94 @@ def tracking_fallback_findings(tracking_payload: dict[str, Any], *, limit: int =
             findings.append(item)
         if len(findings) >= limit:
             break
+    return findings
+
+
+def _references_start_page(lines: list[dict[str, Any]]) -> int | None:
+    pages = []
+    for line in lines:
+        text = str(line.get("text") or "")
+        if re.search(r"^\s*(参考文献|References)\s*$", text, re.I):
+            page = _first_int(line.get("page"))
+            if page is not None:
+                pages.append(page)
+    return min(pages) if pages else None
+
+
+def text_layer_residue_findings(poppler_audit: dict[str, Any] | None, *, limit: int = 80) -> list[dict[str, Any]]:
+    lines = poppler_audit.get("translated_lines") if isinstance(poppler_audit, dict) else []
+    if not isinstance(lines, list):
+        return []
+
+    page_text: dict[int, str] = {}
+    page_english_lines: dict[int, list[dict[str, Any]]] = {}
+    prompt_leaks: list[dict[str, Any]] = []
+    references_start = _references_start_page([line for line in lines if isinstance(line, dict)])
+
+    for line in lines:
+        if not isinstance(line, dict):
+            continue
+        page = _first_int(line.get("page"))
+        if page is None:
+            continue
+        text = str(line.get("text") or "")
+        if not text.strip():
+            continue
+        page_text[page] = (page_text.get(page, "") + "\n" + text).strip()
+        if has_prompt_leak(text):
+            item = normalize_finding(
+                {
+                    "rule": "text_layer_prompt_leak",
+                    "severity": "blocking",
+                    "page": page,
+                    "visible_text": text,
+                    "bbox": line.get("bbox"),
+                    "layout_role": "body_prose",
+                    "failure_stage": "translate",
+                },
+                source="poppler_text_layer",
+            )
+            if item:
+                item["delivery_blocking"] = True
+                prompt_leaks.append(item)
+            continue
+        if references_start is not None and page >= references_start:
+            continue
+        if not has_long_ordinary_english(text) or is_protected_visible_text(text, page=page):
+            continue
+        page_english_lines.setdefault(page, []).append(line)
+
+    findings = list(prompt_leaks)
+    for page, english_lines in sorted(page_english_lines.items()):
+        text = page_text.get(page, "")
+        page_english_words = sum(english_word_count(str(line.get("text") or "")) for line in english_lines)
+        if len(english_lines) < 4 and page_english_words < 40:
+            continue
+        if cjk_count(text) < 20:
+            continue
+        for line in english_lines[: max(1, min(6, limit - len(findings)))]:
+            item = normalize_finding(
+                {
+                    "rule": "text_layer_page_english_residue",
+                    "severity": "blocking",
+                    "page": page,
+                    "visible_text": line.get("text"),
+                    "bbox": line.get("bbox"),
+                    "layout_role": "body_prose",
+                    "failure_stage": "paint",
+                },
+                source="poppler_text_layer",
+            )
+            if item:
+                item["failure_type"] = "translated_but_source_visible"
+                item["repair_target"] = "readable_fallback_required"
+                item["ordinary_body_residue"] = True
+                item["delivery_blocking"] = True
+                item["page_english_line_count"] = len(english_lines)
+                item["page_english_word_count"] = page_english_words
+                findings.append(item)
+            if len(findings) >= limit:
+                return findings
     return findings
 
 
@@ -474,6 +586,7 @@ def build_visible_residue_audit(
     findings = []
     findings.extend(iter_audit_findings(pymupdf_audit or {}, source="pymupdf_layout_audit"))
     findings.extend(iter_audit_findings(poppler_audit or {}, source="poppler_text_bbox_audit"))
+    findings.extend(text_layer_residue_findings(poppler_audit or {}))
     findings.extend(iter_audit_findings(visual_report or {}, source="visual_layout_report"))
     findings.extend(tracking_fallback_findings(tracking_payload or {}))
     ocr_findings, ocr_status = ocr_critical_page_findings(output_dir)
@@ -494,6 +607,7 @@ def build_visible_residue_audit(
         "blocking_count": len(blocking),
         "critical_page_finding_count": len(critical),
         "ordinary_body_critical_count": sum(1 for item in findings if item.get("critical_page") and item.get("ordinary_body_residue")),
+        "ordinary_body_delivery_blocking_count": sum(1 for item in findings if item.get("delivery_blocking") and item.get("ordinary_body_residue")),
         "counts_by_failure_type": by_type,
         "ocr": ocr_status,
         "findings": findings,

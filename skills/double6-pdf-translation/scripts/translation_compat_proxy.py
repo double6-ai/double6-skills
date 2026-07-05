@@ -137,6 +137,14 @@ def upstream_retry_delay(attempt: int) -> float:
     return min(4.0, 0.5 * (2 ** max(attempt - 1, 0)))
 
 
+def quality_retry_attempts(config: ProxyConfig) -> int:
+    raw_value = config.stats.get("_quality_retry_attempts") or os.environ.get("PAPER_TRANSLATION_QUALITY_RETRY_ATTEMPTS", "1")
+    try:
+        return max(0, int(raw_value))
+    except (TypeError, ValueError):
+        return 1
+
+
 def upstream_error_body(error_type: str, message: str) -> bytes:
     return json.dumps(
         {"error": {"type": error_type, "message": message[:1000]}},
@@ -297,6 +305,12 @@ def looks_like_task_explanation(text: str) -> bool:
             stripped,
             flags=re.I,
         )
+        or re.search(
+            r"以下是(?:根据|依据).*?(?:要求|翻译)|仅输出翻译|不要输出(?:解释|分析)|"
+            r"保留(?:占位符|拉丁)|论文级别术语|Translate ordinary English prose",
+            stripped,
+            flags=re.I,
+        )
     )
 
 
@@ -422,7 +436,49 @@ def _record_translation_ledger(
     )
 
 
-def _request_plain_translation(text: str, config: ProxyConfig, policy_prompt: str, retry: bool = False, role: str = "") -> str:
+def _quality_failure_reasons(source: str, translated: str) -> list[str]:
+    reasons = []
+    if not translated:
+        reasons.append("empty_output")
+        return reasons
+    if is_same_as_input_translation(source, translated):
+        reasons.append("same_as_input_or_non_chinese")
+    if looks_partially_untranslated(source, translated):
+        reasons.append("partial_untranslated")
+    if looks_like_task_explanation(translated):
+        reasons.append("task_explanation_or_prompt_leak")
+    if policy_utils.missing_protected_values(source, translated):
+        reasons.append("protected_value_missing")
+    return reasons
+
+
+def _retry_reflection_instruction(source: str, previous_output: str, reasons: list[str], retry_round: int) -> str:
+    if not reasons:
+        return ""
+    reason_text = ", ".join(dict.fromkeys(reasons))
+    previous_excerpt = re.sub(r"\s+", " ", previous_output or "")[:700]
+    source_alpha = len(re.findall(r"\b[A-Za-z][A-Za-z-]{3,}\b", visible_text_for_quality(source)))
+    output_alpha = len(re.findall(r"\b[A-Za-z][A-Za-z-]{3,}\b", visible_text_for_quality(previous_output)))
+    return (
+        f"Quality retry round {retry_round}. The previous output failed validation: {reason_text}. "
+        f"Source ordinary-English word count is about {source_alpha}; previous output retained about {output_alpha}. "
+        "Do not repeat the previous output. Correct the exact failure now: translate ordinary English prose into natural "
+        "Simplified Chinese, preserve only protected spans verbatim, and output only the corrected translation. "
+        "If the previous output contained task instructions, explanations, or prompt text, remove them completely. "
+        f"Previous bad output excerpt: {previous_excerpt}\n\n"
+    )
+
+
+def _request_plain_translation(
+    text: str,
+    config: ProxyConfig,
+    policy_prompt: str,
+    retry: bool = False,
+    role: str = "",
+    retry_round: int = 0,
+    failure_reasons: list[str] | None = None,
+    previous_output: str = "",
+) -> str:
     role_instruction = (
         "This item is ordinary body prose. Translate every human-readable English word or sentence into natural Simplified Chinese. "
         "Do not preserve bibliography-style English unless the input is explicitly a reference entry. "
@@ -437,20 +493,25 @@ def _request_plain_translation(text: str, config: ProxyConfig, policy_prompt: st
         if retry
         else ""
     )
-    prompt = (
-        "Translate the following academic PDF text into Simplified Chinese. "
+    base_instruction = (
+        "You are a strict academic PDF translation engine. "
+        "Translate the given PDF text into fluent Simplified Chinese. "
         "Preserve placeholders such as {v1}, citations like [12], URLs, code, LaTeX commands, "
-        "XML/HTML-style tags, model names, and file names exactly. Output only the translation.\n\n"
-        "Preserve Latin personal names in the original alphabet. Keep numbered lists as separate items. "
+        "XML/HTML-style tags, model names, and file names exactly. Output only the translation. "
         "Never explain the task, never mention these instructions, and never output analysis.\n\n"
+        "Preserve Latin personal names in the original alphabet. Keep numbered lists as separate items. "
         + role_instruction
         + retry_instruction
-        + (policy_prompt.strip() + "\n\n" if policy_prompt.strip() else "")
-        + f"{text}"
+        + _retry_reflection_instruction(text, previous_output, failure_reasons or [], retry_round)
+        + (policy_prompt.strip() if policy_prompt.strip() else "")
     )
+    messages = [
+        {"role": "system", "content": base_instruction.strip()},
+        {"role": "user", "content": str(text)},
+    ]
     payload = {
         "model": config.model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
         "stream": False,
         "max_tokens": int(config.stats.get("_probe_max_tokens") or min(4096, max(256, len(text) * 3))),
     }
@@ -550,46 +611,50 @@ def call_plain_translation(
             )
         return text
     translated = _request_plain_translation(text, active, policy_prompt, role=role)
-    if translated:
-        text_quality_failure = (
-            is_same_as_input_translation(text, translated)
-            or looks_partially_untranslated(text, translated)
-            or looks_like_task_explanation(translated)
-        )
-        protected_value_failure = bool(policy_utils.missing_protected_values(text, translated))
-    else:
-        text_quality_failure = False
-        protected_value_failure = False
-    if translated and (text_quality_failure or protected_value_failure):
+    failure_reasons = _quality_failure_reasons(text, translated)
+    if translated and failure_reasons:
+        text_quality_failure = any(reason in failure_reasons for reason in {"same_as_input_or_non_chinese", "partial_untranslated", "task_explanation_or_prompt_leak"})
+        protected_value_failure = "protected_value_missing" in failure_reasons
         if text_quality_failure:
             _append_stat_sample(active, "same_as_input_candidates", {"source": text[:160], "output": translated[:160]})
             _increment_stat(active, "same_as_input_retry")
         if protected_value_failure:
             _append_stat_sample(active, "protected_value_candidates", {"source": text[:160], "output": translated[:160]})
             _increment_stat(active, "protected_value_retry")
-        retry_translated = _request_plain_translation(text, active, policy_prompt, retry=True, role=role)
-        retry_text_quality_failure = (
-            retry_translated
-            and (
-                is_same_as_input_translation(text, retry_translated)
-                or looks_partially_untranslated(text, retry_translated)
-                or looks_like_task_explanation(retry_translated)
+        max_quality_retries = quality_retry_attempts(active)
+        for retry_round in range(1, max_quality_retries + 1):
+            _increment_stat(active, "quality_retry_attempt")
+            retry_translated = _request_plain_translation(
+                text,
+                active,
+                policy_prompt,
+                retry=True,
+                role=role,
+                retry_round=retry_round,
+                failure_reasons=failure_reasons,
+                previous_output=translated,
             )
-        )
-        retry_protected_value_failure = bool(
-            retry_translated and policy_utils.missing_protected_values(text, retry_translated)
-        )
-        if retry_translated and not retry_text_quality_failure and not retry_protected_value_failure:
-            if text_quality_failure:
-                _increment_stat(active, "same_as_input_retry_success")
-            if protected_value_failure:
-                _increment_stat(active, "protected_value_retry_success")
-            translated = retry_translated
-        else:
-            if text_quality_failure:
-                _increment_stat(active, "same_as_input_retry_failed")
-            if protected_value_failure:
-                _increment_stat(active, "protected_value_retry_failed")
+            retry_reasons = _quality_failure_reasons(text, retry_translated)
+            if retry_translated and not retry_reasons:
+                if text_quality_failure:
+                    _increment_stat(active, "same_as_input_retry_success")
+                if protected_value_failure:
+                    _increment_stat(active, "protected_value_retry_success")
+                translated = retry_translated
+                failure_reasons = []
+                break
+            translated = retry_translated or translated
+            failure_reasons = retry_reasons or failure_reasons
+        if failure_reasons and text_quality_failure:
+            _increment_stat(active, "same_as_input_retry_failed")
+        if failure_reasons and protected_value_failure:
+            _increment_stat(active, "protected_value_retry_failed")
+        if failure_reasons:
+            _append_stat_sample(
+                active,
+                "quality_retry_failed_samples",
+                {"source": text[:160], "output": translated[:160], "reasons": failure_reasons},
+            )
     if not translated:
         _increment_stat(active, "empty_translation_fallback")
         if record_ledger:
@@ -604,8 +669,9 @@ def call_plain_translation(
                 status="empty_translation_fallback",
             )
         return text
-    if should_translate_to_chinese(text) and cjk_char_count(translated) == 0 and re.search(r"[A-Za-z]{4,}", translated):
-        _increment_stat(active, "non_chinese_translation_fallback")
+    final_failure_reasons = _quality_failure_reasons(text, translated)
+    if "task_explanation_or_prompt_leak" in final_failure_reasons:
+        _increment_stat(active, "prompt_leak_discarded")
         if record_ledger:
             _record_translation_ledger(
                 active,
@@ -615,9 +681,39 @@ def call_plain_translation(
                 item=ledger_item,
                 batch_id=ledger_batch_id,
                 path=ledger_path,
-                status="non_chinese_translation_fallback",
+                status="prompt_leak_discarded_after_retry",
             )
         return text
+    if any(reason in final_failure_reasons for reason in {"same_as_input_or_non_chinese", "partial_untranslated", "task_explanation_or_prompt_leak"}):
+        _increment_stat(active, "quality_retry_exhausted_no_source_fallback")
+        if record_ledger:
+            _record_translation_ledger(
+                active,
+                source=text,
+                output=translated,
+                role=role,
+                item=ledger_item,
+                batch_id=ledger_batch_id,
+                path=ledger_path,
+                status="quality_retry_exhausted",
+            )
+        return translated
+    if "protected_value_missing" in final_failure_reasons:
+        _increment_stat(active, "protected_value_retry_exhausted")
+    if should_translate_to_chinese(text) and cjk_char_count(translated) == 0 and re.search(r"[A-Za-z]{4,}", translated):
+        _increment_stat(active, "non_chinese_translation_fallback")
+        if record_ledger:
+            _record_translation_ledger(
+                active,
+                source=text,
+                output=translated,
+                role=role,
+                item=ledger_item,
+                batch_id=ledger_batch_id,
+                path=ledger_path,
+                status="non_chinese_translation_failed",
+            )
+        return translated
     literal_repairs = policy_utils.policy_literal_repairs(text, translated)
     if literal_repairs:
         for _repair in literal_repairs:
