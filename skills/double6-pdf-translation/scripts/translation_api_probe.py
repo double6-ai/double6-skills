@@ -25,8 +25,8 @@ SCRIPT_INTERFACE_REASON = "Run offline or live OpenAI-compatible translation pro
 
 DEFAULT_MODEL_NAME = "deepseek-v4-flash"
 DEFAULT_TEMPERATURES = (0.1, 0.2, 0.3, 0.5)
-DEFAULT_PROMPT_VARIANTS = ("current", "no_policy", "no_broad_protection", "force_chinese_retry", "paragraph")
-DEFAULT_CALL_PATHS = ("direct", "proxy", "json-batch")
+DEFAULT_PROMPT_VARIANTS = ("current", "no_policy", "no_broad_protection", "force_chinese_retry", "strict_reflection", "paragraph")
+DEFAULT_CALL_PATHS = ("direct", "direct-system", "proxy", "json-batch")
 PROTECTED_TOKEN_RE = re.compile(
     r"(https?://[^\s)>\]]+|\b10\.\d{4,9}/[-._;()/:A-Za-z0-9]+|"
     r"[A-Za-z0-9_.%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|\{v\d+\}|\[[0-9,\-\s]{1,30}\]|"
@@ -99,6 +99,15 @@ def make_case(
     }
 
 
+def expected_behavior_for_failure_sample(source: str, classification: str = "", role: str = "") -> str:
+    role_value = str(role or "")
+    if role_value in {"body_prose", "plain text", "text", "paragraph_hybrid", ""} and translation_compat_proxy.should_translate_to_chinese(source):
+        return "translate"
+    if classification in {"ordinary_same_as_input", "needs_backend_mapping"}:
+        return "translate"
+    return expected_behavior_for_source(source, classification=classification, role=role_value)
+
+
 def dedupe_cases(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: set[str] = set()
     deduped: list[dict[str, Any]] = []
@@ -159,6 +168,11 @@ def load_backend_retry_failure_cases(path: Path, payload: dict[str, Any]) -> lis
                 source_output=str(item.get("output_snippet") or ""),
                 classification=str(item.get("classification") or ""),
                 role=str(item.get("layout_role") or item.get("layout_label") or ""),
+                expected_behavior=expected_behavior_for_failure_sample(
+                    source,
+                    str(item.get("classification") or ""),
+                    str(item.get("layout_role") or item.get("layout_label") or ""),
+                ),
                 metadata={
                     "failure_type": item.get("failure_type"),
                     "page": item.get("page"),
@@ -206,9 +220,56 @@ def load_translation_proxy_stats_cases(path: Path, payload: dict[str, Any]) -> l
                 source_output=str(item.get("output") or item.get("output_snippet") or ""),
                 role=str(item.get("layout_role") or item.get("role") or item.get("layout_label") or ""),
                 classification="layout_role_passthrough" if key == "plain_layout_role_intercept_samples" else "",
+                expected_behavior=expected_behavior_for_failure_sample(
+                    source,
+                    "layout_role_passthrough" if key == "plain_layout_role_intercept_samples" else "",
+                    str(item.get("layout_role") or item.get("role") or item.get("layout_label") or ""),
+                ),
                 metadata={"sample_key": key, "page": item.get("page"), "layout_label": item.get("layout_label")},
             )
         )
+    return cases
+
+
+def load_visible_residue_cases(path: Path, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    findings = payload.get("findings") if isinstance(payload, dict) else None
+    cases: list[dict[str, Any]] = []
+    for index, item in enumerate(findings if isinstance(findings, list) else [], start=1):
+        if not isinstance(item, dict):
+            continue
+        source = str(item.get("tracking_source") or item.get("visible_text") or "")
+        if not source.strip():
+            continue
+        cases.append(
+            make_case(
+                source,
+                case_id=str(item.get("paragraph_debug_id") or f"{path.stem}-visible-residue-{index}"),
+                origin=f"visible_residue:{path.name}",
+                source_output=str(item.get("tracking_output") or item.get("visible_text") or ""),
+                role=str(item.get("layout_role") or "body_prose"),
+                expected_behavior="translate",
+                metadata={
+                    "failure_type": item.get("failure_type"),
+                    "rule": item.get("rule"),
+                    "page": item.get("page"),
+                    "evidence_source": item.get("evidence_source"),
+                },
+            )
+        )
+    return cases
+
+
+def load_failure_dir_cases(path: Path) -> list[dict[str, Any]]:
+    cases: list[dict[str, Any]] = []
+    for name in [
+        "backend_retry_failures.json",
+        "translation_proxy_stats.json",
+        "visible_residue_audit.json",
+        "visible_residue_pre_repair_audit.json",
+    ]:
+        candidate = path / name
+        if candidate.exists():
+            cases.extend(load_cases_from_path(candidate))
     return cases
 
 
@@ -220,6 +281,8 @@ def load_cases_from_path(path: Path) -> list[dict[str, Any]]:
         return load_backend_retry_failure_cases(path, payload)
     if isinstance(payload, dict) and ("stats" in payload or "json_batch_items" in payload):
         return load_translation_proxy_stats_cases(path, payload)
+    if isinstance(payload, dict) and "findings" in payload:
+        return load_visible_residue_cases(path, payload)
     if isinstance(payload, list):
         cases: list[dict[str, Any]] = []
         for index, item in enumerate(payload, start=1):
@@ -322,6 +385,20 @@ def build_prompt(source: str, case: dict[str, Any], variant: str) -> str:
             + (policy_prompt.strip() + "\n\n" if policy_prompt.strip() else "")
             + source
         )
+    if variant == "strict_reflection":
+        previous = re.sub(r"\s+", " ", str(case.get("source_output") or ""))[:700]
+        metadata = case.get("metadata") if isinstance(case.get("metadata"), dict) else {}
+        failure = ", ".join(str(metadata.get(key) or "") for key in ["failure_type", "blocking_reason", "sample_key"] if metadata.get(key))
+        return (
+            "Quality-repair translation attempt. A previous PDF translation attempt failed"
+            + (f" with: {failure}." if failure else ".")
+            + " Do not repeat the previous bad output. Translate all ordinary academic English prose into natural Simplified Chinese. "
+            "Preserve only URLs, DOIs, citations, placeholders like {v1}, LaTeX commands, XML/HTML tags, emails, and Latin personal names. "
+            "If the previous output contained task instructions or explanations, remove them completely. Output only the corrected translation.\n\n"
+            + (f"Previous bad output excerpt:\n{previous}\n\n" if previous else "")
+            + (policy_prompt.strip() + "\n\n" if policy_prompt.strip() else "")
+            + source
+        )
     if variant == "paragraph":
         return (
             "Translate this academic paragraph fragment into Simplified Chinese. The text may be a PDF extraction fragment, "
@@ -360,10 +437,16 @@ def post_chat_completion(
     max_tokens: int,
     thinking: str = "disabled",
     response_format: dict[str, Any] | None = None,
+    system_prompt: str | None = None,
 ) -> str:
+    messages = (
+        [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}]
+        if system_prompt
+        else [{"role": "user", "content": prompt}]
+    )
     payload: dict[str, Any] = {
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
         "temperature": temperature,
         "stream": False,
         "max_tokens": max_tokens,
@@ -403,6 +486,37 @@ def call_direct(case: dict[str, Any], variant: str, temperature: float, config: 
     }
 
 
+def call_direct_system(case: dict[str, Any], variant: str, temperature: float, config: ProxyConfig, timeout: int) -> tuple[str, dict[str, Any]]:
+    source = str(case["source"])
+    prompt = build_prompt(source, case, variant)
+    if source in prompt:
+        system_prompt, user_prompt = prompt.rsplit(source, 1)
+        system_prompt = system_prompt.strip()
+        user_prompt = source
+    else:
+        system_prompt = prompt
+        user_prompt = source
+    max_tokens = int(config.stats.get("_probe_max_tokens") or 512)
+    output = post_chat_completion(
+        base_url=config.upstream_base_url,
+        api_key=config.api_key,
+        model=config.model,
+        prompt=user_prompt,
+        temperature=temperature,
+        timeout=timeout,
+        max_tokens=max_tokens,
+        thinking=str(config.stats.get("_probe_thinking") or "disabled"),
+        system_prompt=system_prompt,
+    )
+    return output, {
+        "prompt_hash": prompt_hash(system_prompt + "\n---USER---\n" + user_prompt),
+        "temperature_applied": True,
+        "max_tokens": max_tokens,
+        "thinking": str(config.stats.get("_probe_thinking") or "disabled"),
+        "message_mode": "system_user",
+    }
+
+
 def call_proxy(case: dict[str, Any], _variant: str, _temperature: float, config: ProxyConfig, _timeout: int) -> tuple[str, dict[str, Any]]:
     output = translation_compat_proxy.call_plain_translation(str(case["source"]), config, policy_prompt=build_policy_prompt(case, "current"))
     return output, {"prompt_hash": None, "temperature_applied": False, "thinking": str(config.stats.get("_probe_thinking") or "disabled")}
@@ -427,6 +541,7 @@ def call_json_batch(case: dict[str, Any], _variant: str, _temperature: float, co
 
 CALL_PATHS = {
     "direct": call_direct,
+    "direct-system": call_direct_system,
     "proxy": call_proxy,
     "json-batch": call_json_batch,
 }
@@ -434,7 +549,7 @@ CALL_PATHS = {
 
 def probe_call_config(config: ProxyConfig) -> ProxyConfig:
     cloned = ProxyConfig(model=config.model, upstream_base_url=config.upstream_base_url, api_key=config.api_key)
-    for key in ["_probe_max_tokens", "_probe_timeout", "_probe_thinking"]:
+    for key in ["_probe_max_tokens", "_probe_timeout", "_probe_thinking", "_quality_retry_attempts"]:
         if key in config.stats:
             cloned.stats[key] = config.stats[key]
     return cloned
@@ -451,8 +566,8 @@ def build_probe_tasks(
     for call_path in call_paths:
         if call_path not in CALL_PATHS:
             raise ValueError(f"Unsupported call path: {call_path}")
-        variants = prompt_variants if call_path == "direct" else ["current"]
-        temps = temperatures if call_path == "direct" else [temperatures[0]]
+        variants = prompt_variants if call_path in {"direct", "direct-system"} else ["current"]
+        temps = temperatures if call_path in {"direct", "direct-system"} else [temperatures[0]]
         for variant in variants:
             for temperature in temps:
                 for case in cases:
@@ -693,6 +808,8 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     input_cases: list[dict[str, Any]] = []
     for input_path in args.input or []:
         input_cases.extend(load_cases_from_path(Path(input_path).expanduser()))
+    for failure_dir in args.failure_dir or []:
+        input_cases.extend(load_failure_dir_cases(Path(failure_dir).expanduser()))
     if args.include_synthetic:
         input_cases.extend(synthetic_cases())
     cases = select_cases(dedupe_cases(input_cases), args.max_cases_per_kind)
@@ -708,6 +825,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     config.stats["_probe_max_tokens"] = int(args.max_tokens)
     config.stats["_probe_timeout"] = int(args.timeout)
     config.stats["_probe_thinking"] = str(args.thinking)
+    config.stats["_quality_retry_attempts"] = int(args.quality_retry_attempts)
     case_rows = [
         {
             "id": case["id"],
@@ -831,6 +949,7 @@ def build_payload(
         "prompt_variants": prompt_variants,
         "call_paths": call_paths,
         "thinking": args.thinking,
+        "quality_retry_attempts": int(args.quality_retry_attempts),
         "concurrency": int(args.concurrency),
         "summary": summary,
         "results": results,
@@ -855,6 +974,7 @@ def build_warnings(cases: list[dict[str, Any]]) -> list[str]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Probe OpenAI-compatible translation behavior on PDF backend fragments.")
     parser.add_argument("--input", action="append", help="Input backend_retry_failures.json, translation_proxy_stats.json, JSON list, or JSONL fixture. Repeatable.")
+    parser.add_argument("--failure-dir", action="append", help="Output directory from a failed run; common failure artifacts are loaded automatically. Repeatable.")
     parser.add_argument("--output-dir", default=".cache/translation-api-probe", help="Directory for probe_results.json, probe_summary.md, and probe_cases.jsonl.")
     parser.add_argument("--provider", default=os.environ.get("LOCAL_TRANSLATION_PROVIDER", "deepseek"))
     parser.add_argument("--base-url", default=os.environ.get("LOCAL_TRANSLATION_BASE_URL") or DEFAULT_BASE_URL)
@@ -870,6 +990,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--progress-every", type=int, default=25, help="Print JSON progress every N API results; 0 disables progress logs.")
     parser.add_argument("--timeout", type=int, default=120)
     parser.add_argument("--max-tokens", type=int, default=512, help="Maximum completion tokens for direct API probe calls.")
+    parser.add_argument("--quality-retry-attempts", type=int, default=1, help="Quality retry attempts used by proxy/json-batch call paths.")
     parser.add_argument(
         "--thinking",
         choices=["disabled", "enabled", "omit"],
