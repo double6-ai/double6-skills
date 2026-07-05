@@ -33,6 +33,25 @@ python scripts/run_pdf_translation.py <input-file.pdf> \
 
 运行时可能会自动启动内部 `translation_compat_proxy.py`，用于把 PDF 后端的碎片翻译请求接入已配置的 OpenAI-compatible 服务，并执行 JSON 输出兼容、正文翻译重试和质量统计。它不是要求用户本地部署模型；如需调试，可用 `--translation-compat-proxy on|off|auto` 或 `PAPER_TRANSLATION_COMPAT_PROXY` 控制。
 
+常用场景：
+
+```bash
+# 普通 PDF 翻译
+python scripts/run_pdf_translation.py paper.pdf --output-dir paper-zh
+
+# 网络受限环境：关闭 arXiv 源码自动下载，只使用本地 PDF/源码
+python scripts/run_pdf_translation.py paper.pdf --output-dir paper-zh \
+  --no-arxiv-source-autodownload
+
+# 已有 LaTeX 源码：显式指定主 tex 文件
+python scripts/run_pdf_translation.py paper.pdf --output-dir paper-zh \
+  --latex-source paper_source/main.tex
+
+# 诊断模式：只检查运行时配置和依赖，不开始翻译
+python scripts/run_pdf_translation.py paper.pdf --output-dir paper-zh \
+  --preflight-only
+```
+
 ## 最小依赖
 
 需要暴露一个兼容的外部 PDF 后端：
@@ -89,7 +108,6 @@ pdf2zh --help
 - 查看命令参数和失败处理时，阅读 `references/workflow.md`。
 - 安装或审查本地运行时要求时，阅读 `references/runtime-dependencies.md`。
 - 查看厂商 API key 到 `base_url` 的候选映射时，阅读 `references/provider-base-urls.md`。
-- 同步 metadata 修复与可见残留候选清理优化时，阅读 `references/metadata-visible-residue-optimization.md`。
 
 ## 边界
 

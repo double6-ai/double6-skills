@@ -12,7 +12,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
@@ -209,6 +209,74 @@ def _chat_completions_url(base_url: str) -> str:
     return f"{value}/chat/completions"
 
 
+def _chat_endpoint_probe(args: argparse.Namespace, base_url: str, *, fallback_from: dict[str, Any] | None = None) -> dict[str, Any]:
+    endpoint = _chat_completions_url(base_url)
+    payload = {
+        "model": args.model,
+        "messages": [
+            {"role": "system", "content": "You are a runtime preflight checker."},
+            {"role": "user", "content": "Reply with OK."},
+        ],
+        "max_tokens": 8,
+        "stream": False,
+    }
+    request = Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {args.api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=float(args.endpoint_timeout)) as response:  # noqa: S310 - operator-configured endpoint preflight
+            status = int(getattr(response, "status", 0) or 0)
+            ok = 200 <= status < 300
+            details = {"base_url": base_url, "endpoint": endpoint, "status": status, "model": args.model}
+            if fallback_from:
+                details["fallback_from"] = fallback_from
+            return check_result(
+                "openai_endpoint",
+                "pass" if ok else "fail",
+                severity="required",
+                message=f"OpenAI-compatible chat endpoint responded with HTTP {status}.",
+                details=details,
+                remediation="Check LOCAL_TRANSLATION_API_KEY, LOCAL_TRANSLATION_MODEL, and LOCAL_TRANSLATION_BASE_URL.",
+            )
+    except HTTPError as exc:
+        details = {
+            "base_url": base_url,
+            "endpoint": endpoint,
+            "model": args.model,
+            "status": exc.code,
+            "error": str(exc),
+        }
+        if fallback_from:
+            details["fallback_from"] = fallback_from
+        return check_result(
+            "openai_endpoint",
+            "fail",
+            severity="required",
+            message=f"OpenAI-compatible chat endpoint rejected the preflight request with HTTP {exc.code}.",
+            details=details,
+            remediation="Verify the API key, model name, and endpoint by sending a minimal chat completions request.",
+        )
+    except URLError as exc:
+        details = {"base_url": base_url, "endpoint": endpoint, "model": args.model, "error": str(exc)}
+        if fallback_from:
+            details["fallback_from"] = fallback_from
+        return check_result(
+            "openai_endpoint",
+            "fail",
+            severity="required",
+            message=f"OpenAI-compatible chat endpoint is not reachable: {exc}.",
+            details=details,
+            remediation="Set LOCAL_TRANSLATION_API_KEY and allow outbound access to the configured endpoint.",
+        )
+
+
 def check_endpoint_config(args: argparse.Namespace) -> dict[str, Any]:
     base_url = str(args.base_url or "").rstrip("/")
     model = str(args.model or "").strip()
@@ -258,47 +326,7 @@ def check_endpoint(args: argparse.Namespace) -> dict[str, Any]:
     base_url = str(args.base_url or "").rstrip("/")
     parsed = urlparse(base_url)
     if "api.deepseek.com" in parsed.netloc or base_url.endswith("/chat/completions"):
-        endpoint = _chat_completions_url(base_url)
-        payload = {
-            "model": args.model,
-            "messages": [
-                {"role": "system", "content": "You are a runtime preflight checker."},
-                {"role": "user", "content": "Reply with OK."},
-            ],
-            "max_tokens": 8,
-            "stream": False,
-        }
-        request = Request(
-            endpoint,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {args.api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-            method="POST",
-        )
-        try:
-            with urlopen(request, timeout=float(args.endpoint_timeout)) as response:  # noqa: S310 - operator-configured endpoint preflight
-                status = int(getattr(response, "status", 0) or 0)
-                ok = 200 <= status < 300
-                return check_result(
-                    "openai_endpoint",
-                    "pass" if ok else "fail",
-                    severity="required",
-                    message=f"DeepSeek/OpenAI-compatible chat endpoint responded with HTTP {status}.",
-                    details={"base_url": base_url, "endpoint": endpoint, "status": status, "model": args.model},
-                    remediation="Check LOCAL_TRANSLATION_API_KEY, LOCAL_TRANSLATION_MODEL, and LOCAL_TRANSLATION_BASE_URL.",
-                )
-        except URLError as exc:
-            return check_result(
-                "openai_endpoint",
-                "fail",
-                severity="required",
-                message=f"DeepSeek/OpenAI-compatible chat endpoint is not reachable: {exc}.",
-                details={"base_url": base_url, "endpoint": endpoint, "model": args.model, "error": str(exc)},
-                remediation="Set LOCAL_TRANSLATION_API_KEY and allow outbound access to the configured endpoint.",
-            )
+        return _chat_endpoint_probe(args, base_url)
     request = Request(
         base_url + "/models",
         headers={"Authorization": f"Bearer {args.api_key}", "Accept": "application/json"},
@@ -307,7 +335,7 @@ def check_endpoint(args: argparse.Namespace) -> dict[str, Any]:
     try:
         with urlopen(request, timeout=float(args.endpoint_timeout)) as response:  # noqa: S310 - reviewed local/operator endpoint preflight
             status = int(getattr(response, "status", 0) or 0)
-            ok = 200 <= status < 500
+            ok = 200 <= status < 300
             return check_result(
                 "openai_endpoint",
                 "pass" if ok else "fail",
@@ -316,15 +344,12 @@ def check_endpoint(args: argparse.Namespace) -> dict[str, Any]:
                 details={"base_url": base_url, "status": status, "model": args.model},
                 remediation="Start the local model server or adjust LOCAL_TRANSLATION_BASE_URL / --base-url.",
             )
+    except HTTPError as exc:
+        fallback_from = {"endpoint": base_url + "/models", "status": exc.code, "error": str(exc)}
+        return _chat_endpoint_probe(args, base_url, fallback_from=fallback_from)
     except URLError as exc:
-        return check_result(
-            "openai_endpoint",
-            "fail",
-            severity="required",
-            message=f"OpenAI-compatible endpoint is not reachable: {exc}.",
-            details={"base_url": base_url, "model": args.model, "error": str(exc)},
-            remediation="Start the model server before running translation, or point --base-url at a reachable endpoint.",
-        )
+        fallback_from = {"endpoint": base_url + "/models", "error": str(exc)}
+        return _chat_endpoint_probe(args, base_url, fallback_from=fallback_from)
 
 
 def check_proxy_port(args: argparse.Namespace) -> dict[str, Any]:
