@@ -1,6 +1,6 @@
 # Known Pitfalls (踩坑汇总)
 
-本 skill 在 Windows + WorkBuddy 托管 Python 环境中完成了真实运行验证。以下 17 个问题用于帮助新机器和新 agent 避免重复踩坑。
+本 skill 在 Windows + WorkBuddy 托管 Python 环境中完成了真实运行验证。以下 19 个问题用于帮助新机器和新 agent 避免重复踩坑。
 
 每项按“现象 → 根因 → 修复 → 影响位置”组织。
 
@@ -13,6 +13,8 @@
 - [P14：双语 PDF 布局与同步](#p14--bilingual-pdf-layout-and-content-sync)
 - [P15：扫描版 PDF](#p15--scanned--image-only-pdfs-silently-degrade-detect-before-running)
 - [P16–P17：venv 静默失败 & MSYS 路径（本次安装实测新增）](#p16--python--m-venv-在托管-python-上是静默-no-op)
+- [P18：双语 PDF 左右版式反向（backend_native 捷径踩 babeldoc 默认方向）](#p18--双语-pdf-左右版式反向backend_native-捷径踩-babeldoc-默认方向)
+- [P19：Git-Bash `/d/...` 输入/输出路径未规范化 → Windows Python 解析成盘符重复路径](#p19--git-bash-d输入--output-dir-路径未规范化--windows-python-解析成盘符重复路径)
 
 ---
 
@@ -164,6 +166,26 @@
 
 ---
 
+## P18 — 双语 PDF 左右版式反向：`backend_native` 捷径踩中 BabelDOC 默认方向
+
+- **现象**：skill 默认双语版式是“中文在左、英文在右”（`--bilingual-layout zh-left-en-right`），但部分走 `backend_native` 捷径的文件会产出“英文在左、中文在右”的双语 PDF。
+- **根因**：BabelDOC 的 `--dual` 默认把原文放左侧、译文放右侧。`build_standard_bilingual_output` 在单语 PDF 未发生后处理时会直接采用后端 dual PDF，却把 manifest 标记为 `zh_left_en_right`，造成标签与实际内容不一致；其它经 PyMuPDF 重建的路径则会遵循显式布局。
+- **修复**：`build_pdf2zh_command` 在布局为 `zh-left-en-right` 且后端帮助文本确认支持时，为 `--dual` 补充 `--dual-translate-first`。`en-left-zh-right` 和 `backend-default` 保持后端默认方向。
+- **验证**：Windows 实测重跑后，左半页为中文、右半页为英文；同时新增命令构建回归测试，覆盖三种布局及后端不支持该参数时的降级。
+- **影响位置**：`build_pdf2zh_command` 与采用后端原生 dual PDF 的 `backend_native` 分支。
+
+---
+
+## P19 — Git-Bash `/d/...` 输入/输出路径未规范化 → Windows Python 解析成盘符重复路径
+
+- **现象**：在 Git Bash 下把输入 PDF 或 `--output-dir` 写成 MSYS 风格路径（如 `/d/WorkBuddySpace/.../x.pdf`、`--output-dir /d/WorkBuddySpace/.../out`），产物可能写入错误的 `D:\d\WorkBuddySpace\...`，后续读取 JSON 清单时报 `FileNotFoundError`。
+- **根因**：只要把 MSYS 风格路径直接交给 Windows Python，输入 PDF、输出目录和其它路径参数都可能被当作当前盘根下的相对路径。旧启动器只规范化后端二进制，没有处理用户参数。
+- **修复**：`run_translate.sh` 在执行 Python 前遍历参数，用 `normalize_path()` 将输入 PDF、`--output-dir`、`--pdf2zh-binary`、`--source-override`/`--latex-source`、`--latex-source-root`、`--latex-baseline-pdf` 和 `--engine-home` 转为原生 Windows 路径，同时兼容 `--flag value` 与 `--flag=value`。macOS/Linux 下保持原样。
+- **验证**：使用 `--preflight-only` 和 MSYS 风格输入/输出路径实测通过；新增离线回归测试验证多种路径参数的改写结果。
+- **影响位置**：Git Bash / MSYS 下经 `run_translate.sh` 传入 Windows Python 的全部路径类参数。
+
+---
+
 ## Quick reference
 
 | ID | One-line | Where fixed in this skill |
@@ -185,3 +207,5 @@
 | P15 | scanned / image-only PDF silently degrades | `SKILL.md` WARNING + `run_translate.sh` pre-run scanned check (warn before backend) |
 | P16 | `python -m venv` silent no-op on managed Python | `setup_venv.sh` reuses existing venv / uses `venv.EnvBuilder` (not the CLI) |
 | P17 | Git-Bash `/c/...` path → WinError 2 in Windows subprocess | `run_translate.sh` normalizes backend binary path via `cygpath -w` to native `C:\...` |
+| P18 | 双语 PDF 左右版式反向（backend_native 踩 BabelDOC 默认方向） | `build_pdf2zh_command` 在 zh-left-en-right 下补 `--dual-translate-first` |
+| P19 | Git-Bash `/d/...` 输入/输出路径 → 盘符重复 `D:\d\...` | `run_translate.sh` 重写所有路径参数为 `cygpath -w` 原生路径 |
