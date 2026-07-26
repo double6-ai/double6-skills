@@ -37,6 +37,25 @@ if [ -n "${MSYSTEM:-}" ] && command -v cygpath >/dev/null 2>&1; then
   DEFAULT_PDF2ZH="$(cygpath -w "$DEFAULT_PDF2ZH" 2>/dev/null || echo "$DEFAULT_PDF2ZH")"
 fi
 
+# --- P19: path-argument normalizer (shared by binary + input/output args) ---
+#   Under Git Bash (MSYS) a path like /d/WorkBuddySpace/... is passed verbatim to
+#   Windows Python, which mis-parses it as D:\d\WorkBuddySpace\... (doubled drive
+#   letter). That sends outputs to the wrong place and breaks later JSON reads
+#   (FileNotFoundError). Convert any path to a native C:\... before handing it to
+#   Windows Python. On macOS/Linux (no MSYSTEM) the path is already native.
+normalize_path() {
+  local p="$1"
+  if [ -z "$p" ]; then
+    echo ""
+    return
+  fi
+  if [ -n "${MSYSTEM:-}" ] && command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$p" 2>/dev/null || echo "$p"
+  else
+    echo "$p"
+  fi
+}
+
 if [ ! -f "$PYTHON_BIN" ]; then
   echo "ERROR: Python interpreter not found at: $PYTHON_BIN" >&2
   echo "       Fix: run scripts/setup_venv.sh or set PDFTR_VENV explicitly." >&2
@@ -109,7 +128,7 @@ INPUT_PDF=""
 for a in "$@"; do
   case "$a" in
     -*) continue ;;
-    *) [ -f "$a" ] && [[ "$a" == *.pdf ]] && INPUT_PDF="$a" && break ;;
+    *) [ -f "$a" ] && [[ "$a" == *.pdf ]] && INPUT_PDF="$(normalize_path "$a")" && break ;;
   esac
 done
 if [ -n "$INPUT_PDF" ]; then
@@ -151,4 +170,49 @@ PY
   fi
 fi
 
-exec "$PYTHON_BIN" "$SKILL_DIR/scripts/run_pdf_translation.py" "$@"
+# --- P19: rewrite ALL path-valued arguments to NATIVE Windows paths ---
+#   See normalize_path() above. We walk "$@" and convert every path argument so
+#   Windows Python never sees an MSYS /d/... path.
+REW_PATH_FLAGS="--output-dir --pdf2zh-binary --source-override --latex-source --latex-baseline-pdf --engine-home --latex-source-root"
+NEW_ARGS=()
+input_pdf_rewritten=0
+while [ $# -gt 0 ]; do
+  arg="$1"
+  shift
+  # --flag=value form (order matters: longer prefix first so --latex-source-root
+  # is not swallowed by --latex-source)
+  case "$arg" in
+    --latex-source-root=*|--latex-source=*|--output-dir=*|--pdf2zh-binary=*|--source-override=*|--latex-baseline-pdf=*|--engine-home=*)
+      flag="${arg%%=*}"
+      val="${arg#*=}"
+      NEW_ARGS+=("${flag}=$(normalize_path "$val")")
+      continue
+      ;;
+  esac
+  # --flag <value> form
+  matched=0
+  for pf in $REW_PATH_FLAGS; do
+    if [ "$arg" = "$pf" ]; then
+      NEW_ARGS+=("$arg")
+      if [ $# -gt 0 ]; then
+        NEW_ARGS+=("$(normalize_path "$1")")
+        shift
+      fi
+      matched=1
+      break
+    fi
+  done
+  if [ "$matched" -eq 1 ]; then
+    continue
+  fi
+  # Normalize only the first existing positional PDF. This avoids rewriting an
+  # unrelated option value merely because its text happens to end in ".pdf".
+  if [ "$input_pdf_rewritten" -eq 0 ] && [[ "$arg" != -* ]] && [[ "$arg" == *.pdf ]] && [ -f "$arg" ]; then
+    NEW_ARGS+=("$(normalize_path "$arg")")
+    input_pdf_rewritten=1
+  else
+    NEW_ARGS+=("$arg")
+  fi
+done
+
+exec "$PYTHON_BIN" "$SKILL_DIR/scripts/run_pdf_translation.py" "${NEW_ARGS[@]}"
