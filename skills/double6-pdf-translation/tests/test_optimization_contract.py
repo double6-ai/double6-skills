@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import locale
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -485,6 +486,149 @@ sys.exit(0)
             )
             self.assertEqual(0, result.returncode, result.stderr + result.stdout)
             self.assertEqual(str(native_backend), result.stdout.strip())
+
+    def test_run_translate_normalizes_all_msys_path_arguments(self) -> None:
+        launcher = SKILL_DIR / "run_translate.sh"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            venv_bin = root / "venv/bin"
+            tools = root / "tools"
+            venv_bin.mkdir(parents=True)
+            tools.mkdir()
+            python_bin = venv_bin / "python"
+            python_bin.write_text(
+                f"""#!{sys.executable}
+import json
+import sys
+if any(value.endswith("run_pdf_translation.py") for value in sys.argv):
+    print(json.dumps(sys.argv[2:]))
+sys.exit(0)
+""",
+                encoding="utf-8",
+            )
+            python_bin.chmod(0o755)
+            original_backend = venv_bin / "pdf2zh"
+            original_backend.touch()
+            native_backend = root / "native-pdf2zh.exe"
+            native_backend.touch()
+            input_pdf = root / "input.pdf"
+            input_pdf.touch()
+            output_dir = root / "output"
+            source_root = root / "source-root"
+            engine_home = root / "engine-home"
+            cygpath = tools / "cygpath"
+            cygpath.write_text(
+                """#!/bin/sh
+case "$2" in
+  "$ORIGINAL_BACKEND") printf '%s\\n' "$NATIVE_PDF2ZH" ;;
+  "$INPUT_PATH") printf '%s\\n' "WIN_INPUT" ;;
+  "$OUTPUT_PATH") printf '%s\\n' "WIN_OUTPUT" ;;
+  "$SOURCE_ROOT") printf '%s\\n' "WIN_SOURCE_ROOT" ;;
+  "$ENGINE_HOME") printf '%s\\n' "WIN_ENGINE_HOME" ;;
+  *) printf '%s\\n' "$2" ;;
+esac
+""",
+                encoding="utf-8",
+            )
+            cygpath.chmod(0o755)
+            result = subprocess.run(
+                [
+                    "/bin/bash",
+                    str(launcher),
+                    "--custom-system-prompt",
+                    "literal.pdf",
+                    str(input_pdf),
+                    "--output-dir",
+                    str(output_dir),
+                    f"--latex-source-root={source_root}",
+                    "--engine-home",
+                    str(engine_home),
+                ],
+                text=True,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "PDFTR_VENV": str(root / "venv"),
+                    "MSYSTEM": "MINGW64",
+                    "ORIGINAL_BACKEND": str(original_backend),
+                    "NATIVE_PDF2ZH": str(native_backend),
+                    "INPUT_PATH": str(input_pdf),
+                    "OUTPUT_PATH": str(output_dir),
+                    "SOURCE_ROOT": str(source_root),
+                    "ENGINE_HOME": str(engine_home),
+                    "PATH": f"{tools}:/usr/bin:/bin",
+                },
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr + result.stdout)
+            args = json.loads(result.stdout)
+            self.assertEqual(
+                [
+                    "--custom-system-prompt",
+                    "literal.pdf",
+                    "WIN_INPUT",
+                    "--output-dir",
+                    "WIN_OUTPUT",
+                    "--latex-source-root=WIN_SOURCE_ROOT",
+                    "--engine-home",
+                    "WIN_ENGINE_HOME",
+                ],
+                args,
+            )
+
+    def test_dual_translate_first_follows_requested_layout(self) -> None:
+        def build(layout: str, help_text: str) -> tuple[list[str], argparse.Namespace]:
+            args = argparse.Namespace(
+                input_pdf="paper.pdf",
+                backend_debug_artifacts=False,
+                ignore_translation_cache=False,
+                translator_mode="openai",
+                model="test-model",
+                base_url="https://provider.example/v1",
+                api_key="test-key",
+                openai_timeout=30,
+                temperature=0.0,
+                openai_reasoning_effort="none",
+                openai_json_mode=False,
+                disable_same_text_fallback=False,
+                local_max_concurrency=1,
+                custom_system_prompt="Translate.",
+                resolved_pdf_layout_profile="default",
+                pdf_layout_profile="default",
+                dual=True,
+                pages=None,
+                bilingual_layout=layout,
+            )
+            with (
+                mock.patch.object(
+                    pdf_translation_runtime,
+                    "pdf2zh_command_prefix",
+                    return_value=["fake-pdf2zh"],
+                ),
+                mock.patch.object(
+                    pdf_translation_runtime,
+                    "_pdf2zh_help_text",
+                    return_value=help_text,
+                ),
+            ):
+                command = pdf_translation_runtime.build_pdf2zh_command(
+                    args,
+                    Path("output"),
+                )
+            return command, args
+
+        zh_left, _ = build("zh-left-en-right", "--dual-translate-first")
+        en_left, _ = build("en-left-zh-right", "--dual-translate-first")
+        backend_default, _ = build("backend-default", "--dual-translate-first")
+        unsupported, unsupported_args = build("zh-left-en-right", "")
+        self.assertIn("--dual-translate-first", zh_left)
+        self.assertNotIn("--dual-translate-first", en_left)
+        self.assertNotIn("--dual-translate-first", backend_default)
+        self.assertNotIn("--dual-translate-first", unsupported)
+        self.assertIn(
+            "--dual-translate-first",
+            unsupported_args.backend_unsupported_options,
+        )
 
 
 if __name__ == "__main__":
