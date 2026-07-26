@@ -395,6 +395,97 @@ class OptimizationContractTests(unittest.TestCase):
             self.assertEqual(2, missing.returncode)
             self.assertIn("Set PDFTR_PYTHON explicitly", missing.stderr)
 
+    def test_setup_venv_re_resolves_paths_after_fresh_install(self) -> None:
+        setup_script = SCRIPT_DIR / "setup_venv.sh"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target_venv = root / "fresh-venv"
+            fake_manager = root / "managed-python"
+            fake_manager.write_text(
+                f"""#!{sys.executable}
+import os
+import pathlib
+import sys
+
+target = pathlib.Path(sys.argv[-1])
+if len(sys.argv) >= 3 and sys.argv[1] == "-c" and ".installing." in str(target):
+    bindir = target / "bin"
+    bindir.mkdir(parents=True)
+    python_bin = bindir / "python"
+    python_bin.write_text("#!{sys.executable}\\nimport sys\\nsys.exit(0)\\n")
+    python_bin.chmod(0o755)
+    pdf2zh = bindir / "pdf2zh"
+    pdf2zh.write_text("#!/bin/sh\\necho --output\\n")
+    pdf2zh.chmod(0o755)
+sys.exit(0)
+""",
+                encoding="utf-8",
+            )
+            fake_manager.chmod(0o755)
+            result = subprocess.run(
+                ["/bin/bash", str(setup_script)],
+                text=True,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "HOME": str(root),
+                    "PDFTR_PYTHON": str(fake_manager),
+                    "PDFTR_VENV": str(target_venv),
+                    "PATH": "/usr/bin:/bin",
+                },
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr + result.stdout)
+            self.assertTrue((target_venv / "bin/python").is_file())
+            self.assertTrue((target_venv / "bin/pdf2zh").is_file())
+            self.assertIn("Backend installed", result.stdout)
+            self.assertIn("pdf2zh CLI OK", result.stdout)
+
+    def test_run_translate_normalizes_msys_backend_path(self) -> None:
+        launcher = SKILL_DIR / "run_translate.sh"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            venv_bin = root / "venv/bin"
+            tools = root / "tools"
+            venv_bin.mkdir(parents=True)
+            tools.mkdir()
+            python_bin = venv_bin / "python"
+            python_bin.write_text(
+                f"""#!{sys.executable}
+import os
+import sys
+if any(value.endswith("run_pdf_translation.py") for value in sys.argv):
+    print(os.environ.get("PAPER_TRANSLATION_PDF2ZH_BINARY", ""))
+sys.exit(0)
+""",
+                encoding="utf-8",
+            )
+            python_bin.chmod(0o755)
+            (venv_bin / "pdf2zh").touch()
+            native_backend = root / "native-pdf2zh.exe"
+            native_backend.touch()
+            cygpath = tools / "cygpath"
+            cygpath.write_text(
+                "#!/bin/sh\nprintf '%s\\n' \"$NATIVE_PDF2ZH\"\n",
+                encoding="utf-8",
+            )
+            cygpath.chmod(0o755)
+            result = subprocess.run(
+                ["/bin/bash", str(launcher), "--help"],
+                text=True,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "PDFTR_VENV": str(root / "venv"),
+                    "MSYSTEM": "MINGW64",
+                    "NATIVE_PDF2ZH": str(native_backend),
+                    "PATH": f"{tools}:/usr/bin:/bin",
+                },
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr + result.stdout)
+            self.assertEqual(str(native_backend), result.stdout.strip())
+
 
 if __name__ == "__main__":
     unittest.main()

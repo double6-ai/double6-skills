@@ -51,6 +51,8 @@ Installing the backend in this environment hits several traps (full detail in `r
 - **P3 — do not `rm -rf` a venv.** The bash safe-delete wrapper hangs on bulk-delete confirmation non-interactively. Recreate by using a *fresh* path instead of deleting the old one.
 - **P4 — leftover `~` dists.** Killing a `pip install` leaves invalid `~radio`/`~ymupdf` dirs in `site-packages`, causing later installs to silently stall. Remove `site-packages/~*` before retrying; wheels are cached so a clean retry is fast.
 - **P5 — `setx`/registry blocked.** Security policy may block persisting env vars. Export `DEEPSEEK_API_KEY` and related values per session or use a secrets manager; never hardcode them in the shared launcher.
+- **P16 — `python -m venv` is a silent no-op.** On this managed Python, `python -m venv <path>` exits 0 but creates an *empty* directory (no `Scripts/python.exe`). Use `venv.EnvBuilder(with_pip=True).create(path)` instead, or — better — reuse an existing usable venv and just `pip install` into it. `scripts/setup_venv.sh` already does this (reuse-or-builder, never the `python -m venv` CLI).
+- **P17 — Git-Bash `/c/...` paths break Windows subprocess.** When a binary path built under Git Bash (`/c/Users/.../pdf2zh.exe`) is passed to a Windows `subprocess` (e.g. the backend binary), it fails with `WinError 2`. Always hand a **native `C:\...` path** to Windows subprocesses. `run_translate.sh` normalizes the backend binary path via `cygpath -w`; when setting `PAPER_TRANSLATION_PDF2ZH_BINARY` manually under Git Bash, use a native path (e.g. `C:\Users\<username>\.workbuddy\binaries\python\envs\default\Scripts\pdf2zh.exe`).
 
 ## Third-Party Notice
 
