@@ -28,6 +28,15 @@ else
   DEFAULT_PDF2ZH="$VENV/bin/pdf2zh"
 fi
 
+# --- P17: normalize the backend binary path to a NATIVE Windows path. ---
+#   Windows subprocess cannot resolve Git-Bash MSYS paths like /c/Users/.../pdf2zh.exe
+#   (WinError 2: system cannot find the file). Convert via `cygpath -w` under MSYS.
+#   PYTHON_BIN is executed by bash (which converts /c/... on exec), but the pdf2zh
+#   binary is handed to Windows Python subprocess, so it MUST be a native C:\... path.
+if [ -n "${MSYSTEM:-}" ] && command -v cygpath >/dev/null 2>&1; then
+  DEFAULT_PDF2ZH="$(cygpath -w "$DEFAULT_PDF2ZH" 2>/dev/null || echo "$DEFAULT_PDF2ZH")"
+fi
+
 if [ ! -f "$PYTHON_BIN" ]; then
   echo "ERROR: Python interpreter not found at: $PYTHON_BIN" >&2
   echo "       Fix: run scripts/setup_venv.sh or set PDFTR_VENV explicitly." >&2
@@ -45,13 +54,24 @@ unset CLAUDE_SESSION_ID
 export CODEBUDDY_SAFE_DELETE_SANDBOX=0
 
 # --- Backend presence check (fail fast with an actionable message) ---
-PDF2ZH_BIN="${PAPER_TRANSLATION_PDF2ZH_BINARY:-$DEFAULT_PDF2ZH}"
-if [ ! -f "$PDF2ZH_BIN" ]; then
-  echo "ERROR: pdf2zh backend not found at: $PDF2ZH_BIN" >&2
-  echo "       The skill needs the 'pdf2zh_next' package (NOT the unrelated PyPI 'pdf2zh')." >&2
-  echo "       Fix: run  scripts/setup_venv.sh  to install it safely." >&2
-  echo "       (See references/known-pitfalls.md P1/P2 for details.)" >&2
-  exit 2
+PDF2ZH_BIN_RAW="${PAPER_TRANSLATION_PDF2ZH_BINARY:-$DEFAULT_PDF2ZH}"
+if [ ! -f "$PDF2ZH_BIN_RAW" ]; then
+  # P17: maybe the path is an MSYS path that needs conversion for the check itself
+  _NATIVE="$(cygpath -w "$PDF2ZH_BIN_RAW" 2>/dev/null || echo "$PDF2ZH_BIN_RAW")"
+  if [ ! -f "$_NATIVE" ]; then
+    echo "ERROR: pdf2zh backend not found at: $PDF2ZH_BIN_RAW" >&2
+    echo "       The skill needs the 'pdf2zh_next' package (NOT the unrelated PyPI 'pdf2zh')." >&2
+    echo "       Fix: run  scripts/setup_venv.sh  to install it safely." >&2
+    echo "       (See references/known-pitfalls.md P1/P2/P17 for details.)" >&2
+    exit 2
+  fi
+  PDF2ZH_BIN="$_NATIVE"
+else
+  PDF2ZH_BIN="$PDF2ZH_BIN_RAW"
+fi
+# P17: normalize to a native Windows path before handing to Windows subprocess
+if [ -n "${MSYSTEM:-}" ] && command -v cygpath >/dev/null 2>&1; then
+  PDF2ZH_BIN="$(cygpath -w "$PDF2ZH_BIN" 2>/dev/null || echo "$PDF2ZH_BIN")"
 fi
 export PAPER_TRANSLATION_PDF2ZH_BINARY="$PDF2ZH_BIN"
 

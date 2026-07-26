@@ -1,6 +1,6 @@
 # Known Pitfalls (踩坑汇总)
 
-本 skill 在 Windows + WorkBuddy 托管 Python 环境中完成了真实运行验证。以下 15 个问题用于帮助新机器和新 agent 避免重复踩坑。
+本 skill 在 Windows + WorkBuddy 托管 Python 环境中完成了真实运行验证。以下 17 个问题用于帮助新机器和新 agent 避免重复踩坑。
 
 每项按“现象 → 根因 → 修复 → 影响位置”组织。
 
@@ -12,6 +12,7 @@
 - [P12–P13：Windows 文本解码和 CJK 文本层](#p12--bundled-portablegit-pdftotext-emits-gbk-bytes--texttrue-crash--false-zero-cjk)
 - [P14：双语 PDF 布局与同步](#p14--bilingual-pdf-layout-and-content-sync)
 - [P15：扫描版 PDF](#p15--scanned--image-only-pdfs-silently-degrade-detect-before-running)
+- [P16–P17：venv 静默失败 & MSYS 路径（本次安装实测新增）](#p16--python--m-venv-在托管-python-上是静默-no-op)
 
 ---
 
@@ -141,6 +142,28 @@
 
 ---
 
+## P16 — `python -m venv` is a silent no-op on WorkBuddy managed Python
+
+- **现象**：在本机托管 Python（3.13.12）上执行 `python -m venv <path>`，命令 **退出码为 0，但目标目录为空**（连 `pyvenv.cfg`、`Scripts/python.exe` 都没有）。后续 `Scripts/python.exe` 找不到，安装脚本随即失败。
+- **根因**：托管 Python 的 `venv/__main__.py`（CLI 入口）被包装过，会吞掉真实异常；直接调用 `venv.EnvBuilder(with_pip=True).create(path)` 则正常工作。即“`python -m venv` 静默 no-op”是托管 Python 的已知怪癖，**与 P2 的 safe-delete shim 无关**——即使已 `unset CODEBUDDY_SESSION_ID; export CODEBUDDY_SAFE_DELETE_SANDBOX=0` 仍然存在。
+- **修复**：
+  1. **优先复用已存在的 venv**：如果目标 venv（如 `default`）里已经有可用的 `python.exe`，直接往里 `pip install`，**不要重建**。这既能绕过该 bug，又能避免覆盖托管 Python `default` venv 里其它共享包（gradio/pandas/pydantic 等）。
+  2. **确需新建时，用 builder 而非 CLI**：`"$MP" -c "import venv,sys; venv.EnvBuilder(with_pip=True, clear=True).create(sys.argv[1])" "$TMPV"`。
+  3. `scripts/setup_venv.sh` 已按上述逻辑改写（先判断复用、再 builder 创建、绝不 `rm -rf` 旧 venv，见 P3）。
+- **影响位置**：任何依赖 `python -m venv` 初始化环境的安装步骤；`setup_venv.sh` 的旧实现首行就踩了这个坑（最终报 `pdf2zh.exe` 找不到 / preflight `pdf2zh_backend` 127）。
+
+## P17 — Git-Bash MSYS 路径（`/c/...`）无法被 Windows subprocess 解析 → WinError 2
+
+- **现象**：在 Git Bash 下把 `PAPER_TRANSLATION_PDF2ZH_BINARY` 设成 `/c/Users/.../pdf2zh.exe`（或直接用 `run_translate.sh` 由 `$HOME` 拼出的 `/c/...` 路径），preflight / 实际运行调用后端时报 `FileNotFoundError: [WinError 2] 系统找不到指定的文件`。但 `import pdf2zh_next` 正常，因为模块后端走的是 `runpy`，不经过这个路径。
+- **根因**：Windows 的 `subprocess` 用 Windows 路径规则解析可执行文件，Git-Bash 风格的 MSYS 路径（`/c/Users/...`）不是合法 Windows 路径，解析失败。注意 `bash` 自己执行 `/c/.../python.exe` 能跑（Git Bash 在 **exec 时** 做了转换），但 **Python 内部的 `subprocess` 不会再被转换**。
+- **修复**：
+  1. **所有要传给 Windows 子进程的可执行路径，必须转成原生 `C:\...`**。Git Bash 下用 `cygpath -w` 转换最稳：`PDF2ZH_BIN="$(cygpath -w "$PDF2ZH_BIN")"`。
+  2. `run_translate.sh` 现在在导出 `PAPER_TRANSLATION_PDF2ZH_BINARY` 前，会判断 `MSYSTEM`（MINGW/MSYS/CYGWIN）并用 `cygpath -w` 把默认 / 用户覆盖的二进制路径规范化为原生 Windows 路径；后端存在性检查也会先尝试 `cygpath` 转换，避免误报“找不到”。
+  3. 手动指定时请用 `C:\Users\<username>\.workbuddy\binaries\python\envs\default\Scripts\pdf2zh.exe` 这种原生路径，不要用 `/c/...`。
+- **影响位置**：后端二进制解析（`pdf2zh_backend.py` 的 binary 模式、preflight 的 `pdf2zh_backend` 检查、任何显式传 `--pdf2zh-binary /c/...` 的地方）。模块后端（`pdf2zh_next.main` via runpy）不受影响，因此该坑主要表现为“偶发找不到后端”，容易被忽略。
+
+---
+
 ## Quick reference
 
 | ID | One-line | Where fixed in this skill |
@@ -160,3 +183,5 @@
 | P13 | `text_layer` gate false-positives on pdf2zh-next Chinese renders | same P12 second-order fix (prefer CJK extractor) |
 | P14 | bilingual layout or repaired-content mismatch | backend-native default + PyMuPDF post-repair rebuild |
 | P15 | scanned / image-only PDF silently degrades | `SKILL.md` WARNING + `run_translate.sh` pre-run scanned check (warn before backend) |
+| P16 | `python -m venv` silent no-op on managed Python | `setup_venv.sh` reuses existing venv / uses `venv.EnvBuilder` (not the CLI) |
+| P17 | Git-Bash `/c/...` path → WinError 2 in Windows subprocess | `run_translate.sh` normalizes backend binary path via `cygpath -w` to native `C:\...` |
