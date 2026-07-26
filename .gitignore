@@ -18,6 +18,15 @@ __pycache__/
 # Local Codex runtime/install state
 .codex/
 
+# Local governance and acceptance metadata
+AGENTS.md
+reports/
+test_runs/
+skills/*/agents/
+skills/*/evals/
+skills/*/security/
+skills/*/manifest.json
+
 # Runtime outputs
 .cache/
 .release-sandbox/

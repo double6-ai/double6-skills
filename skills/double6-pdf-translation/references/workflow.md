@@ -41,6 +41,8 @@ Options:
 - `--no-arxiv-source-autodownload`: disable the fallback that extracts the primary arXiv ID from PDF metadata/page 1 and downloads `https://arxiv.org/e-print/<id>`.
 - `--visual-check-pages`: visual/layout audit page selection.
 - `--visible-residue-repair-mode`: visible English residue repair mode, `auto`, `candidate-only`, or `off`. `auto` only promotes a repaired candidate after post-repair OCR/text gates pass.
+- `--bilingual-layout`: `zh-left-en-right`（默认）、`en-left-zh-right`、`backend-default` 或 `off`。
+- `--bilingual-render-mode`: PyMuPDF `vector`（默认）或 `raster`；`pypdf-vector` 仅作为映射到 `vector` 的兼容别名。
 - `--skip-visual-eval`: skip expensive visual checks only when the user explicitly accepts draft-level observability.
 
 Environment overrides:
@@ -66,6 +68,14 @@ Environment overrides:
 - `PAPER_TRANSLATION_COMPAT_PROXY_PORT`
 - `PAPER_TRANSLATION_VISIBLE_RESIDUE_REPAIR_MODE`
 
+## 脚本分层
+
+- 主入口：`preflight_runtime.py` 负责运行时自检，`run_pdf_translation.py` 负责后端调用、交付物、manifest 和质量门。
+- 共享策略：`policy_utils.py`、`layout_role_policy.py`、`translation_compat_proxy.py` 负责术语、版面角色和模型接口适配。
+- PDF 证据层：`build_*_layout_*`、`visible_residue_*`、`visual_layout*` 生成结构、残留和视觉证据；候选修复必须通过 post-repair gate 才能进入交付。
+- 独立维护工具：`apply_glossary_edits.py`、`repair_protected_spans.py`、`repair_quality_issues.py` 只处理人工术语和确定性 QA 修复。
+- 不保留一次性汇总脚本、运行缓存、截图、评测输出或未被主流程和测试引用的本地诊断导出。
+
 ## LaTeX Source Selection
 
 Normal runs are LaTeX-first when source is available:
@@ -83,7 +93,7 @@ Use `--latex-render-mode required` only when LaTeX direct rendering must succeed
 
 The runtime should work for local-execution agents that do not have a built-in vision model:
 
-- Full diagnostic mode: Python, PDF backend, PyMuPDF, Poppler, pypdf, and reportlab are available, so the run can emit richer layout evidence and fallback artifacts.
+- Full diagnostic mode: Python, PDF backend, PyMuPDF, Poppler, and reportlab are available, so the run can emit richer layout evidence and fallback artifacts.
 - Headless evidence mode: the agent cannot visually inspect screenshots, but can read generated JSON/Markdown reports. It should decide from `render_manifest.json`, delivery gates, visual/layout audit JSON, and quality reports.
 - Core translation mode: optional visual/layout dependencies are missing or `--skip-visual-eval` is used. The main PDF translation path still relies on the external PDF backend, but automatic problem detection is reduced.
 - Network-restricted mode: arXiv source download or remote model calls may fail. The run should record the failure and fall back to local source/PDF backend paths where possible.
@@ -91,6 +101,8 @@ The runtime should work for local-execution agents that do not have a built-in v
 Do not require GUI tools, Preview, screenshots, or agent-side multimodal inspection for normal operation. If a human visual review is needed, record it as additional evidence, not as the only gate.
 
 ## Dependencies
+
+> **WARNING — do NOT run `pip install pdf2zh`.** PyPI's `pdf2zh` (≈1.7.9) is an unrelated/older project with an incompatible CLI. The correct backend is the `pdf2zh_next` package: `pip install pdf2zh_next pymupdf reportlab`. Symptom of the wrong package: runtime error `pdf2zh: error: unrecognized arguments: --output ... --openai-model ...`. See `references/known-pitfalls.md` (P1) for root cause.
 
 Required runtime capability:
 
@@ -102,10 +114,11 @@ The repository does not vendor PDFMathTranslate-next, BabelDOC, or pdf2zh-skill 
 
 If `pdf2zh --help` fails with `ModuleNotFoundError: No module named 'pdf2zh_next'`, the executable is present but the backend environment is incomplete. Fix the backend environment or point `--pdf2zh-binary` / `PAPER_TRANSLATION_PDF2ZH_BINARY` at a working executable before running translation.
 
+For environment-specific install failures (managed-Python safe-delete shim, `rm -rf` hangs, leftover `~` dists, blocked `setx`), see `references/known-pitfalls.md`.
+
 Recommended optional tools:
 
-- PyMuPDF for PDF text extraction and layout audits.
-- pypdf for vector bilingual PDF composition and text extraction fallback.
+- PyMuPDF for PDF text extraction, layout audits, and rebuilding bilingual output after the Chinese PDF is repaired.
 - reportlab for readable fallback PDFs.
 - Poppler tools for independent bbox/text checks.
 - A CJK-capable font setup for rendered Chinese text.
@@ -114,7 +127,7 @@ Recommended optional tools:
 ## Output Contract
 
 - `<input-stem>.zh.pdf`: final high-fidelity Chinese monolingual PDF.
-- `<input-stem>.bilingual.pdf`: final bilingual PDF with original English on the left and Chinese translation on the right.
+- `<input-stem>.bilingual.pdf`: final bilingual PDF with Chinese translation on the left and original English on the right by default.
 - `render_manifest.json`: selected outputs, backend command, quality gates, visual reports, and error evidence.
 - `backend_run_manifest.json`: backend status and translation metadata.
 - `layout_map.json`, `block_bridge.json`: layout and block correspondence evidence when backend tracking is available.

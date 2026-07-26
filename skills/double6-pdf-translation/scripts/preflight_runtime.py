@@ -7,6 +7,7 @@ import json
 import os
 import socket
 import subprocess
+from _subprocess_safe import run_text
 import sys
 import time
 from datetime import datetime, timezone
@@ -80,7 +81,7 @@ def backend_command_env(args: argparse.Namespace | None = None) -> dict[str, str
 def run_command(command: list[str], timeout_seconds: float, env: dict[str, str] | None = None) -> dict[str, Any]:
     started = time.perf_counter()
     try:
-        proc = subprocess.run(command, capture_output=True, text=True, timeout=timeout_seconds, check=False, env=env)
+        proc = run_text(command, timeout=timeout_seconds, check=False, env=env)
         return {
             "command": command,
             "returncode": proc.returncode,

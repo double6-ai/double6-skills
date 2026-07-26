@@ -6,77 +6,28 @@ SCRIPT_INTERFACE_REASON = "Imported by run_pdf_translation.py for source prepara
 
 import argparse
 import json
-import math
 import os
 import re
 import shutil
-import subprocess
-import sys
-import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import build_block_bridge
 import build_babeldoc_il_layout_map
 import build_bilingual_pdf
-import build_layout_structure_gate
 import build_pdf_rerender_plan
-import build_poppler_text_bbox_audit
-import build_pymupdf_layout_audit
-import build_structured_writeback_manifest
 import build_structured_visual_candidates
 import check_translation
 import extract_terms
 import prepare_paper_source
-import preflight_runtime
 import render_readable_pdf
 import repair_quality_issues
-import layout_role_policy
 import policy_utils
-import visual_layout
-from translation_compat_proxy import ProxyConfig, start_translation_compat_proxy
 
-from delivery_gate_runtime import (
-    build_delivery_gates,
-    build_fast_full_translation_draft_gates,
-)
 from latex_direct_runtime import (
-    discover_latex_source,
     extract_pdf_text,
-    iter_latex_candidates,
-    run_latex_direct_render,
 )
 
-from pdf_translation_runtime import (
-    DEFAULT_API_KEY,
-    DEFAULT_BASE_URL,
-    DEFAULT_CLI_MAX_TOKENS,
-    DEFAULT_HYMT2_TEMPERATURE,
-    DEFAULT_TRANSLATION_COMPAT_PROXY_PORT,
-    DEFAULT_LATEX_DOCKER_IMAGE,
-    DEFAULT_LATEX_PROJECT_MODE,
-    DEFAULT_LATEX_RENDER_MODE,
-    DEFAULT_LOCAL_MAX_CONCURRENCY,
-    DEFAULT_MODEL,
-    DEFAULT_PDF2ZH_BACKEND,
-    DEFAULT_REASONING_EFFORT,
-    DEFAULT_SYSTEM_PROMPT,
-    DEFAULT_TRANSLATOR_MODE,
-    PROTECTED_CHECK_TRANSLATIONS,
-    PROTECTED_CHECK_VALUES,
-    apply_pdf_direct_text_repairs,
-    build_backend_system_prompt,
-    build_pdf2zh_command,
-    default_engine_home,
-    default_output_dir,
-    external_pdf2zh_skill_root,
-    redacted_command,
-    resolve_pdf_layout_profile,
-    resolved_pdf2zh_backend,
-    should_enable_translation_compat_proxy,
-    should_use_qwen_cli_adapter,
-)
 
 
 
@@ -205,29 +156,113 @@ def build_standard_bilingual_output(
     output_dir: Path,
     selected_outputs: dict[str, str | None],
     *,
-    enabled: bool,
-    render_mode: str = "pypdf-vector",
+    layout: str,
+    backend_dual_pdf: str | None,
+    mono_changed: bool,
+    render_mode: str = "vector",
     raster_dpi: int = 144,
 ) -> dict[str, Any]:
-    if not enabled:
-        return {"status": "skipped", "reason": "dual_output_disabled", "layout": None}
-    right_pdf_value = selected_outputs.get("mono_pdf") or selected_outputs.get("translated_pdf")
-    if not right_pdf_value:
-        return {"status": "skipped", "reason": "missing_mono_translated_pdf", "layout": "en_left_zh_right"}
-    right_pdf = Path(right_pdf_value)
-    if not right_pdf.exists():
-        return {"status": "skipped", "reason": "translated_pdf_not_found", "layout": "en_left_zh_right", "translated_pdf": str(right_pdf)}
+    manifest_path = output_dir / "bilingual_pdf_manifest.json"
+    normalized_layout = layout.replace("-", "_") if layout != "off" else None
+    backend_dual = Path(backend_dual_pdf) if backend_dual_pdf else None
+    backend_available = bool(backend_dual and backend_dual.is_file())
+    if layout == "off":
+        selected_outputs["dual_pdf"] = None
+        selected_outputs["standard_bilingual_pdf"] = None
+        manifest = {
+            "version": 1,
+            "status": "skipped",
+            "reason": "dual_output_disabled",
+            "layout": None,
+            "source": None,
+            "content_sync": None,
+            "layout_verification": None,
+        }
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return {**manifest, "manifest_path": str(manifest_path)}
+    if layout == "backend-default":
+        manifest = {
+            "version": 1,
+            "status": "ok" if backend_available and not mono_changed else ("partial" if backend_available else "error"),
+            "reason": None if backend_available else "backend_dual_pdf_missing",
+            "layout": "backend_default",
+            "source": "backend_native" if backend_available else None,
+            "content_sync": "final_mono" if backend_available and not mono_changed else ("backend_snapshot" if backend_available else "unknown"),
+            "layout_verification": "backend_contract" if backend_available else "unavailable",
+            "output_pdf": str(backend_dual) if backend_available else None,
+        }
+        selected_outputs["dual_pdf"] = str(backend_dual) if backend_available else None
+        selected_outputs["standard_bilingual_pdf"] = None
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return {**manifest, "manifest_path": str(manifest_path)}
+    if layout == "zh-left-en-right" and backend_available and not mono_changed:
+        selected_outputs["dual_pdf"] = str(backend_dual)
+        selected_outputs["standard_bilingual_pdf"] = None
+        manifest = {
+            "version": 1,
+            "status": "ok",
+            "layout": "zh_left_en_right",
+            "source": "backend_native",
+            "content_sync": "final_mono",
+            "layout_verification": "backend_contract",
+            "output_pdf": str(backend_dual),
+        }
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return {**manifest, "manifest_path": str(manifest_path)}
+    translated_pdf_value = selected_outputs.get("mono_pdf") or selected_outputs.get("translated_pdf")
+    if not translated_pdf_value:
+        manifest = {
+            "version": 1,
+            "status": "error",
+            "reason": "missing_mono_translated_pdf",
+            "layout": normalized_layout,
+            "source": None,
+            "content_sync": "unknown",
+            "layout_verification": "unavailable",
+        }
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return {**manifest, "manifest_path": str(manifest_path)}
+    translated_pdf = Path(translated_pdf_value)
+    if not translated_pdf.exists():
+        manifest = {
+            "version": 1,
+            "status": "error",
+            "reason": "translated_pdf_not_found",
+            "layout": normalized_layout,
+            "source": None,
+            "content_sync": "unknown",
+            "layout_verification": "unavailable",
+            "translated_pdf": str(translated_pdf),
+        }
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return {**manifest, "manifest_path": str(manifest_path)}
     source_pdf = resolve_bilingual_source_pdf(input_pdf)
-    output_pdf = output_dir / f"{input_pdf.stem}.en-left.zh-right.dual.pdf"
-    manifest = build_bilingual_pdf.build_manifest(source_pdf, right_pdf, output_pdf, mode=render_mode, raster_dpi=raster_dpi)
+    output_pdf = output_dir / f"{input_pdf.stem}.{layout}.dual.pdf"
+    manifest = build_bilingual_pdf.build_manifest(
+        source_pdf,
+        translated_pdf,
+        output_pdf,
+        layout=layout,
+        mode=render_mode,
+        raster_dpi=raster_dpi,
+    )
+    if manifest.get("status") != "ok" and layout == "zh-left-en-right" and backend_available:
+        manifest = {
+            **manifest,
+            "status": "partial",
+            "reason": "pymupdf_rebuild_unavailable_backend_snapshot_used",
+            "source": "backend_native",
+            "content_sync": "backend_snapshot",
+            "layout_verification": "backend_contract",
+            "output_pdf": str(backend_dual),
+        }
     if source_pdf != input_pdf:
         manifest["requested_source_pdf"] = str(input_pdf)
         manifest["resolved_source_pdf"] = str(source_pdf)
-    manifest_path = output_dir / "bilingual_pdf_manifest.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    if manifest.get("status") == "ok":
-        selected_outputs["dual_pdf"] = str(output_pdf)
-        selected_outputs["standard_bilingual_pdf"] = str(output_pdf)
+    if manifest.get("status") in {"ok", "partial"} and manifest.get("output_pdf"):
+        selected_outputs["dual_pdf"] = str(manifest["output_pdf"])
+        selected_outputs["standard_bilingual_pdf"] = str(manifest["output_pdf"]) if manifest.get("source") == "pymupdf_rebuilt" else None
     return {**manifest, "manifest_path": str(manifest_path)}
 
 
@@ -245,6 +280,7 @@ def finalize_delivery_pdf_outputs(
     output_dir: Path,
     selected_outputs: dict[str, str | None],
     candidate_pdfs: list[str] | None = None,
+    bilingual_manifest: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     mono_source = Path(str(selected_outputs.get("mono_pdf") or selected_outputs.get("translated_pdf") or ""))
     bilingual_source = Path(
@@ -290,21 +326,36 @@ def finalize_delivery_pdf_outputs(
             removed.append(str(pdf))
         except OSError as exc:
             preserved.append(f"{pdf} ({exc})")
+    standard_bilingual = (
+        delivery["bilingual_pdf"]
+        if isinstance(bilingual_manifest, dict) and bilingual_manifest.get("source") == "pymupdf_rebuilt"
+        else None
+    )
     selected_outputs.update(
         {
             "translated_pdf": delivery["mono_pdf"],
             "mono_pdf": delivery["mono_pdf"],
             "dual_pdf": delivery["bilingual_pdf"],
-            "standard_bilingual_pdf": delivery["bilingual_pdf"],
+            "standard_bilingual_pdf": standard_bilingual,
             "backend_dual_pdf": None,
             "backend_dual_pdf_role": None,
         }
     )
+    bilingual_status = str((bilingual_manifest or {}).get("status") or "")
+    bilingual_disabled = (
+        bilingual_status == "skipped"
+        and (bilingual_manifest or {}).get("reason") == "dual_output_disabled"
+    )
+    delivery_ok = bool(delivery["mono_pdf"]) and (
+        bilingual_disabled
+        or bool(delivery["bilingual_pdf"]) and bilingual_status != "partial"
+    )
     return {
         "version": 1,
-        "status": "ok" if delivery["mono_pdf"] and delivery["bilingual_pdf"] else "partial",
+        "status": "ok" if delivery_ok else "partial",
         "contract": "current-run PDF artifacts are collapsed to the Chinese monolingual PDF and bilingual PDF; unrelated pre-existing PDFs are preserved.",
         "outputs": delivery,
+        "bilingual": dict(bilingual_manifest or {}),
         "removed_pdf_count": len(removed),
         "removed_pdfs": removed,
         "preserved_pdfs": preserved,

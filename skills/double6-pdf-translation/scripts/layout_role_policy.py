@@ -211,7 +211,6 @@ INSTITUTION_TRANSLATIONS: dict[str, str] = {
     "Stanford University": "斯坦福大学",
     "Northeastern University": "东北大学",
     "University of Minnesota": "明尼苏达大学",
-    "University of Southern California": "南加州大学",
     "SRI International": "斯坦福研究院国际",
     "UNSW Sydney": "新南威尔士大学悉尼分校",
     "JPMorgan Chase & Co.": "摩根大通",
@@ -338,7 +337,6 @@ def report_heading_direct_output(source: str) -> str | None:
 def classify_babeldoc_item(item: dict[str, Any], *, references_mode: bool = False) -> str:
     source = str(item.get("input") or "")
     visible = visible_text(source)
-    lowered = visible.lower()
     layout_label = str(item.get("layout_label") or "").lower()
     heading = normalized_heading(source)
     if is_backmatter_section(source):

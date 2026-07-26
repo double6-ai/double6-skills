@@ -7,12 +7,11 @@ import os
 import re
 import shlex
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-import policy_utils
+from _subprocess_safe import run_text
 import visual_layout
 
 SCRIPT_INTERFACE = "internal-module"
@@ -328,23 +327,37 @@ def _pdf2zh_help_text(args: argparse.Namespace, output_dir: Path) -> str:
     for key in ("XDG_CACHE_HOME", "HF_HOME", "UV_CACHE_DIR"):
         Path(env[key]).mkdir(parents=True, exist_ok=True)
     try:
-        result = subprocess.run(
+        result = run_text(
             [*pdf2zh_command_prefix(args), "--help"],
             cwd=output_dir,
             env=env,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
             timeout=30,
             check=False,
         )
-    except Exception:
+    except Exception as exc:
+        setattr(
+            args,
+            "backend_help_probe",
+            {"status": "failed", "reason": f"help_command_failed: {exc}", "parameter_policy": "conservative"},
+        )
         return ""
-    return (result.stdout or "") + "\n" + (result.stderr or "")
+    help_text = (result.stdout or "") + "\n" + (result.stderr or "")
+    readable = bool(help_text.strip())
+    setattr(
+        args,
+        "backend_help_probe",
+        {
+            "status": "ok" if result.returncode == 0 and readable else "failed",
+            "returncode": int(result.returncode),
+            "reason": None if result.returncode == 0 and readable else "help_text_unreadable_or_command_failed",
+            "parameter_policy": "detected" if result.returncode == 0 and readable else "conservative",
+        },
+    )
+    return help_text if result.returncode == 0 and readable else ""
 
 
 def _pdf2zh_supports_option(help_text: str, option: str) -> bool:
-    return not help_text or option in help_text
+    return bool(help_text and option in help_text)
 
 
 def _append_supported_option(
