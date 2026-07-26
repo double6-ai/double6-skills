@@ -27,7 +27,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     build_parser().parse_known_args(sys.argv[1:])
-    repo_root = Path(__file__).resolve().parents[3]
     engine_home = Path(
         os.environ.get(
             "PAPER_TRANSLATION_ENGINE_HOME",

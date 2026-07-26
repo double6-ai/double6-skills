@@ -3,10 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
-import re
-import shutil
 import subprocess
 import sys
 import time
@@ -15,21 +12,12 @@ from types import SimpleNamespace
 from typing import Any
 
 import build_block_bridge
-import build_babeldoc_il_layout_map
-import build_bilingual_pdf
 import build_layout_structure_gate
-import build_pdf_rerender_plan
 import build_poppler_text_bbox_audit
 import build_pymupdf_layout_audit
 import build_structured_writeback_manifest
-import build_structured_visual_candidates
 import check_translation
-import extract_terms
-import prepare_paper_source
 import preflight_runtime
-import render_readable_pdf
-import repair_quality_issues
-import layout_role_policy
 import metadata_label_repair_runtime
 import policy_utils
 import toc_repair_runtime
@@ -45,7 +33,6 @@ from delivery_gate_runtime import (
 from latex_direct_runtime import (
     discover_latex_source,
     extract_pdf_text,
-    iter_latex_candidates,
     run_latex_direct_render,
 )
 
@@ -64,8 +51,6 @@ from pdf_translation_runtime import (
     DEFAULT_REASONING_EFFORT,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TRANSLATOR_MODE,
-    PROTECTED_CHECK_TRANSLATIONS,
-    PROTECTED_CHECK_VALUES,
     apply_pdf_direct_text_repairs,
     build_backend_system_prompt,
     build_pdf2zh_command,
@@ -105,9 +90,41 @@ from pdf_translation_runtime import (
 
 
 
-from pdf_translation_artifacts_runtime import *  # noqa: F401,F403
-from pdf_translation_quality_runtime import *  # noqa: F401,F403
-from pdf_translation_delivery_runtime import *  # noqa: F401,F403
+from pdf_translation_artifacts_runtime import (
+    build_standard_bilingual_output,
+    collect_pdfs,
+    enrich_quality_artifacts,
+    fallback_to_text_path,
+    finalize_delivery_pdf_outputs,
+    maybe_build_visual_repair_output,
+    maybe_run_cloud_layout,
+    mirror_latex_direct_bilingual_output,
+    prepare_source,
+    relocate_backend_dual_intermediate,
+    render_qa_repaired_pdf,
+    run_quality_check,
+    select_pdf_outputs,
+    write_glossary,
+    write_layout_map,
+    write_translation_artifacts,
+)
+from pdf_translation_quality_runtime import (
+    annotate_backend_quality_origin,
+    build_dropped_text_audit_from_files,
+    copy_backend_tracking_artifact,
+    enrich_translation_cache_stats,
+    parse_backend_quality,
+    parse_translation_cache_stats,
+    refine_backend_quality_with_retry_failures,
+    resolve_backend_quality_with_pdf_direct_repairs,
+    write_backend_retry_failures,
+)
+from pdf_translation_delivery_runtime import (
+    add_rerender_candidate,
+    append_visual_rerender_candidates,
+    append_visual_rerender_plan,
+    build_rerender_candidates,
+)
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
     started = time.monotonic()
@@ -386,6 +403,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     pdfs = [] if bool(source_override and source_override.suffix.lower() == ".tex" and args.skip_pdf_backend_when_latex_direct) else collect_pdfs(output_dir)
     selected_outputs = select_pdf_outputs(pdfs)
     pdf_backend_outputs = dict(selected_outputs)
+    selected_outputs["pdf_backend_translated_pdf"] = pdf_backend_outputs.get("translated_pdf")
+    selected_outputs["pdf_backend_mono_pdf"] = pdf_backend_outputs.get("mono_pdf")
+    selected_outputs["pdf_backend_dual_pdf"] = pdf_backend_outputs.get("dual_pdf")
     latex_direct_manifest = run_latex_direct_render(
         args,
         input_pdf,
@@ -458,20 +478,35 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             selected_outputs["mono_pdf"] = str(repaired_pdf)
             selected_outputs["metadata_label_repaired_pdf"] = str(repaired_pdf)
     pdfs = collect_pdfs(output_dir)
+    final_mono_value = selected_outputs.get("mono_pdf") or selected_outputs.get("translated_pdf")
+    backend_mono_value = pdf_backend_outputs.get("mono_pdf") or pdf_backend_outputs.get("translated_pdf")
+    mono_changed = not (
+        final_mono_value
+        and backend_mono_value
+        and Path(str(final_mono_value)).resolve() == Path(str(backend_mono_value)).resolve()
+    )
     bilingual_manifest = build_standard_bilingual_output(
         input_pdf,
         output_dir,
         selected_outputs,
-        enabled=bool(args.dual and args.bilingual_layout == "en-left-zh-right"),
+        layout=args.bilingual_layout if args.dual else "off",
+        backend_dual_pdf=pdf_backend_outputs.get("dual_pdf"),
+        mono_changed=mono_changed,
         render_mode=args.bilingual_render_mode,
         raster_dpi=args.bilingual_raster_dpi,
     )
-    if bilingual_manifest.get("status") == "ok" and bilingual_manifest.get("output_pdf"):
+    if bilingual_manifest.get("status") in {"ok", "partial"} and bilingual_manifest.get("output_pdf"):
         selected_outputs["dual_pdf"] = str(bilingual_manifest["output_pdf"])
-        selected_outputs["standard_bilingual_pdf"] = str(bilingual_manifest["output_pdf"])
+        selected_outputs["standard_bilingual_pdf"] = (
+            str(bilingual_manifest["output_pdf"])
+            if bilingual_manifest.get("source") == "pymupdf_rebuilt"
+            else None
+        )
         latex_direct_dual = mirror_latex_direct_bilingual_output(bilingual_manifest, latex_direct_manifest, selected_outputs)
         if latex_direct_dual:
             bilingual_manifest["latex_direct_dual_pdf"] = latex_direct_dual
+    if status == "ok" and bilingual_manifest.get("status") == "partial":
+        status = "partial"
     backend_dual_intermediate = relocate_backend_dual_intermediate(
         output_dir,
         pdf_backend_outputs.get("dual_pdf"),
@@ -547,7 +582,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             visual_report["status"] = "warn"
             visual_report["dropped_text_audit"] = str(dropped_text_audit_path)
         visual_report_path.write_text(json.dumps(visual_report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    standard_dual_pdf = Path(selected_outputs["standard_bilingual_pdf"]) if selected_outputs.get("standard_bilingual_pdf") else None
+    standard_dual_pdf = Path(selected_outputs["dual_pdf"]) if selected_outputs.get("dual_pdf") else None
     backend_dual_pdf = Path(selected_outputs["backend_dual_pdf"]) if selected_outputs.get("backend_dual_pdf") else None
     mono_pdf = Path(selected_outputs["mono_pdf"]) if selected_outputs.get("mono_pdf") else (Path(selected_outputs["translated_pdf"]) if selected_outputs.get("translated_pdf") else None)
     if not skip_visual_eval:
@@ -557,6 +592,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             standard_dual_pdf,
             backend_dual_pdf,
             output_dir,
+            layout=str(bilingual_manifest.get("layout") or args.bilingual_layout),
         )
         dual_visual_report_path.write_text(json.dumps(dual_visual_report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         paragraph_audit = visual_layout.build_paragraph_label_audit(
@@ -694,6 +730,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "ignore_translation_cache": bool(getattr(args, "ignore_translation_cache", False)),
         "backend_debug_artifacts": bool(getattr(args, "backend_debug_artifacts", True)),
         "backend_unsupported_options": list(getattr(args, "backend_unsupported_options", []) or []),
+        "backend_help_probe": dict(getattr(args, "backend_help_probe", {}) or {}),
         "translation_cache": translation_cache,
         "model": args.model,
         "provider": getattr(args, "provider", ""),
@@ -709,7 +746,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "translation_compat_proxy": proxy_info,
         "backend_quality": backend_quality,
         "backend_retry_failures": str(backend_retry_failures_path),
-        "pdf_backend_skipped": skip_pdf_backend,
         "cli_max_tokens": args.cli_max_tokens if should_use_qwen_cli_adapter(args) else None,
         "translation_context_file": str(context_file) if should_use_qwen_cli_adapter(args) else None,
         "input_pdf": str(input_pdf),
@@ -755,7 +791,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "paragraph_label_audit": str(paragraph_audit_path),
         "translation_proxy_stats": str(translation_proxy_stats_path),
         "translation_proxy_ledger": str(translation_proxy_ledger_path),
-        "backend_retry_failures": str(backend_retry_failures_path),
         "backend_translate_tracking": str(backend_tracking_path) if backend_tracking_path else None,
         "validation": {
             "translated_text_chars": len(translated_text),
@@ -948,13 +983,19 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 input_pdf,
                 output_dir,
                 selected_outputs,
-                enabled=bool(args.dual and args.bilingual_layout == "en-left-zh-right"),
+                layout=args.bilingual_layout if args.dual else "off",
+                backend_dual_pdf=selected_outputs.get("backend_dual_pdf") or pdf_backend_outputs.get("dual_pdf"),
+                mono_changed=True,
                 render_mode=args.bilingual_render_mode,
                 raster_dpi=args.bilingual_raster_dpi,
             )
-            if bilingual_manifest.get("status") == "ok" and bilingual_manifest.get("output_pdf"):
+            if bilingual_manifest.get("status") in {"ok", "partial"} and bilingual_manifest.get("output_pdf"):
                 selected_outputs["dual_pdf"] = str(bilingual_manifest["output_pdf"])
-                selected_outputs["standard_bilingual_pdf"] = str(bilingual_manifest["output_pdf"])
+                selected_outputs["standard_bilingual_pdf"] = (
+                    str(bilingual_manifest["output_pdf"])
+                    if bilingual_manifest.get("source") == "pymupdf_rebuilt"
+                    else None
+                )
             render_manifest["bilingual_pdf"] = bilingual_manifest
             backend_manifest["bilingual_pdf"] = bilingual_manifest
             post_audit = visible_residue_repair_manifest.get("post_repair_audit")
@@ -1086,6 +1127,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         output_dir,
         selected_outputs,
         candidate_pdfs=cleanup_candidates,
+        bilingual_manifest=bilingual_manifest,
     )
     if status == "partial":
         delivery_pdf_outputs["status"] = "partial"
@@ -1280,15 +1322,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dual", action=argparse.BooleanOptionalAction, default=True, help="Request dual PDF output when supported.")
     parser.add_argument(
         "--bilingual-layout",
-        choices=["en-left-zh-right", "backend-default", "off"],
-        default=os.environ.get("PAPER_TRANSLATION_BILINGUAL_LAYOUT", "en-left-zh-right"),
-        help="Final bilingual PDF layout. Default rebuilds dual PDF as original English left, Chinese translation right.",
+        choices=["zh-left-en-right", "en-left-zh-right", "backend-default", "off"],
+        default=os.environ.get("PAPER_TRANSLATION_BILINGUAL_LAYOUT", "zh-left-en-right"),
+        help="最终双语 PDF 布局；默认中文在左、英文原文在右。",
     )
     parser.add_argument(
         "--bilingual-render-mode",
         choices=["vector", "raster", "pypdf-vector"],
-        default=os.environ.get("PAPER_TRANSLATION_BILINGUAL_RENDER_MODE", "pypdf-vector"),
-        help="标准双语 PDF 合成模式；pypdf-vector 默认用于兼顾 macOS Preview 兼容性、清晰度和文本层，vector 使用 PyMuPDF Form XObject，raster 仅作最后兼容兜底。",
+        default=os.environ.get("PAPER_TRANSLATION_BILINGUAL_RENDER_MODE", "vector"),
+        help="双语 PDF 合成模式；vector 使用 PyMuPDF，raster 为兼容兜底，pypdf-vector 是映射到 vector 的弃用别名。",
     )
     parser.add_argument(
         "--bilingual-raster-dpi",
@@ -1341,6 +1383,11 @@ def build_console_summary(manifest: dict[str, Any]) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.bilingual_render_mode == "pypdf-vector":
+        print(
+            "弃用提示：pypdf-vector 现已映射为 PyMuPDF vector；请改用 --bilingual-render-mode vector。",
+            file=sys.stderr,
+        )
     manifest = run(args)
     print(json.dumps(build_console_summary(manifest), ensure_ascii=False, indent=2))
     if manifest.get("status") == "preflight_failed":

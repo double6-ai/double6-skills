@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -31,159 +32,73 @@ def _show_pdf_page_raster(page: Any, rect: Any, source_page: Any, fitz: Any, ras
     page.insert_image(rect, pixmap=pix, keep_proportion=False)
 
 
-def build_en_left_zh_right_pdf_pypdf(source_pdf: Path, translated_pdf: Path, output_pdf: Path) -> dict[str, Any]:
-    try:
-        from pypdf import PageObject, PdfReader, PdfWriter, Transformation  # type: ignore
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"pypdf unavailable: {exc}") from exc
-    output_pdf.parent.mkdir(parents=True, exist_ok=True)
-    source_reader = PdfReader(str(source_pdf))
-    translated_reader = PdfReader(str(translated_pdf))
-    writer = PdfWriter()
-    source_pages = len(source_reader.pages)
-    translated_pages = len(translated_reader.pages)
-    page_count = max(source_pages, translated_pages)
-    for index in range(page_count):
-        source_page = source_reader.pages[index] if index < source_pages else None
-        translated_page = translated_reader.pages[index] if index < translated_pages else None
-        source_width = float(source_page.mediabox.width if source_page is not None else translated_page.mediabox.width)
-        source_height = float(source_page.mediabox.height if source_page is not None else translated_page.mediabox.height)
-        translated_width = float(translated_page.mediabox.width if translated_page is not None else source_page.mediabox.width)
-        translated_height = float(translated_page.mediabox.height if translated_page is not None else source_page.mediabox.height)
-        page = PageObject.create_blank_page(width=source_width + translated_width, height=max(source_height, translated_height))
-        if source_page is not None:
-            page.merge_page(source_page)
-        if translated_page is not None:
-            page.merge_transformed_page(translated_page, Transformation().translate(tx=source_width, ty=0), expand=False)
-        writer.add_page(page)
-    with output_pdf.open("wb") as handle:
-        writer.write(handle)
-    link_manifest = repair_pypdf_link_annotations(source_pdf, translated_pdf, output_pdf)
-    return {
-        "version": 1,
-        "status": "ok",
-        "layout": "en_left_zh_right",
-        "source_pdf": str(source_pdf),
-        "translated_pdf": str(translated_pdf),
-        "output_pdf": str(output_pdf),
-        "render_mode": "pypdf-vector",
-        "raster_dpi": None,
-        "preview_compatibility": "candidate_direct_content_merge",
-        "text_layer_policy": "preserve_merged_page_text_when_viewer_supports_content_stream_merge",
-        "source_pages": source_pages,
-        "translated_pages": translated_pages,
-        "page_count": page_count,
-        "link_annotation_repair": link_manifest,
-    }
-
-
-def rects_close(left: Any, right: Any, *, tolerance: float = 1.5) -> bool:
-    return (
-        abs(float(left.x0) - float(right.x0)) <= tolerance
-        and abs(float(left.y0) - float(right.y0)) <= tolerance
-        and abs(float(left.x1) - float(right.x1)) <= tolerance
-        and abs(float(left.y1) - float(right.y1)) <= tolerance
-    )
-
-
-def repair_pypdf_link_annotations(source_pdf: Path, translated_pdf: Path, output_pdf: Path) -> dict[str, Any]:
-    fitz = _load_fitz()
-    source_doc = fitz.open(str(source_pdf))
-    translated_doc = fitz.open(str(translated_pdf))
-    out_doc = fitz.open(str(output_pdf))
+def _copy_uri_links(output_page: Any, source_page: Any, x_offset: float, fitz: Any) -> int:
     inserted = 0
-    removed = 0
-    try:
-        page_count = min(out_doc.page_count, translated_doc.page_count)
-        for index in range(page_count):
-            source_width = float(source_doc[index].rect.width) if index < source_doc.page_count else 0.0
-            source_links = (
-                [link for link in source_doc[index].get_links() if link.get("kind") == fitz.LINK_URI and link.get("uri")]
-                if index < source_doc.page_count
-                else []
-            )
-            translated_links = [link for link in translated_doc[index].get_links() if link.get("kind") == fitz.LINK_URI and link.get("uri")]
-            if not source_links and not translated_links:
-                continue
-            out_page = out_doc[index]
-            for existing in list(out_page.get_links()):
-                if existing.get("kind") == fitz.LINK_URI:
-                    out_page.delete_link(existing)
-                    removed += 1
-            for source_link in source_links:
-                source_rect = source_link.get("from")
-                source_uri = str(source_link.get("uri") or "")
-                if source_rect is None or not source_uri:
-                    continue
-                out_page.insert_link({"kind": fitz.LINK_URI, "from": fitz.Rect(source_rect), "uri": source_uri})
-            for target_link in translated_links:
-                target_rect = target_link.get("from")
-                target_uri = str(target_link.get("uri") or "")
-                if target_rect is None:
-                    continue
-                shifted = fitz.Rect(target_rect)
-                shifted.x0 += source_width
-                shifted.x1 += source_width
-                out_page.insert_link({"kind": fitz.LINK_URI, "from": shifted, "uri": target_uri})
-                inserted += 1
-        if inserted or removed:
-            tmp_output = output_pdf.with_suffix(output_pdf.suffix + ".links.tmp")
-            out_doc.save(str(tmp_output), garbage=4, deflate=True)
-    finally:
-        out_doc.close()
-        translated_doc.close()
-        source_doc.close()
-    if (inserted or removed) and "tmp_output" in locals():
-        tmp_output.replace(output_pdf)
-    return {
-        "status": "ok",
-        "translated_links_shifted": inserted,
-        "unshifted_translated_links_removed": removed,
-    }
+    for link in source_page.get_links():
+        if link.get("kind") != fitz.LINK_URI or not link.get("uri") or link.get("from") is None:
+            continue
+        rect = fitz.Rect(link["from"])
+        rect.x0 += x_offset
+        rect.x1 += x_offset
+        output_page.insert_link({"kind": fitz.LINK_URI, "from": rect, "uri": str(link["uri"])})
+        inserted += 1
+    return inserted
 
 
-def build_en_left_zh_right_pdf(
+def build_bilingual_pdf(
     source_pdf: Path,
     translated_pdf: Path,
     output_pdf: Path,
     *,
-    mode: str = "pypdf-vector",
+    layout: str = "zh-left-en-right",
+    mode: str = "vector",
     raster_dpi: int = 144,
 ) -> dict[str, Any]:
+    requested_mode = mode
     if mode == "pypdf-vector":
-        return build_en_left_zh_right_pdf_pypdf(source_pdf, translated_pdf, output_pdf)
+        mode = "vector"
     fitz = _load_fitz()
-    if mode not in {"vector", "raster", "pypdf-vector"}:
+    if mode not in {"vector", "raster"}:
         raise ValueError(f"unsupported bilingual render mode: {mode}")
+    if layout not in {"zh-left-en-right", "en-left-zh-right"}:
+        raise ValueError(f"unsupported bilingual layout: {layout}")
     output_pdf.parent.mkdir(parents=True, exist_ok=True)
     source_doc = fitz.open(str(source_pdf))
     translated_doc = fitz.open(str(translated_pdf))
+    left_doc, right_doc = (
+        (translated_doc, source_doc)
+        if layout == "zh-left-en-right"
+        else (source_doc, translated_doc)
+    )
     out = fitz.open()
+    inserted_links = 0
     try:
         source_pages = int(source_doc.page_count)
         translated_pages = int(translated_doc.page_count)
         page_count = max(source_pages, translated_pages)
         for index in range(page_count):
-            source_page = source_doc[index] if index < source_doc.page_count else None
-            translated_page = translated_doc[index] if index < translated_doc.page_count else None
-            source_rect = source_page.rect if source_page is not None else translated_page.rect
-            translated_rect = translated_page.rect if translated_page is not None else source_page.rect
-            width = float(source_rect.width + translated_rect.width)
-            height = float(max(source_rect.height, translated_rect.height))
+            left_page = left_doc[index] if index < left_doc.page_count else None
+            right_page = right_doc[index] if index < right_doc.page_count else None
+            left_rect = left_page.rect if left_page is not None else right_page.rect
+            right_rect = right_page.rect if right_page is not None else left_page.rect
+            width = float(left_rect.width + right_rect.width)
+            height = float(max(left_rect.height, right_rect.height))
             page = out.new_page(width=width, height=height)
-            if source_page is not None:
-                left_rect = fitz.Rect(0, 0, source_rect.width, source_rect.height)
+            if left_page is not None:
+                target_left = fitz.Rect(0, 0, left_rect.width, left_rect.height)
                 if mode == "raster":
-                    _show_pdf_page_raster(page, left_rect, source_page, fitz, raster_dpi)
+                    _show_pdf_page_raster(page, target_left, left_page, fitz, raster_dpi)
                 else:
-                    _show_pdf_page_vector(page, left_rect, source_doc, index, fitz)
-            if translated_page is not None:
-                right_rect = fitz.Rect(source_rect.width, 0, source_rect.width + translated_rect.width, translated_rect.height)
+                    _show_pdf_page_vector(page, target_left, left_doc, index, fitz)
+                    inserted_links += _copy_uri_links(page, left_page, 0.0, fitz)
+            if right_page is not None:
+                target_right = fitz.Rect(left_rect.width, 0, left_rect.width + right_rect.width, right_rect.height)
                 if mode == "raster":
-                    _show_pdf_page_raster(page, right_rect, translated_page, fitz, raster_dpi)
+                    _show_pdf_page_raster(page, target_right, right_page, fitz, raster_dpi)
                 else:
-                    _show_pdf_page_vector(page, right_rect, translated_doc, index, fitz)
-            page.draw_line((source_rect.width, 0), (source_rect.width, height), color=(0.82, 0.82, 0.82), width=0.4)
+                    _show_pdf_page_vector(page, target_right, right_doc, index, fitz)
+                    inserted_links += _copy_uri_links(page, right_page, float(left_rect.width), fitz)
+            page.draw_line((left_rect.width, 0), (left_rect.width, height), color=(0.82, 0.82, 0.82), width=0.4)
         out.save(str(output_pdf), garbage=4, deflate=True)
     finally:
         out.close()
@@ -192,17 +107,23 @@ def build_en_left_zh_right_pdf(
     return {
         "version": 1,
         "status": "ok",
-        "layout": "en_left_zh_right",
+        "layout": layout.replace("-", "_"),
+        "source": "pymupdf_rebuilt",
+        "content_sync": "final_mono",
+        "layout_verification": "constructed",
         "source_pdf": str(source_pdf),
         "translated_pdf": str(translated_pdf),
         "output_pdf": str(output_pdf),
         "render_mode": mode,
+        "requested_render_mode": requested_mode,
+        "deprecated_render_mode_alias": requested_mode == "pypdf-vector",
         "raster_dpi": raster_dpi if mode == "raster" else None,
         "preview_compatibility": "high" if mode == "raster" else "viewer_dependent",
         "text_layer_policy": "visual_raster_composite; use mono_pdf for searchable translated text" if mode == "raster" else "preserve_embedded_page_text_when_viewer_supports_form_xobject",
         "source_pages": source_pages,
         "translated_pages": translated_pages,
         "page_count": page_count,
+        "uri_links_copied": inserted_links,
     }
 
 
@@ -211,16 +132,27 @@ def build_manifest(
     translated_pdf: Path,
     output_pdf: Path,
     *,
-    mode: str = "pypdf-vector",
+    layout: str = "zh-left-en-right",
+    mode: str = "vector",
     raster_dpi: int = 144,
 ) -> dict[str, Any]:
     try:
-        return build_en_left_zh_right_pdf(source_pdf, translated_pdf, output_pdf, mode=mode, raster_dpi=raster_dpi)
+        return build_bilingual_pdf(
+            source_pdf,
+            translated_pdf,
+            output_pdf,
+            layout=layout,
+            mode=mode,
+            raster_dpi=raster_dpi,
+        )
     except Exception as exc:  # noqa: BLE001 - 双语后处理失败不能吞掉主 PDF
         return {
             "version": 1,
             "status": "error",
-            "layout": "en_left_zh_right",
+            "layout": layout.replace("-", "_"),
+            "source": "pymupdf_rebuilt",
+            "content_sync": "unknown",
+            "layout_verification": "failed",
             "source_pdf": str(source_pdf),
             "translated_pdf": str(translated_pdf),
             "output_pdf": str(output_pdf),
@@ -231,18 +163,25 @@ def build_manifest(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build a bilingual PDF with original English on the left and Chinese translation on the right.")
+    parser = argparse.ArgumentParser(description="Build a bilingual PDF from the English source and Chinese translation.")
     parser.add_argument("--source-pdf", required=True)
     parser.add_argument("--translated-pdf", required=True)
     parser.add_argument("--output-pdf", required=True)
     parser.add_argument("--manifest")
-    parser.add_argument("--mode", choices=["vector", "raster", "pypdf-vector"], default="pypdf-vector")
+    parser.add_argument("--layout", choices=["zh-left-en-right", "en-left-zh-right"], default="zh-left-en-right")
+    parser.add_argument("--mode", choices=["vector", "raster", "pypdf-vector"], default="vector")
     parser.add_argument("--raster-dpi", type=int, default=144)
     args = parser.parse_args(argv)
+    if args.mode == "pypdf-vector":
+        print(
+            "DEPRECATION: --mode pypdf-vector now uses PyMuPDF vector mode; use --mode vector.",
+            file=sys.stderr,
+        )
     manifest = build_manifest(
         Path(args.source_pdf),
         Path(args.translated_pdf),
         Path(args.output_pdf),
+        layout=args.layout,
         mode=args.mode,
         raster_dpi=args.raster_dpi,
     )

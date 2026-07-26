@@ -1,11 +1,13 @@
 ---
 name: double6-pdf-translation
-description: Layout-preserving English PDF and academic paper translation into Simplified Chinese. Use when a local-execution agent must run a PDF backend, preserve layout, protect terms/spans, and emit QA evidence. Do not use for plain text translation, summaries, web pages, or non-PDF conversion.
+description: Translate English PDFs (academic papers, reports, technical documents) into accurate, layout-preserving Simplified Chinese. Produces a translated PDF plus a side-by-side bilingual PDF (Chinese on the left, source English on the right by default). Best for non-scanned, text-based PDFs.
 ---
 
 # Double6 PDF Translation
 
-将英文 PDF 翻译为准确、可读的简体中文，并尽量保持原始版式。该 skill 使用外部高保真 PDF 后端，叠加文本/视觉 QA gate 和可复现的修复证据；本仓库不内置 PDFMathTranslate-next、BabelDOC 或 pdf2zh-skill 源码树。
+将英文 PDF（论文、报告、技术文档等）翻译为准确、可读的简体中文，并尽量保持原始版式。翻译由高保真 PDF 后端完成，并叠加文本与视觉质量校验，确保成品可读、版式稳定。
+
+> ⚠️ **适用范围**：本 skill 只针对**非扫描版 PDF**。对于扫描版 / 图像版 PDF，可能翻译失败或效果较差，请谨慎使用。
 
 ## 运行
 
@@ -31,7 +33,7 @@ python scripts/run_pdf_translation.py <input-file.pdf> \
 
 也可以直接在命令中传入 `--provider`、`--base-url`、`--model`、`--api-key`。`--base-url` 和 `LOCAL_TRANSLATION_BASE_URL` 永远优先于候选表推断；`LOCAL_TRANSLATION_API_KEY` 是泛用 key，只有搭配 `LOCAL_TRANSLATION_PROVIDER` / `--provider` 时才会推断厂商 URL。没有可推断或显式的 `base_url`、没有 `model` 或没有 API key 时，preflight 会阻止正式翻译。
 
-运行时可能会自动启动内部 `translation_compat_proxy.py`，用于把 PDF 后端的碎片翻译请求接入已配置的 OpenAI-compatible 服务，并执行 JSON 输出兼容、正文翻译重试和质量统计。它不是要求用户本地部署模型；如需调试，可用 `--translation-compat-proxy on|off|auto` 或 `PAPER_TRANSLATION_COMPAT_PROXY` 控制。
+运行时可能会自动启动内置 `translation_compat_proxy.py`，用于把 PDF 后端的碎片翻译请求接入已配置的 OpenAI-compatible 服务，并执行 JSON 输出兼容、正文翻译重试和质量统计。它不是要求用户本地部署模型；如需调试，可用 `--translation-compat-proxy on|off|auto` 或 `PAPER_TRANSLATION_COMPAT_PROXY` 控制。
 
 常用场景：
 
@@ -54,20 +56,29 @@ python scripts/run_pdf_translation.py paper.pdf --output-dir paper-zh \
 
 ## 最小依赖
 
-需要暴露一个兼容的外部 PDF 后端：
+需要暴露一个兼容的外部 PDF 后端。推荐同时安装下列辅助包，以获得完整的文本抽取、版式审计、修复和双语拼接能力：
 
 ```bash
-pdf2zh --help
+# 通过 venv 安装（推荐用 scripts/setup_venv.sh，已内置环境规避逻辑）
+pip install pdf2zh_next pymupdf reportlab
 ```
 
-后端解析顺序为：`--pdf2zh-binary`、`PAPER_TRANSLATION_PDF2ZH_BINARY`、module backend，然后是 `PATH` 中的 `pdf2zh`。`PAPER_TRANSLATION_PDF2ZH_SKILL_PATH` 仅用于外部 LaTeX 直接渲染器。PyMuPDF、Poppler、reportlab、pypdf 只用于可选诊断、辅助抽取或降级产物。
+| 包 | 是否必需 | 用途 |
+|---|---|---|
+| `pdf2zh_next` | **必需** | 高保真 PDF 翻译后端（`pdf2zh` 命令必须来自此包；PyPI 同名的旧 `pdf2zh` 不可用） |
+| `pymupdf` | 推荐 | 文本抽取、版式/视觉审计、QA 门判定，以及最终中文件修复后的双语 PDF 重建 |
+| `reportlab` | 推荐 | 渲染可读的 QA 修复 PDF（缺失仅降低自动诊断，不阻断主翻译） |
+
+后端解析顺序为：`--pdf2zh-binary`、`PAPER_TRANSLATION_PDF2ZH_BINARY`、module backend，然后是 `PATH` 中的 `pdf2zh`。`PAPER_TRANSLATION_PDF2ZH_SKILL_PATH` 仅用于外部 LaTeX 直接渲染器。
+
+注意：后端可执行文件**必须来自 `pdf2zh_next` 包**；PyPI 同名 `pdf2zh` 是另一个旧项目，CLI 不匹配（会报 `unrecognized arguments`）。安装用 `pip install pdf2zh_next`。
 
 ## 输出
 
 普通交付只保留两份 PDF：
 
 - `<原文件名>.zh.pdf`：最终中文单语 PDF。
-- `<原文件名>.bilingual.pdf`：英文原文在左、中文译文在右的双语 PDF。
+- `<原文件名>.bilingual.pdf`：默认中文译文在左、英文原文在右的双语 PDF；可用 `--bilingual-layout en-left-zh-right` 切换旧布局。
 
 输出目录还会保留 `render_manifest.json`、`backend_run_manifest.json`、`translation.md`、版式/审计报告、术语和 protected span 证据，供 agent 或开发者排查使用。面向普通用户汇报时，只列两份 PDF 和 manifest 路径；不要把 `backend_quality`、`tracking_incomplete`、`rerender_candidates`、术语表补全建议等内部 gate 明细当成“建议下一步”输出，除非用户明确要求调试或交付失败。
 
@@ -85,9 +96,9 @@ pdf2zh --help
 
 该 skill 不要求 agent 自带视觉模型。视觉/版式判断应优先依赖脚本生成的 `visual_layout_report.json`、`pymupdf_layout_audit.json`、`layout_structure_gate.json` 和 `render_manifest.json` gate，而不是依赖 agent 直接看截图。
 
-- 有 PyMuPDF、Poppler、reportlab、pypdf 时，可以生成更完整的诊断证据和辅助产物。
+- PyMuPDF、reportlab、Poppler 为推荐或可选的诊断/辅助工具。
 - 没有视觉模型但能运行本地 shell 的 agent，也应读取 JSON/Markdown 证据并按 gate 状态决策。
-- 缺少这些可选工具时，主 PDF 翻译路径仍可运行；只是自动发现版式问题和生成辅助报告的能力会减少。
+- 缺少这些可选工具时，主 PDF 翻译路径仍可运行；只是自动发现版式问题、生成辅助报告或拼接标准双语件的能力会减少。
 - `--skip-visual-eval` 用于跳过较慢的可选视觉检查。
 - 没有网络的环境应关闭或接受 arXiv 源码下载失败回退，并使用本地/可达的 OpenAI-compatible endpoint。
 
@@ -107,6 +118,7 @@ pdf2zh --help
 - 人工修订术语时，使用 `references/glossary-template.tsv`。
 - 查看命令参数和失败处理时，阅读 `references/workflow.md`。
 - 安装或审查本地运行时要求时，阅读 `references/runtime-dependencies.md`。
+- 在 Windows / WorkBuddy 环境安装失败、路径异常或文本层误判时，阅读 `references/known-pitfalls.md`。
 - 查看厂商 API key 到 `base_url` 的候选映射时，阅读 `references/provider-base-urls.md`。
 
 ## 边界
