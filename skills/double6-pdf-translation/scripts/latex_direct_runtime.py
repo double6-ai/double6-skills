@@ -4,11 +4,11 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
-import math
 import os
 import re
 import shutil
 import subprocess
+from _subprocess_safe import run_text
 import sys
 import tarfile
 import time
@@ -26,7 +26,6 @@ from delivery_gate_runtime import (
     build_latex_segment_window_coverage,
     estimated_column_lines,
     is_line_estimate_eligible,
-    latex_prose_for_line_estimate,
     load_latex_direct_segments_for_gate,
     strip_latex_comments,
     write_latex_paragraph_structure_repair_manifest,
@@ -40,6 +39,7 @@ from pdf_translation_runtime import (
     DEFAULT_LATEX_RENDER_MODE,
     LATEX_BAD_NAME_HINTS,
     LATEX_MAIN_NAME_HINTS,
+    LATEX_REFLOW_LINE_WIDTH_CJK,
     LATEX_REFLOW_LINES_PER_PAGE,
     LATEX_SOURCE_HINT_ENV,
     LATEX_SOURCE_ROOTS_ENV,
@@ -847,32 +847,6 @@ def run_latex_direct_render(
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return manifest
 
-def prepare_source(input_pdf: Path, output_dir: Path, source_override: Path | None = None) -> dict[str, Any]:
-    source_input = source_override or input_pdf
-    manifest = prepare_paper_source.prepare_source(
-        SimpleNamespace(
-            input=str(source_input),
-            output_dir=str(output_dir),
-            text=None,
-            stdin=False,
-            no_ocr=True,
-            keep_pdf_noise=False,
-        )
-    )
-    if source_override:
-        manifest["render_input_pdf"] = str(input_pdf)
-        manifest["source_override"] = {
-            "path": str(source_override),
-            "input_type": manifest.get("input_type"),
-            "extraction_method": manifest.get("extraction_method"),
-            "reason": "LaTeX source is the translation source of truth; render path is recorded separately in render_manifest.json.",
-        }
-        (output_dir / "source_manifest.json").write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-    return manifest
-
 def latex_candidate_score(path: Path) -> int:
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -949,14 +923,6 @@ def extract_pdf_metadata_text(path: Path) -> tuple[str, str]:
             parts.extend(str(value) for value in metadata.values() if value)
     except Exception:
         pass
-    try:
-        from pypdf import PdfReader  # type: ignore
-
-        reader = PdfReader(str(path))
-        metadata = reader.metadata or {}
-        parts.extend(str(value) for value in metadata.values() if value)
-    except Exception:
-        pass
     return "\n".join(parts).strip(), "pdf_metadata"
 
 
@@ -976,26 +942,11 @@ def extract_pdf_frontmatter_text(path: Path, max_pages: int = 1) -> tuple[str, s
                 attempts.append(("pymupdf_frontmatter", text))
     except Exception:
         pass
-    try:
-        from pypdf import PdfReader  # type: ignore
-
-        reader = PdfReader(str(path))
-        pages = []
-        for index in range(min(max_pages, len(reader.pages))):
-            pages.append(reader.pages[index].extract_text() or "")
-        text = "\n".join(pages).strip()
-        if text:
-            attempts.append(("pypdf_frontmatter", text))
-    except Exception:
-        pass
     binary = shutil.which("pdftotext")
     if binary:
-        result = subprocess.run(
+        result = run_text(
             [binary, "-f", "1", "-l", str(max_pages), "-layout", str(path), "-"],
             check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
         )
         if result.returncode == 0 and result.stdout.strip():
             attempts.append(("pdftotext_frontmatter", result.stdout.strip()))
@@ -1227,7 +1178,6 @@ def extract_pdf_text(path: Path | None) -> tuple[str, str]:
     candidates: list[tuple[int, str, str]] = []
     for method, extractor in [
         ("pymupdf", prepare_paper_source.try_pymupdf),
-        ("pypdf", prepare_paper_source.try_pypdf),
         ("pdftotext", prepare_paper_source.try_pdftotext),
     ]:
         try:
@@ -1244,5 +1194,16 @@ def extract_pdf_text(path: Path | None) -> tuple[str, str]:
             continue
     if not candidates:
         return "", "text_extraction_failed"
-    candidates.sort(key=lambda item: item[0], reverse=True)
-    return candidates[0][1], f"{candidates[0][2]}_voted"
+    # Prefer a candidate that actually contains CJK (Chinese) characters. On some
+    # pdf2zh-next renders, Poppler/pdftotext mis-reads the Chinese text layer
+    # as English/empty while PyMuPDF reads it correctly (known-pitfalls
+    # P13). The +12000 pdftotext weight below would otherwise always win the
+    # vote and yield cjk_char_count=0 -> a false "no extractable Chinese text
+    # layer" blocking gate. When any extractor recovered Chinese, trust that.
+    cjk_candidates = [
+        item for item in candidates
+        if any("\u4e00" <= ch <= "\u9fff" for ch in item[1])
+    ]
+    pool = cjk_candidates or candidates
+    pool.sort(key=lambda item: item[0], reverse=True)
+    return pool[0][1], f"{pool[0][2]}_voted"

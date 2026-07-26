@@ -6,11 +6,11 @@ import difflib
 import json
 import re
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from _subprocess_safe import run_text
 
 SCRIPT_INTERFACE = "internal-module"
 SCRIPT_INTERFACE_REASON = "Imported by run_pdf_translation.py and tests to aggregate visible English residue diagnostics."
@@ -126,7 +126,6 @@ def _ordinary_body_residue(item: dict[str, Any]) -> bool:
 
 def normalize_finding(raw: dict[str, Any], *, source: str) -> dict[str, Any] | None:
     rule = str(raw.get("rule") or "")
-    sample = raw
     if "samples" in raw and isinstance(raw.get("samples"), list):
         return None
     text = str(raw.get("visible_text") or raw.get("text") or raw.get("evidence") or "")
@@ -438,10 +437,8 @@ def ocr_critical_page_findings(output_dir: Path | None, *, limit: int = 20) -> t
         pages_checked.append(page)
         with tempfile.TemporaryDirectory(prefix="visible_residue_ocr_") as tmpdir:
             out_base = Path(tmpdir) / "ocr"
-            result = subprocess.run(
+            result = run_text(
                 [binary, str(image), str(out_base), "-l", "eng", "--psm", "6", "tsv"],
-                capture_output=True,
-                text=True,
                 timeout=60,
                 check=False,
             )

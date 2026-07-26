@@ -6,7 +6,7 @@ import html.parser
 import json
 import re
 import shutil
-import subprocess
+from _subprocess_safe import run_text
 import sys
 from pathlib import Path
 from typing import Any
@@ -198,32 +198,11 @@ def try_pymupdf(path: Path) -> tuple[str, int | None]:
         return "\n".join(text_parts).strip(), len(doc)
 
 
-def try_pypdf(path: Path) -> tuple[str, int | None]:
-    try:
-        from pypdf import PdfReader  # type: ignore
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"pypdf unavailable: {exc}") from exc
-
-    reader = PdfReader(str(path))
-    text_parts: list[str] = []
-    for index, page in enumerate(reader.pages, start=1):
-        page_text = page.extract_text() or ""
-        if page_text.strip():
-            text_parts.append(f"\n\n<!-- page:{index} -->\n\n{page_text.strip()}")
-    return "\n".join(text_parts).strip(), len(reader.pages)
-
-
 def try_pdftotext(path: Path) -> tuple[str, int | None]:
     binary = shutil.which("pdftotext")
     if not binary:
         raise RuntimeError("pdftotext unavailable")
-    result = subprocess.run(
-        [binary, "-layout", str(path), "-"],
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    result = run_text([binary, "-layout", str(path), "-"], check=False)
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "pdftotext failed")
     return result.stdout.strip(), None
@@ -579,7 +558,7 @@ def is_corrupt_pdf_error(error: str) -> bool:
 
 
 def classify_pdf_failure(attempts: list[dict[str, Any]]) -> tuple[str, str]:
-    text_attempts = [item for item in attempts if item.get("method") in {"pymupdf", "pypdf", "pdftotext"}]
+    text_attempts = [item for item in attempts if item.get("method") in {"pymupdf", "pdftotext"}]
     errors = [str(item.get("error") or "") for item in text_attempts if item.get("status") == "error"]
     ok_attempts = [item for item in text_attempts if item.get("status") == "ok"]
     non_dependency_errors = [error for error in errors if not is_dependency_error(error)]
@@ -590,7 +569,7 @@ def classify_pdf_failure(attempts: list[dict[str, Any]]) -> tuple[str, str]:
     if non_dependency_errors and not ok_attempts:
         return "pdf_read_error", "PDF 抽取工具可用但读取失败；需要查看 attempts 中的错误并确认文件状态。"
     if not ok_attempts:
-        return "needs_pdf_dependency", "当前环境没有可用的 PDF 文本抽取工具；可选工具包括 PyMuPDF、pypdf 或 pdftotext。"
+        return "needs_pdf_dependency", "当前环境没有可用的 PDF 文本抽取工具；可选工具包括 PyMuPDF 或 pdftotext。"
     return "needs_ocr", "PDF 文本抽取为空，疑似扫描件或图片型 PDF，需要 OCR。"
 
 
@@ -600,12 +579,9 @@ def try_ocrmypdf(path: Path, output_dir: Path) -> tuple[str, int | None, dict[st
         raise RuntimeError("ocrmypdf unavailable")
     sidecar = output_dir / "ocr_sidecar.txt"
     ocr_pdf = output_dir / "ocr_source.pdf"
-    result = subprocess.run(
+    result = run_text(
         [binary, "--skip-text", "--sidecar", str(sidecar), str(path), str(ocr_pdf)],
         check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
     )
     detail = {
         "command": [binary, "--skip-text", "--sidecar", str(sidecar), str(path), str(ocr_pdf)],
@@ -626,7 +602,6 @@ def extract_pdf(path: Path, output_dir: Path, enable_ocr: bool) -> tuple[str, st
     page_count: int | None = None
     for method, extractor in [
         ("pymupdf", try_pymupdf),
-        ("pypdf", try_pypdf),
         ("pdftotext", try_pdftotext),
     ]:
         try:

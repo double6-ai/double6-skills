@@ -6,7 +6,7 @@ import html
 import json
 import re
 import shutil
-import subprocess
+from _subprocess_safe import run_text
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -205,7 +205,7 @@ def parse_bbox_layout(content: str) -> list[dict[str, Any]]:
 
 
 def pdftotext_version(binary: str) -> str | None:
-    result = subprocess.run([binary, "-v"], capture_output=True, text=True, timeout=10, check=False)
+    result = run_text([binary, "-v"], timeout=10, check=False)
     output = "\n".join(part.strip() for part in [result.stdout, result.stderr] if part.strip())
     return output.splitlines()[0] if output else None
 
@@ -222,7 +222,7 @@ def extract_bbox_lines(pdf_path: Path, *, max_pages: int | None = None) -> tuple
         if max_pages is not None:
             cmd.extend(["-f", "1", "-l", str(max_pages)])
         cmd.extend([str(pdf_path), str(out_path)])
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
+        result = run_text(cmd, timeout=60, check=False)
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "pdftotext_bbox_layout_failed")
         content = out_path.read_text(encoding="utf-8", errors="replace")

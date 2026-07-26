@@ -722,6 +722,7 @@ def build_dual_visual_report(
     standard_dual_pdf: Path | None,
     backend_dual_pdf: Path | None,
     output_dir: Path,
+    layout: str = "zh-left-en-right",
 ) -> dict[str, Any]:
     if not source_pdf or not mono_translated_pdf or not standard_dual_pdf or not source_pdf.exists() or not mono_translated_pdf.exists() or not standard_dual_pdf.exists():
         return {"version": 1, "status": "unavailable", "reason": "missing_source_mono_or_standard_dual_pdf", "findings": []}
@@ -729,13 +730,17 @@ def build_dual_visual_report(
     findings: list[dict[str, Any]] = []
     page_metrics: list[dict[str, Any]] = []
 
-    def inspect_dual(path: Path, role: str, delivery_blocking: bool) -> None:
+    normalized_layout = layout.replace("_", "-")
+
+    def inspect_dual(path: Path, role: str, delivery_blocking: bool, inspected_layout: str) -> None:
         with fitz.open(str(source_pdf)) as source_doc, fitz.open(str(mono_translated_pdf)) as mono_doc, fitz.open(str(path)) as dual_doc:  # type: ignore[attr-defined]
             for page_index in range(min(len(source_doc), len(mono_doc), len(dual_doc))):
                 source_full = _page_region_metrics(source_doc, page_index, "full")
                 mono_full = _page_region_metrics(mono_doc, page_index, "full")
                 left = _page_region_metrics(dual_doc, page_index, "left")
                 right = _page_region_metrics(dual_doc, page_index, "right")
+                translated_side = left if inspected_layout == "zh-left-en-right" else right
+                source_side = right if inspected_layout == "zh-left-en-right" else left
                 page_metrics.append(
                     {
                         "role": role,
@@ -744,16 +749,17 @@ def build_dual_visual_report(
                         "mono_translated_full": mono_full,
                         "dual_left": left,
                         "dual_right": right,
+                        "layout": inspected_layout,
                     }
                 )
                 source_nonempty = source_full["text_chars"] >= 30 or source_full["nonwhite_ratio"] >= 0.025
                 translated_nonempty = mono_full["text_chars"] >= 20 or mono_full["cjk_count"] >= 8
-                right_low = (
-                    right["text_chars"] < max(20, int(mono_full["text_chars"] * 0.08))
-                    and right["cjk_count"] < 8
-                    and right["nonwhite_ratio"] < max(0.012, float(mono_full["nonwhite_ratio"]) * 0.25)
+                translated_side_low = (
+                    translated_side["text_chars"] < max(20, int(mono_full["text_chars"] * 0.08))
+                    and translated_side["cjk_count"] < 8
+                    and translated_side["nonwhite_ratio"] < max(0.012, float(mono_full["nonwhite_ratio"]) * 0.25)
                 )
-                if source_nonempty and translated_nonempty and right_low:
+                if source_nonempty and translated_nonempty and translated_side_low:
                     findings.append(
                         normalize_finding(
                             {
@@ -768,18 +774,19 @@ def build_dual_visual_report(
                                     {
                                         "mono_text_chars": mono_full["text_chars"],
                                         "mono_cjk_count": mono_full["cjk_count"],
-                                        "right_text_chars": right["text_chars"],
-                                        "right_cjk_count": right["cjk_count"],
-                                        "right_nonwhite_ratio": right["nonwhite_ratio"],
+                                        "translated_side": "left" if inspected_layout == "zh-left-en-right" else "right",
+                                        "translated_text_chars": translated_side["text_chars"],
+                                        "translated_cjk_count": translated_side["cjk_count"],
+                                        "translated_nonwhite_ratio": translated_side["nonwhite_ratio"],
                                     },
                                     ensure_ascii=False,
                                 ),
                             }
                         )
                     )
-                left_delta = abs(float(left["nonwhite_ratio"]) - float(source_full["nonwhite_ratio"]))
-                mean_delta = max(abs(float(left["mean_rgb"][idx]) - float(source_full["mean_rgb"][idx])) for idx in range(3))
-                if source_nonempty and (left_delta >= 0.18 or mean_delta >= 55):
+                source_side_delta = abs(float(source_side["nonwhite_ratio"]) - float(source_full["nonwhite_ratio"]))
+                mean_delta = max(abs(float(source_side["mean_rgb"][idx]) - float(source_full["mean_rgb"][idx])) for idx in range(3))
+                if source_nonempty and (source_side_delta >= 0.18 or mean_delta >= 55):
                     findings.append(
                         normalize_finding(
                             {
@@ -793,9 +800,10 @@ def build_dual_visual_report(
                                 "evidence": json.dumps(
                                     {
                                         "source_nonwhite_ratio": source_full["nonwhite_ratio"],
-                                        "left_nonwhite_ratio": left["nonwhite_ratio"],
+                                        "source_side": "right" if inspected_layout == "zh-left-en-right" else "left",
+                                        "dual_source_nonwhite_ratio": source_side["nonwhite_ratio"],
                                         "source_mean_rgb": source_full["mean_rgb"],
-                                        "left_mean_rgb": left["mean_rgb"],
+                                        "dual_source_mean_rgb": source_side["mean_rgb"],
                                     },
                                     ensure_ascii=False,
                                 ),
@@ -804,9 +812,10 @@ def build_dual_visual_report(
                     )
 
     try:
-        inspect_dual(standard_dual_pdf, "standard_delivery", True)
+        if normalized_layout in {"zh-left-en-right", "en-left-zh-right"}:
+            inspect_dual(standard_dual_pdf, "standard_delivery", True, normalized_layout)
         if backend_dual_pdf and backend_dual_pdf.exists() and backend_dual_pdf != standard_dual_pdf:
-            inspect_dual(backend_dual_pdf, "backend_intermediate", False)
+            inspect_dual(backend_dual_pdf, "backend_intermediate", False, "zh-left-en-right")
         semantic = build_semantic_layout_report(mono_translated_pdf, target_pdf_role="mono_translated_pdf")
         if semantic.get("findings"):
             findings.extend(semantic["findings"])
@@ -819,6 +828,7 @@ def build_dual_visual_report(
         "delivery_status": "blocking" if delivery_findings else "ok",
         "standard_dual_pdf": str(standard_dual_pdf),
         "backend_dual_pdf": str(backend_dual_pdf) if backend_dual_pdf else None,
+        "layout": normalized_layout,
         "page_metrics": page_metrics,
         "semantic_layout_report": semantic,
         "findings": findings,
