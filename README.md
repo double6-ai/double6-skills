@@ -30,6 +30,9 @@ cp -R skills/double6-pdf-translation <agent-skills-dir>/
 
 `<agent-skills-dir>` 的具体位置由所使用的 agent 决定。只要宿主能够读取 `SKILL.md`，并具备对应 skill 所需的网页读取或本地 shell 能力，就可以按名称调用。
 
+部分宿主只在会话启动时发现 skills。如果复制后按名称调用仍提示 unknown skill，请新建
+会话或重启宿主，再检查安装目录是否正确；这不是 skill 运行失败。
+
 ## 使用
 
 ### 多来源深度研究
@@ -38,7 +41,7 @@ cp -R skills/double6-pdf-translation <agent-skills-dir>/
 请使用 $double6-deep-research 调研这个问题，明确给出证据、冲突、覆盖缺口、结论和限制。
 ```
 
-这个 skill 提供研究方法、证据记录规范和交付校验器，不自带搜索引擎或网页抓取服务。宿主没有获准的检索能力，或关键来源无法核验时，它会将结果标记为未完成，而不是把推断包装成事实。
+这个 skill 提供研究方法、逐问题覆盖与饱和停止规范和交付校验器，不按固定来源数判定深度，也不自带搜索引擎或网页抓取服务。宿主没有获准的检索能力，或关键来源无法核验时，它会将结果标记为 `partial` 或 `blocked`，而不是把推断包装成事实。当前 validator 交付合同版本为 `2.0.0`。
 
 详细说明见 [`skills/double6-deep-research/SKILL.md`](skills/double6-deep-research/SKILL.md)。
 
@@ -86,7 +89,8 @@ skills/
 ├── double6-deep-research/
 │   ├── SKILL.md
 │   ├── references/
-│   └── scripts/
+│   ├── scripts/
+│   └── tests/
 └── double6-pdf-translation/
     ├── SKILL.md
     ├── references/
