@@ -1,0 +1,10 @@
+reports/
+evals/
+security/
+agents/
+tests/
+dist/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
