@@ -133,14 +133,14 @@ class TranslationApiProbeTests(unittest.TestCase):
         self.assertTrue(metrics["task_explanation"])
         self.assertTrue(metrics["ordinary_failure"])
 
-    def test_provider_alias_infers_base_url_and_api_key(self) -> None:
+    def test_provider_alias_infers_base_url_but_never_harvests_api_key(self) -> None:
         with mock.patch.dict("os.environ", {"DASHSCOPE_API_KEY": "dashscope-key"}, clear=True):
             base_url = pdf_translation_runtime.resolve_base_url("qwen", "")
             api_key = pdf_translation_runtime.resolve_api_key("qwen", "")
             inference = pdf_translation_runtime.resolve_base_url_inference("qwen", "")
 
         self.assertEqual("https://dashscope.aliyuncs.com/compatible-mode/v1", base_url)
-        self.assertEqual("dashscope-key", api_key)
+        self.assertEqual("", api_key)
         self.assertEqual("provider", inference["source"])
 
     def test_generic_api_key_does_not_infer_base_url_without_provider(self) -> None:
@@ -150,7 +150,7 @@ class TranslationApiProbeTests(unittest.TestCase):
             inference = pdf_translation_runtime.resolve_base_url_inference("", "")
 
         self.assertEqual("", base_url)
-        self.assertEqual("generic-key", api_key)
+        self.assertEqual("", api_key)
         self.assertIsNone(inference)
 
     def test_multiple_provider_keys_do_not_infer_base_url_without_provider(self) -> None:

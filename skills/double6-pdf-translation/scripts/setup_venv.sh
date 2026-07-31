@@ -129,28 +129,12 @@ else
 fi
 "$VENV_PDF2ZH" --help >/dev/null 2>&1 && echo "==> pdf2zh CLI OK" || echo "==> pdf2zh CLI CHECK FAILED"
 
-# --- optional P7: ping the model endpoint (non-fatal) ---
+# --- optional P7 notice ---
 if [ "$verify_model" = "1" ]; then
-  echo "==> Verifying model endpoint (P7) ..."
-  : "${DEEPSEEK_API_KEY:?set DEEPSEEK_API_KEY to verify}"
-  : "${LOCAL_TRANSLATION_MODEL:?set LOCAL_TRANSLATION_MODEL to verify}"
-  : "${LOCAL_TRANSLATION_BASE_URL:=https://api.deepseek.com}"
-  "$VENV_PYTHON" - "$DEEPSEEK_API_KEY" "$LOCAL_TRANSLATION_BASE_URL" "$LOCAL_TRANSLATION_MODEL" <<'PY'
-import sys, json, urllib.request
-key, base, model = sys.argv[1:4]
-url = base.rstrip('/') + '/chat/completions'
-data = json.dumps({"model": model, "messages":[{"role":"user","content":"ping"}], "max_tokens":1}).encode()
-req = urllib.request.Request(url, data, {"Content-Type":"application/json","Authorization":"Bearer "+key})
-try:
-    r = urllib.request.urlopen(req, timeout=20)
-    print("MODEL_OK", r.status)
-except Exception as e:
-    print("MODEL_FAIL", e); sys.exit(3)
-PY
-  echo "    (non-fatal: a failure here means the model name/key is wrong, not the backend)"
+  echo "==> 跳过安装阶段的 endpoint 探测；请用显式参数运行 preflight_runtime.py --allow-endpoint-check。"
 fi
 
 echo
 echo "Next steps:"
-echo "  1. Export DEEPSEEK_API_KEY / LOCAL_TRANSLATION_MODEL etc. in the current session."
-echo "  2. Translate:  bash run_translate.sh <pdf> --output-dir <out>"
+echo "  1. 用 --provider/--base-url、--model 与 --api-key 显式配置本次运行。"
+echo "  2. Translate: bash run_translate.sh <pdf> --output-dir <out> --provider <name> --model <model> --api-key <key>"

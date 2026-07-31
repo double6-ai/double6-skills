@@ -1,7 +1,7 @@
 ---
 name: double6-pdf-translation
-version: 1.0.2
-description: Translate user-supplied text PDFs into Simplified Chinese and bilingual PDFs. Reads the PDF and user-approved local LaTeX, sends extracted text to an approved OpenAI-compatible endpoint, runs local PDF/Python subprocesses, and writes all outputs only under the chosen directory. arXiv download and Docker compilation require explicit opt-in.
+version: 1.0.3
+description: Translate user-supplied text PDFs into Simplified Chinese and bilingual PDFs. Reads the PDF and only explicitly selected local LaTeX, sends extracted text to an explicitly approved OpenAI-compatible endpoint, runs local PDF/Python subprocesses, and writes outputs, diagnostics, and the default runtime cache under the chosen directory. Local proxy, arXiv download, Docker compilation, and external cache paths require explicit command-line opt-in.
 metadata:
   openclaw:
     homepage: https://github.com/double6-ai/double6-skills/tree/main/skills/double6-pdf-translation
@@ -13,19 +13,6 @@ metadata:
         - python3
         - python
         - py
-    envVars:
-      - name: LOCAL_TRANSLATION_PROVIDER
-        required: false
-        description: 可选的 OpenAI-compatible 服务商标识。
-      - name: LOCAL_TRANSLATION_BASE_URL
-        required: false
-        description: 可选的 OpenAI-compatible API 地址；命令行参数也可提供。
-      - name: LOCAL_TRANSLATION_MODEL
-        required: false
-        description: 翻译模型名；正式运行时必须通过环境变量或命令行显式指定。
-      - name: LOCAL_TRANSLATION_API_KEY
-        required: false
-        description: 通用 API key；也可使用文档列出的服务商专用 key。
 ---
 
 # Double6 PDF Translation
@@ -39,15 +26,11 @@ metadata:
 先配置用户选择的 OpenAI-compatible Chat Completions 服务；不得假设本地模型或使用内置
 默认模型。模型必须显式指定，服务商 URL 推断规则见 `references/provider-base-urls.md`。
 
-```bash
-export DEEPSEEK_API_KEY="your-api-key"
-export LOCAL_TRANSLATION_MODEL="your-model-name"
-```
-
-然后在 skill 根目录运行：
+在 skill 根目录运行，并为本次调用显式传入 endpoint、模型和凭据：
 
 ```bash
-python scripts/preflight_runtime.py --strict
+python scripts/preflight_runtime.py --strict \
+  --provider deepseek --model <model-name> --api-key-file <key-file>
 # 用户确认目标 host 后才做带凭据的联网探测：追加 --allow-endpoint-check
 ```
 
@@ -55,7 +38,8 @@ python scripts/preflight_runtime.py --strict
 
 ```bash
 python scripts/run_pdf_translation.py <input-file.pdf> \
-  --output-dir <output-dir>
+  --output-dir <output-dir> \
+  --provider deepseek --model <model-name> --api-key-file <key-file>
 ```
 
 也可用参数提供 provider、base URL、model 和 API key；缺任一必要配置时 preflight 必须阻断。
@@ -84,17 +68,17 @@ PyPI 的旧同名 `pdf2zh` 不兼容。后端解析顺序和可选工具职责�
 
 ## LaTeX 与降级
 
-优先使用显式指定或输入文件旁的本地 LaTeX 源码。arXiv 和 Docker 默认关闭，分别只在用户
+只使用 `--latex-source` 或 `--latex-source-root` 显式批准的本地 LaTeX 源码。arXiv 和 Docker 默认关闭，分别只在用户
 同意并显式传入 `--allow-arxiv-source-autodownload`、`--latex-compile-runtime docker` 时启用。
 
 ## 安全与副作用
 
-- 权限为 `file_read`（用户 PDF／可信源码）、`file_write`（仅 `--output-dir`）、`env`（所列配置）、
+- 权限为 `file_read`（用户 PDF／显式批准的可信源码）、`file_write`（默认仅 `--output-dir`）、
   `network`（获批模型 endpoint）和 `shell`（本地 Python／PDF 工具）；宿主必须按此最小授权。
 - 发送文档前须确认 endpoint；key 不得写入日志或产物，子进程只继承白名单环境变量。
 - 输入只读；输出、QA 中间件和本地质量记录只写 `--output-dir`。
 - arXiv 与 Docker 只接受上述显式 opt-in，不得自动代用户开启。
-- `PAPER_TRANSLATION_PDF2ZH_SKILL_PATH` 只接受用户确认可信的本地代码目录；不得自动查找或下载。
+- 本地兼容代理默认关闭；仅 `--translation-compat-proxy on` 会监听回环地址。`--engine-home` 可显式选择输出目录之外的缓存路径。
 
 ## 翻译规则
 

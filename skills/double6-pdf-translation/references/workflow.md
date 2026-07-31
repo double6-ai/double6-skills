@@ -4,22 +4,21 @@ This workflow targets high-fidelity PDF layout preservation. The skill repositor
 
 ## Command
 
-Fresh installs must configure an OpenAI-compatible model before preflight. The skill has no built-in default model, because users may use different commercial, local, or self-hosted providers. If `LOCAL_TRANSLATION_PROVIDER` / `--provider` is set, or exactly one provider-specific API key is present, the runtime can infer `base_url` from `references/provider-base-urls.md`; otherwise set `LOCAL_TRANSLATION_BASE_URL` or pass `--base-url`.
+Fresh installs must explicitly select an OpenAI-compatible model before preflight. The skill has no built-in default model and does not inspect ambient provider credentials.
 
 ```bash
-export LOCAL_TRANSLATION_MODEL="your-model-name"
-export DEEPSEEK_API_KEY="your-api-key"
+API_KEY="your-api-key"
 ```
 
 Then run preflight from the installed skill root:
 
 ```bash
-python scripts/preflight_runtime.py --strict
+python scripts/preflight_runtime.py --strict --provider deepseek --model <model-name> --api-key "$API_KEY"
 ```
 
 ```bash
 python scripts/run_pdf_translation.py <input-file.pdf> \
-  --output-dir <output-dir>
+  --output-dir <output-dir> --provider deepseek --model <model-name> --api-key "$API_KEY"
 ```
 
 Options:
@@ -29,12 +28,12 @@ Options:
 - `--preflight-only`: run runtime checks and write manifests without starting translation.
 - `--skip-preflight`: diagnostic escape hatch; real release evidence should not use it.
 - `--provider`: optional provider alias used to infer `base_url`, such as `deepseek`, `openai`, `qwen`, `kimi`, `siliconflow`, `glm`, `openrouter`, or `ark`.
-- `--base-url`: OpenAI-compatible Chat Completions endpoint. Required unless `LOCAL_TRANSLATION_BASE_URL`, provider selection, or exactly one provider-specific API key can infer it.
-- `--model`: translation model for that endpoint. Required unless `LOCAL_TRANSLATION_MODEL` is set.
-- `--api-key`: API key. Resolution prefers `LOCAL_TRANSLATION_API_KEY`; if exactly one provider-specific key is set, that key is used. This flag overrides all environment defaults.
+- `--base-url`: OpenAI-compatible Chat Completions endpoint. Required unless explicit provider selection can infer it.
+- `--model`: translation model for that endpoint; must be explicit.
+- `--api-key`: API key for this run; no ambient key is inspected.
 - `--timeout`: backend command timeout in seconds. Default: `3600`.
 - `--temperature`: translation temperature. Default: `0.1`.
-- `--translation-compat-proxy`: internal translation compatibility proxy mode, `auto`, `on`, or `off`. It is an in-process adapter for PDF backend requests, not a requirement to run a local model server.
+- `--translation-compat-proxy`: internal translation compatibility proxy mode, `on` or `off`（默认）；only explicit `on` starts it.
 - `--translation-compat-proxy-port`: local port used by the internal compatibility proxy. Default: `18082`.
 - `--latex-render-mode`: LaTeX-source primary rendering mode. `auto` keeps PDF backend fallback.
 - `--latex-source-root`: additional local roots to scan for `.tex` source.
@@ -46,26 +45,9 @@ Options:
 - `--bilingual-render-mode`: PyMuPDF `vector`（默认）或 `raster`；`pypdf-vector` 仅作为映射到 `vector` 的兼容别名。
 - `--skip-visual-eval`: skip expensive visual checks only when the user explicitly accepts draft-level observability.
 
-Environment overrides:
-
-- `LOCAL_TRANSLATION_BASE_URL`
-- `LOCAL_TRANSLATION_PROVIDER`
-- `LOCAL_TRANSLATION_MODEL`
-- `LOCAL_TRANSLATION_API_KEY`
-- `OPENAI_API_KEY`
-- `DEEPSEEK_API_KEY`
-- `DASHSCOPE_API_KEY`
-- `MOONSHOT_API_KEY`
-- `SILICONFLOW_API_KEY`
-- `ZHIPUAI_API_KEY`
-- `OPENROUTER_API_KEY`
-- `ARK_API_KEY`
+Non-secret runtime overrides:
 - `PAPER_TRANSLATION_PDF2ZH_BINARY`
 - `PAPER_TRANSLATION_PDF2ZH_BACKEND`
-- `PAPER_TRANSLATION_ENGINE_HOME`
-- `PAPER_TRANSLATION_PDF2ZH_SKILL_PATH`
-- `PAPER_TRANSLATION_ARXIV_SOURCE_AUTODOWNLOAD` (default `0`; set to `1` only with explicit user consent)
-- `PAPER_TRANSLATION_COMPAT_PROXY`
 - `PAPER_TRANSLATION_COMPAT_PROXY_PORT`
 - `PAPER_TRANSLATION_VISIBLE_RESIDUE_REPAIR_MODE`
 
@@ -79,10 +61,10 @@ Environment overrides:
 
 ## LaTeX Source Selection
 
-Normal runs are LaTeX-first when source is available:
+LaTeX is considered only when the user explicitly selects a source:
 
 1. Manual `--latex-source` / `--source-override` wins.
-2. Environment hints and explicit `--latex-source-root` roots are scanned.
+2. Explicit `--latex-source-root` roots are scanned.
 3. Adjacent PDF directories are scanned: the PDF directory plus `source/`, `paper_source/`, `latex/`, and `arxiv/`.
 4. If local discovery misses, the skill only inspects PDF metadata and page 1 for a unique primary arXiv ID. It must not scan references or full-body text for source candidates. When one primary ID is found, it downloads `https://arxiv.org/e-print/<id>`, unpacks it under the output directory, and chooses the highest-scoring main `.tex`.
 5. If no unique primary arXiv ID is found, or if the primary arXiv source download fails, the skill records the reason in `source_manifest.json` and falls back to the PDF backend without trying IDs from references.

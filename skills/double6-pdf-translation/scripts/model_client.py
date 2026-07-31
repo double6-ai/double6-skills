@@ -66,10 +66,6 @@ def parse_api_key_text(text: str, env_name: str | None = None) -> str:
 
 
 def resolve_api_key(api_key_env: str | None = None, api_key_file: str | None = None) -> str | None:
-    if api_key_env:
-        env_value = os.environ.get(api_key_env)
-        if env_value:
-            return env_value
     if api_key_file:
         path = Path(api_key_file).expanduser()
         if path.exists():
@@ -99,7 +95,7 @@ def post_chat(
     if provider_name in {"openai", "openai_compatible", "deepseek"}:
         api_key = resolve_api_key(api_key_env, api_key_file)
         if not api_key:
-            key_hint = api_key_env or api_key_file or "API key"
+            key_hint = api_key_file or "explicit API key file"
             raise RuntimeError(f"Missing API key for {provider_name}: {key_hint}")
         headers["Authorization"] = f"Bearer {api_key}"
         payload: dict[str, Any] = {

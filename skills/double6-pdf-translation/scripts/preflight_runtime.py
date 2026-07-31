@@ -27,6 +27,7 @@ from pdf_translation_runtime import (
     PDF2ZH_BINARY_ENV,
     provider_base_url_candidates,
     resolve_api_key,
+    read_explicit_api_key_file,
     resolve_base_url,
     resolve_base_url_inference,
     redacted_command,
@@ -244,7 +245,7 @@ def _chat_endpoint_probe(args: argparse.Namespace, base_url: str, *, fallback_fr
                 severity="required",
                 message=f"OpenAI-compatible chat endpoint responded with HTTP {status}.",
                 details=details,
-                remediation="Check LOCAL_TRANSLATION_API_KEY, LOCAL_TRANSLATION_MODEL, and LOCAL_TRANSLATION_BASE_URL.",
+                remediation="Pass --api-key, --model, and --base-url (or --provider) explicitly.",
             )
     except HTTPError as exc:
         details = {
@@ -274,7 +275,7 @@ def _chat_endpoint_probe(args: argparse.Namespace, base_url: str, *, fallback_fr
             severity="required",
             message=f"OpenAI-compatible chat endpoint is not reachable: {exc}.",
             details=details,
-            remediation="Set LOCAL_TRANSLATION_API_KEY and allow outbound access to the configured endpoint.",
+            remediation="Pass --api-key explicitly and allow outbound access to the approved endpoint.",
         )
 
 
@@ -441,12 +442,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", help="Optional JSON report path.")
     parser.add_argument("--pdf2zh-binary", default=os.environ.get(PDF2ZH_BINARY_ENV), help="Explicit pdf2zh executable path.")
     parser.add_argument("--pdf2zh-backend", choices=["path", "module"], default=os.environ.get("PAPER_TRANSLATION_PDF2ZH_BACKEND", DEFAULT_PDF2ZH_BACKEND))
-    parser.add_argument("--provider", default=os.environ.get("LOCAL_TRANSLATION_PROVIDER", ""), help="Optional provider alias used to infer base URL, e.g. deepseek, openai, qwen, kimi, siliconflow, glm, openrouter, ark.")
-    parser.add_argument("--base-url", default=os.environ.get("LOCAL_TRANSLATION_BASE_URL") or DEFAULT_BASE_URL)
-    parser.add_argument("--model", default=os.environ.get("LOCAL_TRANSLATION_MODEL") or DEFAULT_MODEL)
-    parser.add_argument("--api-key", default=os.environ.get("LOCAL_TRANSLATION_API_KEY") or DEFAULT_API_KEY)
+    parser.add_argument("--provider", default="", help="Explicit provider alias used to infer base URL.")
+    parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--api-key", default=DEFAULT_API_KEY)
+    parser.add_argument("--api-key-file", help="Explicit API key file selected for this run.")
     parser.add_argument("--translation-compat-proxy-port", type=int, default=int(os.environ.get("PAPER_TRANSLATION_COMPAT_PROXY_PORT", str(DEFAULT_TRANSLATION_COMPAT_PROXY_PORT))))
-    parser.add_argument("--engine-home", default=os.environ.get("PAPER_TRANSLATION_ENGINE_HOME", str(default_engine_home())))
+    parser.add_argument("--engine-home", default=str(default_engine_home()))
     parser.add_argument("--command-timeout", type=float, default=10.0)
     parser.add_argument("--endpoint-timeout", type=float, default=3.0)
     parser.add_argument("--allow-endpoint-check", action="store_true", help="Send an authenticated probe to the displayed OpenAI-compatible endpoint after user approval.")
@@ -458,7 +460,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     raw_base_url = args.base_url
     args.base_url = resolve_base_url(args.provider, args.base_url)
-    args.api_key = resolve_api_key(args.provider, args.api_key)
+    explicit_key = args.api_key or read_explicit_api_key_file(args.api_key_file)
+    args.api_key = resolve_api_key(args.provider, explicit_key)
     args.inferred_translation_provider = resolve_base_url_inference(args.provider, raw_base_url)
     report = build_report(args)
     text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"

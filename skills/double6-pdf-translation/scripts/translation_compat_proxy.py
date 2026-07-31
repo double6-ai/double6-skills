@@ -563,9 +563,9 @@ def call_plain_translation(
     ledger_path: str = "plain",
 ) -> str:
     active = config or ProxyConfig(
-        model=os.environ.get("LOCAL_TRANSLATION_MODEL", DEFAULT_MODEL),
-        upstream_base_url=os.environ.get("LOCAL_TRANSLATION_BASE_URL", DEFAULT_UPSTREAM_BASE_URL).rstrip("/"),
-        api_key=os.environ.get("LOCAL_TRANSLATION_API_KEY", DEFAULT_API_KEY),
+        model=DEFAULT_MODEL,
+        upstream_base_url=DEFAULT_UPSTREAM_BASE_URL.rstrip("/"),
+        api_key=DEFAULT_API_KEY,
     )
     role = layout_role_policy.classify_babeldoc_item({"id": "plain", "input": text})
     direct_output = layout_role_policy.direct_output_for_role(role, text)
