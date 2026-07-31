@@ -106,3 +106,5 @@ skills/
 ## 许可
 
 本仓库源码使用 [MIT License](LICENSE) 发布。外部模型服务、Python 包、PDF 工具和其它第三方组件不随本仓库分发，并适用各自的许可证与服务条款。
+
+发布到 ClawHub 的 skill 版本按该平台规则另行使用 MIT-0：允许使用、修改和再分发（包括商业使用），且不要求署名。GitHub 与 skills.sh 上的仓库源码仍适用根目录的 MIT License。
