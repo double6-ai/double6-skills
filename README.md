@@ -66,7 +66,7 @@ bash run_translate.sh <input-file.pdf> --output-dir <output-dir>
 
 - 面向包含可提取文本层的英文 PDF；扫描版、图像版或严重损坏的 PDF 应先做 OCR。
 - 默认可能把待翻译文本发送到用户配置的模型服务；处理敏感文档前，请确认服务商的数据与隐私政策。
-- 默认可能访问 arXiv 下载论文源码，可通过 `--no-arxiv-source-autodownload` 关闭。
+- 默认不会访问 arXiv；只有用户明确同意并传入 `--allow-arxiv-source-autodownload` 时才下载论文源码。
 - PDF 后端和辅助工具由用户自行安装，并分别受其自身许可证约束。
 
 完整依赖、配置和故障处理见：

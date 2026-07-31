@@ -253,6 +253,26 @@ class OptimizationContractTests(unittest.TestCase):
         self.assertEqual("zh-left-en-right", args.bilingual_layout)
         self.assertEqual("vector", args.bilingual_render_mode)
 
+    def test_external_source_and_docker_paths_are_opt_in(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=True):
+            args = run_pdf_translation.build_parser().parse_args(["paper.pdf"])
+            self.assertFalse(latex_direct_runtime._arxiv_autodownload_enabled(args))
+            self.assertEqual("local", args.latex_compile_runtime)
+
+            allowed = run_pdf_translation.build_parser().parse_args(
+                ["paper.pdf", "--allow-arxiv-source-autodownload"]
+            )
+            self.assertTrue(latex_direct_runtime._arxiv_autodownload_enabled(allowed))
+
+            denied = run_pdf_translation.build_parser().parse_args(
+                [
+                    "paper.pdf",
+                    "--allow-arxiv-source-autodownload",
+                    "--no-arxiv-source-autodownload",
+                ]
+            )
+            self.assertFalse(latex_direct_runtime._arxiv_autodownload_enabled(denied))
+
     def test_help_probe_failure_uses_conservative_options(self) -> None:
         self.assertFalse(pdf_translation_artifacts_runtime.build_bilingual_pdf is None)
         self.assertFalse(pdf_translation_runtime._pdf2zh_supports_option("", "--working-dir"))

@@ -1,7 +1,7 @@
 ---
 name: double6-deep-research
-version: 2.0.1
-description: 面向开放全景、固定对象比较和有界决策问题，使用宿主已有搜索与网页读取能力完成多来源深度研究并交付完整、可读、可核验的报告。用于用户要求深入调研某一主题、比较多个对象、形成有证据的决策建议、梳理某领域截至当前的研究进展或核验一组复杂事实，也适用于英文 deep research、landscape review、evidence-based comparison 请求；不用于无需多来源综合与证据审计即可完成的轻量请求，例如任务状态查询、简单事实查询或单页内容摘要。
+version: 2.0.2
+description: 在用户授权范围内使用宿主搜索、网页和本地材料完成多来源研究；在指定目录写入报告、记录、SHA-256 候选哈希与验证回执，并运行 Python validator。用于深入调研、对象比较、证据化决策和复杂事实核验。
 metadata:
   openclaw:
     homepage: https://github.com/double6-ai/double6-skills/tree/main/skills/double6-deep-research
@@ -15,12 +15,12 @@ metadata:
 
 # Double6 Deep Research
 
-交付完整、可读、可核验的报告；validator 通过不能代替报告质量。
+交付可核验的报告；validator 通过不等于质量合格。
 
 ## 1. 冻结任务合同
 
 把请求拆为问题清单，冻结对象、时间、地域、排除项、输出形态、比较维度和决策用途，并
-区分当前信息与稳定历史材料。仅在关键歧义会改变报告时提问，否则采用保守假设并说明；
+区分当前与历史材料。仅在关键歧义会改变报告时提问，否则采用保守假设并说明；
 语言和格式跟随用户请求。
 
 用户明确要求的成本、时延、部署、采用和风险等维度须分别成为可检查的问题。
@@ -36,6 +36,10 @@ metadata:
 
 只使用宿主已经提供且用户允许的搜索、网页、浏览器或材料读取能力。不要配置 provider、
 读取 credential、启动自建 runtime，或执行与研究交付无关的外部操作。
+
+权限边界：先确认用户允许访问的网页和本地材料；本地读取仅限这些材料与交付目录，写入
+仅限该目录中的报告、审阅和验证文件。validator 只读该目录、计算候选 SHA-256 并写入
+`validation_receipt.json`，不联网、不读凭据，也不写其它路径。
 
 按以下职责循环研究：
 

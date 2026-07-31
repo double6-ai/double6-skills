@@ -38,7 +38,8 @@ Options:
 - `--translation-compat-proxy-port`: local port used by the internal compatibility proxy. Default: `18082`.
 - `--latex-render-mode`: LaTeX-source primary rendering mode. `auto` keeps PDF backend fallback.
 - `--latex-source-root`: additional local roots to scan for `.tex` source.
-- `--no-arxiv-source-autodownload`: disable the fallback that extracts the primary arXiv ID from PDF metadata/page 1 and downloads `https://arxiv.org/e-print/<id>`.
+- `--allow-arxiv-source-autodownload`: explicitly enable the fallback that extracts the primary arXiv ID from PDF metadata/page 1 and downloads `https://arxiv.org/e-print/<id>`; the default is no arXiv access.
+- `--no-arxiv-source-autodownload`: compatibility switch that always disables the fallback.
 - `--visual-check-pages`: visual/layout audit page selection.
 - `--visible-residue-repair-mode`: visible English residue repair mode, `auto`, `candidate-only`, or `off`. `auto` only promotes a repaired candidate after post-repair OCR/text gates pass.
 - `--bilingual-layout`: `zh-left-en-right`（默认）、`en-left-zh-right`、`backend-default` 或 `off`。
@@ -63,7 +64,7 @@ Environment overrides:
 - `PAPER_TRANSLATION_PDF2ZH_BACKEND`
 - `PAPER_TRANSLATION_ENGINE_HOME`
 - `PAPER_TRANSLATION_PDF2ZH_SKILL_PATH`
-- `PAPER_TRANSLATION_ARXIV_SOURCE_AUTODOWNLOAD`
+- `PAPER_TRANSLATION_ARXIV_SOURCE_AUTODOWNLOAD` (default `0`; set to `1` only with explicit user consent)
 - `PAPER_TRANSLATION_COMPAT_PROXY`
 - `PAPER_TRANSLATION_COMPAT_PROXY_PORT`
 - `PAPER_TRANSLATION_VISIBLE_RESIDUE_REPAIR_MODE`

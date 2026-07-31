@@ -17,6 +17,7 @@ SCRIPT_PATH = (
     / "scripts"
     / "validate_research_bundle.py"
 )
+sys.path.insert(0, str(SCRIPT_PATH.parent))
 SKILL_PATH = SCRIPT_PATH.parents[1] / "SKILL.md"
 REPORT_QUALITY_PATH = (
     SCRIPT_PATH.parents[1] / "references" / "report-quality.md"

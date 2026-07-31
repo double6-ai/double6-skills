@@ -1133,26 +1133,11 @@ def build_coverage_diagnostics(
     return diagnostics
 
 
-try:
-    from research_review_validation import (
-        candidate_hashes,
-        validate_independent_review,
-        validate_stop_decision,
-    )
-except ModuleNotFoundError:
-    import importlib.util
-
-    review_spec = importlib.util.spec_from_file_location(
-        "research_review_validation",
-        Path(__file__).with_name("research_review_validation.py"),
-    )
-    if review_spec is None or review_spec.loader is None:
-        raise
-    review_module = importlib.util.module_from_spec(review_spec)
-    review_spec.loader.exec_module(review_module)
-    candidate_hashes = review_module.candidate_hashes
-    validate_independent_review = review_module.validate_independent_review
-    validate_stop_decision = review_module.validate_stop_decision
+from research_review_validation import (
+    candidate_hashes,
+    validate_independent_review,
+    validate_stop_decision,
+)
 
 
 
