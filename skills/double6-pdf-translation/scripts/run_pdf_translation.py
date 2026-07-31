@@ -1229,7 +1229,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source-override", "--latex-source", dest="source_override", help="Compatibility/debug override. Normal runs auto-discover LaTeX source and do not require this flag.")
     parser.add_argument("--latex-source-root", action="append", default=[], help="Additional root to scan for LaTeX source; auto-discovery still applies without this when .tex files are adjacent.")
     parser.add_argument("--no-latex-autodiscovery", dest="disable_latex_autodiscovery", action="store_true", help="Disable LaTeX-first auto source selection for diagnostics.")
-    parser.add_argument("--no-arxiv-source-autodownload", dest="disable_arxiv_source_autodownload", action="store_true", help="Disable arXiv e-print source download fallback after local LaTeX source discovery misses.")
+    parser.add_argument(
+        "--allow-arxiv-source-autodownload",
+        dest="allow_arxiv_source_autodownload",
+        action="store_true",
+        help="Explicitly allow arXiv e-print source download after local LaTeX discovery misses; default is no arXiv access.",
+    )
+    parser.add_argument(
+        "--no-arxiv-source-autodownload",
+        dest="disable_arxiv_source_autodownload",
+        action="store_true",
+        help="Compatibility switch that always disables arXiv e-print source download.",
+    )
     parser.add_argument(
         "--latex-render-mode",
         choices=["auto", "required", "off"],
@@ -1251,8 +1262,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--latex-compile-runtime",
         choices=["auto", "local", "docker"],
-        default=os.environ.get("PAPER_TRANSLATION_LATEX_COMPILE_RUNTIME", "auto"),
-        help="LaTeX direct 编译运行时。auto 优先本机 TeX，缺失时自动使用 Docker TeX Live wrapper。",
+        default=os.environ.get("PAPER_TRANSLATION_LATEX_COMPILE_RUNTIME", "local"),
+        help="LaTeX direct 编译运行时。默认只使用本机 TeX；仅显式选择 docker 时启动 Docker。",
     )
     parser.add_argument(
         "--latex-docker-image",

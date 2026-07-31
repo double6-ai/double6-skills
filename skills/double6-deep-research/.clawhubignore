@@ -4,6 +4,7 @@ security/
 agents/
 tests/
 dist/
+manifest.json
 __pycache__/
 *.pyc
 *.pyo

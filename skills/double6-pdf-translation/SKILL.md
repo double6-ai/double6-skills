@@ -1,6 +1,6 @@
 ---
 name: double6-pdf-translation
-version: 1.0.0
+version: 1.0.1
 description: Translate English PDFs (academic papers, reports, technical documents) into accurate, layout-preserving Simplified Chinese. Produces a translated PDF plus a side-by-side bilingual PDF (Chinese on the left, source English on the right by default). Best for non-scanned, text-based PDFs.
 metadata:
   openclaw:
@@ -30,7 +30,7 @@ metadata:
 
 # Double6 PDF Translation
 
-将英文 PDF（论文、报告、技术文档等）翻译为准确、可读的简体中文，并尽量保持原始版式。翻译由高保真 PDF 后端完成，并叠加文本与视觉质量校验，确保成品可读、版式稳定。
+将英文 PDF 翻译为简体中文，尽量保持原始版式，并通过文本与视觉门禁检查成品。
 
 > ⚠️ **适用范围**：本 skill 只针对**非扫描版 PDF**。对于扫描版 / 图像版 PDF，可能翻译失败或效果较差，请谨慎使用。
 
@@ -79,18 +79,24 @@ PyPI 的旧同名 `pdf2zh` 不兼容。后端解析顺序和可选工具职责�
 - `<原文件名>.zh.pdf`：最终中文单语 PDF。
 - `<原文件名>.bilingual.pdf`：默认中文译文在左、英文原文在右的双语 PDF；可用 `--bilingual-layout en-left-zh-right` 切换旧布局。
 
-同时保留 `render_manifest.json` 和审计证据。普通用户只需看到两份 PDF 与 manifest；内部 gate
-明细仅在调试或失败时报告。
+同时保留 `render_manifest.json`；内部 gate 明细仅在调试或失败时报告。
 
 ## LaTeX 与降级
 
-优先使用显式或本地 LaTeX 源码；仅从元数据和首页识别主 arXiv ID，失败时回退 PDF 后端。
+优先使用显式指定或输入文件旁的本地 LaTeX 源码。arXiv 和 Docker 默认关闭，分别只在用户
+同意并显式传入 `--allow-arxiv-source-autodownload`、`--latex-compile-runtime docker` 时启用。
+
+## 安全与副作用
+
+- 发送文档前须取得用户对模型 endpoint 的明确授权；key 不得写入日志或产物。
+- 输入 PDF／源码只读；翻译和修复只写 `--output-dir`，通过 gate 后才选为交付文件。
+- arXiv 与 Docker 只接受上述显式 opt-in，不得自动代用户开启。
+- `PAPER_TRANSLATION_PDF2ZH_SKILL_PATH` 只接受用户确认可信的本地代码目录；不得自动查找或下载。
 
 ## Agent 能力适配
 
-不要求 agent 自带视觉模型；应读取 `visual_layout_report.json`、`layout_structure_gate.json` 和
-`render_manifest.json` 决策。PyMuPDF、reportlab、Poppler 缺失只减少诊断与辅助能力；完整
-降级规则和 `--skip-visual-eval` 见 `references/workflow.md`。
+不要求 agent 自带视觉模型；按生成的报告决策。诊断工具缺失时的降级规则见
+`references/workflow.md`。
 
 ## 翻译规则
 

@@ -1086,7 +1086,9 @@ def _download_arxiv_source(arxiv_id: str, output_dir: Path, timeout: int = 60) -
 def _arxiv_autodownload_enabled(args: argparse.Namespace) -> bool:
     if getattr(args, "disable_arxiv_source_autodownload", False):
         return False
-    return os.environ.get(ARXIV_SOURCE_AUTODOWNLOAD_ENV, "1") not in {"0", "false", "False"}
+    if getattr(args, "allow_arxiv_source_autodownload", False):
+        return True
+    return os.environ.get(ARXIV_SOURCE_AUTODOWNLOAD_ENV, "0") in {"1", "true", "True"}
 
 
 def discover_latex_source(input_pdf: Path, args: argparse.Namespace, output_dir: Path | None = None) -> tuple[Path | None, dict[str, Any]]:
