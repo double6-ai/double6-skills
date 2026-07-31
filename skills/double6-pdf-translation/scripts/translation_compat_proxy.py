@@ -964,7 +964,7 @@ class _TranslationCompatHandler(BaseHTTPRequestHandler):
             chat_completions_url(self.config.upstream_base_url),
             data=json.dumps(payload).encode("utf-8"),
             headers={
-                "Authorization": self.headers.get("Authorization", f"Bearer {self.config.api_key}"),
+                "Authorization": f"Bearer {self.config.api_key}",
                 "Content-Type": "application/json",
             },
             method="POST",

@@ -1,5 +1,9 @@
 # double6-pdf-translation 变更记录
 
+## 1.0.4
+
+- 本地兼容代理不再转发调用方的 `Authorization` 头，只使用本次显式配置的上游 key。
+
 ## 1.0.3
 
 - 凭据、endpoint、模型和 provider 改为仅接受本次命令显式参数，不再扫描宿主环境中的 key。

@@ -1,6 +1,6 @@
 ---
 name: double6-pdf-translation
-version: 1.0.3
+version: 1.0.4
 description: Translate user-supplied text PDFs into Simplified Chinese and bilingual PDFs. Reads the PDF and only explicitly selected local LaTeX, sends extracted text to an explicitly approved OpenAI-compatible endpoint, runs local PDF/Python subprocesses, and writes outputs, diagnostics, and the default runtime cache under the chosen directory. Local proxy, arXiv download, Docker compilation, and external cache paths require explicit command-line opt-in.
 metadata:
   openclaw:
@@ -79,6 +79,7 @@ PyPI 的旧同名 `pdf2zh` 不兼容。后端解析顺序和可选工具职责�
 - 输入只读；输出、QA 中间件和本地质量记录只写 `--output-dir`。
 - arXiv 与 Docker 只接受上述显式 opt-in，不得自动代用户开启。
 - 本地兼容代理默认关闭；仅 `--translation-compat-proxy on` 会监听回环地址。`--engine-home` 可显式选择输出目录之外的缓存路径。
+- 本地代理忽略调用方的认证头，向上游只使用本次显式配置的 key，避免成为任意凭据中继。
 
 ## 翻译规则
 

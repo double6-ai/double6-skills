@@ -55,6 +55,11 @@ class _FakeHTTPResponse:
 
 
 class TranslationApiProbeTests(unittest.TestCase):
+    def test_proxy_never_relays_inbound_authorization_header(self) -> None:
+        source = (SCRIPT_DIR / "translation_compat_proxy.py").read_text(encoding="utf-8")
+        self.assertNotIn('self.headers.get("Authorization"', source)
+        self.assertIn('"Authorization": f"Bearer {self.config.api_key}"', source)
+
     def test_subprocess_environment_drops_unrelated_secrets(self) -> None:
         with mock.patch.dict(
             "os.environ",
