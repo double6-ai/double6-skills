@@ -817,7 +817,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     temperatures = split_float_csv(args.temperatures, DEFAULT_TEMPERATURES)
     prompt_variants = split_csv(args.prompt_variants, DEFAULT_PROMPT_VARIANTS)
     call_paths = split_csv(args.call_paths, DEFAULT_CALL_PATHS)
-    model = args.model or os.environ.get("LOCAL_TRANSLATION_MODEL") or DEFAULT_MODEL
+    model = args.model or DEFAULT_MODEL
     base_url = resolve_base_url(args.provider, args.base_url or DEFAULT_BASE_URL).rstrip("/")
     api_key = resolve_api_key(args.provider, args.api_key or DEFAULT_API_KEY) or ""
     config = ProxyConfig(model=model, upstream_base_url=base_url, api_key=api_key)
@@ -843,7 +843,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         if not model:
             raise RuntimeError("Missing model. Set LOCAL_TRANSLATION_MODEL or pass --model.")
         if not api_key:
-            raise RuntimeError("Missing API key. Set provider-specific env vars such as DEEPSEEK_API_KEY, or pass --api-key.")
+            raise RuntimeError("Missing API key. Pass --api-key explicitly for this run.")
         results = []
         tasks = build_probe_tasks(cases, call_paths, prompt_variants, temperatures, max_results=int(args.max_results))
         planned_total = len(tasks)
@@ -977,10 +977,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input", action="append", help="Input backend_retry_failures.json, translation_proxy_stats.json, JSON list, or JSONL fixture. Repeatable.")
     parser.add_argument("--failure-dir", action="append", help="Output directory from a failed run; common failure artifacts are loaded automatically. Repeatable.")
     parser.add_argument("--output-dir", default=".cache/translation-api-probe", help="Directory for probe_results.json, probe_summary.md, and probe_cases.jsonl.")
-    parser.add_argument("--provider", default=os.environ.get("LOCAL_TRANSLATION_PROVIDER", ""))
-    parser.add_argument("--base-url", default=os.environ.get("LOCAL_TRANSLATION_BASE_URL") or DEFAULT_BASE_URL)
-    parser.add_argument("--model", default=os.environ.get("LOCAL_TRANSLATION_MODEL") or DEFAULT_MODEL)
-    parser.add_argument("--api-key", default=os.environ.get("LOCAL_TRANSLATION_API_KEY") or DEFAULT_API_KEY)
+    parser.add_argument("--provider", default="")
+    parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--api-key", default=DEFAULT_API_KEY)
     parser.add_argument("--temperatures", default=",".join(str(value) for value in DEFAULT_TEMPERATURES))
     parser.add_argument("--prompt-variants", default=",".join(DEFAULT_PROMPT_VARIANTS))
     parser.add_argument("--call-paths", default=",".join(DEFAULT_CALL_PATHS))

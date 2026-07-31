@@ -55,12 +55,11 @@ cp -R skills/double6-pdf-translation <agent-skills-dir>/
 
 ```bash
 bash scripts/setup_venv.sh
-export LOCAL_TRANSLATION_MODEL="your-model-name"
-export DEEPSEEK_API_KEY="your-api-key"
-bash run_translate.sh <input-file.pdf> --output-dir <output-dir>
+bash run_translate.sh <input-file.pdf> --output-dir <output-dir> \
+  --provider deepseek --model <model-name> --api-key-file <key-file>
 ```
 
-启动器会先执行运行时检查，再进入正式翻译。也可以使用其它 OpenAI-compatible 服务，并通过 `LOCAL_TRANSLATION_PROVIDER`、`LOCAL_TRANSLATION_BASE_URL`、`LOCAL_TRANSLATION_API_KEY` 或对应命令行参数显式配置。模型名没有默认值，缺少模型、端点或 API key 时不会开始正式翻译。
+启动器会先执行运行时检查，再进入正式翻译。也可以使用其它 OpenAI-compatible 服务；provider、base URL、模型与 API key 仅从本次命令行参数读取。缺少必要配置时不会开始正式翻译。
 
 适用边界：
 

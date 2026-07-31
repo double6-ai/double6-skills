@@ -24,7 +24,6 @@ PROVIDER_BASE_URL_CANDIDATES = [
         "provider": "deepseek",
         "display_name": "DeepSeek",
         "base_url": "https://api.deepseek.com",
-        "api_key_envs": ["DEEPSEEK_API_KEY"],
         "aliases": ["deepseek"],
         "notes": "OpenAI-compatible endpoint.",
     },
@@ -32,7 +31,6 @@ PROVIDER_BASE_URL_CANDIDATES = [
         "provider": "openai",
         "display_name": "OpenAI",
         "base_url": "https://api.openai.com/v1",
-        "api_key_envs": ["OPENAI_API_KEY"],
         "aliases": ["openai"],
         "notes": "OpenAI official API endpoint.",
     },
@@ -40,7 +38,6 @@ PROVIDER_BASE_URL_CANDIDATES = [
         "provider": "dashscope",
         "display_name": "Alibaba Cloud Model Studio / DashScope",
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "api_key_envs": ["DASHSCOPE_API_KEY"],
         "aliases": ["dashscope", "aliyun", "qwen"],
         "notes": "Generic compatible-mode endpoint; workspace-specific endpoints can override this.",
     },
@@ -48,7 +45,6 @@ PROVIDER_BASE_URL_CANDIDATES = [
         "provider": "moonshot",
         "display_name": "Moonshot / Kimi",
         "base_url": "https://api.moonshot.cn/v1",
-        "api_key_envs": ["MOONSHOT_API_KEY", "KIMI_API_KEY"],
         "aliases": ["moonshot", "kimi"],
         "notes": "OpenAI SDK compatible endpoint.",
     },
@@ -56,7 +52,6 @@ PROVIDER_BASE_URL_CANDIDATES = [
         "provider": "siliconflow",
         "display_name": "SiliconFlow",
         "base_url": "https://api.siliconflow.cn/v1",
-        "api_key_envs": ["SILICONFLOW_API_KEY"],
         "aliases": ["siliconflow"],
         "notes": "OpenAI-compatible chat completions endpoint.",
     },
@@ -64,7 +59,6 @@ PROVIDER_BASE_URL_CANDIDATES = [
         "provider": "zhipu",
         "display_name": "Zhipu / Z.ai",
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
-        "api_key_envs": ["ZHIPUAI_API_KEY", "ZHIPU_API_KEY", "BIGMODEL_API_KEY"],
         "aliases": ["zhipu", "zai", "bigmodel", "glm"],
         "notes": "OpenAI-style chat completions endpoint.",
     },
@@ -72,7 +66,6 @@ PROVIDER_BASE_URL_CANDIDATES = [
         "provider": "openrouter",
         "display_name": "OpenRouter",
         "base_url": "https://openrouter.ai/api/v1",
-        "api_key_envs": ["OPENROUTER_API_KEY"],
         "aliases": ["openrouter"],
         "notes": "OpenAI SDK compatible model router.",
     },
@@ -80,21 +73,11 @@ PROVIDER_BASE_URL_CANDIDATES = [
         "provider": "volcengine_ark",
         "display_name": "Volcengine Ark",
         "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-        "api_key_envs": ["ARK_API_KEY", "VOLCENGINE_API_KEY"],
         "aliases": ["volcengine_ark", "ark", "volcengine", "doubao"],
         "notes": "Common Ark OpenAI-compatible endpoint; override for non-Beijing regions if needed.",
     },
 ]
-_CONFIGURED_PROVIDER_API_KEYS = [
-    (env_name, os.environ.get(env_name, "").strip())
-    for candidate in PROVIDER_BASE_URL_CANDIDATES
-    for env_name in candidate["api_key_envs"]
-    if os.environ.get(env_name, "").strip()
-]
-DEFAULT_API_KEY = (
-    os.environ.get("LOCAL_TRANSLATION_API_KEY", "").strip()
-    or (_CONFIGURED_PROVIDER_API_KEYS[0][1] if len(_CONFIGURED_PROVIDER_API_KEYS) == 1 else "")
-)
+DEFAULT_API_KEY = ""
 DEFAULT_REASONING_EFFORT = "none"
 DEFAULT_TRANSLATOR_MODE = "auto"
 DEFAULT_CLI_MAX_TOKENS = 4096
@@ -152,37 +135,18 @@ def provider_candidate(provider: str | None) -> dict[str, Any] | None:
 
 
 def configured_provider_api_key_envs() -> list[dict[str, str]]:
-    configured: list[dict[str, str]] = []
-    for candidate in PROVIDER_BASE_URL_CANDIDATES:
-        for env_name in candidate["api_key_envs"]:
-            if os.environ.get(env_name, "").strip():
-                configured.append(
-                    {
-                        "provider": str(candidate["provider"]),
-                        "display_name": str(candidate["display_name"]),
-                        "api_key_env": env_name,
-                        "base_url": str(candidate["base_url"]),
-                    }
-                )
-    return configured
+    """兼容旧调用；正式运行不扫描宿主环境中的服务商凭据。"""
+    return []
 
 
 def infer_base_url_from_api_key_env() -> str:
-    if os.environ.get("LOCAL_TRANSLATION_BASE_URL", "").strip():
-        return os.environ["LOCAL_TRANSLATION_BASE_URL"].strip()
-    # LOCAL_TRANSLATION_API_KEY is intentionally generic and does not imply a provider.
-    configured = configured_provider_api_key_envs()
-    if len(configured) == 1:
-        return configured[0]["base_url"]
     return DEFAULT_BASE_URL
 
 
 def resolve_base_url(provider: str | None = None, base_url: str | None = None) -> str:
     if str(base_url or "").strip():
         return str(base_url).strip()
-    if os.environ.get("LOCAL_TRANSLATION_BASE_URL", "").strip():
-        return os.environ["LOCAL_TRANSLATION_BASE_URL"].strip()
-    candidate = provider_candidate(provider or os.environ.get("LOCAL_TRANSLATION_PROVIDER"))
+    candidate = provider_candidate(provider)
     if candidate:
         return str(candidate["base_url"])
     return infer_base_url_from_api_key_env()
@@ -191,14 +155,33 @@ def resolve_base_url(provider: str | None = None, base_url: str | None = None) -
 def resolve_api_key(provider: str | None = None, api_key: str | None = None) -> str:
     if str(api_key or "").strip():
         return str(api_key).strip()
-    if os.environ.get("LOCAL_TRANSLATION_API_KEY", "").strip():
-        return os.environ["LOCAL_TRANSLATION_API_KEY"].strip()
-    candidate = provider_candidate(provider or os.environ.get("LOCAL_TRANSLATION_PROVIDER"))
-    if candidate:
-        for env_name in candidate["api_key_envs"]:
-            if os.environ.get(str(env_name), "").strip():
-                return os.environ[str(env_name)].strip()
     return DEFAULT_API_KEY
+
+
+def read_explicit_api_key_file(path_value: str | None) -> str:
+    """读取用户显式选择的凭据文件，不扫描默认位置或宿主环境。"""
+    if not str(path_value or "").strip():
+        return ""
+    path = Path(str(path_value)).expanduser().resolve()
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        return ""
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict):
+            for key in ("api_key", "key"):
+                value = payload.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+    except json.JSONDecodeError:
+        pass
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        value = stripped.split("=", 1)[1] if "=" in stripped else stripped
+        return value.strip().strip('"').strip("'")
+    return ""
 
 
 def infer_provider_from_api_key_env() -> dict[str, str] | None:
@@ -207,9 +190,9 @@ def infer_provider_from_api_key_env() -> dict[str, str] | None:
 
 
 def resolve_base_url_inference(provider: str | None = None, base_url: str | None = None) -> dict[str, str] | None:
-    if str(base_url or "").strip() or os.environ.get("LOCAL_TRANSLATION_BASE_URL", "").strip():
+    if str(base_url or "").strip():
         return None
-    selected = provider_candidate(provider or os.environ.get("LOCAL_TRANSLATION_PROVIDER"))
+    selected = provider_candidate(provider)
     if selected:
         return {
             "provider": str(selected["provider"]),
@@ -217,11 +200,6 @@ def resolve_base_url_inference(provider: str | None = None, base_url: str | None
             "source": "provider",
             "base_url": str(selected["base_url"]),
         }
-    inferred = infer_provider_from_api_key_env()
-    if inferred:
-        inferred = dict(inferred)
-        inferred["source"] = "single_provider_api_key_env"
-        return inferred
     return None
 
 
@@ -230,52 +208,28 @@ def repo_root() -> Path:
 
 
 def paper_translation_project_root() -> Path:
-    configured = os.environ.get("PAPER_TRANSLATION_PROJECT_ROOT", "").strip()
-    if configured:
-        path = Path(configured).expanduser()
-        return path if path.is_absolute() else repo_root() / path
     return repo_root() / "projects" / "double6-pdf-translation"
 
 
 def paper_translation_run_root() -> Path:
-    configured = os.environ.get("PAPER_TRANSLATION_RUN_ROOT", "").strip()
-    if configured:
-        path = Path(configured).expanduser()
-        return path if path.is_absolute() else repo_root() / path
     return paper_translation_project_root() / "runs" / "default"
 
 
 def paper_translation_shared_library_dir() -> Path:
-    configured = os.environ.get("PAPER_TRANSLATION_SHARED_LIBRARY_DIR", "").strip()
-    if configured:
-        path = Path(configured).expanduser()
-        return path if path.is_absolute() else repo_root() / path
     return repo_root() / "shared_resources"
 
 
 def default_engine_home() -> Path:
-    configured = os.environ.get("PAPER_TRANSLATION_ENGINE_HOME", "").strip()
-    if configured:
-        return Path(configured).expanduser().resolve()
     return (Path.home() / ".cache" / "double6-pdf-translation" / "pdf2zh-home").resolve()
 
 
 def external_pdf2zh_skill_root() -> Path | None:
-    configured = os.environ.get("PAPER_TRANSLATION_PDF2ZH_SKILL_PATH", "").strip()
-    return Path(configured).expanduser().resolve() if configured else None
+    return None
 
 
 def latex_translation_after_writeback_repair(source: str, translation: str) -> str:
-    """返回 LaTeX 写回前实际会进入 TeX 的译文口径。"""
-    try:
-        external_root = external_pdf2zh_skill_root()
-        if external_root and str(external_root) not in sys.path:
-            sys.path.insert(0, str(external_root))
-        from pdf2zh_skill.latex_ops import fix_translation
-
-        return str(fix_translation(translation, source))
-    except Exception:
-        return translation
+    """返回 LaTeX 写回前译文；不从用户路径动态导入代码。"""
+    return translation
 
 
 def default_output_dir(input_pdf: Path) -> Path:
@@ -387,13 +341,8 @@ def should_use_qwen_cli_adapter(args: argparse.Namespace) -> bool:
 
 
 def should_enable_translation_compat_proxy(args: argparse.Namespace) -> bool:
-    mode = str(getattr(args, "translation_compat_proxy", "auto") or "auto")
-    if mode == "off":
-        return False
-    if mode == "on":
-        return not should_use_qwen_cli_adapter(args)
-    model = str(getattr(args, "model", "") or "").lower()
-    return ("hy-mt" in model or "deepseek" in model) and not should_use_qwen_cli_adapter(args)
+    mode = str(getattr(args, "translation_compat_proxy", "off") or "off")
+    return mode == "on" and not should_use_qwen_cli_adapter(args)
 
 
 def pdf_has_toc_like_pages(input_pdf: Path, max_pages: int = 5) -> bool:

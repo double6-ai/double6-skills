@@ -54,10 +54,10 @@ from pdf_translation_runtime import (
     apply_pdf_direct_text_repairs,
     build_backend_system_prompt,
     build_pdf2zh_command,
-    default_engine_home,
     default_output_dir,
     external_pdf2zh_skill_root,
     resolve_api_key,
+    read_explicit_api_key_file,
     resolve_base_url,
     resolve_base_url_inference,
     redacted_command,
@@ -129,16 +129,17 @@ from pdf_translation_delivery_runtime import (
 def run(args: argparse.Namespace) -> dict[str, Any]:
     started = time.monotonic()
     raw_base_url = getattr(args, "base_url", "")
-    args.provider = getattr(args, "provider", os.environ.get("LOCAL_TRANSLATION_PROVIDER", ""))
+    args.provider = getattr(args, "provider", "")
     args.base_url = resolve_base_url(args.provider, raw_base_url)
-    args.api_key = resolve_api_key(args.provider, getattr(args, "api_key", ""))
+    explicit_key = getattr(args, "api_key", "") or read_explicit_api_key_file(getattr(args, "api_key_file", ""))
+    args.api_key = resolve_api_key(args.provider, explicit_key)
     if not hasattr(args, "inferred_translation_provider"):
         args.inferred_translation_provider = resolve_base_url_inference(args.provider, raw_base_url)
     input_pdf = Path(args.input_pdf).expanduser().resolve()
     args.input_pdf = str(input_pdf)
     output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else default_output_dir(input_pdf).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    engine_home = Path(args.engine_home).expanduser().resolve() if args.engine_home else default_engine_home()
+    engine_home = Path(args.engine_home).expanduser().resolve() if args.engine_home else output_dir / ".runtime-cache"
     engine_home.mkdir(parents=True, exist_ok=True)
     log_path = output_dir / "pdf2zh-next.log"
     preflight_path = output_dir / "preflight_report.json"
@@ -1188,16 +1189,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--preflight-only", action="store_true", help="Run runtime dependency preflight, write preflight/render manifests, and exit before translation.")
     parser.add_argument("--skip-preflight", action="store_true", help="Diagnostic only: skip strict runtime preflight before translation.")
-    parser.add_argument("--provider", default=os.environ.get("LOCAL_TRANSLATION_PROVIDER", ""), help="可选厂商别名，用于按候选表推断 base URL，例如 deepseek、openai、qwen、kimi、siliconflow、glm、openrouter、ark。")
-    parser.add_argument("--model", default=os.environ.get("LOCAL_TRANSLATION_MODEL") or DEFAULT_MODEL)
-    parser.add_argument("--base-url", default=os.environ.get("LOCAL_TRANSLATION_BASE_URL") or DEFAULT_BASE_URL)
-    parser.add_argument("--api-key", default=os.environ.get("LOCAL_TRANSLATION_API_KEY") or DEFAULT_API_KEY)
+    parser.add_argument("--provider", default="", help="显式厂商别名，用于按候选表推断 base URL，例如 deepseek、openai、qwen、kimi、siliconflow、glm、openrouter、ark。")
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    parser.add_argument("--api-key", default=DEFAULT_API_KEY, help="显式提供本次运行使用的 API key；不会扫描宿主环境变量。")
+    parser.add_argument("--api-key-file", help="显式选择仅用于本次运行的 API key 文件；优先推荐，避免 key 出现在进程参数中。")
     parser.add_argument("--translator-mode", choices=["auto", "openai", "qwen-cli"], default=os.environ.get("PDF_TRANSLATION_TRANSLATOR_MODE", DEFAULT_TRANSLATOR_MODE))
     parser.add_argument(
         "--translation-compat-proxy",
-        choices=["auto", "on", "off"],
-        default=os.environ.get("PAPER_TRANSLATION_COMPAT_PROXY", "auto"),
-        help="翻译兼容代理开关；auto 会在需要 PDF 后端翻译兼容层的模型模式下自动启用。",
+        choices=["on", "off"],
+        default="off",
+        help="翻译兼容代理开关；仅在用户显式传入 on 时启用。",
     )
     parser.add_argument(
         "--translation-compat-proxy-port",
@@ -1231,8 +1233,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--temperature", type=float, default=float(os.environ.get("PDF_TRANSLATION_TEMPERATURE", str(DEFAULT_HYMT2_TEMPERATURE))))
     parser.add_argument("--cli-max-tokens", type=int, default=int(os.environ.get("PDF_TRANSLATION_CLI_MAX_TOKENS", str(DEFAULT_CLI_MAX_TOKENS))))
     parser.add_argument("--custom-system-prompt", default=os.environ.get("PDF_TRANSLATION_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT))
-    parser.add_argument("--source-override", "--latex-source", dest="source_override", help="Compatibility/debug override. Normal runs auto-discover LaTeX source and do not require this flag.")
-    parser.add_argument("--latex-source-root", action="append", default=[], help="Additional root to scan for LaTeX source; auto-discovery still applies without this when .tex files are adjacent.")
+    parser.add_argument("--source-override", "--latex-source", dest="source_override", help="显式指定用户批准的本地 LaTeX 主文件。")
+    parser.add_argument("--latex-source-root", action="append", default=[], help="显式指定允许扫描的 LaTeX 源码目录；默认不扫描相邻目录。")
     parser.add_argument("--no-latex-autodiscovery", dest="disable_latex_autodiscovery", action="store_true", help="Disable LaTeX-first auto source selection for diagnostics.")
     parser.add_argument(
         "--allow-arxiv-source-autodownload",

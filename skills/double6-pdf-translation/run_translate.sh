@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Launcher for the double6-pdf-translation skill.
-# Holds the model + backend configuration so the skill is ready to run.
-# NOTE: reads the API key from the environment; never hardcode secrets in a shared skill.
+# Normalizes local paths and forwards only the arguments explicitly supplied by the user.
 set -euo pipefail
 
 # --- Path normalization (single source of truth) ---
@@ -96,18 +95,6 @@ done
 if [ -n "$MISSING" ]; then
   echo "WARNING: Recommended Python package(s) missing in venv ($VENV):$MISSING" >&2
   echo "         Run scripts/setup_venv.sh for fuller QA and bilingual rebuild support." >&2
-fi
-
-# --- Model / endpoint config ---
-export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-}"
-export LOCAL_TRANSLATION_MODEL="${LOCAL_TRANSLATION_MODEL:-}"
-export LOCAL_TRANSLATION_PROVIDER="${LOCAL_TRANSLATION_PROVIDER:-}"
-export LOCAL_TRANSLATION_BASE_URL="${LOCAL_TRANSLATION_BASE_URL:-}"
-
-# --- Lightweight config sanity (non-fatal warning; runs AFTER the inline
-#     config above so it only fires when the key was genuinely removed) ---
-if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
-  echo "WARNING: DEEPSEEK_API_KEY is empty; translation API calls will fail." >&2
 fi
 
 # --- Pre-run scanned-PDF warning (see SKILL.md 适用范围 / known-pitfalls P15) ---

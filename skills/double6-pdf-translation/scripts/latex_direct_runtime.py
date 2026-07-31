@@ -41,8 +41,6 @@ from pdf_translation_runtime import (
     LATEX_MAIN_NAME_HINTS,
     LATEX_REFLOW_LINE_WIDTH_CJK,
     LATEX_REFLOW_LINES_PER_PAGE,
-    LATEX_SOURCE_HINT_ENV,
-    LATEX_SOURCE_ROOTS_ENV,
     external_pdf2zh_skill_root,
     redacted_command,
     should_enable_translation_compat_proxy,
@@ -50,7 +48,6 @@ from pdf_translation_runtime import (
 
 SCRIPT_INTERFACE = "internal-module"
 SCRIPT_INTERFACE_REASON = "Imported by run_pdf_translation.py for LaTeX source discovery, direct rendering, baseline audit, and reflow planning."
-ARXIV_SOURCE_AUTODOWNLOAD_ENV = "PAPER_TRANSLATION_ARXIV_SOURCE_AUTODOWNLOAD"
 ARXIV_ID_PATTERNS = (
     re.compile(r"arXiv\s*:\s*([0-9]{4}\.[0-9]{4,5}(?:v[0-9]+)?)", re.IGNORECASE),
     re.compile(r"arxiv\.org/(?:abs|pdf|e-print)/([0-9]{4}\.[0-9]{4,5})(?:v[0-9]+)?(?:\.pdf)?", re.IGNORECASE),
@@ -643,7 +640,7 @@ def run_latex_direct_render(
         "log_path": str(output_dir / "latex_direct.log"),
         "errors": [],
         "translation_compat_proxy": {
-            "mode": getattr(args, "translation_compat_proxy", "auto"),
+            "mode": getattr(args, "translation_compat_proxy", "off"),
             "enabled": False,
             "upstream_base_url": args.base_url,
             "proxy_base_url": None,
@@ -679,12 +676,11 @@ def run_latex_direct_render(
         manifest["errors"].append(
             {
                 "error_type": "missing_external_pdf2zh_skill",
-                "message": "Set PAPER_TRANSLATION_PDF2ZH_SKILL_PATH to a directory that contains the pdf2zh_skill package to enable LaTeX direct rendering.",
+                "message": "External LaTeX code loading is disabled; use the standard PDF backend.",
             }
         )
         Path(manifest["log_path"]).write_text(
-            "LATEX_DIRECT_SKIPPED: missing external pdf2zh_skill dependency. "
-            "Set PAPER_TRANSLATION_PDF2ZH_SKILL_PATH to a directory containing pdf2zh_skill.\n",
+            "LATEX_DIRECT_SKIPPED: external LaTeX code loading is disabled; using the standard PDF backend.\n",
             encoding="utf-8",
         )
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -1088,7 +1084,7 @@ def _arxiv_autodownload_enabled(args: argparse.Namespace) -> bool:
         return False
     if getattr(args, "allow_arxiv_source_autodownload", False):
         return True
-    return os.environ.get(ARXIV_SOURCE_AUTODOWNLOAD_ENV, "0") in {"1", "true", "True"}
+    return False
 
 
 def discover_latex_source(input_pdf: Path, args: argparse.Namespace, output_dir: Path | None = None) -> tuple[Path | None, dict[str, Any]]:
@@ -1099,28 +1095,8 @@ def discover_latex_source(input_pdf: Path, args: argparse.Namespace, output_dir:
         path = Path(explicit).expanduser().resolve()
         return path, {"policy": "manual_compat_override", "status": "manual", "source_path": str(path)}
     roots: list[Path] = []
-    hint = os.environ.get(LATEX_SOURCE_HINT_ENV, "").strip()
-    if hint:
-        hinted = Path(hint).expanduser().resolve()
-        if hinted.exists():
-            if hinted.is_file() and hinted.suffix.lower() == ".tex":
-                return hinted, {"policy": "latex_first_auto", "status": "env_hint_file", "source_path": str(hinted)}
-            roots.append(hinted)
-    for raw in os.environ.get(LATEX_SOURCE_ROOTS_ENV, "").split(os.pathsep):
-        if raw.strip():
-            roots.append(Path(raw).expanduser().resolve())
     for raw in getattr(args, "latex_source_root", []) or []:
         roots.append(Path(raw).expanduser().resolve())
-    pdf_parent = input_pdf.parent
-    roots.extend(
-        [
-            pdf_parent,
-            pdf_parent / "source",
-            pdf_parent / "paper_source",
-            pdf_parent / "latex",
-            pdf_parent / "arxiv",
-        ]
-    )
     seen: set[Path] = set()
     scored: list[tuple[int, Path]] = []
     for root in roots:
@@ -1132,7 +1108,7 @@ def discover_latex_source(input_pdf: Path, args: argparse.Namespace, output_dir:
             if score >= 120:
                 scored.append((score, candidate.resolve()))
     if not scored:
-        selection: dict[str, Any] = {"policy": "latex_first_auto", "status": "not_found", "searched_roots": [str(root) for root in roots]}
+        selection: dict[str, Any] = {"policy": "explicit_latex_only", "status": "not_found", "searched_roots": [str(root) for root in roots]}
         if output_dir is not None and _arxiv_autodownload_enabled(args):
             inspection = extract_primary_arxiv_ids(input_pdf)
             arxiv_ids = inspection.get("ids") if isinstance(inspection.get("ids"), list) else []
@@ -1167,7 +1143,7 @@ def discover_latex_source(input_pdf: Path, args: argparse.Namespace, output_dir:
     scored.sort(key=lambda item: (item[0], -len(str(item[1]))), reverse=True)
     source = scored[0][1]
     return source, {
-        "policy": "latex_first_auto",
+        "policy": "explicit_latex_only",
         "status": "found",
         "source_path": str(source),
         "candidate_count": len(scored),
