@@ -30,6 +30,7 @@ skills/*/manifest.json
 # Runtime outputs
 .cache/
 .release-sandbox/
+/dist/
 skills/*/dist/
 daily_runs/
 projects/*/runs/
