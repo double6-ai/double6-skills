@@ -115,7 +115,7 @@ The repository does not vendor PDFMathTranslate-next, BabelDOC, or pdf2zh-skill 
 
 If `pdf2zh --help` fails with `ModuleNotFoundError: No module named 'pdf2zh_next'`, the executable is present but the backend environment is incomplete. Fix the backend environment or point `--pdf2zh-binary` / `PAPER_TRANSLATION_PDF2ZH_BINARY` at a working executable before running translation.
 
-For environment-specific install failures (managed-Python safe-delete shim, `rm -rf` hangs, leftover `~` dists, blocked `setx`), see `references/known-pitfalls.md`.
+For environment-specific install failures (managed-Python policy, `rm -rf` hangs, leftover `~` dists, blocked `setx`), see `references/known-pitfalls.md`; the skill never disables host safety controls.
 
 Recommended optional tools:
 

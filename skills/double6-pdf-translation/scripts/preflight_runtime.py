@@ -7,7 +7,7 @@ import json
 import os
 import socket
 import subprocess
-from _subprocess_safe import run_text
+from _subprocess_safe import minimal_subprocess_env, run_text
 import sys
 import time
 from datetime import datetime, timezone
@@ -61,7 +61,7 @@ def module_available(name: str) -> bool:
 
 
 def backend_command_env(args: argparse.Namespace | None = None) -> dict[str, str]:
-    env = os.environ.copy()
+    env = minimal_subprocess_env()
     raw_engine_home = str(getattr(args, "engine_home", "") or "").strip() if args is not None else ""
     engine_home = Path(raw_engine_home).expanduser().resolve() if raw_engine_home else default_engine_home()
     env.update(
@@ -393,7 +393,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     endpoint_config_check = check_endpoint_config(args)
     if endpoint_config_check["status"] == "fail":
         checks.append(endpoint_config_check)
-    elif not args.skip_endpoint_check:
+    elif bool(getattr(args, "allow_endpoint_check", False)) and not args.skip_endpoint_check:
         checks.append(check_endpoint(args))
     else:
         checks.append(
@@ -401,9 +401,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
                 "openai_endpoint",
                 "skipped",
                 severity="required",
-                message="OpenAI-compatible endpoint check was skipped by request.",
+                message="Endpoint configuration was validated locally; no network probe was authorized.",
                 details={"base_url": args.base_url, "model": args.model},
-                remediation="Run without --skip-endpoint-check before real translation.",
+                remediation="Use --allow-endpoint-check only after confirming the target host and credential transmission.",
             )
         )
     checks.append(check_proxy_port(args))
@@ -435,7 +435,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Preflight runtime dependencies for double6-pdf-translation.")
+    parser = argparse.ArgumentParser(description="Check local runtime dependencies. Network and credential transmission are off unless --allow-endpoint-check is supplied.")
     parser.add_argument("--strict", action="store_true", help="Return non-zero when required runtime checks fail.")
     parser.add_argument("--profile", choices=["runtime", "release-qa"], default="runtime", help="Dependency contract to check. runtime checks user-facing essentials; release-qa is a stricter local diagnostics profile.")
     parser.add_argument("--output", help="Optional JSON report path.")
@@ -449,6 +449,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--engine-home", default=os.environ.get("PAPER_TRANSLATION_ENGINE_HOME", str(default_engine_home())))
     parser.add_argument("--command-timeout", type=float, default=10.0)
     parser.add_argument("--endpoint-timeout", type=float, default=3.0)
+    parser.add_argument("--allow-endpoint-check", action="store_true", help="Send an authenticated probe to the displayed OpenAI-compatible endpoint after user approval.")
     parser.add_argument("--skip-endpoint-check", action="store_true", help="Diagnostic only; real translation still requires a reachable model endpoint.")
     return parser
 

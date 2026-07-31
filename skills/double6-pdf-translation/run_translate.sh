@@ -62,16 +62,6 @@ if [ ! -f "$PYTHON_BIN" ]; then
   exit 2
 fi
 
-# --- Why these env knobs? (WorkBuddy managed Python safe-delete shim) ---
-# The managed Python injects a sitecustomize that patches os.remove/shutil with a
-# bulk-delete guard. With no Recycle Bin here, pip installs either abort (so the
-# pdf2zh.exe launcher is never written) or hang. Neutralize by unsetting the
-# session id / PYTHONPATH and disabling the sandbox trash. (known-pitfalls P2/P4)
-unset PYTHONPATH
-unset CODEBUDDY_SESSION_ID
-unset CLAUDE_SESSION_ID
-export CODEBUDDY_SAFE_DELETE_SANDBOX=0
-
 # --- Backend presence check (fail fast with an actionable message) ---
 PDF2ZH_BIN_RAW="${PAPER_TRANSLATION_PDF2ZH_BINARY:-$DEFAULT_PDF2ZH}"
 if [ ! -f "$PDF2ZH_BIN_RAW" ]; then
@@ -81,7 +71,7 @@ if [ ! -f "$PDF2ZH_BIN_RAW" ]; then
     echo "ERROR: pdf2zh backend not found at: $PDF2ZH_BIN_RAW" >&2
     echo "       The skill needs the 'pdf2zh_next' package (NOT the unrelated PyPI 'pdf2zh')." >&2
     echo "       Fix: run  scripts/setup_venv.sh  to install it safely." >&2
-    echo "       (See references/known-pitfalls.md P1/P2/P17 for details.)" >&2
+    echo "       (See references/known-pitfalls.md P1/P17 for details.)" >&2
     exit 2
   fi
   PDF2ZH_BIN="$_NATIVE"

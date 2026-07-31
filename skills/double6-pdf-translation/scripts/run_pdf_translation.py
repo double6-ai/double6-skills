@@ -18,12 +18,12 @@ import build_pymupdf_layout_audit
 import build_structured_writeback_manifest
 import check_translation
 import preflight_runtime
-import metadata_label_repair_runtime
 import policy_utils
 import toc_repair_runtime
 import visible_residue_audit
 import visible_residue_repair
 import visual_layout
+from _subprocess_safe import minimal_subprocess_env
 from translation_compat_proxy import ProxyConfig, start_translation_compat_proxy
 
 from delivery_gate_runtime import (
@@ -167,6 +167,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             translation_compat_proxy_port=getattr(args, "translation_compat_proxy_port", DEFAULT_TRANSLATION_COMPAT_PROXY_PORT),
             command_timeout=10.0,
             endpoint_timeout=3.0,
+            allow_endpoint_check=True,
             skip_endpoint_check=False,
             engine_home=str(engine_home),
         )
@@ -231,8 +232,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 encoding="utf-8",
             )
             return backend_manifest
-    env = os.environ.copy()
-    env.update(
+    env = minimal_subprocess_env(
         {
             "HOME": str(engine_home),
             "XDG_CACHE_HOME": str(engine_home / ".cache"),
@@ -463,12 +463,17 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             selected_outputs["translated_pdf"] = str(repaired_pdf)
             selected_outputs["mono_pdf"] = str(repaired_pdf)
             selected_outputs["toc_repaired_pdf"] = str(repaired_pdf)
-    metadata_label_repair_manifest = metadata_label_repair_runtime.apply_metadata_label_repair(
-        source_pdf=input_pdf,
-        translated_pdf=Path(selected_outputs["translated_pdf"]) if selected_outputs.get("translated_pdf") else None,
-        output_dir=output_dir,
-        mode=getattr(args, "metadata_label_repair", "auto"),
-        engine_home=engine_home,
+    metadata_label_repair_manifest = {
+        "version": 2,
+        "status": "skipped",
+        "reason": "document_specific_rewrites_removed",
+        "selected_as_delivery": False,
+        "output_pdf": None,
+        "actions": [],
+    }
+    (output_dir / "metadata_label_repair_manifest.json").write_text(
+        json.dumps(metadata_label_repair_manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
     )
     quality_artifacts["metadata_label_repair"] = metadata_label_repair_manifest
     if metadata_label_repair_manifest.get("selected_as_delivery") and metadata_label_repair_manifest.get("output_pdf"):
@@ -1324,9 +1329,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--metadata-label-repair",
-        choices=["auto", "off", "force"],
-        default=os.environ.get("PAPER_TRANSLATION_METADATA_LABEL_REPAIR", "auto"),
-        help="封面年份、联系邮箱和当前已知图表轴标签的确定性修复；auto 仅在安全背景区域应用。",
+        choices=["off"],
+        default="off",
+        help="兼容参数；文档专用内容改写已移除。",
     )
     parser.add_argument("--engine-home", help="Shared pdf2zh/BabelDOC asset cache. Defaults to ~/.cache/double6-pdf-translation/pdf2zh-home.")
     parser.add_argument("--allow-cloud-layout", action="store_true", help="Allow cloud layout/OCR backends such as MinerU.")

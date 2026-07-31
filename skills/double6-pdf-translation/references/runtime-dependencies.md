@@ -17,6 +17,13 @@ python scripts/preflight_runtime.py --strict
 
 The preflight report is the runtime contract: required failures block real translation; optional warnings reduce automatic diagnostics or fallback rendering only.
 
+## Privacy and network boundary
+
+Remote translation sends extracted document text and related prompts to the user-selected endpoint. The
+endpoint URL and model are recorded in the output manifest, but API keys are not. The standalone preflight
+does not contact an endpoint unless `--allow-endpoint-check` is supplied. Keep confidential documents on an
+approved endpoint, and use no arXiv, Docker or cloud option unless the user explicitly opts in.
+
 ## Required Runtime Surface
 
 - Python 3.11-compatible interpreter for the scripts in `scripts/`.
@@ -46,10 +53,8 @@ The runtime may start `scripts/translation_compat_proxy.py` automatically as an 
 Installing the backend in this environment hits several traps (full detail in `references/known-pitfalls.md`):
 
 - **P1 — wrong package.** `pip install pdf2zh` pulls an unrelated/older project (≈1.7.9) whose CLI only accepts `--service`/`--lang-out`. This skill needs the `pdf2zh_next` package: `pip install pdf2zh_next pymupdf reportlab`. A wrong install fails at runtime with `pdf2zh: error: unrecognized arguments: --output ... --openai-model ...`.
-- **P2 — safe-delete shim.** The managed Python injects a `sitecustomize` (via `CODEBUDDY_SESSION_ID` + `PYTHONPATH`) that patches `os.remove`/`shutil` with a bulk-delete guard. With no Recycle Bin present, `pip install` either aborts (leaving `pdf2zh.exe` unwritten → "system cannot find the file" at runtime) or hangs. Disable it before any pip/venv op:
-  `unset CODEBUDDY_SESSION_ID; unset CLAUDE_SESSION_ID; unset PYTHONPATH; export CODEBUDDY_SAFE_DELETE_SANDBOX=0`
 - **P3 — do not `rm -rf` a venv.** The bash safe-delete wrapper hangs on bulk-delete confirmation non-interactively. Recreate by using a *fresh* path instead of deleting the old one.
-- **P4 — leftover `~` dists.** Killing a `pip install` leaves invalid `~radio`/`~ymupdf` dirs in `site-packages`, causing later installs to silently stall. Remove `site-packages/~*` before retrying; wheels are cached so a clean retry is fast.
+- **P4 — leftover `~` dists.** Killing a `pip install` can leave invalid `~radio`/`~ymupdf` dirs. Do not let this skill remove them automatically; inspect and clean the dedicated venv manually if needed.
 - **P5 — `setx`/registry blocked.** Security policy may block persisting env vars. Export `DEEPSEEK_API_KEY` and related values per session or use a secrets manager; never hardcode them in the shared launcher.
 - **P16 — `python -m venv` is a silent no-op.** On this managed Python, `python -m venv <path>` exits 0 but creates an *empty* directory (no `Scripts/python.exe`). Use `venv.EnvBuilder(with_pip=True).create(path)` instead, or — better — reuse an existing usable venv and just `pip install` into it. `scripts/setup_venv.sh` already does this (reuse-or-builder, never the `python -m venv` CLI).
 - **P17 — Git-Bash `/c/...` paths break Windows subprocess.** When a binary path built under Git Bash (`/c/Users/.../pdf2zh.exe`) is passed to a Windows `subprocess` (e.g. the backend binary), it fails with `WinError 2`. Always hand a **native `C:\...` path** to Windows subprocesses. `run_translate.sh` normalizes the backend binary path via `cygpath -w`; when setting `PAPER_TRANSLATION_PDF2ZH_BINARY` manually under Git Bash, use a native path (e.g. `C:\Users\<username>\.workbuddy\binaries\python\envs\default\Scripts\pdf2zh.exe`).
