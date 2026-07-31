@@ -28,8 +28,30 @@ This is recorded as pitfall P12 in references/known-pitfalls.md.
 from __future__ import annotations
 
 import locale
+import os
 import subprocess
 from typing import Any
+
+
+_SUBPROCESS_ENV_ALLOWLIST = (
+    "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC",
+    "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL", "VIRTUAL_ENV",
+    "CONDA_PREFIX", "SSL_CERT_FILE", "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "HTTP_PROXY",
+    "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+)
+
+
+def minimal_subprocess_env(overrides: dict[str, str] | None = None) -> dict[str, str]:
+    """Return a narrow child environment without unrelated ambient secrets."""
+    env = {
+        key: value
+        for key in _SUBPROCESS_ENV_ALLOWLIST
+        if (value := os.environ.get(key))
+    }
+    if overrides:
+        env.update({str(key): str(value) for key, value in overrides.items()})
+    return env
 
 
 def _decode(raw: Any) -> str:

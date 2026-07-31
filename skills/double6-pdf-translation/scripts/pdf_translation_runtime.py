@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from _subprocess_safe import run_text
+from _subprocess_safe import minimal_subprocess_env, run_text
 import visual_layout
 
 SCRIPT_INTERFACE = "internal-module"
@@ -314,8 +314,7 @@ def pdf2zh_command_prefix(args: argparse.Namespace) -> list[str]:
 
 def _pdf2zh_help_text(args: argparse.Namespace, output_dir: Path) -> str:
     engine_home = Path(str(getattr(args, "engine_home", "") or default_engine_home())).expanduser().resolve()
-    env = os.environ.copy()
-    env.update(
+    env = minimal_subprocess_env(
         {
             "HOME": str(engine_home),
             "XDG_CACHE_HOME": str(engine_home / ".cache"),

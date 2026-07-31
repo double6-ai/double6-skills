@@ -1,7 +1,7 @@
 ---
 name: double6-pdf-translation
-version: 1.0.1
-description: Translate English PDFs (academic papers, reports, technical documents) into accurate, layout-preserving Simplified Chinese. Produces a translated PDF plus a side-by-side bilingual PDF (Chinese on the left, source English on the right by default). Best for non-scanned, text-based PDFs.
+version: 1.0.2
+description: Translate user-supplied text PDFs into Simplified Chinese and bilingual PDFs. Reads the PDF and user-approved local LaTeX, sends extracted text to an approved OpenAI-compatible endpoint, runs local PDF/Python subprocesses, and writes all outputs only under the chosen directory. arXiv download and Docker compilation require explicit opt-in.
 metadata:
   openclaw:
     homepage: https://github.com/double6-ai/double6-skills/tree/main/skills/double6-pdf-translation
@@ -48,6 +48,7 @@ export LOCAL_TRANSLATION_MODEL="your-model-name"
 
 ```bash
 python scripts/preflight_runtime.py --strict
+# 用户确认目标 host 后才做带凭据的联网探测：追加 --allow-endpoint-check
 ```
 
 先修复 required 级失败，再开始翻译；可选诊断依赖缺失只减少自动检查。
@@ -65,7 +66,7 @@ python scripts/run_pdf_translation.py <input-file.pdf> \
 必须安装 `pdf2zh_next` 并提供其 `pdf2zh` 命令；推荐安装 PyMuPDF 与 reportlab：
 
 ```bash
-# 通过 venv 安装（推荐用 scripts/setup_venv.sh，已内置环境规避逻辑）
+# 通过专用 venv 安装（也可使用 scripts/setup_venv.sh）
 pip install pdf2zh_next pymupdf reportlab
 ```
 
@@ -88,15 +89,12 @@ PyPI 的旧同名 `pdf2zh` 不兼容。后端解析顺序和可选工具职责�
 
 ## 安全与副作用
 
-- 发送文档前须取得用户对模型 endpoint 的明确授权；key 不得写入日志或产物。
-- 输入 PDF／源码只读；翻译和修复只写 `--output-dir`，通过 gate 后才选为交付文件。
+- 权限为 `file_read`（用户 PDF／可信源码）、`file_write`（仅 `--output-dir`）、`env`（所列配置）、
+  `network`（获批模型 endpoint）和 `shell`（本地 Python／PDF 工具）；宿主必须按此最小授权。
+- 发送文档前须确认 endpoint；key 不得写入日志或产物，子进程只继承白名单环境变量。
+- 输入只读；输出、QA 中间件和本地质量记录只写 `--output-dir`。
 - arXiv 与 Docker 只接受上述显式 opt-in，不得自动代用户开启。
 - `PAPER_TRANSLATION_PDF2ZH_SKILL_PATH` 只接受用户确认可信的本地代码目录；不得自动查找或下载。
-
-## Agent 能力适配
-
-不要求 agent 自带视觉模型；按生成的报告决策。诊断工具缺失时的降级规则见
-`references/workflow.md`。
 
 ## 翻译规则
 
@@ -107,7 +105,3 @@ PyPI 的旧同名 `pdf2zh` 不兼容。后端解析顺序和可选工具职责�
 ## 参考
 
 工作流、依赖、平台陷阱、翻译政策、术语模板和服务商 URL 映射均在 `references/` 中按需读取。
-
-## 边界
-
-该 skill 专用于高保真 PDF 翻译，不包含 benchmark runner 或私有测试报告，也不再分发第三方 PDF 后端源码。

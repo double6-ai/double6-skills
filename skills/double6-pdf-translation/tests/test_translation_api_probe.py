@@ -21,10 +21,10 @@ import latex_direct_runtime  # noqa: E402
 import visible_residue_audit  # noqa: E402
 import visible_residue_repair  # noqa: E402
 import delivery_gate_runtime  # noqa: E402
-import metadata_label_repair_runtime  # noqa: E402
 import pdf_translation_artifacts_runtime  # noqa: E402
 import pdf_translation_runtime  # noqa: E402
 import preflight_runtime  # noqa: E402
+import _subprocess_safe  # noqa: E402
 from translation_compat_proxy import ProxyConfig  # noqa: E402
 
 
@@ -55,6 +55,18 @@ class _FakeHTTPResponse:
 
 
 class TranslationApiProbeTests(unittest.TestCase):
+    def test_subprocess_environment_drops_unrelated_secrets(self) -> None:
+        with mock.patch.dict(
+            "os.environ",
+            {"PATH": "/trusted/bin", "UNRELATED_SECRET_TOKEN": "must-not-leak"},
+            clear=True,
+        ):
+            env = _subprocess_safe.minimal_subprocess_env({"HOME": "/tmp/runtime"})
+
+        self.assertEqual("/trusted/bin", env["PATH"])
+        self.assertEqual("/tmp/runtime", env["HOME"])
+        self.assertNotIn("UNRELATED_SECRET_TOKEN", env)
+
     def _require_fitz(self):
         try:
             import fitz  # type: ignore
@@ -504,90 +516,6 @@ class TranslationApiProbeTests(unittest.TestCase):
         self.assertEqual("missing_external_pdf2zh_skill", manifest["reason"])
         self.assertEqual("dependency", manifest["failure_stage"])
         self.assertEqual("not_started", manifest["api_stage_status"])
-
-    def test_metadata_references_word_in_body_does_not_clone_region(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            pdf = Path(tmpdir) / "paper.pdf"
-            self._write_text_pdf(
-                pdf,
-                [
-                    (50, 80, "1. Introduction"),
-                    (50, 120, "The method stores raw trajectories during sampling to serve as references"),
-                    (50, 136, "for similar future tasks without treating this phrase as a bibliography heading."),
-                ],
-            )
-
-            plan = metadata_label_repair_runtime.build_repair_plan(pdf)
-
-        reference_clones = [
-            action
-            for action in plan.get("actions", [])
-            if action.get("kind") == "source_region_clone" and action.get("role") == "references_region"
-        ]
-        self.assertEqual([], reference_clones)
-
-    def test_metadata_standalone_references_heading_clones_region(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            pdf = Path(tmpdir) / "paper.pdf"
-            self._write_text_pdf(
-                pdf,
-                [
-                    (50, 80, "References"),
-                    (50, 120, "Shinn, N., Cassano, F., Gopinath, A., Narasimhan, K., and Yao, S. Reflexion. 2023."),
-                    (50, 136, "Zhao, A., Huang, D., Xu, Q., Lin, M., Liu, Y.-J., and Huang, G. Expel. 2024."),
-                ],
-            )
-
-            plan = metadata_label_repair_runtime.build_repair_plan(pdf)
-
-        reference_clones = [
-            action
-            for action in plan.get("actions", [])
-            if action.get("kind") == "source_region_clone" and action.get("role") == "references_region"
-        ]
-        self.assertEqual(1, len(reference_clones))
-        self.assertEqual(1, reference_clones[0]["page"])
-
-    def test_metadata_unsafe_clone_is_not_selected_for_delivery(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root = Path(tmpdir)
-            source_pdf = root / "source.pdf"
-            translated_pdf = root / "translated.pdf"
-            lines = [
-                (50, 80, "1. Introduction"),
-                (50, 120, "Large language model agents operate in isolation and fail to learn from past experiences."),
-                (50, 136, "These methods store trajectories as references for similar future tasks."),
-            ]
-            self._write_text_pdf(source_pdf, lines)
-            self._write_text_pdf(translated_pdf, lines)
-            plan = {
-                "version": 1,
-                "status": "ok",
-                "actions": [
-                    {
-                        "kind": "source_region_clone",
-                        "role": "references_region",
-                        "page": 1,
-                        "source_bbox": [30.0, 70.0, 582.0, 744.0],
-                        "target_bbox": [30.0, 70.0, 582.0, 744.0],
-                        "redact_before_clone": True,
-                    }
-                ],
-                "action_count": 1,
-            }
-
-            with mock.patch("metadata_label_repair_runtime.build_repair_plan", return_value=plan):
-                manifest = metadata_label_repair_runtime.apply_metadata_label_repair(
-                    source_pdf=source_pdf,
-                    translated_pdf=translated_pdf,
-                    output_dir=root,
-                    mode="auto",
-                )
-
-        self.assertEqual("unsafe_clone_skipped", manifest["reason"])
-        self.assertEqual(1, manifest["unsafe_clone_skipped_count"])
-        self.assertFalse(manifest["selected_as_delivery"])
-        self.assertEqual("not_selected_for_delivery", manifest["delivery_status"])
 
     def test_rejected_visible_residue_candidate_pdf_is_cleaned_from_delivery_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

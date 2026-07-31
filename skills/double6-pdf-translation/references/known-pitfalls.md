@@ -26,18 +26,11 @@
 - **Fix**: `pip install pdf2zh_next`（可同时安装 `pymupdf reportlab` 以启用完整 QA 和双语重建）。不要安装 `pdf2zh`。
 - **Bites at**: install time, only surfaces at the first real translation run.
 
-## P2 — managed-Python safe-delete shim blocks `pip install`
+## P2 — managed-Python safety policy can block `pip install`
 
 - **Symptom**: `pip install` either (a) aborts partway with a bulk-delete confirmation error, or (b) hangs for minutes doing nothing; afterwards the venv's `pdf2zh.exe` launcher is **missing** even though `import pdf2zh_next` works → real run fails with `系统找不到指定的文件` / `file not found`.
 - **Root cause**: The WorkBuddy managed Python injects a `sitecustomize.py` (loaded when `CODEBUDDY_SESSION_ID` / `CLAUDE_SESSION_ID` is set and `PYTHONPATH` points at the shim dir). It patches `os.remove` / `shutil` with a **bulk-delete guard**. This environment has no Recycle Bin, so the guard either trips (>50 deletes → abort before the `.exe` launcher is written) or routes every delete through a non-existent trash → hang.
-- **Fix**: before any `pip` / `python -m venv` op in this environment:
-  ```bash
-  unset CODEBUDDY_SESSION_ID
-  unset CLAUDE_SESSION_ID
-  unset PYTHONPATH
-  export CODEBUDDY_SAFE_DELETE_SANDBOX=0
-  ```
-  (The shim only activates when `CODEBUDDY_SESSION_ID` is set; unsetting it makes `os.remove` a normal fast delete.)
+- **Fix**: 不要由 skill 关闭宿主安全策略。改用用户控制的标准 Python 与专用新 venv，或请宿主管理员提供批准的安装路径；失败时保留原环境并停止。
 - **Bites at**: every `pip install` / `python -m venv` in the managed-Python env.
 
 ## P3 — never `rm -rf` an existing venv
@@ -147,7 +140,7 @@
 ## P16 — `python -m venv` is a silent no-op on WorkBuddy managed Python
 
 - **现象**：在本机托管 Python（3.13.12）上执行 `python -m venv <path>`，命令 **退出码为 0，但目标目录为空**（连 `pyvenv.cfg`、`Scripts/python.exe` 都没有）。后续 `Scripts/python.exe` 找不到，安装脚本随即失败。
-- **根因**：托管 Python 的 `venv/__main__.py`（CLI 入口）被包装过，会吞掉真实异常；直接调用 `venv.EnvBuilder(with_pip=True).create(path)` 则正常工作。即“`python -m venv` 静默 no-op”是托管 Python 的已知怪癖，**与 P2 的 safe-delete shim 无关**——即使已 `unset CODEBUDDY_SESSION_ID; export CODEBUDDY_SAFE_DELETE_SANDBOX=0` 仍然存在。
+- **根因**：托管 Python 的 `venv/__main__.py`（CLI 入口）被包装过，会吞掉真实异常；直接调用 `venv.EnvBuilder(with_pip=True).create(path)` 则正常工作。
 - **修复**：
   1. **优先复用已存在的 venv**：如果目标 venv（如 `default`）里已经有可用的 `python.exe`，直接往里 `pip install`，**不要重建**。这既能绕过该 bug，又能避免覆盖托管 Python `default` venv 里其它共享包（gradio/pandas/pydantic 等）。
   2. **确需新建时，用 builder 而非 CLI**：`"$MP" -c "import venv,sys; venv.EnvBuilder(with_pip=True, clear=True).create(sys.argv[1])" "$TMPV"`。
@@ -191,9 +184,9 @@
 | ID | One-line | Where fixed in this skill |
 | --- | --- | --- |
 | P1 | wrong PyPI `pdf2zh` package | `setup_venv.sh`, `runtime-dependencies.md`, `workflow.md` WARNING |
-| P2 | safe-delete shim blocks pip | env knobs in `setup_venv.sh` + `run_translate.sh` |
+| P2 | managed safety policy blocks pip | use an approved standard Python and dedicated venv |
 | P3 | don't `rm -rf` venv | `setup_venv.sh` rename-into-place |
-| P4 | `~` leftover dists stall next install | `setup_venv.sh` post-install cleanup |
+| P4 | `~` leftover dists stall next install | inspect and clean the dedicated venv manually |
 | P5 | `setx` blocked → use per-session env | `run_translate.sh` reads env without storing secrets |
 | P6 | MSYS path mangling | `pwd -W` in launchers |
 | P7 | model name unverified | 显式 `--model` + `setup_venv.sh --verify-model` |

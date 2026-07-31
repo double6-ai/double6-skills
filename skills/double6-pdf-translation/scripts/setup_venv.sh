@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 # setup_venv.sh — safe one-shot installer for the double6-pdf-translation backend.
 #
-# Bakes in the lessons from references/known-pitfalls.md (P1-P4, P16):
+# Bakes in the lessons from references/known-pitfalls.md (P1, P3, P16):
 #   P1  installs the CORRECT package (pdf2zh_next, NOT the unrelated PyPI pdf2zh)
-#   P2  disables the managed-Python safe-delete shim before any pip/venv op
 #   P3  never `rm -rf` an existing venv; lands on a stable path via rename
-#   P4  cleans leftover `~*` dists before/after install
 #   P16 `python -m venv` is a SILENT NO-OP on WorkBuddy managed Python — so we
 #       REUSE an existing usable venv, or create via venv.EnvBuilder (not the CLI)
 #
@@ -47,12 +45,6 @@ elif [ -f "$WORKBUDDY_PYTHON" ]; then
 else
   VENV="$USER_ROOT/.local/share/double6-pdf-translation/venv"
 fi
-
-# --- P2: disable the managed-Python safe-delete shim ---
-unset PYTHONPATH
-unset CODEBUDDY_SESSION_ID
-unset CLAUDE_SESSION_ID
-export CODEBUDDY_SAFE_DELETE_SANDBOX=0
 
 verify_model=0
 for a in "$@"; do [ "$a" = "--verify-model" ] && verify_model=1; done
@@ -105,9 +97,6 @@ fi
 
 echo "==> Installing pdf2zh_next pymupdf reportlab (P1) ..."
 "$TMP_PYTHON" -m pip install pdf2zh_next pymupdf reportlab
-
-# --- P4: clean any leftover `~*` invalid dists (python, shim-safe) ---
-"$TMP_PYTHON" -c "import os,shutil,site,glob; paths=[p for root in site.getsitepackages() for p in glob.glob(os.path.join(root, '~*'))]; [shutil.rmtree(p) if os.path.isdir(p) else os.remove(p) for p in paths]; print('cleaned ~* leftovers')"
 
 # --- P1 sanity: the installed pdf2zh CLI must carry --output ---
 if ! "$TMP_PDF2ZH" --help 2>&1 | grep -q -- "--output"; then
