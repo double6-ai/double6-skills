@@ -1,0 +1,393 @@
+{
+  "schema_version": 4,
+  "system_id": "vivid_social_workbench_templates_v4",
+  "status": "precise_scene_matching_candidates_need_user_review",
+  "default_template_id": "coral_sprout",
+  "benchmark": {
+    "path": "04_iterations/2026-08-03_xiaoxue-2s3-vivid-social-preview/index.html",
+    "sha256": "2f4021d099e9adaf278fdace3d6b151c67f6f36fc0841f066ea99257eb3c14db",
+    "user_judgment": "儿童学习页是当前审美质量基线；其它场景应达到同等完成度，不重做或弱化这张页面",
+    "scope": "锁定儿童学习页、可读标签导航、真实入口与单一成长激励方向；不代表当前生成器已像素级复刻"
+  },
+  "selection_policy": {
+    "automatic_non_default_selection": true,
+    "rule": "仅当场景命中已登记的场景模板时，自动选择其默认模板；用户明确的模板选择或颜色反馈始终覆盖。未登记场景继续使用珊瑚小芽，不把旧候选配色按职业或身份自动套用。",
+    "pilot_scope": ["child_learning_quest", "creator_production_room", "teacher_lesson_studio", "freelance_delivery_studio", "travel_departure_atlas", "finance_month_close", "household_week_coordination", "fitness_week_sprint"]
+  },
+  "common_kernel": {
+    "product_shape": {
+      "desktop": "180–220px 身份侧栏 + 主工作面 + 可选辅助栏",
+      "tablet": "96–112px 彩色 emoji + 精简文字侧栏 + 主工作面",
+      "mobile": "顶部品牌条 + 单列主工作面 + 可滚动的彩色 emoji 与精简文字侧栏",
+      "first_screen": "品牌问候或主题横幅、一个主任务、进度反馈、最多四个高频捷径",
+      "primary_action_count": 1
+    },
+    "emoji_contract": {
+      "semantic_slots": {
+        "home": "☀️",
+        "tasks": "✅",
+        "math": "🧮",
+        "reading": "📚",
+        "writing": "✍️",
+        "exercise": "🏃",
+        "schedule": "📅",
+        "review": "🌈",
+        "analytics": "📊",
+        "reward": "🎁",
+        "settings": "⚙️",
+        "profile": "🧒"
+      },
+      "rule": "每个主要入口或工作对象使用独特且语义贴合的 emoji；相同语义跨设备保持一致。",
+      "forbidden": [
+        "用同一个 emoji 代表多个入口",
+        "随机堆叠无语义 emoji",
+        "复制第三方角色或品牌资产",
+        "用单字方块冒充语义素材"
+      ]
+    },
+    "color_contract": {
+      "required_tokens": [
+        "canvas",
+        "sidebar",
+        "card",
+        "ink",
+        "muted",
+        "line",
+        "primary",
+        "primary_strong",
+        "accent",
+        "category_1",
+        "category_2",
+        "category_3",
+        "category_4",
+        "hero_gradient"
+      ],
+      "brand_binding": "primary 同时进入选中导航、主按钮、进度、重点标签和成功反馈中的至少四处。",
+      "category_binding": "四个类别色在任务卡、emoji 容器、标签和图表中保持一一对应。",
+      "saturation": "高饱和色负责身份与反馈，正文使用白、奶油色或低饱和浅底。",
+      "contrast": "正文与承载面至少满足 WCAG AA，装饰色不得承载唯一语义。"
+    },
+    "component_contract": {
+      "required": [
+        "identity_sidebar_or_bottom_nav",
+        "themed_hero",
+        "primary_work_surface",
+        "emoji_capability_entries",
+        "progress_feedback"
+      ],
+      "task_tile": "独特 emoji + 动作名称 + 一句结果提示 + 状态",
+      "hero": "只表达身份、今日目标和主反馈，不塞入功能目录。",
+      "empty_state": "显示真实起点与下一步，不虚构连续天数、完成率或累计记录。"
+    },
+    "responsive_contract": {
+      "desktop": "侧栏显示 emoji 与文字；主任务优先于统计。",
+      "mobile": "保留可滚动的窄侧栏；每项展示彩色 emoji 与可见的精简文字，全部已确认入口可达，主任务位于首个滚动屏。",
+      "touch_target_min_px": 44,
+      "no_horizontal_overflow": true
+    }
+  },
+  "templates": [
+    {
+      "template_id": "coral_sprout",
+      "name": "珊瑚小芽",
+      "motif": "🌱",
+      "palette_status": "benchmark_default_needs_generated_page_user_review",
+      "palette": {
+        "canvas": "#fffaf2",
+        "sidebar": "#ffe4eb",
+        "card": "#ffffff",
+        "ink": "#322c43",
+        "muted": "#857e96",
+        "line": "#eee8f1",
+        "primary": "#ff5f83",
+        "primary_strong": "#ed4269",
+        "accent": "#46d8ad",
+        "category_1": "#fff4c8",
+        "category_2": "#e4f3ff",
+        "category_3": "#eee6ff",
+        "category_4": "#dffaf2",
+        "hero_gradient": ["#ff547b", "#ff9c7e"]
+      }
+    },
+    {
+      "template_id": "cosmic_grape",
+      "name": "星河葡萄",
+      "motif": "✨",
+      "palette_status": "candidate_needs_palette_review",
+      "palette": {
+        "canvas": "#f8efff",
+        "sidebar": "#4f0f82",
+        "card": "#f9edff",
+        "ink": "#3d1458",
+        "muted": "#816490",
+        "line": "#dac1eb",
+        "primary": "#a52cce",
+        "primary_strong": "#74139c",
+        "accent": "#ff4f98",
+        "category_1": "#ffe89c",
+        "category_2": "#dcecff",
+        "category_3": "#e4c8ff",
+        "category_4": "#d5f4e8",
+        "hero_gradient": ["#6d1aaa", "#d12fbb"]
+      }
+    },
+    {
+      "template_id": "lesson_bloom",
+      "name": "靛蓝教案",
+      "motif": "📚",
+      "palette_status": "candidate_scene_template_needs_user_review",
+      "palette": {
+        "canvas": "#f8f8ff",
+        "sidebar": "#e7ecff",
+        "card": "#ffffff",
+        "ink": "#25304d",
+        "muted": "#77819a",
+        "line": "#e1e6f3",
+        "primary": "#4968ee",
+        "primary_strong": "#3049c8",
+        "accent": "#f0af45",
+        "category_1": "#fff1c9",
+        "category_2": "#e4ecff",
+        "category_3": "#eee7ff",
+        "category_4": "#ddf5ef",
+        "hero_gradient": ["#4263e6", "#7894ff"]
+      }
+    },
+    {
+      "template_id": "sky_postcard",
+      "name": "晴空旅笺",
+      "motif": "🧳",
+      "palette_status": "candidate_scene_template_needs_user_review",
+      "palette": {
+        "canvas": "#f4fbff",
+        "sidebar": "#ddecff",
+        "card": "#ffffff",
+        "ink": "#1e3551",
+        "muted": "#6d8298",
+        "line": "#dce9f4",
+        "primary": "#2977e8",
+        "primary_strong": "#1456b8",
+        "accent": "#f6b544",
+        "category_1": "#fff0bd",
+        "category_2": "#dff4ff",
+        "category_3": "#e9e2ff",
+        "category_4": "#dff5ed",
+        "hero_gradient": ["#1767d6", "#6ebeff"]
+      }
+    },
+    {
+      "template_id": "studio_sunset",
+      "name": "橘光制片",
+      "motif": "🎬",
+      "palette_status": "candidate_scene_template_needs_user_review",
+      "palette": {
+        "canvas": "#fff9f2",
+        "sidebar": "#ffe5cf",
+        "card": "#fffdfa",
+        "ink": "#3d2b2b",
+        "muted": "#856f68",
+        "line": "#f0dfd4",
+        "primary": "#e45f3c",
+        "primary_strong": "#bc3f25",
+        "accent": "#2c9b89",
+        "category_1": "#ffe0b2",
+        "category_2": "#dff4ed",
+        "category_3": "#ede3ff",
+        "category_4": "#ffe3dd",
+        "hero_gradient": ["#dc5938", "#ff9a69"]
+      }
+    },
+    {
+      "template_id": "ink_parchment",
+      "name": "墨绿工坊",
+      "motif": "✒️",
+      "palette_status": "candidate_scene_template_needs_user_review",
+      "palette": {
+        "canvas": "#f8f3e9",
+        "sidebar": "#183b35",
+        "card": "#fffdf8",
+        "ink": "#283733",
+        "muted": "#69736d",
+        "line": "#e4dccd",
+        "primary": "#276257",
+        "primary_strong": "#184a41",
+        "accent": "#c95f48",
+        "category_1": "#f6e5ba",
+        "category_2": "#dbece7",
+        "category_3": "#e9e1f3",
+        "category_4": "#f5ddd3",
+        "hero_gradient": ["#245e54", "#4c8378"]
+      }
+    },
+    {
+      "template_id": "ledger_jade",
+      "name": "翡翠月结",
+      "motif": "🧾",
+      "palette_status": "candidate_scene_template_needs_user_review",
+      "palette": {
+        "canvas": "#f3faf7", "sidebar": "#d8eee5", "card": "#ffffff", "ink": "#20372f", "muted": "#6e8179", "line": "#d8e7e0",
+        "primary": "#1f7a5b", "primary_strong": "#145640", "accent": "#d49b3d", "category_1": "#f7e9bd", "category_2": "#dcefe8",
+        "category_3": "#e6e2f5", "category_4": "#dcecf4", "hero_gradient": ["#185f48", "#49a37e"]
+      }
+    },
+    {
+      "template_id": "home_sunrise",
+      "name": "暖阳之家",
+      "motif": "🏠",
+      "palette_status": "candidate_scene_template_needs_user_review",
+      "palette": {
+        "canvas": "#fffaf1", "sidebar": "#ffe8c9", "card": "#ffffff", "ink": "#48372f", "muted": "#8a756a", "line": "#eee0d2",
+        "primary": "#e8784d", "primary_strong": "#bb4f2d", "accent": "#4d9f83", "category_1": "#fff0bd", "category_2": "#deefff",
+        "category_3": "#f1e3ff", "category_4": "#dff5e9", "hero_gradient": ["#e36c43", "#f5b46e"]
+      }
+    },
+    {
+      "template_id": "energy_sprint",
+      "name": "活力冲刺",
+      "motif": "🏃",
+      "palette_status": "candidate_scene_template_needs_user_review",
+      "palette": {
+        "canvas": "#f5f8f2", "sidebar": "#dfeccd", "card": "#ffffff", "ink": "#26342a", "muted": "#718076", "line": "#dfe7dc",
+        "primary": "#5f8f2f", "primary_strong": "#416b1c", "accent": "#f38a3f", "category_1": "#f4e7ad", "category_2": "#dcecf5",
+        "category_3": "#e8e1f4", "category_4": "#dcedd4", "hero_gradient": ["#537f29", "#9fbd56"]
+      }
+    }
+  ],
+  "scene_templates": [
+    {
+      "scene_template_id": "child_learning_quest",
+      "name": "儿童每日学习闯关",
+      "domain_ids": ["education-learning"],
+      "match": {"profile_ids": ["baby-growth-explorer", "primary-transition-1-to-2", "primary-transition-2-to-3", "primary-transition-3-to-4"]},
+      "template_id": "coral_sprout",
+      "token_id": "playful-growth",
+      "renderer_id": "child_learning_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "detail_mode": "single_active_view",
+      "quality_reference": "04_iterations/2026-08-03_xiaoxue-2s3-vivid-social-preview/index.html",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+    },
+    {
+      "scene_template_id": "teacher_lesson_studio",
+      "name": "教师单节备课工作台",
+      "domain_ids": ["teaching-classroom"],
+      "match": {"profile_ids": ["teaching-lesson-preparation"]},
+      "template_id": "lesson_bloom",
+      "token_id": "professional-trust",
+      "renderer_id": "teacher_lesson_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "detail_mode": "single_active_view",
+      "quality_reference": "child_learning_quest",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+    },
+    {
+      "scene_template_id": "freelance_delivery_studio",
+      "name": "自由职业项目交付工作台",
+      "domain_ids": ["professional-services"],
+      "match": {"request_any": ["自由职业", "客户项目", "项目交付", "插画交付"]},
+      "template_id": "ink_parchment",
+      "token_id": "professional-trust",
+      "renderer_id": "freelance_delivery_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "detail_mode": "single_active_view",
+      "quality_reference": "child_learning_quest",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+    },
+    {
+      "scene_template_id": "travel_departure_atlas",
+      "name": "周末出发行程台",
+      "domain_ids": ["travel-planning"],
+      "match": {"request_any": ["周末出发", "行程", "旅行计划"], "request_none": ["不做行程", "不是出发"]},
+      "template_id": "sky_postcard",
+      "token_id": "general-focus",
+      "renderer_id": "travel_departure_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "detail_mode": "single_active_view",
+      "quality_reference": "child_learning_quest",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+    },
+    {
+      "scene_template_id": "creator_production_room",
+      "name": "内容选题制作台",
+      "domain_ids": ["content-operations"],
+      "match": {"request_any": ["选题", "内容制作", "脚本制作", "发布排期"]},
+      "template_id": "studio_sunset",
+      "token_id": "editorial-story",
+      "renderer_id": "creator_production_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "detail_mode": "single_active_view",
+      "quality_reference": "child_learning_quest",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+    },
+    {
+      "scene_template_id": "finance_month_close",
+      "name": "本地财务月结工作台",
+      "domain_ids": ["finance-tax-contract"],
+      "match": {"request_any": ["月结", "对账", "凭证整理"]},
+      "template_id": "ledger_jade",
+      "token_id": "professional-trust",
+      "renderer_id": "finance_month_close_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "detail_mode": "single_active_view",
+      "quality_reference": "child_learning_quest",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+    },
+    {
+      "scene_template_id": "household_week_coordination",
+      "name": "家庭一周协作工作台",
+      "domain_ids": ["household-collaboration"],
+      "match": {"request_any": ["家庭一周", "家务协作", "一周采购"]},
+      "template_id": "home_sunrise",
+      "token_id": "general-focus",
+      "renderer_id": "household_week_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "detail_mode": "single_active_view",
+      "quality_reference": "child_learning_quest",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+    },
+    {
+      "scene_template_id": "fitness_week_sprint",
+      "name": "一周训练冲刺工作台",
+      "domain_ids": ["fitness-nutrition"],
+      "match": {"request_any": ["一周训练", "训练冲刺", "一周减脂"], "request_none": ["不做一周", "不要冲刺"]},
+      "template_id": "energy_sprint",
+      "token_id": "high-contrast-execution",
+      "renderer_id": "fitness_sprint_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "detail_mode": "single_active_view",
+      "quality_reference": "child_learning_quest",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+    },
+    {
+      "scene_template_id": "personal_life_dashboard",
+      "name": "个人生活驾驶舱",
+      "domain_ids": ["personal-execution"],
+      "match": {"profile_ids": ["personal-life-dashboard"]},
+      "template_id": "home_sunrise",
+      "token_id": "general-focus",
+      "renderer_id": "personal_life_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "detail_mode": "single_active_view",
+      "quality_reference": "04_iterations/2026-08-04_scene-capability-social-ui-reconstruction/scene_reports/scene-01-life-management-social-ui.md",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+    }
+  ]
+}

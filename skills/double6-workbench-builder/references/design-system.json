@@ -1,0 +1,20 @@
+{
+  "schema_version": 3,
+  "tokens": {
+    "general-focus": {"background":"#f4f7fb","surface":"#ffffff","text":"#172033","muted":"#5c667a","accent":"#2457d6","success":"#1f7a52","error":"#b43a3a","font":"system-ui","radius":14},
+    "professional-trust": {"background":"#f4f5f3","surface":"#ffffff","text":"#1f2a2a","muted":"#5e6967","accent":"#285c57","success":"#26704c","error":"#a33b35","font":"system-ui","radius":10},
+    "editorial-story": {"background":"#fbf6ee","surface":"#fffdf8","text":"#3b2a21","muted":"#786557","accent":"#8a4a2c","success":"#34704b","error":"#a8443d","font":"Georgia, 'Noto Serif SC', serif","radius":18},
+    "playful-growth": {"background":"#f3f8ff","surface":"#ffffff","text":"#17304a","muted":"#587088","accent":"#3468c0","success":"#2a8555","error":"#b34444","font":"system-ui","radius":20},
+    "high-contrast-execution": {"background":"#101725","surface":"#192338","text":"#f5f7ff","muted":"#b9c3d8","accent":"#ffd84d","success":"#64d197","error":"#ff827a","font":"system-ui","radius":8}
+  },
+  "invariants": {
+    "primary_action_count": 1,
+    "shortcut_max": 3,
+    "core_module_min": 4,
+    "core_module_max": 15,
+    "all_core_modules_reachable": true,
+    "mobile_min_width": 360,
+    "body_min_px": 16,
+    "touch_min_px": 44
+  }
+}

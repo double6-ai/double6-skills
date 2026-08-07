@@ -1,0 +1,7 @@
+Material Icons
+Copyright 2014 Google, Inc.
+
+This embedded subset is distributed under the Apache License, Version 2.0.
+https://www.apache.org/licenses/LICENSE-2.0
+
+The subset contains only the navigation glyphs used by double6-workbench-builder.
