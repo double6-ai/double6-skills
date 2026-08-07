@@ -27,6 +27,11 @@ skills/*/evals/
 skills/*/security/
 skills/*/manifest.json
 
+# double6-workbench-builder 的治理元数据随仓库公开发布
+!skills/double6-workbench-builder/manifest.json
+!skills/double6-workbench-builder/agents/
+!skills/double6-workbench-builder/evals/
+
 # Runtime outputs
 .cache/
 .release-sandbox/

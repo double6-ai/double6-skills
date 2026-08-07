@@ -1,0 +1,4 @@
+interface:
+  display_name: "Double6 工作台制作器"
+  short_description: "把重复的个人工作做成离线单文件工作台"
+  default_prompt: "使用 $double6-workbench-builder 把真实重复工作收敛成一个本地个人工作台。先选择 16 个领域中的路由，再用自然语言说明理解；最多问三个会改变结果的问题。展示完整理解稿与模块 starter 后，只在用户确认事件携带当前理解稿 SHA 时构建。构建后只在当前候选 SHA 匹配的确认或拒绝事件下交付或重建；构图、密度、字体、资产、场景辨识和交互改动标记为 renderer_revision_required，维护者修订 renderer 后使用 renderer_revised 回到可构建状态。不要读取、要求或声称宿主 session、trace、数据库或 UI 回执。所有内容默认使用合成/脱敏数据；联网、多人、账号、支付、消息发送和公开发布仅作人工交接。详细内容与交互规则见 SKILL.md；儿童学习场景细则见 references/education-rules.md。"

@@ -1,0 +1,64 @@
+{
+  "skill_id": "double6-workbench-builder",
+  "name": "Double6 工作台制作器",
+  "version": "0.39.0",
+  "status": "experimental_project_local",
+  "workflow_mode": "project_local_runner_or_workflow",
+  "skill_decision": "not_assessed_not_authorized",
+  "product_scope": "offline_single_file_local_personal_workbench",
+  "public_cli": "scripts/double6.py",
+  "public_commands": [
+    "start",
+    "respond",
+    "propose",
+    "build",
+    "evaluate",
+    "cleanup",
+    "status"
+  ],
+  "runtime": {
+    "builder": "python_standard_library_only",
+    "browser_evaluation": "playwright_chromium_discovered_at_runtime",
+    "publication": "separate_host_workflow_with_real_receipt"
+  },
+  "schemas": {
+    "run": 3,
+    "events": 7,
+    "requirements": 4,
+    "sources": 1,
+    "product": 7,
+    "design": 6,
+    "build": 7,
+    "candidate_lock": 9,
+    "evidence": 7,
+    "delivery": 3
+  },
+  "states": [
+    "intake",
+    "clarifying",
+    "awaiting_product_confirmation",
+    "ready_to_build",
+    "candidate_built",
+    "evaluation_failed",
+    "local_delivered"
+  ],
+  "references": {
+    "risk_packs": "references/risk-packs.json",
+    "domain_content_packs": "references/domain-content-packs.json",
+    "scene_capability_starters": "references/scene-capability-starters.json",
+    "education_stage_starters": "references/education-stage-starters.json",
+    "product_schema": "references/product.schema.json",
+    "design_system": "references/design-system.json",
+    "vivid_social_template_system": "references/vivid-social-template-system.json",
+    "page_icon": "references/page-icon.svg",
+    "education_rules": "references/education-rules.md",
+    "personal_life_content_sources": "references/personal-life-content-sources.md",
+    "host_integration_playbook": "references/host-integration-playbook.md"
+  },
+  "release_validation": {
+    "active_test": "workflows/double6-workbench-governance/tests/test_v0300_core.py",
+    "time_budget_seconds": 60,
+    "comparison_tests": false,
+    "historical_full_regression": false
+  }
+}
