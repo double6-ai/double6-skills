@@ -1,10 +1,10 @@
 {
   "skill_id": "double6-workbench-builder",
   "name": "Double6 工作台制作器",
-  "version": "0.39.0",
-  "status": "experimental_project_local",
-  "workflow_mode": "project_local_runner_or_workflow",
-  "skill_decision": "not_assessed_not_authorized",
+  "version": "0.40.0",
+  "status": "experimental_public",
+  "workflow_mode": "public_runner_or_workflow",
+  "skill_decision": "approved_public_shared",
   "product_scope": "offline_single_file_local_personal_workbench",
   "public_cli": "scripts/double6.py",
   "public_commands": [
