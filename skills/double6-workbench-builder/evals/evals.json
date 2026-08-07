@@ -1,0 +1,48 @@
+{
+  "skill_name": "double6-workbench-builder",
+  "comparison_policy": "no_formal_baseline_or_host_comparison",
+  "evals": [
+    {
+      "id": "exam-both-core",
+      "prompt": "做一个手机和电脑都能用的考公工作台，管理计划、刷题和错题复盘，数据只保存在本地。",
+      "expected_output": "零到一次关键澄清、自然产品确认、一个推荐候选、保存恢复和双视口核心验收通过。",
+      "files": []
+    },
+    {
+      "id": "household-risk-route",
+      "prompt": "给家里做一个共享待办和记账工作台。",
+      "expected_output": "命中多人和权限风险，说明当前只支持各自设备本地使用与导出文件人工交接。",
+      "files": []
+    },
+    {
+      "id": "candidate-recovery",
+      "prompt": "候选验收失败后保留已经确认的产品，换一个 build ID 修好再验收。",
+      "expected_output": "失败证据保留，产品确认不失效，新候选使用新 build ID。",
+      "files": []
+    },
+    {
+      "id": "primary-transition-stage-specific-defaults",
+      "prompt": "宿主选择小学二升三，为孩子做一个学习工作台。",
+      "expected_output": "宿主从路由目录选择二升三子场景；候选命中儿童学习界面、显示二升三标题，并使用二升三通用练习，不能出现三升四标签或相邻年级题库。",
+      "files": []
+    },
+    {
+      "id": "sixteen-domain-surface-matrix",
+      "prompt": "核查全部 16 个领域的默认内容和真实交互能力。",
+      "expected_output": "16 个领域各有 4–15 个核心模块、至少两个包级可选模块；所有台内能力绑定五类表面之一并通过核心动作与刷新恢复。",
+      "files": []
+    },
+    {
+      "id": "safe-import-and-undo",
+      "prompt": "导入一个包含未知字段和恶意 record id 的备份，再撤销导入。",
+      "expected_output": "导入前确认、未知字段保守保留、不可信 ID 重新生成且不执行 HTML、导入后可恢复原状态。",
+      "files": []
+    },
+    {
+      "id": "precise-scene-negative-cases",
+      "prompt": "分别为班级管理、健身饮食记录（不做一周冲刺）、销售培训制作工作台。",
+      "expected_output": "三个请求都不因宽泛主领域或辅助领域误套教师备课、健身冲刺或儿童学习 renderer。",
+      "files": []
+    }
+  ]
+}

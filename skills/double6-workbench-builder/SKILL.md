@@ -5,7 +5,7 @@ description: 把普通用户反复要做的真实事情构建成离线优先、�
 
 # Double6 工作台制作器
 
-这是项目本地 workflow，不是共享 Skill。活动版本、命令与 schema 以 `manifest.json` 为准；本文定义流程语义与不可突破的边界。儿童学习场景的专属细则见 `references/education-rules.md`（路由命中时必读）。
+这是公开共享的 Skill。活动版本、命令与 schema 以 `manifest.json` 为准；本文定义流程语义与不可突破的边界。儿童学习场景的专属细则见 `references/education-rules.md`（路由命中时必读）。
 
 ## 不可突破的边界
 
@@ -88,7 +88,7 @@ description: 把普通用户反复要做的真实事情构建成离线优先、�
 
 ## 验证
 
-发布门位于相邻治理包：
+发布门由维护者的治理包执行，不随本 Skill 分发；在维护者项目中的调用方式为：
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python -B workflows/double6-workbench-governance/scripts/validate_release.py
