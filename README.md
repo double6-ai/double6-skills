@@ -1,6 +1,6 @@
 # Double6 Skills
 
-Double6 AI 维护的开源 agent skills。仓库目前包含两个可以独立安装的 skill：一个负责多来源深度研究，一个负责保留版式的 PDF 中文翻译。
+Double6 AI 维护的开源 agent skills。仓库目前包含三个可以独立安装的 skill：一个负责多来源深度研究，一个负责保留版式的 PDF 中文翻译，一个负责构建离线单文件的个人工作台。
 
 ## Skills
 
@@ -8,8 +8,9 @@ Double6 AI 维护的开源 agent skills。仓库目前包含两个可以独立�
 |---|---|---|---|
 | [`double6-deep-research`](skills/double6-deep-research/) | 研究开放性问题、比较多个对象、形成有证据的决策建议，并交付可核验的完整报告 | 宿主 agent 已提供并允许使用搜索、网页或材料读取能力；Python 3.10+ 仅用于可选的交付校验 | 可公开使用 |
 | [`double6-pdf-translation`](skills/double6-pdf-translation/) | 将非扫描版英文 PDF 翻译为简体中文，尽量保留原始版式，并生成中文单语与中英双语 PDF | Python 3.11、`pdf2zh_next`、用户自行配置的 OpenAI-compatible 模型服务；PyMuPDF 和 reportlab 推荐安装 | 可公开使用，但需要先配置运行环境 |
+| [`double6-workbench-builder`](skills/double6-workbench-builder/) | 把反复要做的真实事情（学习台、备考台、任务面板、记录与复盘等）构建为离线优先、严格单文件的本地个人工作台，个人数据只留在当前设备 | Python 3（仅标准库）；浏览器验收可选 Playwright + Chromium | 可公开使用（实验性） |
 
-两个 skill 都不会随仓库分发模型、API key、搜索服务或第三方 PDF 后端。请根据任务选择安装，不必复制整个仓库。
+三个 skill 都不会随仓库分发模型、API key、搜索服务或第三方 PDF 后端。请根据任务选择安装，不必复制整个仓库。
 
 ## 安装
 
@@ -26,6 +27,7 @@ cd double6-skills
 mkdir -p <agent-skills-dir>
 cp -R skills/double6-deep-research <agent-skills-dir>/
 cp -R skills/double6-pdf-translation <agent-skills-dir>/
+cp -R skills/double6-workbench-builder <agent-skills-dir>/
 ```
 
 `<agent-skills-dir>` 的具体位置由所使用的 agent 决定。只要宿主能够读取 `SKILL.md`，并具备对应 skill 所需的网页读取或本地 shell 能力，就可以按名称调用。
@@ -74,6 +76,22 @@ bash run_translate.sh <input-file.pdf> --output-dir <output-dir> \
 - [`runtime-dependencies.md`](skills/double6-pdf-translation/references/runtime-dependencies.md)
 - [`known-pitfalls.md`](skills/double6-pdf-translation/references/known-pitfalls.md)
 
+### 个人工作台制作器
+
+```text
+请使用 $double6-workbench-builder 把我反复要做的这件事做成一个可离线使用的本地工作台。
+```
+
+这个 skill 通过 `start` → `respond` → `propose` → `build` → `evaluate` 的六步流程，把澄清后的需求构建成一个可离线打开的单个 `index.html`：内置可直接操作的起始内容、localStorage 本地保存、导入导出备份和移动端适配。联网、多人协作、账号、支付和公开发布不属于单文件交付范围，只标记为人工交接或暂不支持。
+
+适用边界：
+
+- 交付物只写入本产品唯一的 localStorage 命名空间；儿童、学生、财务、医疗等敏感场景默认使用合成或脱敏数据。
+- 构建器只依赖 Python 标准库；完整的浏览器验收需要自行安装 Playwright 与 Chromium，环境缺失时只会标记为 `evaluation_blocked`，不会假装通过。
+- 发布到云托管或本机部署由独立的宿主流程执行，本 skill 不自行上线任何页面。
+
+详细说明见 [`skills/double6-workbench-builder/SKILL.md`](skills/double6-workbench-builder/SKILL.md)。
+
 ## 安全与隐私
 
 - 不要把 API key、`.env`、私有文档、研究快照或运行产物提交到仓库。
@@ -90,7 +108,11 @@ skills/
 │   ├── references/
 │   ├── scripts/
 │   └── tests/
-└── double6-pdf-translation/
+├── double6-pdf-translation/
+│   ├── SKILL.md
+│   ├── references/
+│   └── scripts/
+└── double6-workbench-builder/
     ├── SKILL.md
     ├── references/
     └── scripts/

@@ -1,0 +1,1376 @@
+{
+  "schema_version": 1,
+  "contract_version": "education_stage_reference_v1",
+  "stages": [
+    {
+      "stage_id": "baby-growth-explorer",
+      "modules": {
+        "education-language": [
+          {
+            "kind": "reference",
+            "item_id": "ref-baby-lang-pinyin",
+            "title": "拼音启蒙表",
+            "body": "点一点任意拼音，跟着声音一起读。",
+            "result": "已和宝宝一起听过拼音启蒙表",
+            "source_label": "按《汉语拼音方案》声母表、韵母表与小学通行教学顺序整理（2026-08-06 核验公开资料，通用启蒙内容）",
+            "reference": {
+              "style": "chips",
+              "lang": "zh-CN",
+              "groups": [
+                {
+                  "label": "单韵母（6个）",
+                  "entries": [
+                    {"text": "a", "speak": "啊"}, {"text": "o", "speak": "喔"}, {"text": "e", "speak": "鹅"},
+                    {"text": "i", "speak": "衣"}, {"text": "u", "speak": "乌"}, {"text": "ü", "speak": "迂"}
+                  ]
+                },
+                {
+                  "label": "声母（23个）",
+                  "entries": [
+                    {"text": "b", "speak": "玻"}, {"text": "p", "speak": "泼"}, {"text": "m", "speak": "摸"}, {"text": "f", "speak": "佛"},
+                    {"text": "d", "speak": "得"}, {"text": "t", "speak": "特"}, {"text": "n", "speak": "讷"}, {"text": "l", "speak": "勒"},
+                    {"text": "g", "speak": "哥"}, {"text": "k", "speak": "科"}, {"text": "h", "speak": "喝"},
+                    {"text": "j", "speak": "基"}, {"text": "q", "speak": "欺"}, {"text": "x", "speak": "希"},
+                    {"text": "zh", "speak": "知"}, {"text": "ch", "speak": "蚩"}, {"text": "sh", "speak": "诗"}, {"text": "r", "speak": "日"},
+                    {"text": "z", "speak": "资"}, {"text": "c", "speak": "雌"}, {"text": "s", "speak": "思"},
+                    {"text": "y", "speak": "衣"}, {"text": "w", "speak": "乌"}
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "reference",
+            "item_id": "ref-baby-lang-hanzi",
+            "title": "宝宝认字卡",
+            "body": "最常见的 24 个汉字，点一点听读音，指着家里的东西找一找。",
+            "result": "已和宝宝一起看过认字卡",
+            "source_label": "Double6 自编宝宝启蒙字卡（通用内容，不作测评）",
+            "reference": {
+              "style": "chips",
+              "lang": "zh-CN",
+              "groups": [
+                {
+                  "label": "数字（10个）",
+                  "entries": [
+                    {"text": "一", "note": "yī", "speak": "一"}, {"text": "二", "note": "èr", "speak": "二"}, {"text": "三", "note": "sān", "speak": "三"},
+                    {"text": "四", "note": "sì", "speak": "四"}, {"text": "五", "note": "wǔ", "speak": "五"}, {"text": "六", "note": "liù", "speak": "六"},
+                    {"text": "七", "note": "qī", "speak": "七"}, {"text": "八", "note": "bā", "speak": "八"}, {"text": "九", "note": "jiǔ", "speak": "九"},
+                    {"text": "十", "note": "shí", "speak": "十"}
+                  ]
+                },
+                {
+                  "label": "常见字（14个）",
+                  "entries": [
+                    {"text": "人", "note": "rén", "speak": "人"}, {"text": "口", "note": "kǒu", "speak": "口"}, {"text": "手", "note": "shǒu", "speak": "手"},
+                    {"text": "耳", "note": "ěr", "speak": "耳"}, {"text": "目", "note": "mù", "speak": "目"}, {"text": "日", "note": "rì", "speak": "日"},
+                    {"text": "月", "note": "yuè", "speak": "月"}, {"text": "水", "note": "shuǐ", "speak": "水"}, {"text": "火", "note": "huǒ", "speak": "火"},
+                    {"text": "山", "note": "shān", "speak": "山"}, {"text": "大", "note": "dà", "speak": "大"}, {"text": "小", "note": "xiǎo", "speak": "小"},
+                    {"text": "多", "note": "duō", "speak": "多"}, {"text": "少", "note": "shǎo", "speak": "少"}
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "education-english": [
+          {
+            "kind": "reference",
+            "item_id": "ref-baby-en-letters",
+            "title": "英文字母与启蒙词",
+            "body": "点字母听读音，再点单词听一听它说的是什么。",
+            "result": "已和宝宝一起听过英文字母",
+            "source_label": "Double6 自编宝宝英语启蒙内容（通用内容，未对齐指定教材）",
+            "reference": {
+              "style": "chips",
+              "lang": "en-US",
+              "groups": [
+                {
+                  "label": "大写字母（26个）",
+                  "entries": [
+                    {"text": "A"}, {"text": "B"}, {"text": "C"}, {"text": "D"}, {"text": "E"}, {"text": "F"}, {"text": "G"},
+                    {"text": "H"}, {"text": "I"}, {"text": "J"}, {"text": "K"}, {"text": "L"}, {"text": "M"}, {"text": "N"},
+                    {"text": "O"}, {"text": "P"}, {"text": "Q"}, {"text": "R"}, {"text": "S"}, {"text": "T"}, {"text": "U"},
+                    {"text": "V"}, {"text": "W"}, {"text": "X"}, {"text": "Y"}, {"text": "Z"}
+                  ]
+                },
+                {
+                  "label": "启蒙单词（12个）",
+                  "entries": [
+                    {"text": "apple", "note": "🍎 苹果"}, {"text": "banana", "note": "🍌 香蕉"}, {"text": "cat", "note": "🐱 猫"},
+                    {"text": "dog", "note": "🐶 狗"}, {"text": "egg", "note": "🥚 鸡蛋"}, {"text": "fish", "note": "🐟 鱼"},
+                    {"text": "sun", "note": "☀️ 太阳"}, {"text": "moon", "note": "🌙 月亮"}, {"text": "red", "note": "🔴 红色"},
+                    {"text": "blue", "note": "🔵 蓝色"}, {"text": "one", "note": "1 一"}, {"text": "two", "note": "2 二"}
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "education-reading": [
+          {
+            "kind": "reference",
+            "item_id": "ref-baby-read-poems",
+            "title": "亲子共读小古诗",
+            "body": "点开一首，先听朗读，再看着译文讲给宝宝听。",
+            "result": "已和宝宝一起读过小古诗",
+            "source_label": "篇目为流传最广的启蒙古诗（通用内容）；译文为 Double6 自写",
+            "reference": {
+              "style": "poems",
+              "poems": [
+                {
+                  "title": "咏鹅",
+                  "author": "唐 · 骆宾王",
+                  "lines": ["鹅，鹅，鹅，", "曲项向天歌。", "白毛浮绿水，", "红掌拨清波。"],
+                  "notes": "曲项：弯着脖子。拨：划动。",
+                  "translation": "鹅弯着长长的脖子向天唱歌，白白的羽毛浮在绿绿的水上，红红的脚掌拨动着清清的波浪。"
+                },
+                {
+                  "title": "静夜思",
+                  "author": "唐 · 李白",
+                  "lines": ["床前明月光，", "疑是地上霜。", "举头望明月，", "低头思故乡。"],
+                  "notes": "疑：好像。举头：抬头。",
+                  "translation": "床前洒满明亮的月光，好像地上结了一层霜；抬起头看看月亮，低下头想起远方的家乡。"
+                },
+                {
+                  "title": "春晓",
+                  "author": "唐 · 孟浩然",
+                  "lines": ["春眠不觉晓，", "处处闻啼鸟。", "夜来风雨声，", "花落知多少。"],
+                  "notes": "晓：天亮。闻：听见。",
+                  "translation": "春天睡得香，不知不觉天亮了，到处都能听见鸟叫；想起昨夜的风雨声，不知吹落了多少花。"
+                },
+                {
+                  "title": "悯农（其二）",
+                  "author": "唐 · 李绅",
+                  "lines": ["锄禾日当午，", "汗滴禾下土。", "谁知盘中餐，", "粒粒皆辛苦。"],
+                  "notes": "禾：禾苗。皆：都。",
+                  "translation": "农民顶着正午的太阳给禾苗锄草，汗水一滴滴落进土里；谁能想到碗里的饭，每一粒都来得那么辛苦。"
+                },
+                {
+                  "title": "登鹳雀楼",
+                  "author": "唐 · 王之涣",
+                  "lines": ["白日依山尽，", "黄河入海流。", "欲穷千里目，", "更上一层楼。"],
+                  "notes": "白日：太阳。穷：穷尽、看完。",
+                  "translation": "太阳靠着群山慢慢落下，黄河滚滚流向大海；想看到更远更美的风景，就要再登上一层楼。"
+                }
+              ]
+            }
+          }
+        ],
+        "education-math": [
+          {
+            "kind": "reference",
+            "item_id": "ref-baby-math-count",
+            "title": "数一数 1–20",
+            "body": "点数字听读音，和宝宝伸出手指一起数。",
+            "result": "已和宝宝一起数过数",
+            "source_label": "Double6 自编宝宝数数启蒙（通用内容）",
+            "reference": {
+              "style": "chips",
+              "lang": "zh-CN",
+              "groups": [
+                {
+                  "label": "1–10",
+                  "entries": [
+                    {"text": "1", "note": "一", "speak": "一"}, {"text": "2", "note": "二", "speak": "二"}, {"text": "3", "note": "三", "speak": "三"},
+                    {"text": "4", "note": "四", "speak": "四"}, {"text": "5", "note": "五", "speak": "五"}, {"text": "6", "note": "六", "speak": "六"},
+                    {"text": "7", "note": "七", "speak": "七"}, {"text": "8", "note": "八", "speak": "八"}, {"text": "9", "note": "九", "speak": "九"},
+                    {"text": "10", "note": "十", "speak": "十"}
+                  ]
+                },
+                {
+                  "label": "11–20",
+                  "entries": [
+                    {"text": "11", "note": "十一", "speak": "十一"}, {"text": "12", "note": "十二", "speak": "十二"}, {"text": "13", "note": "十三", "speak": "十三"},
+                    {"text": "14", "note": "十四", "speak": "十四"}, {"text": "15", "note": "十五", "speak": "十五"}, {"text": "16", "note": "十六", "speak": "十六"},
+                    {"text": "17", "note": "十七", "speak": "十七"}, {"text": "18", "note": "十八", "speak": "十八"}, {"text": "19", "note": "十九", "speak": "十九"},
+                    {"text": "20", "note": "二十", "speak": "二十"}
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "primary-transition-1-to-2",
+      "modules": {
+        "education-language": [
+          {
+            "kind": "reference",
+            "item_id": "ref-12-lang-pinyin",
+            "title": "拼音总表",
+            "body": "一年级学过的拼音都在这里，点一点就能听读音。",
+            "result": "已复习拼音总表",
+            "source_label": "按《汉语拼音方案》声母表、韵母表与小学通行整体认读音节教学表整理（2026-08-06 核验公开资料）",
+            "reference": {
+              "style": "chips",
+              "lang": "zh-CN",
+              "groups": [
+                {
+                  "label": "声母（23个）",
+                  "entries": [
+                    {"text": "b", "speak": "玻"}, {"text": "p", "speak": "泼"}, {"text": "m", "speak": "摸"}, {"text": "f", "speak": "佛"},
+                    {"text": "d", "speak": "得"}, {"text": "t", "speak": "特"}, {"text": "n", "speak": "讷"}, {"text": "l", "speak": "勒"},
+                    {"text": "g", "speak": "哥"}, {"text": "k", "speak": "科"}, {"text": "h", "speak": "喝"},
+                    {"text": "j", "speak": "基"}, {"text": "q", "speak": "欺"}, {"text": "x", "speak": "希"},
+                    {"text": "zh", "speak": "知"}, {"text": "ch", "speak": "蚩"}, {"text": "sh", "speak": "诗"}, {"text": "r", "speak": "日"},
+                    {"text": "z", "speak": "资"}, {"text": "c", "speak": "雌"}, {"text": "s", "speak": "思"},
+                    {"text": "y", "speak": "衣"}, {"text": "w", "speak": "乌"}
+                  ]
+                },
+                {
+                  "label": "单韵母（6个）",
+                  "entries": [
+                    {"text": "a", "speak": "啊"}, {"text": "o", "speak": "喔"}, {"text": "e", "speak": "鹅"},
+                    {"text": "i", "speak": "衣"}, {"text": "u", "speak": "乌"}, {"text": "ü", "speak": "迂"}
+                  ]
+                },
+                {
+                  "label": "复韵母（8个）",
+                  "entries": [
+                    {"text": "ai", "speak": "哀"}, {"text": "ei", "speak": "欸"}, {"text": "ui", "speak": "威"}, {"text": "ao", "speak": "凹"},
+                    {"text": "ou", "speak": "欧"}, {"text": "iu", "speak": "优"}, {"text": "ie", "speak": "耶"}, {"text": "üe", "speak": "约"}
+                  ]
+                },
+                {
+                  "label": "特殊韵母（1个）",
+                  "entries": [
+                    {"text": "er", "speak": "儿"}
+                  ]
+                },
+                {
+                  "label": "前鼻韵母（5个）",
+                  "entries": [
+                    {"text": "an", "speak": "安"}, {"text": "en", "speak": "恩"}, {"text": "in", "speak": "因"},
+                    {"text": "un", "speak": "温"}, {"text": "ün", "speak": "晕"}
+                  ]
+                },
+                {
+                  "label": "后鼻韵母（4个）",
+                  "entries": [
+                    {"text": "ang", "speak": "昂"}, {"text": "eng", "speak": "鞥"}, {"text": "ing", "speak": "英"}, {"text": "ong", "speak": "翁"}
+                  ]
+                },
+                {
+                  "label": "整体认读音节（16个）",
+                  "entries": [
+                    {"text": "zhi", "speak": "知"}, {"text": "chi", "speak": "蚩"}, {"text": "shi", "speak": "诗"}, {"text": "ri", "speak": "日"},
+                    {"text": "zi", "speak": "资"}, {"text": "ci", "speak": "雌"}, {"text": "si", "speak": "思"},
+                    {"text": "yi", "speak": "衣"}, {"text": "wu", "speak": "乌"}, {"text": "yu", "speak": "迂"},
+                    {"text": "ye", "speak": "耶"}, {"text": "yue", "speak": "约"}, {"text": "yuan", "speak": "冤"},
+                    {"text": "yin", "speak": "因"}, {"text": "yun", "speak": "晕"}, {"text": "ying", "speak": "英"}
+                  ]
+                },
+                {
+                  "label": "声调小练习",
+                  "entries": [
+                    {"text": "ā á ǎ à", "note": "妈 麻 马 骂", "speak": "妈，麻，马，骂"},
+                    {"text": "ō ó ǒ ò", "note": "喔 哦 我 卧", "speak": "喔，哦，我，卧"},
+                    {"text": "ē é ě è", "note": "鹅 额 恶 饿", "speak": "鹅，额，恶，饿"},
+                    {"text": "ī í ǐ ì", "note": "衣 姨 椅 一", "speak": "衣，姨，椅，一"},
+                    {"text": "ū ú ǔ ù", "note": "屋 无 五 物", "speak": "屋，无，五，物"},
+                    {"text": "ǖ ǘ ǚ ǜ", "note": "迂 鱼 雨 玉", "speak": "迂，鱼，雨，玉"}
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "reference",
+            "item_id": "ref-12-lang-xiezi",
+            "title": "一年级上册写字表（100字）",
+            "body": "升二年级前再过一遍：每个字都带拼音和组词，点一点听读音。",
+            "result": "已复习一年级上册写字表",
+            "source_label": "按统编版语文一年级上册写字表整理（2026-08-06 核验公开目录；教材可能有个别版本微调，请以孩子课本为准）",
+            "reference": {
+              "style": "chips",
+              "lang": "zh-CN",
+              "groups": [
+                {
+                  "label": "识字 1–5 · 语文园地一",
+                  "entries": [
+                    {"text": "一", "note": "yī · 一个", "speak": "一"}, {"text": "二", "note": "èr · 二月", "speak": "二"},
+                    {"text": "三", "note": "sān · 三天", "speak": "三"}, {"text": "上", "note": "shàng · 上学", "speak": "上"},
+                    {"text": "口", "note": "kǒu · 开口", "speak": "口"}, {"text": "目", "note": "mù · 目光", "speak": "目"},
+                    {"text": "耳", "note": "ěr · 耳朵", "speak": "耳"}, {"text": "手", "note": "shǒu · 小手", "speak": "手"},
+                    {"text": "日", "note": "rì · 日子", "speak": "日"}, {"text": "田", "note": "tián · 田地", "speak": "田"},
+                    {"text": "禾", "note": "hé · 禾苗", "speak": "禾"}, {"text": "火", "note": "huǒ · 大火", "speak": "火"},
+                    {"text": "虫", "note": "chóng · 虫子", "speak": "虫"}, {"text": "云", "note": "yún · 白云", "speak": "云"},
+                    {"text": "山", "note": "shān · 大山", "speak": "山"}, {"text": "八", "note": "bā · 八个", "speak": "八"},
+                    {"text": "十", "note": "shí · 十个", "speak": "十"}
+                  ]
+                },
+                {
+                  "label": "课文 1–4 · 语文园地四",
+                  "entries": [
+                    {"text": "了", "note": "le · 来了", "speak": "了"}, {"text": "子", "note": "zi · 儿子", "speak": "子"},
+                    {"text": "人", "note": "rén · 人们", "speak": "人"}, {"text": "大", "note": "dà · 大小", "speak": "大"},
+                    {"text": "月", "note": "yuè · 月亮", "speak": "月"}, {"text": "儿", "note": "ér · 儿歌", "speak": "儿"},
+                    {"text": "头", "note": "tóu · 头发", "speak": "头"}, {"text": "里", "note": "lǐ · 里面", "speak": "里"},
+                    {"text": "可", "note": "kě · 可是", "speak": "可"}, {"text": "东", "note": "dōng · 东西", "speak": "东"},
+                    {"text": "西", "note": "xī · 西方", "speak": "西"}, {"text": "天", "note": "tiān · 天上", "speak": "天"},
+                    {"text": "四", "note": "sì · 四个", "speak": "四"}, {"text": "是", "note": "shì · 是的", "speak": "是"},
+                    {"text": "女", "note": "nǚ · 女孩", "speak": "女"}, {"text": "开", "note": "kāi · 开门", "speak": "开"}
+                  ]
+                },
+                {
+                  "label": "识字 6–10",
+                  "entries": [
+                    {"text": "水", "note": "shuǐ · 水果", "speak": "水"}, {"text": "去", "note": "qù · 出去", "speak": "去"},
+                    {"text": "来", "note": "lái · 回来", "speak": "来"}, {"text": "不", "note": "bù · 不好", "speak": "不"},
+                    {"text": "小", "note": "xiǎo · 小心", "speak": "小"}, {"text": "少", "note": "shǎo · 多少", "speak": "少"},
+                    {"text": "牛", "note": "niú · 小牛", "speak": "牛"}, {"text": "果", "note": "guǒ · 果子", "speak": "果"},
+                    {"text": "鸟", "note": "niǎo · 小鸟", "speak": "鸟"}, {"text": "早", "note": "zǎo · 早上", "speak": "早"},
+                    {"text": "书", "note": "shū · 书包", "speak": "书"}, {"text": "刀", "note": "dāo · 小刀", "speak": "刀"},
+                    {"text": "尺", "note": "chǐ · 尺子", "speak": "尺"}, {"text": "本", "note": "běn · 本子", "speak": "本"},
+                    {"text": "木", "note": "mù · 木头", "speak": "木"}, {"text": "林", "note": "lín · 树林", "speak": "林"},
+                    {"text": "土", "note": "tǔ · 土地", "speak": "土"}, {"text": "力", "note": "lì · 力气", "speak": "力"},
+                    {"text": "心", "note": "xīn · 开心", "speak": "心"}, {"text": "中", "note": "zhōng · 中间", "speak": "中"},
+                    {"text": "五", "note": "wǔ · 五个", "speak": "五"}, {"text": "立", "note": "lì · 立正", "speak": "立"},
+                    {"text": "正", "note": "zhèng · 正好", "speak": "正"}
+                  ]
+                },
+                {
+                  "label": "课文 5–14 · 语文园地八",
+                  "entries": [
+                    {"text": "在", "note": "zài · 在家", "speak": "在"}, {"text": "后", "note": "hòu · 后面", "speak": "后"},
+                    {"text": "我", "note": "wǒ · 我们", "speak": "我"}, {"text": "好", "note": "hǎo · 好人", "speak": "好"},
+                    {"text": "长", "note": "cháng · 长短", "speak": "长"}, {"text": "比", "note": "bǐ · 比较", "speak": "比"},
+                    {"text": "巴", "note": "bā · 尾巴", "speak": "巴"}, {"text": "把", "note": "bǎ · 一把", "speak": "把"},
+                    {"text": "下", "note": "xià · 下面", "speak": "下"}, {"text": "个", "note": "gè · 个子", "speak": "个"},
+                    {"text": "雨", "note": "yǔ · 下雨", "speak": "雨"}, {"text": "们", "note": "men · 我们", "speak": "们"},
+                    {"text": "问", "note": "wèn · 问好", "speak": "问"}, {"text": "有", "note": "yǒu · 没有", "speak": "有"},
+                    {"text": "半", "note": "bàn · 一半", "speak": "半"}, {"text": "从", "note": "cóng · 从前", "speak": "从"},
+                    {"text": "你", "note": "nǐ · 你好", "speak": "你"}, {"text": "才", "note": "cái · 刚才", "speak": "才"},
+                    {"text": "明", "note": "míng · 明天", "speak": "明"}, {"text": "同", "note": "tóng · 同学", "speak": "同"},
+                    {"text": "学", "note": "xué · 学习", "speak": "学"}, {"text": "自", "note": "zì · 自己", "speak": "自"},
+                    {"text": "己", "note": "jǐ · 自己", "speak": "己"}, {"text": "衣", "note": "yī · 衣服", "speak": "衣"},
+                    {"text": "白", "note": "bái · 白色", "speak": "白"}, {"text": "的", "note": "de · 好的", "speak": "的"},
+                    {"text": "又", "note": "yòu · 又来", "speak": "又"}, {"text": "和", "note": "hé · 和平", "speak": "和"},
+                    {"text": "竹", "note": "zhú · 竹子", "speak": "竹"}, {"text": "牙", "note": "yá · 牙齿", "speak": "牙"},
+                    {"text": "马", "note": "mǎ · 小马", "speak": "马"}, {"text": "用", "note": "yòng · 用力", "speak": "用"},
+                    {"text": "几", "note": "jǐ · 几个", "speak": "几"}, {"text": "只", "note": "zhī · 一只", "speak": "只"},
+                    {"text": "石", "note": "shí · 石头", "speak": "石"}, {"text": "多", "note": "duō · 多少", "speak": "多"},
+                    {"text": "出", "note": "chū · 出去", "speak": "出"}, {"text": "见", "note": "jiàn · 看见", "speak": "见"},
+                    {"text": "对", "note": "duì · 对的", "speak": "对"}, {"text": "妈", "note": "mā · 妈妈", "speak": "妈"},
+                    {"text": "全", "note": "quán · 全部", "speak": "全"}, {"text": "回", "note": "huí · 回家", "speak": "回"},
+                    {"text": "工", "note": "gōng · 工人", "speak": "工"}, {"text": "厂", "note": "chǎng · 工厂", "speak": "厂"}
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "education-english": [
+          {
+            "kind": "reference",
+            "item_id": "ref-12-en-words",
+            "title": "英语主题词库",
+            "body": "四个常用主题，点单词听读音，看着中文说一说。",
+            "result": "已听过英语主题词库",
+            "source_label": "参考人教 PEP 等主流小学英语教材常见主题整理（2026-08-06 核验公开词表；通用词库，未对齐指定教材）",
+            "reference": {
+              "style": "chips",
+              "lang": "en-US",
+              "groups": [
+                {
+                  "label": "数字",
+                  "entries": [
+                    {"text": "one", "note": "一"}, {"text": "two", "note": "二"}, {"text": "three", "note": "三"},
+                    {"text": "four", "note": "四"}, {"text": "five", "note": "五"}, {"text": "six", "note": "六"},
+                    {"text": "seven", "note": "七"}, {"text": "eight", "note": "八"}, {"text": "nine", "note": "九"}, {"text": "ten", "note": "十"}
+                  ]
+                },
+                {
+                  "label": "颜色",
+                  "entries": [
+                    {"text": "red", "note": "红色"}, {"text": "yellow", "note": "黄色"}, {"text": "blue", "note": "蓝色"},
+                    {"text": "green", "note": "绿色"}, {"text": "black", "note": "黑色"}, {"text": "white", "note": "白色"},
+                    {"text": "pink", "note": "粉色"}, {"text": "orange", "note": "橙色"}
+                  ]
+                },
+                {
+                  "label": "动物",
+                  "entries": [
+                    {"text": "cat", "note": "猫"}, {"text": "dog", "note": "狗"}, {"text": "bird", "note": "鸟"},
+                    {"text": "fish", "note": "鱼"}, {"text": "rabbit", "note": "兔子"}, {"text": "duck", "note": "鸭子"},
+                    {"text": "panda", "note": "熊猫"}, {"text": "tiger", "note": "老虎"}
+                  ]
+                },
+                {
+                  "label": "家庭",
+                  "entries": [
+                    {"text": "father", "note": "爸爸"}, {"text": "mother", "note": "妈妈"}, {"text": "sister", "note": "姐妹"},
+                    {"text": "brother", "note": "兄弟"}, {"text": "grandma", "note": "奶奶；外婆"}, {"text": "grandpa", "note": "爷爷；外公"},
+                    {"text": "baby", "note": "宝宝"}, {"text": "family", "note": "家庭"}
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "education-reading": [
+          {
+            "kind": "reference",
+            "item_id": "ref-12-read-poems",
+            "title": "一二年级课内古诗",
+            "body": "点开一首，先听朗读，再看看注释和译文。",
+            "result": "已复习课内古诗",
+            "source_label": "篇目按统编版语文一二年级课内古诗整理（2026-08-06 核验公开汇总）；注释与译文为 Double6 自写",
+            "reference": {
+              "style": "poems",
+              "poems": [
+                {
+                  "title": "咏鹅",
+                  "author": "唐 · 骆宾王",
+                  "lines": ["鹅，鹅，鹅，", "曲项向天歌。", "白毛浮绿水，", "红掌拨清波。"],
+                  "notes": "曲项：弯着脖子。拨：划动。",
+                  "translation": "鹅弯着长长的脖子向天唱歌，白羽毛浮在绿水上，红脚掌拨动着清波。"
+                },
+                {
+                  "title": "江南",
+                  "author": "汉乐府",
+                  "lines": ["江南可采莲，", "莲叶何田田。", "鱼戏莲叶间。", "鱼戏莲叶东，", "鱼戏莲叶西，", "鱼戏莲叶南，", "鱼戏莲叶北。"],
+                  "notes": "田田：莲叶茂盛的样子。戏：嬉戏、游玩。",
+                  "translation": "江南又到了采莲的季节，莲叶层层叠叠多么茂盛；鱼儿在莲叶间游玩，一会儿在东，一会儿在西，一会儿在南，一会儿在北。"
+                },
+                {
+                  "title": "画",
+                  "author": "佚名",
+                  "lines": ["远看山有色，", "近听水无声。", "春去花还在，", "人来鸟不惊。"],
+                  "notes": "色：颜色。惊：受惊飞走。",
+                  "translation": "远远看山有颜色，走近听水却没有声音；春天过去了花还开着，人走近了鸟也不害怕——原来这是一幅画。"
+                },
+                {
+                  "title": "悯农（其二）",
+                  "author": "唐 · 李绅",
+                  "lines": ["锄禾日当午，", "汗滴禾下土。", "谁知盘中餐，", "粒粒皆辛苦。"],
+                  "notes": "禾：禾苗。皆：都。",
+                  "translation": "农民顶着正午的太阳锄地，汗水滴进禾苗下的土里；碗里的每一粒饭，都来得辛苦，要爱惜粮食。"
+                },
+                {
+                  "title": "风",
+                  "author": "唐 · 李峤",
+                  "lines": ["解落三秋叶，", "能开二月花。", "过江千尺浪，", "入竹万竿斜。"],
+                  "notes": "解：能够。三秋：深秋。",
+                  "translation": "风能吹落深秋的树叶，能吹开早春的花朵；吹过江面掀起千尺大浪，吹进竹林让万根竹竿倾斜。"
+                },
+                {
+                  "title": "静夜思",
+                  "author": "唐 · 李白",
+                  "lines": ["床前明月光，", "疑是地上霜。", "举头望明月，", "低头思故乡。"],
+                  "notes": "疑：好像。举头：抬头。",
+                  "translation": "床前洒满月光，好像地上的白霜；抬头望见明月，低头思念远方的故乡。"
+                },
+                {
+                  "title": "春晓",
+                  "author": "唐 · 孟浩然",
+                  "lines": ["春眠不觉晓，", "处处闻啼鸟。", "夜来风雨声，", "花落知多少。"],
+                  "notes": "晓：天亮。闻：听见。",
+                  "translation": "春天睡得香，不知不觉天亮了，到处听见鸟叫；想起昨夜的风雨，不知吹落了多少花。"
+                },
+                {
+                  "title": "小池",
+                  "author": "宋 · 杨万里",
+                  "lines": ["泉眼无声惜细流，", "树阴照水爱晴柔。", "小荷才露尖尖角，", "早有蜻蜓立上头。"],
+                  "notes": "泉眼：泉水的出口。惜：爱惜。晴柔：晴天柔和的风光。",
+                  "translation": "泉眼静悄悄地流出细细的水，树荫映在水面，喜爱这晴天柔和的风光；小荷叶刚露出尖尖的角，早有蜻蜓站在上面。"
+                }
+              ]
+            }
+          }
+        ],
+        "education-math": [
+          {
+            "kind": "reference",
+            "item_id": "ref-12-math-chengfa",
+            "title": "九九乘法口诀表",
+            "body": "二年级要学乘法啦，点一句听一句，每天背一小段。",
+            "result": "已听过乘法口诀表",
+            "source_label": "九九乘法口诀（通用数学内容）",
+            "reference": {
+              "style": "chips",
+              "lang": "zh-CN",
+              "groups": [
+                {"label": "一的乘法", "entries": [{"text": "一一得一"}]},
+                {"label": "二的乘法", "entries": [{"text": "一二得二"}, {"text": "二二得四"}]},
+                {"label": "三的乘法", "entries": [{"text": "一三得三"}, {"text": "二三得六"}, {"text": "三三得九"}]},
+                {"label": "四的乘法", "entries": [{"text": "一四得四"}, {"text": "二四得八"}, {"text": "三四十二"}, {"text": "四四十六"}]},
+                {"label": "五的乘法", "entries": [{"text": "一五得五"}, {"text": "二五一十"}, {"text": "三五十五"}, {"text": "四五二十"}, {"text": "五五二十五"}]},
+                {"label": "六的乘法", "entries": [{"text": "一六得六"}, {"text": "二六十二"}, {"text": "三六十八"}, {"text": "四六二十四"}, {"text": "五六三十"}, {"text": "六六三十六"}]},
+                {"label": "七的乘法", "entries": [{"text": "一七得七"}, {"text": "二七十四"}, {"text": "三七二十一"}, {"text": "四七二十八"}, {"text": "五七三十五"}, {"text": "六七四十二"}, {"text": "七七四十九"}]},
+                {"label": "八的乘法", "entries": [{"text": "一八得八"}, {"text": "二八十六"}, {"text": "三八二十四"}, {"text": "四八三十二"}, {"text": "五八四十"}, {"text": "六八四十八"}, {"text": "七八五十六"}, {"text": "八八六十四"}]},
+                {"label": "九的乘法", "entries": [{"text": "一九得九"}, {"text": "二九十八"}, {"text": "三九二十七"}, {"text": "四九三十六"}, {"text": "五九四十五"}, {"text": "六九五十四"}, {"text": "七九六十三"}, {"text": "八九七十二"}, {"text": "九九八十一"}]}
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "primary-transition-2-to-3",
+      "modules": {
+        "education-language": [
+          {
+            "kind": "reference",
+            "item_id": "ref-23-lang-xiezi",
+            "title": "三年级上册写字表（250字）",
+            "body": "升三年级前先认一认：按课文排好，每字带拼音和组词，点一点听读音。",
+            "result": "已预习三年级上册写字表",
+            "source_label": "按统编版语文三年级上册写字表整理（2026-08-06 核验公开目录；教材可能有个别版本微调，请以孩子课本为准）",
+            "reference": {
+              "style": "chips",
+              "lang": "zh-CN",
+              "groups": [
+                {
+                  "label": "1 大青树下的小学",
+                  "entries": [
+                    {"text": "晨", "note": "chén · 早晨", "speak": "晨"}, {"text": "绒", "note": "róng · 绒毛", "speak": "绒"},
+                    {"text": "球", "note": "qiú · 足球", "speak": "球"}, {"text": "汉", "note": "hàn · 汉字", "speak": "汉"},
+                    {"text": "艳", "note": "yàn · 鲜艳", "speak": "艳"}, {"text": "服", "note": "fú · 衣服", "speak": "服"},
+                    {"text": "装", "note": "zhuāng · 服装", "speak": "装"}, {"text": "扮", "note": "bàn · 打扮", "speak": "扮"},
+                    {"text": "读", "note": "dú · 读书", "speak": "读"}, {"text": "静", "note": "jìng · 安静", "speak": "静"},
+                    {"text": "停", "note": "tíng · 停下", "speak": "停"}, {"text": "粗", "note": "cū · 粗细", "speak": "粗"},
+                    {"text": "影", "note": "yǐng · 影子", "speak": "影"}
+                  ]
+                },
+                {
+                  "label": "2 花的学校",
+                  "entries": [
+                    {"text": "落", "note": "luò · 落叶", "speak": "落"}, {"text": "荒", "note": "huāng · 荒野", "speak": "荒"},
+                    {"text": "笛", "note": "dí · 笛子", "speak": "笛"}, {"text": "舞", "note": "wǔ · 跳舞", "speak": "舞"},
+                    {"text": "狂", "note": "kuáng · 狂风", "speak": "狂"}, {"text": "罚", "note": "fá · 处罚", "speak": "罚"},
+                    {"text": "假", "note": "jià · 放假", "speak": "假"}, {"text": "互", "note": "hù · 互相", "speak": "互"},
+                    {"text": "所", "note": "suǒ · 所以", "speak": "所"}, {"text": "够", "note": "gòu · 足够", "speak": "够"},
+                    {"text": "猜", "note": "cāi · 猜想", "speak": "猜"}, {"text": "扬", "note": "yáng · 表扬", "speak": "扬"},
+                    {"text": "臂", "note": "bì · 手臂", "speak": "臂"}
+                  ]
+                },
+                {
+                  "label": "4 古诗三首",
+                  "entries": [
+                    {"text": "寒", "note": "hán · 寒冷", "speak": "寒"}, {"text": "径", "note": "jìng · 小径", "speak": "径"},
+                    {"text": "斜", "note": "xié · 斜阳", "speak": "斜"}, {"text": "霜", "note": "shuāng · 秋霜", "speak": "霜"},
+                    {"text": "赠", "note": "zèng · 赠送", "speak": "赠"}, {"text": "刘", "note": "liú · 姓刘", "speak": "刘"},
+                    {"text": "盖", "note": "gài · 盖子", "speak": "盖"}, {"text": "菊", "note": "jú · 菊花", "speak": "菊"},
+                    {"text": "残", "note": "cán · 残花", "speak": "残"}, {"text": "君", "note": "jūn · 君子", "speak": "君"},
+                    {"text": "橙", "note": "chéng · 橙子", "speak": "橙"}, {"text": "送", "note": "sòng · 送别", "speak": "送"},
+                    {"text": "挑", "note": "tiǎo · 挑弄", "speak": "挑"}
+                  ]
+                },
+                {
+                  "label": "5 铺满金色巴掌的水泥道",
+                  "entries": [
+                    {"text": "铺", "note": "pū · 铺满", "speak": "铺"}, {"text": "泥", "note": "ní · 泥土", "speak": "泥"},
+                    {"text": "晶", "note": "jīng · 晶莹", "speak": "晶"}, {"text": "紧", "note": "jǐn · 抓紧", "speak": "紧"},
+                    {"text": "院", "note": "yuàn · 院子", "speak": "院"}, {"text": "印", "note": "yìn · 脚印", "speak": "印"},
+                    {"text": "排", "note": "pái · 排队", "speak": "排"}, {"text": "列", "note": "liè · 排列", "speak": "列"},
+                    {"text": "规", "note": "guī · 规则", "speak": "规"}, {"text": "则", "note": "zé · 原则", "speak": "则"},
+                    {"text": "乱", "note": "luàn · 杂乱", "speak": "乱"}, {"text": "棕", "note": "zōng · 棕色", "speak": "棕"},
+                    {"text": "迟", "note": "chí · 迟到", "speak": "迟"}
+                  ]
+                },
+                {
+                  "label": "6 秋天的雨",
+                  "entries": [
+                    {"text": "盒", "note": "hé · 盒子", "speak": "盒"}, {"text": "颜", "note": "yán · 颜色", "speak": "颜"},
+                    {"text": "料", "note": "liào · 颜料", "speak": "料"}, {"text": "票", "note": "piào · 车票", "speak": "票"},
+                    {"text": "飘", "note": "piāo · 飘落", "speak": "飘"}, {"text": "争", "note": "zhēng · 争取", "speak": "争"},
+                    {"text": "仙", "note": "xiān · 仙子", "speak": "仙"}, {"text": "闻", "note": "wén · 闻名", "speak": "闻"},
+                    {"text": "梨", "note": "lí · 梨子", "speak": "梨"}, {"text": "勾", "note": "gōu · 勾画", "speak": "勾"},
+                    {"text": "油", "note": "yóu · 加油", "speak": "油"}, {"text": "曲", "note": "qǔ · 歌曲", "speak": "曲"},
+                    {"text": "丰", "note": "fēng · 丰收", "speak": "丰"}
+                  ]
+                },
+                {
+                  "label": "8 卖火柴的小女孩",
+                  "entries": [
+                    {"text": "柴", "note": "chái · 火柴", "speak": "柴"}, {"text": "冷", "note": "lěng · 寒冷", "speak": "冷"},
+                    {"text": "旧", "note": "jiù · 新旧", "speak": "旧"}, {"text": "裙", "note": "qún · 裙子", "speak": "裙"},
+                    {"text": "怜", "note": "lián · 可怜", "speak": "怜"}, {"text": "饿", "note": "è · 饥饿", "speak": "饿"},
+                    {"text": "乎", "note": "hū · 几乎", "speak": "乎"}, {"text": "焰", "note": "yàn · 火焰", "speak": "焰"},
+                    {"text": "蜡", "note": "là · 蜡烛", "speak": "蜡"}, {"text": "烛", "note": "zhú · 烛光", "speak": "烛"},
+                    {"text": "富", "note": "fù · 丰富", "speak": "富"}, {"text": "诉", "note": "sù · 告诉", "speak": "诉"},
+                    {"text": "离", "note": "lí · 离开", "speak": "离"}
+                  ]
+                },
+                {
+                  "label": "10 在牛肚子里旅行",
+                  "entries": [
+                    {"text": "旅", "note": "lǚ · 旅行", "speak": "旅"}, {"text": "咱", "note": "zán · 咱们", "speak": "咱"},
+                    {"text": "救", "note": "jiù · 救命", "speak": "救"}, {"text": "命", "note": "mìng · 生命", "speak": "命"},
+                    {"text": "拼", "note": "pīn · 拼命", "speak": "拼"}, {"text": "扫", "note": "sǎo · 打扫", "speak": "扫"},
+                    {"text": "胃", "note": "wèi · 胃口", "speak": "胃"}, {"text": "管", "note": "guǎn · 管理", "speak": "管"},
+                    {"text": "等", "note": "děng · 等待", "speak": "等"}, {"text": "刚", "note": "gāng · 刚才", "speak": "刚"},
+                    {"text": "流", "note": "liú · 流水", "speak": "流"}, {"text": "泪", "note": "lèi · 眼泪", "speak": "泪"},
+                    {"text": "算", "note": "suàn · 计算", "speak": "算"}
+                  ]
+                },
+                {
+                  "label": "12 总也倒不了的老屋",
+                  "entries": [
+                    {"text": "洞", "note": "dòng · 山洞", "speak": "洞"}, {"text": "准", "note": "zhǔn · 准备", "speak": "准"},
+                    {"text": "备", "note": "bèi · 备课", "speak": "备"}, {"text": "暴", "note": "bào · 暴雨", "speak": "暴"},
+                    {"text": "墙", "note": "qiáng · 墙壁", "speak": "墙"}, {"text": "壁", "note": "bì · 墙壁", "speak": "壁"},
+                    {"text": "砍", "note": "kǎn · 砍柴", "speak": "砍"}, {"text": "蜘", "note": "zhī · 蜘蛛", "speak": "蜘"},
+                    {"text": "蛛", "note": "zhū · 蜘蛛", "speak": "蛛"}, {"text": "漂", "note": "piào · 漂亮", "speak": "漂"},
+                    {"text": "撞", "note": "zhuàng · 碰撞", "speak": "撞"}, {"text": "饱", "note": "bǎo · 吃饱", "speak": "饱"},
+                    {"text": "晒", "note": "shài · 晒太阳", "speak": "晒"}
+                  ]
+                },
+                {
+                  "label": "15 搭船的鸟",
+                  "entries": [
+                    {"text": "搭", "note": "dā · 搭船", "speak": "搭"}, {"text": "亲", "note": "qīn · 亲人", "speak": "亲"},
+                    {"text": "父", "note": "fù · 父亲", "speak": "父"}, {"text": "沙", "note": "shā · 沙子", "speak": "沙"},
+                    {"text": "啦", "note": "la · 好啦", "speak": "啦"}, {"text": "响", "note": "xiǎng · 响声", "speak": "响"},
+                    {"text": "羽", "note": "yǔ · 羽毛", "speak": "羽"}, {"text": "翠", "note": "cuì · 翠鸟", "speak": "翠"},
+                    {"text": "嘴", "note": "zuǐ · 嘴巴", "speak": "嘴"}, {"text": "悄", "note": "qiāo · 悄悄", "speak": "悄"},
+                    {"text": "吞", "note": "tūn · 吞下", "speak": "吞"}, {"text": "哦", "note": "ò · 哦", "speak": "哦"},
+                    {"text": "捕", "note": "bǔ · 捕捉", "speak": "捕"}
+                  ]
+                },
+                {
+                  "label": "16 金色的草地",
+                  "entries": [
+                    {"text": "蒲", "note": "pú · 蒲公英", "speak": "蒲"}, {"text": "英", "note": "yīng · 英雄", "speak": "英"},
+                    {"text": "盛", "note": "shèng · 盛开", "speak": "盛"}, {"text": "耍", "note": "shuǎ · 玩耍", "speak": "耍"},
+                    {"text": "喊", "note": "hǎn · 喊叫", "speak": "喊"}, {"text": "欠", "note": "qiàn · 哈欠", "speak": "欠"},
+                    {"text": "钓", "note": "diào · 钓鱼", "speak": "钓"}, {"text": "而", "note": "ér · 而且", "speak": "而"},
+                    {"text": "察", "note": "chá · 观察", "speak": "察"}, {"text": "拢", "note": "lǒng · 合拢", "speak": "拢"},
+                    {"text": "趣", "note": "qù · 有趣", "speak": "趣"}, {"text": "喜", "note": "xǐ · 喜欢", "speak": "喜"},
+                    {"text": "睡", "note": "shuì · 睡觉", "speak": "睡"}
+                  ]
+                },
+                {
+                  "label": "17 古诗三首",
+                  "entries": [
+                    {"text": "断", "note": "duàn · 断开", "speak": "断"}, {"text": "楚", "note": "chǔ · 清楚", "speak": "楚"},
+                    {"text": "至", "note": "zhì · 至于", "speak": "至"}, {"text": "孤", "note": "gū · 孤单", "speak": "孤"},
+                    {"text": "帆", "note": "fān · 帆船", "speak": "帆"}, {"text": "饮", "note": "yǐn · 饮水", "speak": "饮"},
+                    {"text": "初", "note": "chū · 初晴", "speak": "初"}, {"text": "镜", "note": "jìng · 镜子", "speak": "镜"},
+                    {"text": "未", "note": "wèi · 未来", "speak": "未"}, {"text": "磨", "note": "mó · 磨刀", "speak": "磨"},
+                    {"text": "遥", "note": "yáo · 遥远", "speak": "遥"}, {"text": "银", "note": "yín · 银色", "speak": "银"},
+                    {"text": "盘", "note": "pán · 盘子", "speak": "盘"}
+                  ]
+                },
+                {
+                  "label": "18 富饶的西沙群岛",
+                  "entries": [
+                    {"text": "优", "note": "yōu · 优秀", "speak": "优"}, {"text": "淡", "note": "dàn · 淡水", "speak": "淡"},
+                    {"text": "浅", "note": "qiǎn · 浅色", "speak": "浅"}, {"text": "错", "note": "cuò · 错误", "speak": "错"},
+                    {"text": "岩", "note": "yán · 岩石", "speak": "岩"}, {"text": "虾", "note": "xiā · 鱼虾", "speak": "虾"},
+                    {"text": "挺", "note": "tǐng · 挺立", "speak": "挺"}, {"text": "鼓", "note": "gǔ · 打鼓", "speak": "鼓"},
+                    {"text": "数", "note": "shǔ · 数不清", "speak": "数"}, {"text": "厚", "note": "hòu · 深厚", "speak": "厚"},
+                    {"text": "宝", "note": "bǎo · 宝贝", "speak": "宝"}, {"text": "贵", "note": "guì · 宝贵", "speak": "贵"}
+                  ]
+                },
+                {
+                  "label": "19 海滨小城",
+                  "entries": [
+                    {"text": "滨", "note": "bīn · 海滨", "speak": "滨"}, {"text": "灰", "note": "huī · 灰色", "speak": "灰"},
+                    {"text": "渔", "note": "yú · 渔民", "speak": "渔"}, {"text": "遍", "note": "biàn · 遍地", "speak": "遍"},
+                    {"text": "躺", "note": "tǎng · 躺下", "speak": "躺"}, {"text": "载", "note": "zài · 满载", "speak": "载"},
+                    {"text": "靠", "note": "kào · 依靠", "speak": "靠"}, {"text": "栽", "note": "zāi · 栽树", "speak": "栽"},
+                    {"text": "亚", "note": "yà · 亚洲", "speak": "亚"}, {"text": "夏", "note": "xià · 夏天", "speak": "夏"},
+                    {"text": "除", "note": "chú · 除了", "speak": "除"}, {"text": "踩", "note": "cǎi · 踩踏", "speak": "踩"},
+                    {"text": "洁", "note": "jié · 洁白", "speak": "洁"}
+                  ]
+                },
+                {
+                  "label": "20 美丽的小兴安岭",
+                  "entries": [
+                    {"text": "脑", "note": "nǎo · 脑袋", "speak": "脑"}, {"text": "袋", "note": "dài · 口袋", "speak": "袋"},
+                    {"text": "严", "note": "yán · 严格", "speak": "严"}, {"text": "实", "note": "shí · 诚实", "speak": "实"},
+                    {"text": "挡", "note": "dǎng · 挡住", "speak": "挡"}, {"text": "视", "note": "shì · 电视", "speak": "视"},
+                    {"text": "线", "note": "xiàn · 线条", "speak": "线"}, {"text": "坛", "note": "tán · 花坛", "speak": "坛"},
+                    {"text": "显", "note": "xiǎn · 显示", "speak": "显"}, {"text": "材", "note": "cái · 木材", "speak": "材"},
+                    {"text": "软", "note": "ruǎn · 柔软", "speak": "软"}, {"text": "刮", "note": "guā · 刮风", "speak": "刮"},
+                    {"text": "库", "note": "kù · 仓库", "speak": "库"}
+                  ]
+                },
+                {
+                  "label": "21 大自然的声音",
+                  "entries": [
+                    {"text": "妙", "note": "miào · 美妙", "speak": "妙"}, {"text": "演", "note": "yǎn · 表演", "speak": "演"},
+                    {"text": "奏", "note": "zòu · 演奏", "speak": "奏"}, {"text": "琴", "note": "qín · 钢琴", "speak": "琴"},
+                    {"text": "柔", "note": "róu · 柔软", "speak": "柔"}, {"text": "感", "note": "gǎn · 感动", "speak": "感"},
+                    {"text": "受", "note": "shòu · 接受", "speak": "受"}, {"text": "激", "note": "jī · 激动", "speak": "激"},
+                    {"text": "击", "note": "jī · 打击", "speak": "击"}, {"text": "器", "note": "qì · 乐器", "speak": "器"},
+                    {"text": "滴", "note": "dī · 水滴", "speak": "滴"}, {"text": "敲", "note": "qiāo · 敲门", "speak": "敲"},
+                    {"text": "鸣", "note": "míng · 鸣叫", "speak": "鸣"}
+                  ]
+                },
+                {
+                  "label": "22 父亲、树林和鸟",
+                  "entries": [
+                    {"text": "朝", "note": "cháo · 朝向", "speak": "朝"}, {"text": "雾", "note": "wù · 雾气", "speak": "雾"},
+                    {"text": "蒙", "note": "méng · 蒙蒙", "speak": "蒙"}, {"text": "鼻", "note": "bí · 鼻子", "speak": "鼻"},
+                    {"text": "总", "note": "zǒng · 总是", "speak": "总"}, {"text": "抖", "note": "dǒu · 发抖", "speak": "抖"},
+                    {"text": "露", "note": "lù · 露水", "speak": "露"}, {"text": "湿", "note": "shī · 湿润", "speak": "湿"},
+                    {"text": "吸", "note": "xī · 呼吸", "speak": "吸"}, {"text": "猎", "note": "liè · 猎人", "speak": "猎"},
+                    {"text": "翅", "note": "chì · 翅膀", "speak": "翅"}, {"text": "膀", "note": "bǎng · 肩膀", "speak": "膀"},
+                    {"text": "重", "note": "zhòng · 重要", "speak": "重"}
+                  ]
+                },
+                {
+                  "label": "23 带刺的朋友",
+                  "entries": [
+                    {"text": "刺", "note": "cì · 带刺", "speak": "刺"}, {"text": "枣", "note": "zǎo · 红枣", "speak": "枣"},
+                    {"text": "颗", "note": "kē · 一颗", "speak": "颗"}, {"text": "忽", "note": "hū · 忽然", "speak": "忽"},
+                    {"text": "暗", "note": "àn · 黑暗", "speak": "暗"}, {"text": "伸", "note": "shēn · 伸手", "speak": "伸"},
+                    {"text": "匆", "note": "cōng · 匆忙", "speak": "匆"}, {"text": "沟", "note": "gōu · 水沟", "speak": "沟"},
+                    {"text": "聪", "note": "cōng · 聪明", "speak": "聪"}, {"text": "偷", "note": "tōu · 偷走", "speak": "偷"},
+                    {"text": "追", "note": "zhuī · 追赶", "speak": "追"}, {"text": "腰", "note": "yāo · 弯腰", "speak": "腰"}
+                  ]
+                },
+                {
+                  "label": "24 司马光",
+                  "entries": [
+                    {"text": "司", "note": "sī · 司机", "speak": "司"}, {"text": "庭", "note": "tíng · 庭院", "speak": "庭"},
+                    {"text": "登", "note": "dēng · 登山", "speak": "登"}, {"text": "跌", "note": "diē · 跌倒", "speak": "跌"},
+                    {"text": "众", "note": "zhòng · 众人", "speak": "众"}, {"text": "弃", "note": "qì · 放弃", "speak": "弃"},
+                    {"text": "持", "note": "chí · 坚持", "speak": "持"}
+                  ]
+                },
+                {
+                  "label": "25 掌声",
+                  "entries": [
+                    {"text": "掌", "note": "zhǎng · 掌声", "speak": "掌"}, {"text": "班", "note": "bān · 班级", "speak": "班"},
+                    {"text": "默", "note": "mò · 沉默", "speak": "默"}, {"text": "腿", "note": "tuǐ · 小腿", "speak": "腿"},
+                    {"text": "轮", "note": "lún · 轮流", "speak": "轮"}, {"text": "投", "note": "tóu · 投入", "speak": "投"},
+                    {"text": "调", "note": "diào · 调动", "speak": "调"}, {"text": "摇", "note": "yáo · 摇头", "speak": "摇"},
+                    {"text": "晃", "note": "huàng · 摇晃", "speak": "晃"}, {"text": "烈", "note": "liè · 热烈", "speak": "烈"},
+                    {"text": "勇", "note": "yǒng · 勇敢", "speak": "勇"}
+                  ]
+                },
+                {
+                  "label": "26 灰雀",
+                  "entries": [
+                    {"text": "雀", "note": "què · 灰雀", "speak": "雀"}, {"text": "郊", "note": "jiāo · 郊外", "speak": "郊"},
+                    {"text": "养", "note": "yǎng · 养花", "speak": "养"}, {"text": "粉", "note": "fěn · 粉色", "speak": "粉"},
+                    {"text": "谷", "note": "gǔ · 谷子", "speak": "谷"}, {"text": "粒", "note": "lì · 颗粒", "speak": "粒"},
+                    {"text": "男", "note": "nán · 男孩", "speak": "男"}, {"text": "或", "note": "huò · 或者", "speak": "或"},
+                    {"text": "者", "note": "zhě · 记者", "speak": "者"}, {"text": "冻", "note": "dòng · 冰冻", "speak": "冻"},
+                    {"text": "惜", "note": "xī · 可惜", "speak": "惜"}, {"text": "肯", "note": "kěn · 肯定", "speak": "肯"},
+                    {"text": "诚", "note": "chéng · 诚实", "speak": "诚"}
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "education-english": [
+          {
+            "kind": "reference",
+            "item_id": "ref-23-en-words",
+            "title": "英语主题词库",
+            "body": "三年级正式学英语啦：六个常见主题，点单词听读音。",
+            "result": "已听过英语主题词库",
+            "source_label": "参考人教 PEP 三年级上册等主流教材单元主题整理（2026-08-06 核验公开词表；通用词库，未对齐指定教材）",
+            "reference": {
+              "style": "chips",
+              "lang": "en-US",
+              "groups": [
+                {
+                  "label": "朋友与问候",
+                  "entries": [
+                    {"text": "hello", "note": "你好"}, {"text": "hi", "note": "嗨"}, {"text": "name", "note": "名字"},
+                    {"text": "friend", "note": "朋友"}, {"text": "nice", "note": "友好的"}, {"text": "good", "note": "好的"},
+                    {"text": "say", "note": "说"}, {"text": "help", "note": "帮助"}
+                  ]
+                },
+                {
+                  "label": "身体",
+                  "entries": [
+                    {"text": "ear", "note": "耳朵"}, {"text": "hand", "note": "手"}, {"text": "eye", "note": "眼睛"},
+                    {"text": "mouth", "note": "嘴"}, {"text": "arm", "note": "胳膊"}, {"text": "head", "note": "头"},
+                    {"text": "foot", "note": "脚"}, {"text": "leg", "note": "腿"}
+                  ]
+                },
+                {
+                  "label": "家庭",
+                  "entries": [
+                    {"text": "father", "note": "爸爸"}, {"text": "mother", "note": "妈妈"}, {"text": "sister", "note": "姐妹"},
+                    {"text": "brother", "note": "兄弟"}, {"text": "grandma", "note": "奶奶；外婆"}, {"text": "grandpa", "note": "爷爷；外公"},
+                    {"text": "family", "note": "家庭"}, {"text": "baby", "note": "宝宝"}
+                  ]
+                },
+                {
+                  "label": "动物",
+                  "entries": [
+                    {"text": "duck", "note": "鸭子"}, {"text": "bear", "note": "熊"}, {"text": "cat", "note": "猫"},
+                    {"text": "dog", "note": "狗"}, {"text": "bird", "note": "鸟"}, {"text": "panda", "note": "熊猫"},
+                    {"text": "tiger", "note": "老虎"}, {"text": "monkey", "note": "猴子"}
+                  ]
+                },
+                {
+                  "label": "颜色",
+                  "entries": [
+                    {"text": "red", "note": "红色"}, {"text": "orange", "note": "橙色"}, {"text": "yellow", "note": "黄色"},
+                    {"text": "green", "note": "绿色"}, {"text": "blue", "note": "蓝色"}, {"text": "purple", "note": "紫色"},
+                    {"text": "white", "note": "白色"}, {"text": "black", "note": "黑色"}
+                  ]
+                },
+                {
+                  "label": "数字",
+                  "entries": [
+                    {"text": "one", "note": "一"}, {"text": "two", "note": "二"}, {"text": "three", "note": "三"},
+                    {"text": "four", "note": "四"}, {"text": "five", "note": "五"}, {"text": "six", "note": "六"},
+                    {"text": "seven", "note": "七"}, {"text": "eight", "note": "八"}, {"text": "nine", "note": "九"}, {"text": "ten", "note": "十"}
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "education-reading": [
+          {
+            "kind": "reference",
+            "item_id": "ref-23-read-poems",
+            "title": "二三年级课内古诗",
+            "body": "点开一首，先听朗读，再看看注释和译文。",
+            "result": "已复习课内古诗",
+            "source_label": "篇目按统编版语文二年级课内古诗整理（2026-08-06 核验公开汇总）；注释与译文为 Double6 自写",
+            "reference": {
+              "style": "poems",
+              "poems": [
+                {
+                  "title": "村居",
+                  "author": "清 · 高鼎",
+                  "lines": ["草长莺飞二月天，", "拂堤杨柳醉春烟。", "儿童散学归来早，", "忙趁东风放纸鸢。"],
+                  "notes": "拂：轻轻擦过。纸鸢：风筝。",
+                  "translation": "二月里小草生长、黄莺飞舞，杨柳轻拂堤岸，像陶醉在春天的烟雾里；孩子们放学回来得早，忙趁着东风放起风筝。"
+                },
+                {
+                  "title": "咏柳",
+                  "author": "唐 · 贺知章",
+                  "lines": ["碧玉妆成一树高，", "万条垂下绿丝绦。", "不知细叶谁裁出，", "二月春风似剪刀。"],
+                  "notes": "妆：打扮。丝绦：丝带。似：好像。",
+                  "translation": "高高的柳树像用碧玉装扮而成，千万条柳枝垂下来像绿色的丝带；不知道细细的柳叶是谁裁剪出来的？原来是二月的春风，就像一把剪刀。"
+                },
+                {
+                  "title": "登鹳雀楼",
+                  "author": "唐 · 王之涣",
+                  "lines": ["白日依山尽，", "黄河入海流。", "欲穷千里目，", "更上一层楼。"],
+                  "notes": "白日：太阳。穷：穷尽。",
+                  "translation": "太阳靠着群山落下，黄河滚滚流向大海；想要看到更远的地方，就要再上一层楼。"
+                },
+                {
+                  "title": "望庐山瀑布",
+                  "author": "唐 · 李白",
+                  "lines": ["日照香炉生紫烟，", "遥看瀑布挂前川。", "飞流直下三千尺，", "疑是银河落九天。"],
+                  "notes": "香炉：香炉峰。川：河流。九天：极高的天空。",
+                  "translation": "阳光照着香炉峰升起紫色云烟，远远看去，瀑布像挂在山前的长河；水流飞快地直泻而下，让人以为是银河从九天之上落了下来。"
+                },
+                {
+                  "title": "夜宿山寺",
+                  "author": "唐 · 李白",
+                  "lines": ["危楼高百尺，", "手可摘星辰。", "不敢高声语，", "恐惊天上人。"],
+                  "notes": "危楼：高楼。星辰：星星。恐：害怕。",
+                  "translation": "山上的寺院高楼真高啊，好像一伸手就能摘下星星；站在这里不敢大声说话，怕惊动了天上的仙人。"
+                },
+                {
+                  "title": "敕勒歌",
+                  "author": "北朝民歌",
+                  "lines": ["敕勒川，阴山下。", "天似穹庐，笼盖四野。", "天苍苍，野茫茫，", "风吹草低见牛羊。"],
+                  "notes": "穹庐：圆顶帐篷。见：同“现”，显现。",
+                  "translation": "敕勒平原在阴山脚下，天空像巨大的帐篷，笼罩着四面的原野；天蓝蓝的，原野一望无边，风吹过，草儿弯下腰，露出了成群的牛羊。"
+                },
+                {
+                  "title": "晓出净慈寺送林子方",
+                  "author": "宋 · 杨万里",
+                  "lines": ["毕竟西湖六月中，", "风光不与四时同。", "接天莲叶无穷碧，", "映日荷花别样红。"],
+                  "notes": "毕竟：到底。四时：四季。别样：特别。",
+                  "translation": "到底是六月里的西湖，风光和其他季节都不一样；莲叶密密层层一直铺到天边，绿得看不到尽头，荷花在朝阳映照下，红得格外鲜艳。"
+                },
+                {
+                  "title": "绝句",
+                  "author": "唐 · 杜甫",
+                  "lines": ["两个黄鹂鸣翠柳，", "一行白鹭上青天。", "窗含西岭千秋雪，", "门泊东吴万里船。"],
+                  "notes": "含：包含、镶嵌。泊：停泊。",
+                  "translation": "两只黄鹂在翠绿的柳枝间鸣叫，一行白鹭飞向蓝天；窗口正好框住西岭上千年不化的积雪，门前停泊着从万里之外东吴来的船只。"
+                }
+              ]
+            }
+          }
+        ],
+        "education-math": [
+          {
+            "kind": "reference",
+            "item_id": "ref-23-math-units",
+            "title": "常用单位换算表",
+            "body": "三年级的测量和时间都用得上，点一条听一条。",
+            "result": "已复习常用单位换算",
+            "source_label": "通用数学单位换算内容（未对齐指定教材）",
+            "reference": {
+              "style": "chips",
+              "lang": "zh-CN",
+              "groups": [
+                {
+                  "label": "长度",
+                  "entries": [
+                    {"text": "1千米 = 1000米", "speak": "1千米等于1000米"},
+                    {"text": "1米 = 10分米", "speak": "1米等于10分米"},
+                    {"text": "1分米 = 10厘米", "speak": "1分米等于10厘米"},
+                    {"text": "1厘米 = 10毫米", "speak": "1厘米等于10毫米"},
+                    {"text": "1米 = 100厘米", "speak": "1米等于100厘米"}
+                  ]
+                },
+                {
+                  "label": "重量",
+                  "entries": [
+                    {"text": "1吨 = 1000千克", "speak": "1吨等于1000千克"},
+                    {"text": "1千克 = 1000克", "speak": "1千克等于1000克"},
+                    {"text": "1千克 = 1公斤", "speak": "1千克等于1公斤"}
+                  ]
+                },
+                {
+                  "label": "时间",
+                  "entries": [
+                    {"text": "1时 = 60分", "speak": "1时等于60分"},
+                    {"text": "1分 = 60秒", "speak": "1分等于60秒"},
+                    {"text": "1天 = 24时", "speak": "1天等于24时"},
+                    {"text": "1年 = 12个月", "speak": "1年等于12个月"}
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "primary-transition-3-to-4",
+      "modules": {
+        "education-language": [
+          {
+            "kind": "reference",
+            "item_id": "ref-34-lang-xiezi",
+            "title": "四年级上册写字表",
+            "body": "升四年级前先认一认：按课文排好，每字带拼音和组词，点一点听读音。",
+            "result": "已预习四年级上册写字表",
+            "source_label": "按统编版语文四年级上册写字表整理（2026-08-06 核验公开目录；教材可能有个别版本微调，请以孩子课本为准）",
+            "reference": {
+              "style": "chips",
+              "lang": "zh-CN",
+              "groups": [
+                {
+                  "label": "1 观潮",
+                  "entries": [
+                    {"text": "潮", "note": "cháo · 潮水", "speak": "潮"}, {"text": "据", "note": "jù · 根据", "speak": "据"},
+                    {"text": "堤", "note": "dī · 河堤", "speak": "堤"}, {"text": "阔", "note": "kuò · 宽阔", "speak": "阔"},
+                    {"text": "笼", "note": "lǒng · 笼罩", "speak": "笼"}, {"text": "罩", "note": "zhào · 口罩", "speak": "罩"},
+                    {"text": "盼", "note": "pàn · 盼望", "speak": "盼"}, {"text": "滚", "note": "gǔn · 滚动", "speak": "滚"},
+                    {"text": "顿", "note": "dùn · 顿时", "speak": "顿"}, {"text": "逐", "note": "zhú · 逐渐", "speak": "逐"},
+                    {"text": "渐", "note": "jiàn · 渐渐", "speak": "渐"}, {"text": "犹", "note": "yóu · 犹豫", "speak": "犹"},
+                    {"text": "崩", "note": "bēng · 山崩", "speak": "崩"}, {"text": "震", "note": "zhèn · 地震", "speak": "震"},
+                    {"text": "余", "note": "yú · 剩余", "speak": "余"}
+                  ]
+                },
+                {
+                  "label": "2 走月亮",
+                  "entries": [
+                    {"text": "淘", "note": "táo · 淘气", "speak": "淘"}, {"text": "牵", "note": "qiān · 牵手", "speak": "牵"},
+                    {"text": "鹅", "note": "é · 白鹅", "speak": "鹅"}, {"text": "卵", "note": "luǎn · 卵石", "speak": "卵"},
+                    {"text": "填", "note": "tián · 填空", "speak": "填"}, {"text": "庄", "note": "zhuāng · 村庄", "speak": "庄"},
+                    {"text": "稼", "note": "jia · 庄稼", "speak": "稼"}, {"text": "俗", "note": "sú · 风俗", "speak": "俗"},
+                    {"text": "跃", "note": "yuè · 跳跃", "speak": "跃"}, {"text": "葡", "note": "pú · 葡萄", "speak": "葡"},
+                    {"text": "萄", "note": "táo · 葡萄", "speak": "萄"}, {"text": "稻", "note": "dào · 稻田", "speak": "稻"},
+                    {"text": "熟", "note": "shú · 成熟", "speak": "熟"}
+                  ]
+                },
+                {
+                  "label": "5 一个豆荚里的五粒豆",
+                  "entries": [
+                    {"text": "豌", "note": "wān · 豌豆", "speak": "豌"}, {"text": "按", "note": "àn · 按时", "speak": "按"},
+                    {"text": "舒", "note": "shū · 舒服", "speak": "舒"}, {"text": "适", "note": "shì · 适合", "speak": "适"},
+                    {"text": "恐", "note": "kǒng · 恐怕", "speak": "恐"}, {"text": "僵", "note": "jiāng · 僵硬", "speak": "僵"},
+                    {"text": "硬", "note": "yìng · 坚硬", "speak": "硬"}, {"text": "枪", "note": "qiāng · 手枪", "speak": "枪"},
+                    {"text": "耐", "note": "nài · 耐心", "speak": "耐"}, {"text": "探", "note": "tàn · 探望", "speak": "探"},
+                    {"text": "愉", "note": "yú · 愉快", "speak": "愉"}, {"text": "曾", "note": "céng · 曾经", "speak": "曾"}
+                  ]
+                },
+                {
+                  "label": "6 夜间飞行的秘密",
+                  "entries": [
+                    {"text": "达", "note": "dá · 到达", "speak": "达"}, {"text": "蚊", "note": "wén · 蚊子", "speak": "蚊"},
+                    {"text": "即", "note": "jí · 即使", "speak": "即"}, {"text": "科", "note": "kē · 科学", "speak": "科"},
+                    {"text": "横", "note": "héng · 横线", "speak": "横"}, {"text": "竖", "note": "shù · 竖直", "speak": "竖"},
+                    {"text": "绳", "note": "shéng · 绳子", "speak": "绳"}, {"text": "系", "note": "jì · 系鞋带", "speak": "系"},
+                    {"text": "蝇", "note": "yíng · 苍蝇", "speak": "蝇"}, {"text": "证", "note": "zhèng · 证明", "speak": "证"},
+                    {"text": "研", "note": "yán · 研究", "speak": "研"}, {"text": "究", "note": "jiū · 究竟", "speak": "究"},
+                    {"text": "驾", "note": "jià · 驾驶", "speak": "驾"}, {"text": "驶", "note": "shǐ · 行驶", "speak": "驶"}
+                  ]
+                },
+                {
+                  "label": "7 呼风唤雨的世纪",
+                  "entries": [
+                    {"text": "唤", "note": "huàn · 呼唤", "speak": "唤"}, {"text": "纪", "note": "jì · 世纪", "speak": "纪"},
+                    {"text": "技", "note": "jì · 技术", "speak": "技"}, {"text": "改", "note": "gǎi · 改变", "speak": "改"},
+                    {"text": "程", "note": "chéng · 工程", "speak": "程"}, {"text": "超", "note": "chāo · 超过", "speak": "超"},
+                    {"text": "亿", "note": "yì · 一亿", "speak": "亿"}, {"text": "核", "note": "hé · 核心", "speak": "核"},
+                    {"text": "奥", "note": "ào · 奥秘", "speak": "奥"}, {"text": "益", "note": "yì · 有益", "speak": "益"},
+                    {"text": "联", "note": "lián · 联系", "speak": "联"}, {"text": "质", "note": "zhì · 质量", "speak": "质"},
+                    {"text": "哲", "note": "zhé · 哲学", "speak": "哲"}, {"text": "任", "note": "rèn · 任务", "speak": "任"},
+                    {"text": "善", "note": "shàn · 善良", "speak": "善"}
+                  ]
+                },
+                {
+                  "label": "9 古诗三首",
+                  "entries": [
+                    {"text": "暮", "note": "mù · 暮色", "speak": "暮"}, {"text": "吟", "note": "yín · 吟诵", "speak": "吟"},
+                    {"text": "题", "note": "tí · 题目", "speak": "题"}, {"text": "侧", "note": "cè · 侧面", "speak": "侧"},
+                    {"text": "峰", "note": "fēng · 山峰", "speak": "峰"}, {"text": "庐", "note": "lú · 庐山", "speak": "庐"},
+                    {"text": "缘", "note": "yuán · 缘故", "speak": "缘"}, {"text": "降", "note": "xiáng · 投降", "speak": "降"},
+                    {"text": "阁", "note": "gé · 楼阁", "speak": "阁"}, {"text": "费", "note": "fèi · 花费", "speak": "费"},
+                    {"text": "须", "note": "xū · 必须", "speak": "须"}, {"text": "逊", "note": "xùn · 逊色", "speak": "逊"},
+                    {"text": "输", "note": "shū · 输赢", "speak": "输"}
+                  ]
+                },
+                {
+                  "label": "10 爬山虎的脚",
+                  "entries": [
+                    {"text": "虎", "note": "hǔ · 老虎", "speak": "虎"}, {"text": "操", "note": "cāo · 操心", "speak": "操"},
+                    {"text": "占", "note": "zhàn · 占领", "speak": "占"}, {"text": "嫩", "note": "nèn · 嫩绿", "speak": "嫩"},
+                    {"text": "顺", "note": "shùn · 顺利", "speak": "顺"}, {"text": "均", "note": "jūn · 平均", "speak": "均"},
+                    {"text": "叠", "note": "dié · 重叠", "speak": "叠"}, {"text": "隙", "note": "xì · 缝隙", "speak": "隙"},
+                    {"text": "茎", "note": "jīng · 叶茎", "speak": "茎"}, {"text": "柄", "note": "bǐng · 叶柄", "speak": "柄"},
+                    {"text": "萎", "note": "wěi · 枯萎", "speak": "萎"}, {"text": "瞧", "note": "qiáo · 瞧见", "speak": "瞧"},
+                    {"text": "固", "note": "gù · 牢固", "speak": "固"}
+                  ]
+                },
+                {
+                  "label": "11 蟋蟀的住宅",
+                  "entries": [
+                    {"text": "宅", "note": "zhái · 住宅", "speak": "宅"}, {"text": "临", "note": "lín · 临时", "speak": "临"},
+                    {"text": "慎", "note": "shèn · 慎重", "speak": "慎"}, {"text": "选", "note": "xuǎn · 选择", "speak": "选"},
+                    {"text": "择", "note": "zé · 选择", "speak": "择"}, {"text": "址", "note": "zhǐ · 地址", "speak": "址"},
+                    {"text": "良", "note": "liáng · 良好", "speak": "良"}, {"text": "穴", "note": "xué · 洞穴", "speak": "穴"},
+                    {"text": "厅", "note": "tīng · 大厅", "speak": "厅"}, {"text": "卧", "note": "wò · 卧室", "speak": "卧"},
+                    {"text": "专", "note": "zhuān · 专心", "speak": "专"}, {"text": "卫", "note": "wèi · 卫生", "speak": "卫"},
+                    {"text": "较", "note": "jiào · 比较", "speak": "较"}
+                  ]
+                },
+                {
+                  "label": "12 盘古开天地",
+                  "entries": [
+                    {"text": "翻", "note": "fān · 翻身", "speak": "翻"}, {"text": "劈", "note": "pī · 劈开", "speak": "劈"},
+                    {"text": "缓", "note": "huǎn · 缓慢", "speak": "缓"}, {"text": "浊", "note": "zhuó · 浑浊", "speak": "浊"},
+                    {"text": "丈", "note": "zhàng · 丈夫", "speak": "丈"}, {"text": "撑", "note": "chēng · 支撑", "speak": "撑"},
+                    {"text": "竭", "note": "jié · 竭力", "speak": "竭"}, {"text": "累", "note": "lèi · 劳累", "speak": "累"},
+                    {"text": "血", "note": "xuè · 血液", "speak": "血"}, {"text": "液", "note": "yè · 液体", "speak": "液"},
+                    {"text": "奔", "note": "bēn · 奔跑", "speak": "奔"}, {"text": "茂", "note": "mào · 茂盛", "speak": "茂"},
+                    {"text": "滋", "note": "zī · 滋润", "speak": "滋"}
+                  ]
+                },
+                {
+                  "label": "13 精卫填海",
+                  "entries": [
+                    {"text": "帝", "note": "dì · 皇帝", "speak": "帝"}, {"text": "曰", "note": "yuē · 子曰", "speak": "曰"},
+                    {"text": "溺", "note": "nì · 溺水", "speak": "溺"}, {"text": "返", "note": "fǎn · 返回", "speak": "返"},
+                    {"text": "衔", "note": "xián · 衔着", "speak": "衔"}
+                  ]
+                },
+                {
+                  "label": "14 普罗米修斯",
+                  "entries": [
+                    {"text": "悲", "note": "bēi · 悲伤", "speak": "悲"}, {"text": "惨", "note": "cǎn · 悲惨", "speak": "惨"},
+                    {"text": "兽", "note": "shòu · 野兽", "speak": "兽"}, {"text": "佩", "note": "pèi · 佩服", "speak": "佩"},
+                    {"text": "坚", "note": "jiān · 坚持", "speak": "坚"}, {"text": "违", "note": "wéi · 违反", "speak": "违"},
+                    {"text": "抗", "note": "kàng · 反抗", "speak": "抗"}, {"text": "环", "note": "huán · 铁环", "speak": "环"},
+                    {"text": "锁", "note": "suǒ · 锁住", "speak": "锁"}, {"text": "既", "note": "jì · 既然", "speak": "既"},
+                    {"text": "狠", "note": "hěn · 狠心", "speak": "狠"}, {"text": "著", "note": "zhù · 著名", "speak": "著"},
+                    {"text": "愤", "note": "fèn · 愤怒", "speak": "愤"}, {"text": "获", "note": "huò · 获得", "speak": "获"}
+                  ]
+                },
+                {
+                  "label": "16 麻雀",
+                  "entries": [
+                    {"text": "嗅", "note": "xiù · 嗅觉", "speak": "嗅"}, {"text": "呆", "note": "dāi · 发呆", "speak": "呆"},
+                    {"text": "奈", "note": "nài · 无奈", "speak": "奈"}, {"text": "巢", "note": "cháo · 鸟巢", "speak": "巢"},
+                    {"text": "齿", "note": "chǐ · 牙齿", "speak": "齿"}, {"text": "躯", "note": "qū · 身躯", "speak": "躯"},
+                    {"text": "掩", "note": "yǎn · 掩护", "speak": "掩"}, {"text": "护", "note": "hù · 保护", "speak": "护"},
+                    {"text": "幼", "note": "yòu · 幼小", "speak": "幼"}, {"text": "搏", "note": "bó · 搏斗", "speak": "搏"},
+                    {"text": "庞", "note": "páng · 庞大", "speak": "庞"}, {"text": "量", "note": "liàng · 力量", "speak": "量"},
+                    {"text": "愣", "note": "lèng · 发愣", "speak": "愣"}
+                  ]
+                },
+                {
+                  "label": "17 爬天都峰",
+                  "entries": [
+                    {"text": "哩", "note": "li · 好哩", "speak": "哩"}, {"text": "级", "note": "jí · 年级", "speak": "级"},
+                    {"text": "链", "note": "liàn · 铁链", "speak": "链"}, {"text": "颤", "note": "chàn · 颤抖", "speak": "颤"},
+                    {"text": "攀", "note": "pān · 攀登", "speak": "攀"}, {"text": "猴", "note": "hóu · 猴子", "speak": "猴"},
+                    {"text": "鲫", "note": "jì · 鲫鱼", "speak": "鲫"}, {"text": "念", "note": "niàn · 想念", "speak": "念"},
+                    {"text": "辫", "note": "biàn · 辫子", "speak": "辫"}, {"text": "呵", "note": "hē · 笑呵呵", "speak": "呵"}
+                  ]
+                },
+                {
+                  "label": "18 牛和鹅",
+                  "entries": [
+                    {"text": "摸", "note": "mō · 摸一摸", "speak": "摸"}, {"text": "甚", "note": "shèn · 甚至", "speak": "甚"},
+                    {"text": "跪", "note": "guì · 跪下", "speak": "跪"}, {"text": "捶", "note": "chuí · 捶背", "speak": "捶"},
+                    {"text": "绕", "note": "rào · 围绕", "speak": "绕"}, {"text": "顽", "note": "wán · 顽皮", "speak": "顽"},
+                    {"text": "脖", "note": "bó · 脖子", "speak": "脖"}, {"text": "脱", "note": "tuō · 脱掉", "speak": "脱"},
+                    {"text": "概", "note": "gài · 大概", "speak": "概"}, {"text": "惹", "note": "rě · 惹事", "speak": "惹"},
+                    {"text": "昏", "note": "hūn · 黄昏", "speak": "昏"}, {"text": "握", "note": "wò · 握手", "speak": "握"},
+                    {"text": "摔", "note": "shuāi · 摔倒", "speak": "摔"}, {"text": "凭", "note": "píng · 凭着", "speak": "凭"},
+                    {"text": "掐", "note": "qiā · 掐住", "speak": "掐"}
+                  ]
+                },
+                {
+                  "label": "19 一只窝囊的大老虎",
+                  "entries": [
+                    {"text": "段", "note": "duàn · 一段", "speak": "段"}, {"text": "俩", "note": "liǎ · 咱俩", "speak": "俩"},
+                    {"text": "练", "note": "liàn · 练习", "speak": "练"}, {"text": "裤", "note": "kù · 裤子", "speak": "裤"},
+                    {"text": "逃", "note": "táo · 逃走", "speak": "逃"}, {"text": "罩", "note": "zhào · 头罩", "speak": "罩"},
+                    {"text": "亏", "note": "kuī · 吃亏", "speak": "亏"}, {"text": "挖", "note": "wā · 挖土", "speak": "挖"},
+                    {"text": "撤", "note": "chè · 撤退", "speak": "撤"}, {"text": "堂", "note": "táng · 课堂", "speak": "堂"},
+                    {"text": "砸", "note": "zá · 砸碎", "speak": "砸"}, {"text": "锅", "note": "guō · 铁锅", "speak": "锅"}
+                  ]
+                },
+                {
+                  "label": "20 陀螺",
+                  "entries": [
+                    {"text": "否", "note": "fǒu · 否则", "speak": "否"}, {"text": "旋", "note": "xuán · 旋转", "speak": "旋"},
+                    {"text": "况", "note": "kuàng · 情况", "speak": "况"}, {"text": "兵", "note": "bīng · 士兵", "speak": "兵"},
+                    {"text": "败", "note": "bài · 失败", "speak": "败"}, {"text": "椅", "note": "yǐ · 椅子", "speak": "椅"},
+                    {"text": "仍", "note": "réng · 仍然", "speak": "仍"}, {"text": "尤", "note": "yóu · 尤其", "speak": "尤"},
+                    {"text": "恨", "note": "hèn · 悔恨", "speak": "恨"}, {"text": "帅", "note": "shuài · 帅气", "speak": "帅"},
+                    {"text": "预", "note": "yù · 预习", "speak": "预"}, {"text": "溃", "note": "kuì · 溃败", "speak": "溃"},
+                    {"text": "品", "note": "pǐn · 品质", "speak": "品"}, {"text": "丑", "note": "chǒu · 小丑", "speak": "丑"},
+                    {"text": "豪", "note": "háo · 自豪", "speak": "豪"}
+                  ]
+                },
+                {
+                  "label": "21 古诗三首",
+                  "entries": [
+                    {"text": "塞", "note": "sài · 边塞", "speak": "塞"}, {"text": "秦", "note": "qín · 秦国", "speak": "秦"},
+                    {"text": "征", "note": "zhēng · 长征", "speak": "征"}, {"text": "词", "note": "cí · 词语", "speak": "词"},
+                    {"text": "催", "note": "cuī · 催促", "speak": "催"}, {"text": "醉", "note": "zuì · 喝醉", "speak": "醉"},
+                    {"text": "杰", "note": "jié · 杰出", "speak": "杰"}, {"text": "亦", "note": "yì · 人云亦云", "speak": "亦"},
+                    {"text": "雄", "note": "xióng · 英雄", "speak": "雄"}, {"text": "项", "note": "xiàng · 项目", "speak": "项"}
+                  ]
+                },
+                {
+                  "label": "22 为中华之崛起而读书",
+                  "entries": [
+                    {"text": "肃", "note": "sù · 严肃", "speak": "肃"}, {"text": "默", "note": "mò · 默写", "speak": "默"},
+                    {"text": "晰", "note": "xī · 清晰", "speak": "晰"}, {"text": "振", "note": "zhèn · 振奋", "speak": "振"},
+                    {"text": "胸", "note": "xiōng · 胸怀", "speak": "胸"}, {"text": "怀", "note": "huái · 怀抱", "speak": "怀"},
+                    {"text": "赞", "note": "zàn · 赞叹", "speak": "赞"}, {"text": "效", "note": "xiào · 效果", "speak": "效"},
+                    {"text": "凡", "note": "fán · 凡是", "speak": "凡"}, {"text": "顾", "note": "gù · 照顾", "speak": "顾"},
+                    {"text": "训", "note": "xùn · 训练", "speak": "训"}, {"text": "斥", "note": "chì · 斥责", "speak": "斥"}
+                  ]
+                },
+                {
+                  "label": "25 王戎不取道旁李",
+                  "entries": [
+                    {"text": "戎", "note": "róng · 戎马", "speak": "戎"}, {"text": "尝", "note": "cháng · 品尝", "speak": "尝"},
+                    {"text": "诸", "note": "zhū · 诸位", "speak": "诸"}, {"text": "竞", "note": "jìng · 竞赛", "speak": "竞"},
+                    {"text": "唯", "note": "wéi · 唯一", "speak": "唯"}
+                  ]
+                },
+                {
+                  "label": "26 西门豹治邺",
+                  "entries": [
+                    {"text": "豹", "note": "bào · 猎豹", "speak": "豹"}, {"text": "魏", "note": "wèi · 魏国", "speak": "魏"},
+                    {"text": "派", "note": "pài · 派出", "speak": "派"}, {"text": "娶", "note": "qǔ · 娶亲", "speak": "娶"},
+                    {"text": "媳", "note": "xí · 媳妇", "speak": "媳"}, {"text": "妇", "note": "fù · 妇女", "speak": "妇"},
+                    {"text": "淹", "note": "yān · 淹没", "speak": "淹"}, {"text": "逼", "note": "bī · 逼近", "speak": "逼"},
+                    {"text": "浮", "note": "fú · 浮动", "speak": "浮"}, {"text": "旱", "note": "hàn · 干旱", "speak": "旱"},
+                    {"text": "徒", "note": "tú · 徒弟", "speak": "徒"}, {"text": "扔", "note": "rēng · 扔掉", "speak": "扔"},
+                    {"text": "饶", "note": "ráo · 求饶", "speak": "饶"}, {"text": "骗", "note": "piàn · 骗人", "speak": "骗"},
+                    {"text": "灌", "note": "guàn · 灌溉", "speak": "灌"}, {"text": "溉", "note": "gài · 灌溉", "speak": "溉"}
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "education-english": [
+          {
+            "kind": "reference",
+            "item_id": "ref-34-en-words",
+            "title": "英语主题词库",
+            "body": "六个常用主题，点单词听读音，看着中文说一说。",
+            "result": "已听过英语主题词库",
+            "source_label": "参考人教 PEP 等主流小学英语教材常见主题整理（2026-08-06 核验公开词表；通用词库，未对齐指定教材）",
+            "reference": {
+              "style": "chips",
+              "lang": "en-US",
+              "groups": [
+                {
+                  "label": "学校用品",
+                  "entries": [
+                    {"text": "schoolbag", "note": "书包"}, {"text": "book", "note": "书"}, {"text": "pen", "note": "钢笔"},
+                    {"text": "pencil", "note": "铅笔"}, {"text": "ruler", "note": "尺子"}, {"text": "eraser", "note": "橡皮"},
+                    {"text": "notebook", "note": "笔记本"}, {"text": "crayon", "note": "蜡笔"}
+                  ]
+                },
+                {
+                  "label": "教室",
+                  "entries": [
+                    {"text": "classroom", "note": "教室"}, {"text": "blackboard", "note": "黑板"}, {"text": "window", "note": "窗户"},
+                    {"text": "door", "note": "门"}, {"text": "light", "note": "电灯"}, {"text": "picture", "note": "图画"},
+                    {"text": "desk", "note": "课桌"}, {"text": "chair", "note": "椅子"}
+                  ]
+                },
+                {
+                  "label": "房间与家具",
+                  "entries": [
+                    {"text": "bedroom", "note": "卧室"}, {"text": "kitchen", "note": "厨房"}, {"text": "bathroom", "note": "卫生间"},
+                    {"text": "study", "note": "书房"}, {"text": "living room", "note": "客厅"}, {"text": "bed", "note": "床"},
+                    {"text": "sofa", "note": "沙发"}, {"text": "table", "note": "桌子"}
+                  ]
+                },
+                {
+                  "label": "食物",
+                  "entries": [
+                    {"text": "rice", "note": "米饭"}, {"text": "noodles", "note": "面条"}, {"text": "bread", "note": "面包"},
+                    {"text": "egg", "note": "鸡蛋"}, {"text": "milk", "note": "牛奶"}, {"text": "juice", "note": "果汁"},
+                    {"text": "cake", "note": "蛋糕"}, {"text": "fish", "note": "鱼肉"}
+                  ]
+                },
+                {
+                  "label": "职业",
+                  "entries": [
+                    {"text": "doctor", "note": "医生"}, {"text": "nurse", "note": "护士"}, {"text": "teacher", "note": "老师"},
+                    {"text": "farmer", "note": "农民"}, {"text": "cook", "note": "厨师"}, {"text": "driver", "note": "司机"},
+                    {"text": "worker", "note": "工人"}, {"text": "student", "note": "学生"}
+                  ]
+                },
+                {
+                  "label": "星期",
+                  "entries": [
+                    {"text": "Monday", "note": "星期一"}, {"text": "Tuesday", "note": "星期二"}, {"text": "Wednesday", "note": "星期三"},
+                    {"text": "Thursday", "note": "星期四"}, {"text": "Friday", "note": "星期五"}, {"text": "Saturday", "note": "星期六"},
+                    {"text": "Sunday", "note": "星期日"}
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "education-reading": [
+          {
+            "kind": "reference",
+            "item_id": "ref-34-read-poems",
+            "title": "三年级课内古诗",
+            "body": "点开一首，先听朗读，再看看注释和译文。",
+            "result": "已复习课内古诗",
+            "source_label": "篇目按统编版语文三年级课内古诗整理（2026-08-06 核验公开汇总）；注释与译文为 Double6 自写",
+            "reference": {
+              "style": "poems",
+              "poems": [
+                {
+                  "title": "山行",
+                  "author": "唐 · 杜牧",
+                  "lines": ["远上寒山石径斜，", "白云生处有人家。", "停车坐爱枫林晚，", "霜叶红于二月花。"],
+                  "notes": "寒山：深秋的山。坐：因为。红于：比……更红。",
+                  "translation": "沿着弯弯的石子小路登上深秋的山，白云升起的地方隐约有几户人家；停下车来，是因为喜爱这傍晚的枫林，经霜的枫叶比二月的花还要红。"
+                },
+                {
+                  "title": "赠刘景文",
+                  "author": "宋 · 苏轼",
+                  "lines": ["荷尽已无擎雨盖，", "菊残犹有傲霜枝。", "一年好景君须记，", "最是橙黄橘绿时。"],
+                  "notes": "擎：举、向上托。雨盖：像雨伞一样的荷叶。君：你。",
+                  "translation": "荷花凋谢了，再也看不到像雨伞一样撑起的荷叶；菊花残败了，还有不怕寒霜的枝条。一年里最好的景色你一定要记住，就是橙子金黄、橘子青绿的时节。"
+                },
+                {
+                  "title": "夜书所见",
+                  "author": "宋 · 叶绍翁",
+                  "lines": ["萧萧梧叶送寒声，", "江上秋风动客情。", "知有儿童挑促织，", "夜深篱落一灯明。"],
+                  "notes": "萧萧：风吹树叶的声音。客情：游子的思乡之情。促织：蟋蟀。",
+                  "translation": "秋风吹动梧桐叶，送来阵阵寒意；江上的秋风，勾起了游子的思乡之情。夜深了，篱笆边还亮着一盏灯，那是有孩子在逗捉蟋蟀。"
+                },
+                {
+                  "title": "望天门山",
+                  "author": "唐 · 李白",
+                  "lines": ["天门中断楚江开，", "碧水东流至此回。", "两岸青山相对出，", "孤帆一片日边来。"],
+                  "notes": "中断：从中间断开。回：回旋。",
+                  "translation": "长江像巨斧一样把天门山从中间劈开，碧绿的江水滚滚东流，到这里激起回旋；两岸的青山相对耸立，一只小船从太阳升起的方向驶来。"
+                },
+                {
+                  "title": "饮湖上初晴后雨",
+                  "author": "宋 · 苏轼",
+                  "lines": ["水光潋滟晴方好，", "山色空蒙雨亦奇。", "欲把西湖比西子，", "淡妆浓抹总相宜。"],
+                  "notes": "潋滟：波光闪动的样子。空蒙：迷茫缥缈。西子：西施。",
+                  "translation": "晴天时，西湖波光闪动，景色正好；下雨时，远山笼罩在朦胧的雨雾中，也很奇妙。如果把西湖比作美人西施，那么淡妆也好、浓妆也好，总是十分合适。"
+                },
+                {
+                  "title": "望洞庭",
+                  "author": "唐 · 刘禹锡",
+                  "lines": ["湖光秋月两相和，", "潭面无风镜未磨。", "遥望洞庭山水翠，", "白银盘里一青螺。"],
+                  "notes": "和：和谐、交融。镜未磨：没有打磨过的镜子。",
+                  "translation": "洞庭湖的水光和秋天的月光交融在一起，湖面没有一丝风，平静得像一面还没磨亮的铜镜；远远望去，洞庭山一片青翠，就像白银盘里放着一只小小的青螺。"
+                },
+                {
+                  "title": "元日",
+                  "author": "宋 · 王安石",
+                  "lines": ["爆竹声中一岁除，", "春风送暖入屠苏。", "千门万户曈曈日，", "总把新桃换旧符。"],
+                  "notes": "元日：正月初一。屠苏：屠苏酒。曈曈：太阳初升、明亮的样子。桃符：春联的前身。",
+                  "translation": "在噼里啪啦的爆竹声中，旧的一年过去了；春风送来温暖，人们畅饮着屠苏酒。初升的太阳照亮千家万户，家家都摘下旧桃符，换上新桃符。"
+                },
+                {
+                  "title": "清明",
+                  "author": "唐 · 杜牧",
+                  "lines": ["清明时节雨纷纷，", "路上行人欲断魂。", "借问酒家何处有，", "牧童遥指杏花村。"],
+                  "notes": "纷纷：细雨不断的样子。断魂：形容心情低落。借问：请问。",
+                  "translation": "清明时节，细雨纷纷飘落，路上的行人个个心情低落；向人打听哪里有酒馆，牧童远远地指了指杏花深处的村庄。"
+                }
+              ]
+            }
+          }
+        ],
+        "education-math": [
+          {
+            "kind": "reference",
+            "item_id": "ref-34-math-digits",
+            "title": "数位顺序表",
+            "body": "四年级要认识更大的数，先把数位顺序表读熟。",
+            "result": "已复习数位顺序表",
+            "source_label": "通用数学数位内容（未对齐指定教材）",
+            "reference": {
+              "style": "chips",
+              "lang": "zh-CN",
+              "groups": [
+                {
+                  "label": "个级",
+                  "entries": [
+                    {"text": "个位", "note": "几个一"}, {"text": "十位", "note": "几个十"},
+                    {"text": "百位", "note": "几个百"}, {"text": "千位", "note": "几个千"}
+                  ]
+                },
+                {
+                  "label": "万级",
+                  "entries": [
+                    {"text": "万位", "note": "几个万"}, {"text": "十万位", "note": "几个十万"},
+                    {"text": "百万位", "note": "几个百万"}, {"text": "千万位", "note": "几个千万"}
+                  ]
+                },
+                {
+                  "label": "亿级",
+                  "entries": [
+                    {"text": "亿位", "note": "几个亿"}, {"text": "十亿位", "note": "几个十亿"},
+                    {"text": "百亿位", "note": "几个百亿"}, {"text": "千亿位", "note": "几个千亿"}
+                  ]
+                },
+                {
+                  "label": "相邻进率（满十进一）",
+                  "entries": [
+                    {"text": "10个一是十"}, {"text": "10个十是百"}, {"text": "10个百是千"}, {"text": "10个千是万"},
+                    {"text": "10个万是十万"}, {"text": "10个十万是百万"}, {"text": "10个百万是千万"}, {"text": "10个千万是一亿"}
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

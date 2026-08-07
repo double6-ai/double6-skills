@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "packs": [
+    {"domain_id":"personal-execution","keywords":["待办","日程","习惯","复盘","记账","个人计划"],"style_token":"general-focus","critical_questions":[],"risk_triggers":[],"source_rules":["用户自有数据默认只在本地处理"]},
+    {"domain_id":"education-learning","keywords":["学习","作业","练习","教材","人教版","孩子","儿童","女儿","儿子","小学","升学衔接","幼小衔接","二升三","三升四","四升五","五升六"],"style_token":"playful-growth","critical_questions":["仅在明确要求真实学习数据或指定教材/真题时确认授权与来源"],"risk_triggers":["child-data"],"source_rules":["未指定来源时必须提供自编通用练习并实际可作答；指定教材、真题或题目必须记录来源、版本/地区、版权边界和适用范围"]},
+    {"domain_id":"teaching-classroom","keywords":["教师","学生","名单","课表","成绩","课堂","备课"],"style_token":"professional-trust","critical_questions":["确认是否录入真实学生数据，以及教学材料的版本与来源"],"risk_triggers":["child-data","sensitive-data"],"source_rules":["可在明确授权、仅本机保存和可清除前提下录入真实学生名单；教学材料必须说明来源、版本/地区、版权边界和适用范围"]},
+    {"domain_id":"exam-preparation","keywords":["考试","备考","考公","国考","省考","事业编","大纲","真题","错题","刷题"],"style_token":"general-focus","critical_questions":["明确考试体系、题目/大纲来源与适用年份会改变计划和题目结构"],"risk_triggers":[],"source_rules":["指定真题、考试大纲、招考公告或规则必须记录官方来源、年份/地区、版权边界和核验时间"]},
+    {"domain_id":"sales-trade","keywords":["客户","销售","跟进","商机","成交","合同"],"style_token":"professional-trust","critical_questions":["客户资料只能使用合成或脱敏数据"],"risk_triggers":["customer-data","external-side-effect"],"source_rules":["工作台不得自动发送消息或承诺成交"]},
+    {"domain_id":"content-operations","keywords":["内容","选题","脚本","稿件","发布","账号运营"],"style_token":"editorial-story","critical_questions":[],"risk_triggers":["external-side-effect"],"source_rules":["公开发布必须由用户单独授权"]},
+    {"domain_id":"ecommerce-operations","keywords":["电商","商品","订单","库存","售后","店铺"],"style_token":"high-contrast-execution","critical_questions":[],"risk_triggers":["external-side-effect","account-data"],"source_rules":["价格、库存、下单和退款不得伪造实时状态"]},
+    {"domain_id":"finance-tax-contract","keywords":["财务","税务","报税","发票","合同","账务","预算"],"style_token":"professional-trust","critical_questions":["财务数据必须合成或脱敏"],"risk_triggers":["financial-data","sensitive-data"],"source_rules":["法规、税率和地区规则必须记录版本与日期"]},
+    {"domain_id":"hr-employment","keywords":["招聘","员工","人事","薪酬","绩效","劳动合同"],"style_token":"professional-trust","critical_questions":[],"risk_triggers":["sensitive-data"],"source_rules":["劳动规则必须记录地区与当前版本"]},
+    {"domain_id":"research-knowledge","keywords":["研究","资料","文献","知识库","证据","引用"],"style_token":"editorial-story","critical_questions":[],"risk_triggers":[],"source_rules":["外部结论必须保留来源和适用时间"]},
+    {"domain_id":"fitness-nutrition","keywords":["健身","训练","动作","组次","饮食","营养"],"style_token":"high-contrast-execution","critical_questions":["确认是否录入真实健康/训练数据，以及仅本机保存与可清除边界"],"risk_triggers":["health-data"],"source_rules":["可在明确授权、仅本机保存和可清除前提下记录真实训练数据；不提供诊断或替代专业医疗意见"]},
+    {"domain_id":"health-pregnancy","keywords":["健康","医疗","疾病","用药","孕期","怀孕","症状"],"style_token":"professional-trust","critical_questions":["确认是否录入真实健康数据，以及仅本机保存与可清除边界"],"risk_triggers":["health-data","sensitive-data"],"source_rules":["可在明确授权、仅本机保存和可清除前提下记录真实数据；只作信息整理，不作诊断、处方或紧急建议"]},
+    {"domain_id":"travel-planning","keywords":["旅行","旅游","行程","酒店","机票","景点","签证"],"style_token":"editorial-story","critical_questions":[],"risk_triggers":["external-side-effect"],"source_rules":["实时价格、天气、余量和下单必须由外部可信服务确认"]},
+    {"domain_id":"household-collaboration","keywords":["家庭","家里","夫妻","家务","共同","共享","分工","采购"],"style_token":"general-focus","critical_questions":["多人参与时必须明确成员与权限"],"risk_triggers":["multi-user"],"source_rules":["当前版本只交付单设备本地工作台，多人协作只能人工交接"]},
+    {"domain_id":"professional-services","keywords":["咨询","律师","会计","审计","专业服务","项目交付"],"style_token":"professional-trust","critical_questions":[],"risk_triggers":["customer-data","sensitive-data"],"source_rules":["专业结论必须保留人工复核和责任边界"]},
+    {"domain_id":"local-service-store","keywords":["门店","预约","到店","排班","本地服务","会员"],"style_token":"high-contrast-execution","critical_questions":[],"risk_triggers":["customer-data","external-side-effect"],"source_rules":["预约、通知和支付必须由外部系统确认"]}
+  ]
+}
