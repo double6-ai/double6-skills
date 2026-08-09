@@ -1,0 +1,10 @@
+reports/
+dist/
+agents/
+evals/
+security/
+tests/
+.clawhub/
+__pycache__/
+*.pyc
+.DS_Store

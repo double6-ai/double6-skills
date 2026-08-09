@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "reviewed_at": "2026-08-09",
+  "capabilities": {
+    "file_write": {
+      "decision": "approved",
+      "reviewer": "double6-ai",
+      "scope": "用户指定的 run 目录、候选目录和浏览器验收输出目录",
+      "reason": "创建本地工作台、保存事务状态并写入确定性验收证据是该 skill 的核心交付职责。",
+      "expires_at": "2027-08-09",
+      "evidence": [
+        "SKILL.md",
+        "references/runtime-contract.md"
+      ],
+      "target_enforcement": {
+        "openai": "写入前确认 run 与输出目录，只处理当前任务文件。",
+        "claude": "写入前确认 run 与输出目录，只处理当前任务文件。",
+        "generic": "写入前确认 run 与输出目录，只处理当前任务文件。",
+        "vscode": "写入前确认 run 与输出目录，只处理当前任务文件。"
+      }
+    },
+    "network": {
+      "decision": "approved",
+      "reviewer": "double6-ai",
+      "scope": "本机 Playwright 与 Chromium 对当前候选 file URI 的离线浏览器验收",
+      "reason": "采集器需要浏览器 API 完成交互验收，但不得访问外部主机或发送候选数据。",
+      "expires_at": "2027-08-09",
+      "evidence": [
+        "security/network_policy.json",
+        "references/host-integration-playbook.md"
+      ],
+      "target_enforcement": {
+        "openai": "仅允许本地 file URI，外部请求出现时验收失败。",
+        "claude": "仅允许本地 file URI，外部请求出现时验收失败。",
+        "generic": "仅允许本地 file URI，外部请求出现时验收失败。",
+        "vscode": "仅允许本地 file URI，外部请求出现时验收失败。"
+      }
+    }
+  }
+}

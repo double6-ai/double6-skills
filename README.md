@@ -30,6 +30,13 @@ cp -R skills/double6-pdf-translation <agent-skills-dir>/
 cp -R skills/double6-workbench-builder <agent-skills-dir>/
 ```
 
+也可以从公开目录安装工作台制作器：
+
+```bash
+npx skills add double6-ai/double6-skills --skill double6-workbench-builder
+clawhub install double6-workbench-builder
+```
+
 `<agent-skills-dir>` 的具体位置由所使用的 agent 决定。只要宿主能够读取 `SKILL.md`，并具备对应 skill 所需的网页读取或本地 shell 能力，就可以按名称调用。
 
 部分宿主只在会话启动时发现 skills。如果复制后按名称调用仍提示 unknown skill，请新建
@@ -90,7 +97,7 @@ bash run_translate.sh <input-file.pdf> --output-dir <output-dir> \
 - 构建器只依赖 Python 标准库；完整的浏览器验收需要自行安装 Playwright 与 Chromium，环境缺失时只会标记为 `evaluation_blocked`，不会假装通过。
 - 发布到云托管或本机部署由独立的宿主流程执行，本 skill 不自行上线任何页面。
 
-详细说明见 [`skills/double6-workbench-builder/SKILL.md`](skills/double6-workbench-builder/SKILL.md)。
+入口说明见 [`skills/double6-workbench-builder/SKILL.md`](skills/double6-workbench-builder/SKILL.md)，完整流程与验收边界见 [`runtime-contract.md`](skills/double6-workbench-builder/references/runtime-contract.md)。
 
 ## 安全与隐私
 
