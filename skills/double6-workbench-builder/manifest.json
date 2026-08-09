@@ -1,8 +1,29 @@
 {
   "skill_id": "double6-workbench-builder",
-  "name": "Double6 工作台制作器",
-  "version": "0.40.0",
-  "status": "experimental_public",
+  "name": "double6-workbench-builder",
+  "display_name": "Double6 工作台制作器",
+  "version": "0.41.0",
+  "owner": "double6-ai",
+  "updated_at": "2026-08-09",
+  "status": "active",
+  "maturity_tier": "production",
+  "lifecycle_stage": "production",
+  "context_budget_tier": "production",
+  "review_cadence": "per-release",
+  "skill_archetype": "workflow",
+  "target_platforms": [
+    "openai",
+    "claude",
+    "generic",
+    "agent-skills-compatible"
+  ],
+  "factory_components": [
+    "references",
+    "scripts",
+    "evals",
+    "security"
+  ],
+  "publication_status": "experimental_public",
   "workflow_mode": "public_runner_or_workflow",
   "skill_decision": "approved_public_shared",
   "product_scope": "offline_single_file_local_personal_workbench",

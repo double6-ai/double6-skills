@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "default_policy": {
+    "decision": "deny",
+    "reason": "工作台构建与验收默认离线；浏览器采集器只读取本次 run 生成的本地 file URI。"
+  },
+  "scripts": {
+    "scripts/double6_browser_collector.py": {
+      "allowed_hosts": [
+        "local-file-only"
+      ],
+      "reason": "只在本机 Chromium 中打开候选 file URI，并把验收事实写入用户指定的输出目录。"
+    }
+  }
+}

@@ -12,10 +12,18 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+SCRIPT_INTERFACE = "cli"
+
 sys.dont_write_bytecode = True
 
-# 必须在关闭 bytecode 后再导入浏览器依赖。
-from playwright.sync_api import sync_playwright  # noqa: E402
+
+def sync_playwright_runtime() -> Any:
+    """延迟导入可选浏览器依赖，使 --help 与静态预检不要求 Playwright。"""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise RuntimeError("缺少 Playwright；请先运行 evaluate --preflight 并按指引安装浏览器验收环境。") from exc
+    return sync_playwright()
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -42,7 +50,7 @@ def collect_smoke(run_dir: Path, chromium: Path, scenario: str) -> dict[str, Any
     """只验证每次发布必须保留的一个真实浏览器闭环。"""
     lock = read_json(run_dir / "candidate-lock.json")
     candidate = Path(lock["candidate_root"]) / lock["entrypoint"]
-    with sync_playwright() as playwright:
+    with sync_playwright_runtime() as playwright:
         browser = playwright.chromium.launch(headless=True, executable_path=str(chromium))
         context = browser.new_context(viewport={"width": 390, "height": 844}, accept_downloads=True)
         page = context.new_page()
@@ -230,7 +238,7 @@ def collect(run_dir: Path, output_dir: Path, chromium: Path) -> dict[str, Any]:
     page_errors: list[str] = []
     requests: list[str] = []
     screenshots: list[dict[str, Any]] = []
-    with sync_playwright() as playwright:
+    with sync_playwright_runtime() as playwright:
         browser = playwright.chromium.launch(headless=True, executable_path=str(chromium))
         context = browser.new_context(viewport={"width": 390, "height": 844}, accept_downloads=True)
         context.add_init_script("""

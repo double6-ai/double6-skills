@@ -1,0 +1,3 @@
+adapter: claude
+source: ../SKILL.md
+notes: "使用中立 Agent Skills 源文件；宿主提供本地 shell、文件读写和可选浏览器验收环境。"

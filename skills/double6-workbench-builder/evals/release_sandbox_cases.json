@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {
+      "id": "installed_metadata_readable",
+      "kind": "metadata_readable",
+      "mode": "required",
+      "required_paths": [
+        "SKILL.md",
+        "manifest.json",
+        "agents/interface.yaml"
+      ]
+    },
+    {
+      "id": "installed_scripts_py_compile",
+      "kind": "py_compile",
+      "mode": "required",
+      "timeout_seconds": 60
+    },
+    {
+      "id": "installed_route_catalog_replay",
+      "kind": "script_command",
+      "mode": "required",
+      "real_execution": true,
+      "script": "double6.py",
+      "args": [
+        "start",
+        "--run",
+        "release-smoke-run",
+        "--request",
+        "做一个个人任务面板"
+      ],
+      "timeout_seconds": 30,
+      "expected_returncode": 0,
+      "stdout_contains": [
+        "\"message\": \"请由宿主 Agent",
+        "\"domain_id\": \"personal-execution\""
+      ]
+    }
+  ]
+}

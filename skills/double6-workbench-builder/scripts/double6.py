@@ -8,6 +8,8 @@ import json
 import sys
 from pathlib import Path
 
+SCRIPT_INTERFACE = "cli"
+
 sys.dont_write_bytecode = True
 
 from double6_runtime import (  # noqa: E402

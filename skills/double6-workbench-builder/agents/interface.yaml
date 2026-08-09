@@ -1,0 +1,24 @@
+interface:
+  display_name: "Double6 工作台制作器"
+  short_description: "把重复的个人工作做成离线单文件工作台。"
+  default_prompt: "使用 $double6-workbench-builder 将这个重复流程构建成可离线打开、可保存恢复的本地个人工作台。"
+compatibility:
+  canonical_format: "agent-skills"
+  adapter_targets:
+    - "openai"
+    - "claude"
+    - "generic"
+  activation:
+    mode: "manual-or-implicit"
+    paths: []
+  execution:
+    context: "inline"
+    shell: "bash"
+  trust:
+    source_tier: "local"
+    remote_inline_execution: "forbid"
+    remote_metadata_policy: "allow-metadata-only"
+  degradation:
+    openai: "native-skill-with-openai-adapter"
+    claude: "neutral-source-plus-adapter"
+    generic: "neutral-source"
