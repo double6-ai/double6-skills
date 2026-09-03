@@ -1,14 +1,12 @@
 ---
 name: double6-pdf-translation
-version: 1.0.4
+version: 1.0.5
 description: Translate user-supplied text PDFs into Simplified Chinese and bilingual PDFs. Reads the PDF and only explicitly selected local LaTeX, sends extracted text to an explicitly approved OpenAI-compatible endpoint, runs local PDF/Python subprocesses, and writes outputs, diagnostics, and the default runtime cache under the chosen directory. Local proxy, arXiv download, Docker compilation, and external cache paths require explicit command-line opt-in.
 metadata:
   openclaw:
     homepage: https://github.com/double6-ai/double6-skills/tree/main/skills/double6-pdf-translation
     emoji: "📑"
     requires:
-      bins:
-        - pdf2zh
       anyBins:
         - python3
         - python
@@ -47,15 +45,14 @@ python scripts/run_pdf_translation.py <input-file.pdf> \
 
 ## 最小依赖
 
-必须安装 `pdf2zh_next` 并提供其 `pdf2zh` 命令；推荐安装 PyMuPDF 与 reportlab：
+必须安装 PyPI 包 `pdf2zh_next`。它会提供本 skill 使用的 `pdf2zh` 命令；**不要**安装同名旧包 `pdf2zh`。
 
 ```bash
 # 通过专用 venv 安装（也可使用 scripts/setup_venv.sh）
-pip install pdf2zh_next pymupdf reportlab
+pip install pdf2zh_next
 ```
 
-PyPI 的旧同名 `pdf2zh` 不兼容。后端解析顺序和可选工具职责见
-`references/runtime-dependencies.md`。
+PyMuPDF 会随 `pdf2zh_next` 带入，不必再单独安装。Poppler、reportlab、TeX Live、Docker、RapidOCR 只用于可选诊断或显式 LaTeX 路径，不是主翻译所需。后端解析顺序见 `references/runtime-dependencies.md`。
 
 ## 输出
 

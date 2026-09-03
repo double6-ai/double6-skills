@@ -1,5 +1,10 @@
 # double6-pdf-translation 变更记录
 
+## 1.0.5
+
+- 默认安装收缩为只装 `pdf2zh_next`；不再把 PyMuPDF、reportlab、Poppler、TeX 或 Docker 写成主路径必装。
+- 元数据不再声明 `pdf2zh` 二进制，避免宿主去安装 PyPI 上不兼容的旧同名包。
+
 ## 1.0.4
 
 - 本地兼容代理不再转发调用方的 `Authorization` 头，只使用本次显式配置的上游 key。

@@ -7,7 +7,7 @@ Double6 AI 维护的开源 agent skills。仓库目前包含三个可以独立�
 | Skill | 适合做什么 | 运行要求 | 公开状态 |
 |---|---|---|---|
 | [`double6-deep-research`](skills/double6-deep-research/) | 研究开放性问题、比较多个对象、形成有证据的决策建议，并交付可核验的完整报告 | 宿主 agent 已提供并允许使用搜索、网页或材料读取能力；Python 3.10+ 仅用于可选的交付校验 | 可公开使用 |
-| [`double6-pdf-translation`](skills/double6-pdf-translation/) | 将非扫描版英文 PDF 翻译为简体中文，尽量保留原始版式，并生成中文单语与中英双语 PDF | Python 3.11、`pdf2zh_next`、用户自行配置的 OpenAI-compatible 模型服务；PyMuPDF 和 reportlab 推荐安装 | 可公开使用，但需要先配置运行环境 |
+| [`double6-pdf-translation`](skills/double6-pdf-translation/) | 将非扫描版英文 PDF 翻译为简体中文，尽量保留原始版式，并生成中文单语与中英双语 PDF | Python 3.11、`pdf2zh_next`、用户自行配置的 OpenAI-compatible 模型服务 | 可公开使用，但需要先配置运行环境 |
 | [`double6-workbench-builder`](skills/double6-workbench-builder/) | 把反复要做的真实事情（学习台、备考台、任务面板、记录与复盘等）构建为离线优先、严格单文件的本地个人工作台，个人数据只留在当前设备 | Python 3（仅标准库）；浏览器验收可选 Playwright + Chromium | 可公开使用（实验性） |
 
 三个 skill 都不会随仓库分发模型、API key、搜索服务或第三方 PDF 后端。请根据任务选择安装，不必复制整个仓库。

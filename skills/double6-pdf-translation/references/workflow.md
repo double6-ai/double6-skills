@@ -76,7 +76,7 @@ Use `--latex-render-mode required` only when LaTeX direct rendering must succeed
 
 The runtime should work for local-execution agents that do not have a built-in vision model:
 
-- Full diagnostic mode: Python, PDF backend, PyMuPDF, Poppler, and reportlab are available, so the run can emit richer layout evidence and fallback artifacts.
+- Full diagnostic mode: Python, PDF backend, and the backend's PyMuPDF are available, so the run can emit richer layout evidence. Poppler or reportlab, if already on the host, only add extra audits or a readable fallback PDF.
 - Headless evidence mode: the agent cannot visually inspect screenshots, but can read generated JSON/Markdown reports. It should decide from `render_manifest.json`, delivery gates, visual/layout audit JSON, and quality reports.
 - Core translation mode: optional visual/layout dependencies are missing or `--skip-visual-eval` is used. The main PDF translation path still relies on the external PDF backend, but automatic problem detection is reduced.
 - Network-restricted mode: arXiv source download or remote model calls may fail. The run should record the failure and fall back to local source/PDF backend paths where possible.
@@ -85,7 +85,7 @@ Do not require GUI tools, Preview, screenshots, or agent-side multimodal inspect
 
 ## Dependencies
 
-> **WARNING — do NOT run `pip install pdf2zh`.** PyPI's `pdf2zh` (≈1.7.9) is an unrelated/older project with an incompatible CLI. The correct backend is the `pdf2zh_next` package: `pip install pdf2zh_next pymupdf reportlab`. Symptom of the wrong package: runtime error `pdf2zh: error: unrecognized arguments: --output ... --openai-model ...`. See `references/known-pitfalls.md` (P1) for root cause.
+> **WARNING — do NOT run `pip install pdf2zh`.** PyPI's `pdf2zh` (≈1.7.9) is an unrelated/older project with an incompatible CLI. The correct backend is the `pdf2zh_next` package: `pip install pdf2zh_next`. Symptom of the wrong package: runtime error `pdf2zh: error: unrecognized arguments: --output ... --openai-model ...`. See `references/known-pitfalls.md` (P1) for root cause.
 
 Required runtime capability:
 
@@ -99,13 +99,13 @@ If `pdf2zh --help` fails with `ModuleNotFoundError: No module named 'pdf2zh_next
 
 For environment-specific install failures (managed-Python policy, `rm -rf` hangs, leftover `~` dists, blocked `setx`), see `references/known-pitfalls.md`; the skill never disables host safety controls.
 
-Recommended optional tools:
+Optional tools (not required to install; skip unless you already have them or explicitly need LaTeX/extra audits):
 
-- PyMuPDF for PDF text extraction, layout audits, and rebuilding bilingual output after the Chinese PDF is repaired.
-- reportlab for readable fallback PDFs.
-- Poppler tools for independent bbox/text checks.
-- A CJK-capable font setup for rendered Chinese text.
-- A local LaTeX toolchain or Docker image when translating from LaTeX sources.
+- PyMuPDF usually arrives with `pdf2zh_next`; do not install it again. The skill uses it for layout audits, TOC repair, residue repair, and bilingual rebuild when importable.
+- reportlab for readable fallback PDFs only.
+- Poppler tools for independent bbox/text checks if already on PATH.
+- A CJK-capable font setup for rendered Chinese text (BabelDOC downloads fonts on first run).
+- A local LaTeX toolchain or Docker image only when the user explicitly selects LaTeX sources.
 
 ## Output Contract
 

@@ -34,23 +34,26 @@ approved endpoint, and use no arXiv, Docker or cloud option unless the user expl
 - OpenAI-compatible Chat Completions endpoint configured by `--base-url` or inferred from explicit `--provider`.
 - Translation model configured by explicit `--model`.
 - API key configured by explicit `--api-key` for this run.
-- `pdf2zh_next` when using the bundled module backend. The `scripts/setup_venv.sh` helper installs it together with the recommended diagnostics: `pip install pdf2zh_next pymupdf reportlab`.
+- `pdf2zh_next` when using the bundled module backend. The `scripts/setup_venv.sh` helper installs only this package: `pip install pdf2zh_next`. PyMuPDF arrives as a transitive dependency of the backend; do not add a second unpinned `pymupdf` install.
 
 The runtime starts `scripts/translation_compat_proxy.py` only when the user explicitly passes `--translation-compat-proxy on`. This local adapter forwards to the approved endpoint and records retry/quality evidence.
 
 ## Optional Diagnostic Tools
 
-- PyMuPDF for text extraction, layout inspection, visual reports, and avoiding Windows Poppler text-layer decoding failures.
-- reportlab for readable QA fallback PDFs.
-- Poppler tools for text bounding-box audits when available.
-- TeX Live or Docker for LaTeX direct-render compile checks.
+These are not part of the default install. Missing them reduces automatic audits or LaTeX/fallback rendering; they do not block the main layout-preserving translation path.
+
+- PyMuPDF usually arrives with `pdf2zh_next`. The skill uses it for layout inspection, TOC repair, residue repair, and bilingual rebuild when importable. Do not `pip install pymupdf` separately.
+- reportlab for readable QA fallback PDFs only.
+- Poppler tools for text bounding-box audits when already present on the host.
+- RapidOCR or Tesseract for optional visible-residue OCR on critical pages.
+- TeX Live or Docker only when the user explicitly selects a LaTeX source or `--latex-compile-runtime docker`.
 - Network access to `https://arxiv.org/e-print/<id>` when arXiv source auto-download is enabled and no local LaTeX source is found.
 
 ## Environment Caveats (WorkBuddy managed Python)
 
 Installing the backend in this environment hits several traps (full detail in `references/known-pitfalls.md`):
 
-- **P1 — wrong package.** `pip install pdf2zh` pulls an unrelated/older project (≈1.7.9) whose CLI only accepts `--service`/`--lang-out`. This skill needs the `pdf2zh_next` package: `pip install pdf2zh_next pymupdf reportlab`. A wrong install fails at runtime with `pdf2zh: error: unrecognized arguments: --output ... --openai-model ...`.
+- **P1 — wrong package.** `pip install pdf2zh` pulls an unrelated/older project (≈1.7.9) whose CLI only accepts `--service`/`--lang-out`. This skill needs the `pdf2zh_next` package: `pip install pdf2zh_next`. A wrong install fails at runtime with `pdf2zh: error: unrecognized arguments: --output ... --openai-model ...`.
 - **P3 — do not `rm -rf` a venv.** The bash safe-delete wrapper hangs on bulk-delete confirmation non-interactively. Recreate by using a *fresh* path instead of deleting the old one.
 - **P4 — leftover `~` dists.** Killing a `pip install` can leave invalid `~radio`/`~ymupdf` dirs. Do not let this skill remove them automatically; inspect and clean the dedicated venv manually if needed.
 - **P5 — 凭据持久化受限。** 不要把 key 写入仓库或共享启动器；从 secrets manager 取得后，仅传给本次命令的 `--api-key`。
