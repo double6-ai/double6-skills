@@ -95,8 +95,8 @@ if "$TMP_PYTHON" -m pip show pdf2zh >/dev/null 2>&1; then
   "$TMP_PYTHON" -m pip uninstall -y pdf2zh >/dev/null 2>&1 || true
 fi
 
-echo "==> Installing pdf2zh_next pymupdf reportlab (P1) ..."
-"$TMP_PYTHON" -m pip install pdf2zh_next pymupdf reportlab
+echo "==> Installing pdf2zh_next (P1) ..."
+"$TMP_PYTHON" -m pip install pdf2zh_next
 
 # --- P1 sanity: the installed pdf2zh CLI must carry --output ---
 if ! "$TMP_PDF2ZH" --help 2>&1 | grep -q -- "--output"; then

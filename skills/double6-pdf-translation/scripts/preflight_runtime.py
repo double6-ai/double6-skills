@@ -146,7 +146,7 @@ def check_pymupdf(*, required: bool) -> dict[str, Any]:
         severity="required" if required else "optional",
         message="PyMuPDF is importable via fitz/pymupdf." if ok else "PyMuPDF is not importable as fitz or pymupdf.",
         details={"python": sys.executable, "fitz": fitz_ok, "pymupdf": pymupdf_ok},
-        remediation="Install PyMuPDF in the release QA Python environment to enable visual/layout PDF audits.",
+        remediation="Optional for extra visual/layout audits; not required for the main translation path. PyMuPDF usually arrives with pdf2zh_next.",
     )
 
 
@@ -200,7 +200,7 @@ def check_poppler(*, required: bool = False) -> dict[str, Any]:
         severity="required" if required else "optional",
         message="Poppler pdftotext is available." if ok else "Poppler pdftotext is not available.",
         details={"command": command, "returncode": result["returncode"], "stderr_excerpt": result.get("stderr_excerpt", "")},
-        remediation="Install Poppler for release QA bbox/text side-channel audits.",
+        remediation="Optional side-channel audit only; do not install Poppler just to run translation.",
     )
 
 
@@ -388,7 +388,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     pdf2zh_check, backend = check_pdf2zh(args)
     checks.append(pdf2zh_check)
     checks.append(check_module("pdf2zh_next", required=str(args.pdf2zh_backend) == "module", remediation="Install pdf2zh_next when using --pdf2zh-backend module."))
-    checks.append(check_module("reportlab", required=release_qa, remediation="Install reportlab to render QA repaired readable PDFs."))
+    checks.append(check_module("reportlab", required=release_qa, remediation="Optional readable QA fallback PDF only; not required for the main translation path."))
     checks.append(check_pymupdf(required=release_qa))
     checks.append(check_poppler(required=release_qa))
     endpoint_config_check = check_endpoint_config(args)

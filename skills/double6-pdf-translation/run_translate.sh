@@ -83,20 +83,6 @@ if [ -n "${MSYSTEM:-}" ] && command -v cygpath >/dev/null 2>&1; then
 fi
 export PAPER_TRANSLATION_PDF2ZH_BINARY="$PDF2ZH_BIN"
 
-# --- Pre-run dependency hints ---
-# 这些包增强审计、修复和双语拼接能力；缺失时由正式 preflight 决定降级方式。
-PY_DEPS="pymupdf reportlab"
-MISSING=""
-for dep in $PY_DEPS; do
-  if ! "$PYTHON_BIN" -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('$dep') is not None else 1)" >/dev/null 2>&1; then
-    MISSING="$MISSING $dep"
-  fi
-done
-if [ -n "$MISSING" ]; then
-  echo "WARNING: Recommended Python package(s) missing in venv ($VENV):$MISSING" >&2
-  echo "         Run scripts/setup_venv.sh for fuller QA and bilingual rebuild support." >&2
-fi
-
 # --- Pre-run scanned-PDF warning (see SKILL.md 适用范围 / known-pitfalls P15) ---
 # This skill targets NON-scanned PDFs. Detect image-only / very-low-text
 # inputs BEFORE translation and remind the user early. Warning only — we do

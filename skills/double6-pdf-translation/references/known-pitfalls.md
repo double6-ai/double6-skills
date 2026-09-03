@@ -23,7 +23,7 @@
 - **Symptom**: The backend appears "installed" and preflight may even pass, but the real run dies with:
   `pdf2zh: error: unrecognized arguments: --output ... --openai-model ...`
 - **Root cause**: PyPI has an unrelated/older project literally named `pdf2zh` (≈1.7.9). Its CLI only accepts `--service` / `--lang-out` / `--thread` and does **not** understand the `--output` / `--openai-*` flags this skill passes. This skill actually needs the **`pdf2zh_next`** package (≈2.9.0), which provides both the `pdf2zh_next.main` module (used by `scripts/pdf2zh_backend.py`) **and** a `pdf2zh` CLI that carries the matching `--output` / `--openai-model` flags.
-- **Fix**: `pip install pdf2zh_next`（可同时安装 `pymupdf reportlab` 以启用完整 QA 和双语重建）。不要安装 `pdf2zh`。
+- **Fix**: `pip install pdf2zh_next`。不要安装 `pdf2zh`。不要为了启用 QA 再单独 `pip install pymupdf reportlab`。
 - **Bites at**: install time, only surfaces at the first real translation run.
 
 ## P2 — managed-Python safety policy can block `pip install`
