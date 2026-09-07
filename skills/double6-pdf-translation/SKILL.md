@@ -1,6 +1,6 @@
 ---
 name: double6-pdf-translation
-version: 1.0.5
+version: 1.0.6
 description: Translate user-supplied text PDFs into Simplified Chinese and bilingual PDFs. Reads the PDF and only explicitly selected local LaTeX, sends extracted text to an explicitly approved OpenAI-compatible endpoint, runs local PDF/Python subprocesses, and writes outputs, diagnostics, and the default runtime cache under the chosen directory. Local proxy, arXiv download, Docker compilation, and external cache paths require explicit command-line opt-in.
 metadata:
   openclaw:
@@ -59,7 +59,7 @@ PyMuPDF 会随 `pdf2zh_next` 带入，不必再单独安装。Poppler、reportla
 普通交付只保留两份 PDF：
 
 - `<原文件名>.zh.pdf`：最终中文单语 PDF。
-- `<原文件名>.bilingual.pdf`：默认中文译文在左、英文原文在右的双语 PDF；可用 `--bilingual-layout en-left-zh-right` 切换旧布局。
+- `<原文件名>.bilingual.pdf`：默认英文原文在左、中文译文在右的双语 PDF；可用 `--bilingual-layout zh-left-en-right` 切换为中文在左。
 
 同时保留 `render_manifest.json`；内部 gate 明细仅在调试或失败时报告。
 

@@ -1,5 +1,9 @@
 # double6-pdf-translation 变更记录
 
+## 1.0.6
+
+- 双语 PDF 默认改为英文原文在左、中文译文在右；可用 `--bilingual-layout zh-left-en-right` 切换旧布局。
+
 ## 1.0.5
 
 - 默认安装收缩为只装 `pdf2zh_next`；不再把 PyMuPDF、reportlab、Poppler、TeX 或 Docker 写成主路径必装。

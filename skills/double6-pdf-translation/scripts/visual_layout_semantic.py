@@ -722,7 +722,7 @@ def build_dual_visual_report(
     standard_dual_pdf: Path | None,
     backend_dual_pdf: Path | None,
     output_dir: Path,
-    layout: str = "zh-left-en-right",
+    layout: str = "en-left-zh-right",
 ) -> dict[str, Any]:
     if not source_pdf or not mono_translated_pdf or not standard_dual_pdf or not source_pdf.exists() or not mono_translated_pdf.exists() or not standard_dual_pdf.exists():
         return {"version": 1, "status": "unavailable", "reason": "missing_source_mono_or_standard_dual_pdf", "findings": []}
@@ -815,7 +815,12 @@ def build_dual_visual_report(
         if normalized_layout in {"zh-left-en-right", "en-left-zh-right"}:
             inspect_dual(standard_dual_pdf, "standard_delivery", True, normalized_layout)
         if backend_dual_pdf and backend_dual_pdf.exists() and backend_dual_pdf != standard_dual_pdf:
-            inspect_dual(backend_dual_pdf, "backend_intermediate", False, "zh-left-en-right")
+            # BabelDOC native dual is English-left unless --dual-translate-first
+            # was requested for zh-left-en-right.
+            backend_inspected_layout = (
+                "zh-left-en-right" if normalized_layout == "zh-left-en-right" else "en-left-zh-right"
+            )
+            inspect_dual(backend_dual_pdf, "backend_intermediate", False, backend_inspected_layout)
         semantic = build_semantic_layout_report(mono_translated_pdf, target_pdf_role="mono_translated_pdf")
         if semantic.get("findings"):
             findings.extend(semantic["findings"])

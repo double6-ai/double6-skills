@@ -606,12 +606,12 @@ def build_pdf2zh_command(args: argparse.Namespace, output_dir: Path, context_fil
     if args.dual:
         command.append("--dual")
         # P18: BabelDOC defaults to original-English left / translated-Chinese
-        # right, the reverse of our zh-left-en-right default. The backend-native
-        # fast path delivers that dual PDF verbatim, so steer supported backends
-        # here. Other layouts keep the backend's native orientation.
+        # right, matching our en-left-zh-right default. The backend-native fast
+        # path delivers that dual PDF verbatim. zh-left-en-right is the reverse,
+        # so steer supported backends with --dual-translate-first.
         bilingual_layout = str(
-            getattr(args, "bilingual_layout", "zh-left-en-right")
-            or "zh-left-en-right"
+            getattr(args, "bilingual_layout", "en-left-zh-right")
+            or "en-left-zh-right"
         )
         if bilingual_layout == "zh-left-en-right":
             _append_supported_option(
