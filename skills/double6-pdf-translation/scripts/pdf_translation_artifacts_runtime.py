@@ -195,13 +195,13 @@ def build_standard_bilingual_output(
         selected_outputs["standard_bilingual_pdf"] = None
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return {**manifest, "manifest_path": str(manifest_path)}
-    if layout == "zh-left-en-right" and backend_available and not mono_changed:
+    if layout in {"zh-left-en-right", "en-left-zh-right"} and backend_available and not mono_changed:
         selected_outputs["dual_pdf"] = str(backend_dual)
         selected_outputs["standard_bilingual_pdf"] = None
         manifest = {
             "version": 1,
             "status": "ok",
-            "layout": "zh_left_en_right",
+            "layout": normalized_layout,
             "source": "backend_native",
             "content_sync": "final_mono",
             "layout_verification": "backend_contract",
@@ -246,7 +246,7 @@ def build_standard_bilingual_output(
         mode=render_mode,
         raster_dpi=raster_dpi,
     )
-    if manifest.get("status") != "ok" and layout == "zh-left-en-right" and backend_available:
+    if manifest.get("status") != "ok" and layout in {"zh-left-en-right", "en-left-zh-right"} and backend_available:
         manifest = {
             **manifest,
             "status": "partial",

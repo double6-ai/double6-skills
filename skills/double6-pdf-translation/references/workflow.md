@@ -41,7 +41,7 @@ Options:
 - `--no-arxiv-source-autodownload`: compatibility switch that always disables the fallback.
 - `--visual-check-pages`: visual/layout audit page selection.
 - `--visible-residue-repair-mode`: visible English residue repair mode, `auto`, `candidate-only`, or `off`. `auto` only promotes a repaired candidate after post-repair OCR/text gates pass.
-- `--bilingual-layout`: `zh-left-en-right`（默认）、`en-left-zh-right`、`backend-default` 或 `off`。
+- `--bilingual-layout`: `en-left-zh-right`（默认）、`zh-left-en-right`、`backend-default` 或 `off`。
 - `--bilingual-render-mode`: PyMuPDF `vector`（默认）或 `raster`；`pypdf-vector` 仅作为映射到 `vector` 的兼容别名。
 - `--skip-visual-eval`: skip expensive visual checks only when the user explicitly accepts draft-level observability.
 
@@ -110,7 +110,7 @@ Optional tools (not required to install; skip unless you already have them or ex
 ## Output Contract
 
 - `<input-stem>.zh.pdf`: final high-fidelity Chinese monolingual PDF.
-- `<input-stem>.bilingual.pdf`: final bilingual PDF with Chinese translation on the left and original English on the right by default.
+- `<input-stem>.bilingual.pdf`: final bilingual PDF with original English on the left and Chinese translation on the right by default.
 - `render_manifest.json`: selected outputs, backend command, quality gates, visual reports, and error evidence.
 - `backend_run_manifest.json`: backend status and translation metadata.
 - `layout_map.json`, `block_bridge.json`: layout and block correspondence evidence when backend tracking is available.

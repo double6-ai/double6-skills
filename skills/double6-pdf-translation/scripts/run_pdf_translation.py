@@ -1341,8 +1341,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--bilingual-layout",
         choices=["zh-left-en-right", "en-left-zh-right", "backend-default", "off"],
-        default=os.environ.get("PAPER_TRANSLATION_BILINGUAL_LAYOUT", "zh-left-en-right"),
-        help="最终双语 PDF 布局；默认中文在左、英文原文在右。",
+        default=os.environ.get("PAPER_TRANSLATION_BILINGUAL_LAYOUT", "en-left-zh-right"),
+        help="最终双语 PDF 布局；默认英文原文在左、中文译文在右。",
     )
     parser.add_argument(
         "--bilingual-render-mode",

@@ -50,7 +50,7 @@ def build_bilingual_pdf(
     translated_pdf: Path,
     output_pdf: Path,
     *,
-    layout: str = "zh-left-en-right",
+    layout: str = "en-left-zh-right",
     mode: str = "vector",
     raster_dpi: int = 144,
 ) -> dict[str, Any]:
@@ -132,7 +132,7 @@ def build_manifest(
     translated_pdf: Path,
     output_pdf: Path,
     *,
-    layout: str = "zh-left-en-right",
+    layout: str = "en-left-zh-right",
     mode: str = "vector",
     raster_dpi: int = 144,
 ) -> dict[str, Any]:
@@ -168,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--translated-pdf", required=True)
     parser.add_argument("--output-pdf", required=True)
     parser.add_argument("--manifest")
-    parser.add_argument("--layout", choices=["zh-left-en-right", "en-left-zh-right"], default="zh-left-en-right")
+    parser.add_argument("--layout", choices=["zh-left-en-right", "en-left-zh-right"], default="en-left-zh-right")
     parser.add_argument("--mode", choices=["vector", "raster", "pypdf-vector"], default="vector")
     parser.add_argument("--raster-dpi", type=int, default=144)
     args = parser.parse_args(argv)
