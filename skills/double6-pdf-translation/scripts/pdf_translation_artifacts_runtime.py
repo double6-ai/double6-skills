@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import bilingual_layout_verify
 import build_babeldoc_il_layout_map
 import build_bilingual_pdf
 import build_pdf_rerender_plan
@@ -188,27 +189,44 @@ def build_standard_bilingual_output(
             "layout": "backend_default",
             "source": "backend_native" if backend_available else None,
             "content_sync": "final_mono" if backend_available and not mono_changed else ("backend_snapshot" if backend_available else "unknown"),
-            "layout_verification": "backend_contract" if backend_available else "unavailable",
+            "layout_verification": "unavailable",
             "output_pdf": str(backend_dual) if backend_available else None,
         }
+        if backend_available:
+            bilingual_layout_verify.apply_geometry_verification(
+                manifest,
+                backend_dual,
+                "backend-default",
+                require_match=False,
+            )
+            if manifest.get("geometry", {}).get("status") not in {"ok", "mismatch"}:
+                manifest["status"] = "partial" if manifest.get("status") == "ok" else manifest.get("status")
+                manifest["reason"] = manifest.get("reason") or "bilingual_layout_geometry_unavailable"
         selected_outputs["dual_pdf"] = str(backend_dual) if backend_available else None
         selected_outputs["standard_bilingual_pdf"] = None
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return {**manifest, "manifest_path": str(manifest_path)}
     if layout in {"zh-left-en-right", "en-left-zh-right"} and backend_available and not mono_changed:
-        selected_outputs["dual_pdf"] = str(backend_dual)
-        selected_outputs["standard_bilingual_pdf"] = None
-        manifest = {
+        backend_manifest = {
             "version": 1,
             "status": "ok",
             "layout": normalized_layout,
             "source": "backend_native",
             "content_sync": "final_mono",
-            "layout_verification": "backend_contract",
+            "layout_verification": "geometry",
             "output_pdf": str(backend_dual),
         }
-        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        return {**manifest, "manifest_path": str(manifest_path)}
+        bilingual_layout_verify.apply_geometry_verification(
+            backend_manifest,
+            backend_dual,
+            layout,
+            require_match=True,
+        )
+        if backend_manifest.get("status") == "ok" and backend_manifest.get("observed_layout") == layout:
+            selected_outputs["dual_pdf"] = str(backend_dual)
+            selected_outputs["standard_bilingual_pdf"] = None
+            manifest_path.write_text(json.dumps(backend_manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            return {**backend_manifest, "manifest_path": str(manifest_path)}
     translated_pdf_value = selected_outputs.get("mono_pdf") or selected_outputs.get("translated_pdf")
     if not translated_pdf_value:
         manifest = {
@@ -246,16 +264,32 @@ def build_standard_bilingual_output(
         mode=render_mode,
         raster_dpi=raster_dpi,
     )
-    if manifest.get("status") != "ok" and layout in {"zh-left-en-right", "en-left-zh-right"} and backend_available:
-        manifest = {
+    if manifest.get("status") == "ok" and manifest.get("output_pdf"):
+        bilingual_layout_verify.apply_geometry_verification(
+            manifest,
+            Path(str(manifest["output_pdf"])),
+            layout,
+            require_match=True,
+        )
+    elif layout in {"zh-left-en-right", "en-left-zh-right"} and backend_available:
+        snapshot = {
             **manifest,
             "status": "partial",
             "reason": "pymupdf_rebuild_unavailable_backend_snapshot_used",
             "source": "backend_native",
             "content_sync": "backend_snapshot",
-            "layout_verification": "backend_contract",
             "output_pdf": str(backend_dual),
         }
+        bilingual_layout_verify.apply_geometry_verification(
+            snapshot,
+            backend_dual,
+            layout,
+            require_match=True,
+        )
+        if snapshot.get("status") == "ok":
+            snapshot["status"] = "partial"
+            snapshot["reason"] = "pymupdf_rebuild_unavailable_backend_snapshot_used"
+        manifest = snapshot
     if source_pdf != input_pdf:
         manifest["requested_source_pdf"] = str(input_pdf)
         manifest["resolved_source_pdf"] = str(source_pdf)

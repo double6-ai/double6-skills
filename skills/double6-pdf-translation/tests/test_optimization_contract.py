@@ -17,7 +17,9 @@ SCRIPT_DIR = SKILL_DIR / "scripts"
 sys.path.insert(0, str(SCRIPT_DIR))
 
 import _subprocess_safe  # noqa: E402
+import bilingual_layout_verify  # noqa: E402
 import build_bilingual_pdf  # noqa: E402
+import delivery_gate_runtime  # noqa: E402
 import latex_direct_runtime  # noqa: E402
 import pdf_translation_artifacts_runtime  # noqa: E402
 import pdf_translation_runtime  # noqa: E402
@@ -39,8 +41,11 @@ class OptimizationContractTests(unittest.TestCase):
     def _write_pdf(self, path: Path, label: str) -> None:
         fitz = self._require_fitz()
         doc = fitz.open()
-        page = doc.new_page(width=200, height=120)
-        page.insert_text((30, 60), label, fontsize=14)
+        page = doc.new_page(width=320, height=160)
+        if any("\u4e00" <= char <= "\u9fff" for char in label):
+            page.insert_text((24, 88), label, fontsize=16, fontname="china-s")
+        else:
+            page.insert_text((24, 88), label, fontsize=16)
         doc.save(path)
         doc.close()
 
@@ -173,56 +178,65 @@ class OptimizationContractTests(unittest.TestCase):
             root = Path(tmpdir)
             source = root / "paper.pdf"
             mono = root / "mono.pdf"
-            backend_dual = root / "backend-dual.pdf"
-            self._write_pdf(source, "EN")
-            self._write_pdf(mono, "ZH")
-            self._write_pdf(backend_dual, "BACKEND-DUAL")
-
-            unchanged = {"mono_pdf": str(mono), "dual_pdf": str(backend_dual)}
-            reused_default = pdf_translation_artifacts_runtime.build_standard_bilingual_output(
+            dummy_dual = root / "backend-dual.pdf"
+            matching_dual = root / "matching-en-left.dual.pdf"
+            self._write_pdf(source, "ENGLISH SOURCE DOCUMENT")
+            self._write_pdf(mono, "这是中文译文内容示例")
+            self._write_pdf(dummy_dual, "BACKEND-DUAL")
+            matching = build_bilingual_pdf.build_manifest(
                 source,
-                root,
-                unchanged,
+                mono,
+                matching_dual,
                 layout="en-left-zh-right",
-                backend_dual_pdf=str(backend_dual),
-                mono_changed=False,
             )
-            self.assertEqual(("ok", "backend_native", "final_mono", "en_left_zh_right"), (
-                reused_default["status"],
-                reused_default["source"],
-                reused_default["content_sync"],
-                reused_default["layout"],
-            ))
+            self.assertEqual("ok", matching["status"])
 
-            reused_zh_left = pdf_translation_artifacts_runtime.build_standard_bilingual_output(
+            reused_matching = pdf_translation_artifacts_runtime.build_standard_bilingual_output(
                 source,
                 root,
-                {"mono_pdf": str(mono), "dual_pdf": str(backend_dual)},
-                layout="zh-left-en-right",
-                backend_dual_pdf=str(backend_dual),
+                {"mono_pdf": str(mono), "dual_pdf": str(matching_dual)},
+                layout="en-left-zh-right",
+                backend_dual_pdf=str(matching_dual),
                 mono_changed=False,
             )
-            self.assertEqual(("ok", "backend_native", "final_mono", "zh_left_en_right"), (
-                reused_zh_left["status"],
-                reused_zh_left["source"],
-                reused_zh_left["content_sync"],
-                reused_zh_left["layout"],
+            self.assertEqual(("ok", "backend_native", "final_mono", "geometry", "en-left-zh-right"), (
+                reused_matching["status"],
+                reused_matching["source"],
+                reused_matching["content_sync"],
+                reused_matching["layout_verification"],
+                reused_matching["observed_layout"],
             ))
 
-            rebuilt_outputs = {"mono_pdf": str(mono), "dual_pdf": str(backend_dual)}
+            mismatched = pdf_translation_artifacts_runtime.build_standard_bilingual_output(
+                source,
+                root,
+                {"mono_pdf": str(mono), "dual_pdf": str(dummy_dual)},
+                layout="en-left-zh-right",
+                backend_dual_pdf=str(dummy_dual),
+                mono_changed=False,
+            )
+            self.assertEqual(("ok", "pymupdf_rebuilt", "geometry"), (
+                mismatched["status"],
+                mismatched["source"],
+                mismatched["layout_verification"],
+            ))
+            self.assertEqual("en-left-zh-right", mismatched["observed_layout"])
+            self.assertNotEqual("backend_contract", mismatched.get("layout_verification"))
+
+            rebuilt_outputs = {"mono_pdf": str(mono), "dual_pdf": str(dummy_dual)}
             rebuilt = pdf_translation_artifacts_runtime.build_standard_bilingual_output(
                 source,
                 root,
                 rebuilt_outputs,
                 layout="en-left-zh-right",
-                backend_dual_pdf=str(backend_dual),
+                backend_dual_pdf=str(dummy_dual),
                 mono_changed=True,
             )
-            self.assertEqual(("ok", "pymupdf_rebuilt", "final_mono"), (
-                rebuilt["status"], rebuilt["source"], rebuilt["content_sync"]
+            self.assertEqual(("ok", "pymupdf_rebuilt", "final_mono", "geometry"), (
+                rebuilt["status"], rebuilt["source"], rebuilt["content_sync"], rebuilt["layout_verification"]
             ))
 
-            fallback_outputs = {"mono_pdf": str(mono), "dual_pdf": str(backend_dual)}
+            fallback_outputs = {"mono_pdf": str(mono), "dual_pdf": str(dummy_dual)}
             with mock.patch.object(
                 pdf_translation_artifacts_runtime.build_bilingual_pdf,
                 "build_manifest",
@@ -240,30 +254,36 @@ class OptimizationContractTests(unittest.TestCase):
                     root,
                     fallback_outputs,
                     layout="en-left-zh-right",
-                    backend_dual_pdf=str(backend_dual),
+                    backend_dual_pdf=str(dummy_dual),
                     mono_changed=True,
                 )
-            self.assertEqual(("partial", "backend_native", "backend_snapshot"), (
-                fallback["status"], fallback["source"], fallback["content_sync"]
+            self.assertEqual(("partial", "backend_native", "backend_snapshot", "geometry"), (
+                fallback["status"],
+                fallback["source"],
+                fallback["content_sync"],
+                fallback["layout_verification"],
             ))
+            self.assertNotEqual("ok", fallback["status"])
+            self.assertNotEqual("backend_contract", fallback.get("layout_verification"))
 
             backend_default = pdf_translation_artifacts_runtime.build_standard_bilingual_output(
                 source,
                 root,
                 {"mono_pdf": str(mono)},
                 layout="backend-default",
-                backend_dual_pdf=str(backend_dual),
+                backend_dual_pdf=str(dummy_dual),
                 mono_changed=False,
             )
             self.assertEqual("backend_default", backend_default["layout"])
+            self.assertNotEqual("backend_contract", backend_default.get("layout_verification"))
 
-            off_outputs = {"mono_pdf": str(mono), "dual_pdf": str(backend_dual)}
+            off_outputs = {"mono_pdf": str(mono), "dual_pdf": str(dummy_dual)}
             off = pdf_translation_artifacts_runtime.build_standard_bilingual_output(
                 source,
                 root,
                 off_outputs,
                 layout="off",
-                backend_dual_pdf=str(backend_dual),
+                backend_dual_pdf=str(dummy_dual),
                 mono_changed=False,
             )
             self.assertEqual("skipped", off["status"])
@@ -276,6 +296,57 @@ class OptimizationContractTests(unittest.TestCase):
             )
             self.assertEqual("ok", delivery["status"])
             self.assertIsNone(delivery["outputs"]["bilingual_pdf"])
+
+    def test_bilingual_geometry_fixtures_and_backend_contract_is_not_success(self) -> None:
+        self.assertEqual(
+            "en-left-zh-right",
+            bilingual_layout_verify.classify_side_scripts(0, 12, 8, 0),
+        )
+        self.assertEqual(
+            "zh-left-en-right",
+            bilingual_layout_verify.classify_side_scripts(8, 0, 0, 12),
+        )
+        self.assertEqual("unknown", bilingual_layout_verify.classify_side_scripts(1, 1, 1, 1))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "source.pdf"
+            translated = root / "translated.pdf"
+            en_left = root / "en-left.pdf"
+            zh_left = root / "zh-left.pdf"
+            self._write_pdf(source, "ENGLISH SOURCE DOCUMENT")
+            self._write_pdf(translated, "这是中文译文内容示例")
+            build_bilingual_pdf.build_bilingual_pdf(source, translated, en_left, layout="en-left-zh-right")
+            build_bilingual_pdf.build_bilingual_pdf(source, translated, zh_left, layout="zh-left-en-right")
+            en_ok = bilingual_layout_verify.verify_bilingual_pdf(en_left, "en-left-zh-right")
+            zh_ok = bilingual_layout_verify.verify_bilingual_pdf(zh_left, "zh-left-en-right")
+            swapped = bilingual_layout_verify.verify_bilingual_pdf(zh_left, "en-left-zh-right")
+            self.assertEqual("ok", en_ok["status"])
+            self.assertEqual("en-left-zh-right", en_ok["observed_layout"])
+            self.assertEqual("ok", zh_ok["status"])
+            self.assertEqual("zh-left-en-right", zh_ok["observed_layout"])
+            self.assertEqual("mismatch", swapped["status"])
+            self.assertFalse(swapped["match"])
+
+        gates = delivery_gate_runtime.build_delivery_gates(
+            visual_report={"status": "ok", "findings": []},
+            backend_quality={"status": "ok"},
+            rerender_candidates={"status": "ok", "candidates": []},
+            translated_text="正文",
+            strict=False,
+            pipeline_status="ok",
+            has_translated_pdf=True,
+            bilingual_manifest={
+                "status": "ok",
+                "layout": "en_left_zh_right",
+                "layout_verification": "backend_contract",
+                "observed_layout": "zh-left-en-right",
+                "output_pdf": "paper.bilingual.pdf",
+            },
+        )
+        gate_by_name = {item["name"]: item for item in gates["gates"]}
+        self.assertEqual("blocking", gate_by_name["bilingual_layout"]["status"])
+        self.assertEqual("partial", gates["status"])
 
     def test_parser_defaults_to_english_left(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=True):

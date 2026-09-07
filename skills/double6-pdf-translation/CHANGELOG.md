@@ -1,5 +1,10 @@
 # double6-pdf-translation 变更记录
 
+## 1.0.7
+
+- 双语 PDF 左右方向改为打开文件后的几何核验；`backend_contract` 不再作为成功依据。方向不匹配时用最终中文单语件重建。
+- 记录已核验组合 `pdf2zh_next==2.9.0` / `babeldoc==0.6.2`；不再把未测的 BabelDOC 注释当成 `--dual` 方向保证。
+
 ## 1.0.6
 
 - 双语 PDF 默认改为英文原文在左、中文译文在右；可用 `--bilingual-layout zh-left-en-right` 切换旧布局。

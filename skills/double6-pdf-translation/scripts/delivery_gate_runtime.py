@@ -97,6 +97,7 @@ def build_delivery_gates(
     visible_residue_audit: dict[str, Any] | None = None,
     actual_render_source: str | None = None,
     latex_direct_quality_gate: dict[str, Any] | None = None,
+    bilingual_manifest: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     gates: list[dict[str, Any]] = []
     is_latex_direct = actual_render_source == "latex_direct"
@@ -397,6 +398,58 @@ def build_delivery_gates(
         add("dual_visual", "warn", json.dumps(delivery_dual_warn[:3], ensure_ascii=False), "标准双语 PDF 有轻度视觉风险，需抽样复查。")
     else:
         add("dual_visual", "ok", "standard dual delivery has no blocking dual-side finding", "无需额外动作。")
+
+    bilingual = bilingual_manifest if isinstance(bilingual_manifest, dict) else {}
+    bilingual_status = str(bilingual.get("status") or "")
+    bilingual_layout = str(bilingual.get("layout") or "").replace("_", "-")
+    observed_layout = str(bilingual.get("observed_layout") or "").replace("_", "-")
+    layout_verification = str(bilingual.get("layout_verification") or "")
+    if not bilingual or bilingual_status in {"skipped", ""}:
+        add("bilingual_layout", "ok", "bilingual layout gate skipped", "未启用双语输出时不检查左右方向。")
+    elif bilingual_layout in {"zh-left-en-right", "en-left-zh-right"}:
+        geometry_ok = (
+            bilingual_status == "ok"
+            and layout_verification == "geometry"
+            and observed_layout == bilingual_layout
+            and bool(bilingual.get("output_pdf"))
+        )
+        add(
+            "bilingual_layout",
+            "ok" if geometry_ok else "blocking",
+            json.dumps(
+                {
+                    "status": bilingual_status,
+                    "layout": bilingual_layout,
+                    "observed_layout": observed_layout,
+                    "layout_verification": layout_verification,
+                    "output_pdf": bilingual.get("output_pdf"),
+                },
+                ensure_ascii=False,
+            ),
+            "双语 PDF 必须经几何核验确认左右方向；backend_contract 不能当作成功。",
+        )
+    elif layout_verification == "backend_contract":
+        add(
+            "bilingual_layout",
+            "blocking",
+            json.dumps({"layout_verification": layout_verification, "layout": bilingual_layout}, ensure_ascii=False),
+            "backend_contract 不能作为双语方向成功依据。",
+        )
+    else:
+        add(
+            "bilingual_layout",
+            "ok" if bilingual_status in {"ok", "partial"} and layout_verification == "geometry" else "warn",
+            json.dumps(
+                {
+                    "status": bilingual_status,
+                    "layout": bilingual_layout,
+                    "observed_layout": observed_layout,
+                    "layout_verification": layout_verification,
+                },
+                ensure_ascii=False,
+            ),
+            "后端默认双语方向已记录几何观察结果。",
+        )
 
     latex_gate = latex_direct_quality_gate if isinstance(latex_direct_quality_gate, dict) else {}
     if is_latex_direct:
@@ -759,18 +812,33 @@ def build_fast_full_translation_draft_gates(
         f"has_translated_pdf={has_translated_pdf}",
         "fast draft 仍要求生成单语中文 PDF。",
     )
+    bilingual_layout = str(bilingual_manifest.get("layout") or "").replace("_", "-")
+    observed_layout = str(bilingual_manifest.get("observed_layout") or "").replace("_", "-")
+    layout_verification = str(bilingual_manifest.get("layout_verification") or "")
+    bilingual_ok = bool(bilingual_manifest.get("status") == "ok" and bilingual_manifest.get("output_pdf"))
+    if bilingual_layout in {"zh-left-en-right", "en-left-zh-right"}:
+        bilingual_ok = (
+            bilingual_ok
+            and layout_verification == "geometry"
+            and observed_layout == bilingual_layout
+        )
+    elif layout_verification == "backend_contract":
+        bilingual_ok = False
     add(
         "standard_bilingual_pdf",
-        "ok" if bilingual_manifest.get("status") == "ok" and bilingual_manifest.get("output_pdf") else "blocking",
+        "ok" if bilingual_ok else "blocking",
         json.dumps(
             {
                 "status": bilingual_manifest.get("status"),
                 "output_pdf": bilingual_manifest.get("output_pdf"),
                 "page_count": bilingual_manifest.get("page_count"),
+                "layout": bilingual_layout,
+                "observed_layout": observed_layout,
+                "layout_verification": layout_verification,
             },
             ensure_ascii=False,
         ),
-        "fast draft 仍要求生成英文左/中文右双语 PDF。",
+        "fast draft 仍要求生成经几何核验的双语 PDF，默认英文左/中文右。",
     )
     backend_status = str(backend_quality.get("status") or "unknown")
     add(

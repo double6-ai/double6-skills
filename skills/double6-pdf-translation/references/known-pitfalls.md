@@ -121,7 +121,7 @@
 
 - **Symptom**: 双语 PDF 的左右顺序不符合当前标准，或中文单语件经过目录/元数据/残留修复后，双语件仍包含修复前页面。
 - **Root cause**: 后端原生双语件生成早于本 skill 的确定性后处理；直接复用时无法自动带入最终中文单语件的修复。
-- **Fix**: 默认标准改为“英文左、中文右”，与 BabelDOC 原生 `--dual` 方向一致。未发生中文后处理时直接复用后端双语件；发生后处理时用 PyMuPDF 和最终中文单语件重建。PyMuPDF 缺失时保留后端件，但 manifest 标记 `partial`、`content_sync=backend_snapshot`。旧的 `pypdf-vector` 参数只作为映射到 PyMuPDF `vector` 的兼容别名。显式 `--bilingual-layout zh-left-en-right` 仍可通过 `--dual-translate-first` 切换为中文在左。
+- **Fix**: 默认标准改为“英文左、中文右”，但必须以打开双语 PDF 后的左右栏几何统计为准，不能相信 BabelDOC 注释或 `backend_contract`。未发生中文后处理且几何核验通过时，可以复用后端双语件；否则用 PyMuPDF 和最终中文单语件重建。PyMuPDF 缺失时保留后端件，但 manifest 标记 `partial`，`layout_verification=geometry`。显式 `--bilingual-layout zh-left-en-right` 仍可请求中文在左，同样要过几何门。
 - **Bites at**: 所有启用双语输出且中文单语件被后处理的运行。
 - **Quick verify**: 检查 `bilingual_pdf_manifest.json` 的 `layout`、`source`、`content_sync` 和 `layout_verification`。
 
@@ -161,11 +161,11 @@
 
 ## P18 — 双语 PDF 左右版式反向：`backend_native` 捷径踩中 BabelDOC 默认方向
 
-- **现象**：旧默认是“中文在左、英文在右”（`--bilingual-layout zh-left-en-right`），但部分走 `backend_native` 捷径的文件会产出“英文在左、中文在右”的双语 PDF。当前默认已改为 `en-left-zh-right`，与 BabelDOC 原生方向一致。
-- **根因**：BabelDOC 的 `--dual` 默认把原文放左侧、译文放右侧。旧路径在单语 PDF 未发生后处理时会直接采用后端 dual PDF，却把 manifest 标记为 `zh_left_en_right`，造成标签与实际内容不一致。
-- **修复**：默认布局 `en-left-zh-right` 直接复用后端 dual。仅当用户显式选择 `zh-left-en-right` 且后端帮助文本确认支持时，才为 `--dual` 补充 `--dual-translate-first`。`backend-default` 保持后端默认方向。
-- **验证**：命令构建回归测试覆盖三种布局及后端不支持该参数时的降级；`backend_native` 捷径对两种显式布局都可复用未改动的后端 dual。
-- **影响位置**：`build_pdf2zh_command` 与采用后端原生 dual PDF 的 `backend_native` 分支。
+- **现象**：旧默认是“中文在左、英文在右”（`--bilingual-layout zh-left-en-right`），但部分走 `backend_native` 捷径的文件会产出“英文在左、中文在右”的双语 PDF。1.0.6 又把未实测的 BabelDOC 注释当成英左中右，导致请求 `en-left-zh-right` 时实际仍是中左英右，manifest 却写 `ok`。
+- **根因**：BabelDOC 源码注释写 `--dual` 默认原文在左；`pdf2zh_next` 2.9.0 / `babeldoc` 0.6.2 的 2026-09-07 探针实测是中文在左。旧路径用 `layout_verification=backend_contract` 代替打开文件后的栏位统计。
+- **修复**：1.0.7 删除 `backend_contract` 成功路径。交付前按页统计左/右半页 CJK 与拉丁字母；方向不对就用最终中文单语件重建。`--dual-translate-first` 只作后端提示。已核验组合见 `references/bilingual-layout-profile.md`。
+- **验证**：几何夹具覆盖左中右英、左英右中和对调负例；`backend_contract` + `status=ok` 被交付门判为 blocking。
+- **影响位置**：`bilingual_layout_verify.py`、`build_standard_bilingual_output`、`build_delivery_gates`。
 
 ---
 
@@ -200,5 +200,5 @@
 | P15 | scanned / image-only PDF silently degrades | `SKILL.md` WARNING + `run_translate.sh` pre-run scanned check (warn before backend) |
 | P16 | `python -m venv` silent no-op on managed Python | `setup_venv.sh` reuses existing venv / uses `venv.EnvBuilder` (not the CLI) |
 | P17 | Git-Bash `/c/...` path → WinError 2 in Windows subprocess | `run_translate.sh` normalizes backend binary path via `cygpath -w` to native `C:\...` |
-| P18 | 双语 PDF 左右版式反向（backend_native 踩 BabelDOC 默认方向） | 默认改为 en-left-zh-right；仅 zh-left-en-right 补 `--dual-translate-first` |
+| P18 | 双语 PDF 左右版式反向（backend_native 踩 BabelDOC 默认方向） | 1.0.7 几何核验；禁止 backend_contract 成功 |
 | P19 | Git-Bash `/d/...` 输入/输出路径 → 盘符重复 `D:\d\...` | `run_translate.sh` 重写所有路径参数为 `cygpath -w` 原生路径 |
