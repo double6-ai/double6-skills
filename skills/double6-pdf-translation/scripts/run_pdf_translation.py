@@ -694,6 +694,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         pdf_rerender_plan=policy_utils.load_json(output_dir / "pdf_rerender_plan.json"),
         pdf_direct_text_repair=pdf_direct_text_repair,
         visible_residue_audit={"version": 1, "status": "ok", "findings": []},
+        bilingual_manifest=bilingual_manifest,
     )
     if skip_visual_eval:
         delivery_gates = build_fast_full_translation_draft_gates(
@@ -1062,6 +1063,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         visible_residue_audit=visible_residue_audit_payload,
         actual_render_source="latex_direct" if latex_direct_primary else None,
         latex_direct_quality_gate=latex_quality_gate,
+        bilingual_manifest=bilingual_manifest,
     )
     if skip_visual_eval:
         delivery_gates = build_fast_full_translation_draft_gates(
