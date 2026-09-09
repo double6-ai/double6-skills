@@ -1,6 +1,6 @@
 # 验证档位与完整测试报告
 
-本文档沉淀 `double6-ppt-cli` 0.2.2 的两项关键内容：
+本文档沉淀 `double6-ppt-cli` 0.2.2 的测试反馈，以及 0.2.3 对这些反馈的实现：
 
 1. **验证档位（native / portable）**：PowerPoint 从硬性必需改为可分档可选；
 2. **隔离环境完整测试报告**：原生 generate 全闭环实测结论，以及公开可用性优化清单。
@@ -61,7 +61,8 @@ portable 成功交付时：
 
 ### 1.4 视觉与 portable 渲染
 
-- portable 在解析视觉门**之前**先产出 `evidence/portable_render/`（含 `slide-*.png`、`pdf/*.pdf`）与 `review/contact_sheet.png`。
+- portable 在解析视觉门**之前**先产出 `evidence/portable_render/`（含 `slide-*.png`、`pdf/*.pdf`）与 `review/contact_sheet-portable.png`。
+- native 使用 `review/contact_sheet-native.png`。两档都必须写完整 `evidence/render_manifest.json`；清单把当前 PPTX、档位、渲染器、PDF、页面和 contact sheet 的 SHA 绑定在一起。
 - `visual-review` 可绑定 PowerPoint 页或 portable（LibreOffice）页；`fact_source` 分别为 `powerpoint` / `libreoffice_portable`。
 - 没有模型视觉能力时，仍可按原合同写 `visual_review_waiver.json`（`--user-ack`）；结果只能是 `skipped_with_user_ack`。
 
@@ -168,6 +169,15 @@ portable 成功交付时：
 - OfficeCLI 固定 `1.0.144`，仍为外部依赖；本 skill 不随包分发二进制。
 - PowerPoint「可选」不等于「推荐跳过」：有条件时应优先 native，portable 是诚实降级。
 
+## 4.1 0.2.3 落地结果
+
+- `doctor --mode ... --verify-tier ...` 按档位判定能力，并逐文件校验 vendor BOM；PowerPoint 缺失只阻断 native。
+- `init --mode generate --design ...` 生成 spec/design 草稿、SVG 目录和语义清单示例。
+- SVG 可用 `data-pptx-shape-id`，semantic manifest 用 `match.drawingml_id`；匹配失败会返回来源文件和页内候选。
+- `footnote` / `page_mark` 使用独立字号阈值；业务规则、样例标记和模板角色从 content contract 读取。
+- 显式 portable 优先于旧 native 回执；portable 探针和渲染声明按实际结果生成；verification 与 delivery 都输出 `tier_result`。
+- PowerPoint/LibreOffice 渲染统一使用 SHA 绑定的 render manifest，视觉回执不能混用另一档或旧图。
+
 ---
 
 ## 5. 版本与变更
@@ -176,6 +186,7 @@ portable 成功交付时：
 |---|---|
 | 0.2.1 | 公开精简包首发；PowerPoint 仍为默认必需 |
 | 0.2.2 | `verify --verify-tier auto\|native\|portable`；portable OfficeCLI/LO 路径；visual 可绑 portable 页；finalize 接受 `skipped_portable_tier`；文档补齐 `spec_lock` 要求；修正 portable 渲染顺序与 PDF 路径 |
+| 0.2.3 | 分档 doctor、generate/design 骨架、稳定 DrawingML ID、角色字号阈值、声明式案例规则、完整 vendor 校验、render manifest 与动态 portable 声明 |
 
 更细的代码级变更见仓库根与 skill 的 `CHANGELOG.md`。
 
@@ -183,9 +194,9 @@ portable 成功交付时：
 
 ## 6. 维护者检查清单（下次发版前）
 
-- [ ] `pytest scripts/tests`（含 `test_verify_tier.py`）全绿  
-- [ ] 无 PowerPoint / 辅助访问环境下 `verify --verify-tier auto` 能降级并可 `finalize`  
-- [ ] 有 PowerPoint 且权限正常时，auto 走 native 且 `powerpoint_status=verified`  
-- [ ] generate 空项目 `init` 后能 compile（若已做骨架）或错误信息可直接照做  
-- [ ] `visual-review` 同时覆盖 PowerPoint 与 LibreOffice 事实源  
-- [ ] README / SKILL.md / ClawHub 安装边界一致  
+- [x] `python -m unittest discover -s scripts/tests` 全绿（56 项，含 `test_verify_tier.py`）
+- [x] 无 PowerPoint / 辅助访问环境下的 portable 路径可 `finalize`，并保留 warning
+- [x] auto/native 选择、强制 portable 优先级和 native fail-closed 有回归测试
+- [x] generate 初始化会创建骨架，未确认草稿的错误信息可直接照做
+- [x] `visual-review` 通过同一 render manifest 覆盖 PowerPoint 与 LibreOffice 事实源
+- [x] README / SKILL.md / ClawHub 安装边界一致

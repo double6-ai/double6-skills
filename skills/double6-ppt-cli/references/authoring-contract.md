@@ -6,7 +6,7 @@
 
 文本或结构化材料先通过 `init` 固化进 run。Agent 在 `authoring/project/` 中完成内容规划和 SVG authoring；编译器不会替 Agent 猜测事实、观点层级或视觉审美。
 
-generate 项目还必须提供 `authoring/project/spec_lock.md`，且包含 `## pptx_structure` 段与 `mode: flat`（自由版式）或 `mode: structured`（模板结构）。缺少该锁定会在 SVG 质量门 fail closed。
+generate 项目还必须提供 `authoring/project/spec_lock.md`，且包含 `## pptx_structure` 段与 `mode: flat`（自由版式）或 `mode: structured`（模板结构）。`init --mode generate --design <profile>` 会创建待确认草稿；未填字段或仍为 draft 时，`compile` 会返回可执行的下一步。
 
 ## PPT Master adapter
 
@@ -18,7 +18,7 @@ generate 项目还必须提供 `authoring/project/spec_lock.md`，且包含 `## 
 
 ## 稳定身份
 
-每个需追踪对象都必须有稳定 `source_id`、slide、role、editable、postflight_sensitive、preferred_structure 和 source_selector。文本内容不能作为唯一身份；文本匹配至少要加显式 ordinal 或额外 source selector。重复、缺失或歧义一律中止编译。
+每个需追踪对象都必须有稳定 `source_id`、slide、role、editable、postflight_sensitive、preferred_structure 和 source_selector。优先在 SVG 元素写 `data-pptx-shape-id="<2..4294967295>"`，并在 semantic manifest 使用同值 `match.drawingml_id`；这是 vendored PPT Master 支持的稳定身份。文本内容不能作为唯一身份；文本匹配至少要加显式 ordinal。重复、缺失或歧义一律中止编译，错误回执会列出来源文件和当前页候选对象。
 
 真实 placeholder 使用 `p:ph` 写入 title/body 语义；对象 `cNvPr.name` 写为 `d6:<source_id>`。object map 同时绑定 source、semantic manifest、compiler output 和最终 PPTX SHA。
 
@@ -38,7 +38,9 @@ generate 项目还必须提供 `authoring/project/spec_lock.md`，且包含 `## 
     "preferred_structure": "placeholder",
     "placeholder": "title",
     "source_selector": {"file": "svg_output/01.svg", "id": "title"},
-    "match": {"text": "标题", "ordinal": 1}
+    "match": {"drawingml_id": 1001}
   }]
 }
 ```
+
+对应 SVG 元素示例：`<text id="title" data-pptx-shape-id="1001" ...>标题</text>`。角色可使用 `footnote` 与 `page_mark`；inspect 默认允许二者低至 9pt，项目也可在 content contract 的 `inspection_rules.font_min_pt_by_role` 覆盖阈值。

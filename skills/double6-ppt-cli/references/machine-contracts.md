@@ -8,6 +8,35 @@ run 支持 `generate`、`postflight`、`template-fill`，冻结输入、模板�
 
 状态：`initialized → authored → compiled → inspected|repair_needed → verified|verified_with_warnings → local_delivered|delivered_with_warnings`；不能继续时为 `blocked`。
 
+`init --mode generate` 会生成 `authoring/project/spec_lock.md`、`design_spec.md`、`svg_output/` 与 `semantic_manifest.example.json`。可用设计配置为 `neutral|academic|business|training`。`verification_preference` 保存 `auto|native|portable`，后续未显式指定其它档位时由 verify 采用。
+
+业务专属检查只从 content contract 读取，通用代码不维护案例词表：
+
+```json
+{
+  "inspection_rules": {
+    "font_min_pt_by_role": {"body": 12, "footnote": 9, "page_mark": 9},
+    "text_rules": [{
+      "rule_id": "remove-known-sample",
+      "pattern": "SAMPLE_TOKEN",
+      "severity": "error",
+      "category": "template_residue",
+      "operation": "remove_leaf",
+      "deterministic": true
+    }],
+    "nonlogical_sample_patterns": ["SAMPLE_TOKEN"]
+  },
+  "template_profile_rules": [{
+    "rule_id": "sample-picture",
+    "name_pattern": "sample-equation",
+    "object_type": "picture",
+    "role": "sample_formula_media"
+  }]
+}
+```
+
+`template_profile_rules` 的角色只能是 `attribution|navigation|sample_content|sample_formula_media|content_slot|design_system|unknown`；规则必须提供 text/name pattern、对象类型或页号选择器。正则无效时 fail closed。
+
 ## template plan
 
 计划沿用 `template_fill_pptx_plan.v1` 数据面，同时使用 `schema_version: "2.0"`。每个选中模板页对象必须有且只有一个 disposition：`keep_design`、`replace_content`、`update_navigation`、`remove_sample`、`preserve_attribution`、`manual_review`。manual、缺失动作、未更新导航和未确认图片都会使 check-plan 失败。Apply 还要求根级 `status: "confirmed"`。
@@ -54,4 +83,4 @@ run 支持 `generate`、`postflight`、`template-fill`，冻结输入、模板�
 
 ## receipts
 
-`patch_ledger.json` 保存操作、OfficeCLI receipt、package diff、未点名页文本 hash 和 master/layout/theme/notes 语义 hash。`package_cleanup_receipt.json` 保存清理前后 SHA、失效 slide relationship、被移除的非逻辑 slide parts/content-type override、保留的入边和 live-slide/protected-part/relationship-closure 守恒。`verification_receipt.json` 绑定 PowerPoint roundtrip/render、对象/备注/图表/表格守恒、视觉复核或豁免和可选 LibreOffice 兼容检查。`delivery_manifest.json` 只能绑定当前最终 SHA。
+`patch_ledger.json` 保存操作、OfficeCLI receipt、package diff、未点名页文本 hash 和 master/layout/theme/notes 语义 hash。`package_cleanup_receipt.json` 保存清理前后 SHA、失效 slide relationship、被移除的非逻辑 slide parts/content-type override、保留的入边和 live-slide/protected-part/relationship-closure 守恒。`render_manifest.json` 绑定 PPTX SHA、验证档位、渲染器和 `{pdf,pages[],contact_sheet}` 每项 SHA；缺一项就不登记。`visual_review.json` 绑定 render manifest SHA。`verification_receipt.json` 绑定 PowerPoint roundtrip 或 portable 结果、对象/备注/图表/表格守恒、视觉复核或豁免和可选 LibreOffice 兼容检查，并输出一行 `tier_result`。`delivery_manifest.json` 只能绑定当前最终 SHA，portable 探针未自动执行或渲染不可用时必须动态陈述实际状态。

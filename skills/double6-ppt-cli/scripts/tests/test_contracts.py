@@ -27,6 +27,12 @@ class ContractTests(unittest.TestCase):
     def test_semantic_contract_accepts_stable_identity(self):
         validate_semantic_manifest(self.semantic())
 
+    def test_semantic_contract_accepts_vendor_shape_id(self):
+        data = self.semantic()
+        data["objects"][0]["match"] = {"drawingml_id": 1001}
+        data["objects"][0]["role"] = "footnote"
+        validate_semantic_manifest(data)
+
     def test_text_alone_is_rejected(self):
         data = self.semantic()
         data["objects"][0]["match"] = {"text": "Title"}
@@ -92,6 +98,20 @@ class ContractTests(unittest.TestCase):
             with self.assertRaises(D6PPTError) as ctx:
                 init_run("generate", source, run)
             self.assertEqual(ctx.exception.code, "run_exists")
+
+    def test_generate_init_creates_design_and_semantic_scaffolds(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "input.md"; source.write_text("hello", encoding="utf-8")
+            run = root / "run"
+            manifest = init_run("generate", source, run, verify_tier="portable", design_profile="academic")
+            self.assertEqual(manifest["verification_preference"], "portable")
+            self.assertEqual(manifest["design_profile"], "academic")
+            self.assertTrue((run / "authoring/project/spec_lock.md").is_file())
+            self.assertTrue((run / "authoring/project/design_spec.md").is_file())
+            self.assertTrue((run / "authoring/project/svg_output").is_dir())
+            semantic = json.loads((run / "authoring/semantic_manifest.example.json").read_text(encoding="utf-8"))
+            self.assertEqual(semantic["objects"][0]["match"], {"drawingml_id": 1001})
 
 
 if __name__ == "__main__":

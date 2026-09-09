@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from PIL import Image, ImageDraw
 
 from .common import D6PPTError, SCHEMA_VERSION, sha256_file, utc_now, write_json
+from .render_evidence import record_render_manifest
 if TYPE_CHECKING:
     from .officecli import OfficeCLI
 
@@ -288,7 +289,18 @@ def verify_with_powerpoint(pptx: Path, run: Path, client: OfficeCLI) -> dict[str
         shutil.copy2(staged_pdf, pdf)
     finally:
         shutil.rmtree(staging_dir, ignore_errors=True)
-    render = _rasterize_powerpoint_pdf(pdf, render_dir, run / "review" / "contact_sheet.png")
+    contact_sheet = run / "review" / "contact_sheet-native.png"
+    render = _rasterize_powerpoint_pdf(pdf, render_dir, contact_sheet)
+    record_render_manifest(
+        run,
+        pptx,
+        verification_tier="native",
+        renderer="Microsoft PowerPoint",
+        fact_source="powerpoint",
+        pdf=pdf,
+        pages=[Path(path) for path in render["pages"]],
+        contact_sheet=contact_sheet,
+    )
     receipt = {
         "schema_version": SCHEMA_VERSION,
         "created_at": utc_now(),
@@ -304,6 +316,8 @@ def verify_with_powerpoint(pptx: Path, run: Path, client: OfficeCLI) -> dict[str
         "operation_result": result,
         "probe_script_sha256": sha256_file(probe_script),
         "render": render,
+        "render_manifest": "evidence/render_manifest.json",
+        "render_manifest_sha256": sha256_file(run / "evidence" / "render_manifest.json"),
     }
     write_json(roundtrip_dir / "receipt.json", receipt)
     return receipt

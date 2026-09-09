@@ -12,6 +12,7 @@ from lxml import etree
 from .common import (
     D6PPTError,
     SCHEMA_VERSION,
+    invalidate_pptx_derived_artifacts,
     load_run,
     resolve_run_path,
     set_status,
@@ -280,12 +281,16 @@ def clean_orphan_slides(run: Path) -> dict[str, Any]:
         "package_diff": compare_parts(current, output),
     }
     write_json(receipt_path, receipt)
+    stale = invalidate_pptx_derived_artifacts(manifest)
+    if stale:
+        manifest.setdefault("stale_artifacts", []).append({
+            "at": utc_now(), "reason": "pptx_sha_changed_after_package_clean", "artifacts": stale,
+        })
     manifest["artifacts"].update({
         "current_pptx": str(output.relative_to(run)),
         "pptx_sha256": after_sha,
         "package_cleanup_receipt": str(receipt_path.relative_to(run)),
     })
-    manifest["powerpoint_status"] = "unverified"
     manifest["unreplayed_patches"] = []
     set_status(run, manifest, "compiled", "package_clean", {
         "removed_relationship_count": len(removed_relationships),

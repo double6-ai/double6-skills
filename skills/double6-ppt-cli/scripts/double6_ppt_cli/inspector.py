@@ -9,7 +9,7 @@ from typing import Any
 
 from lxml import etree
 
-from .common import D6PPTError, SCHEMA_VERSION, load_run, resolve_run_path, set_status, sha256_file, utc_now, write_json
+from .common import D6PPTError, SCHEMA_VERSION, load_run, read_json, resolve_run_path, set_status, sha256_file, utc_now, write_json
 from .officecli import OfficeCLI
 from .template_workflow import build_pptx_profile
 
@@ -122,11 +122,28 @@ def _font_size(row: dict[str, Any]) -> float | None:
     return None
 
 
-def _generic_findings(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+DEFAULT_FONT_MIN_PT = {
+    "title": 20.0,
+    "subtitle": 16.0,
+    "body": 12.0,
+    "caption": 10.0,
+    "label": 10.0,
+    "data": 10.0,
+    "footnote": 9.0,
+    "page_mark": 9.0,
+}
+
+
+def _generic_findings(
+    rows: list[dict[str, Any]],
+    *,
+    role_by_path: dict[str, str] | None = None,
+    font_min_pt_by_role: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     rows_by_slide: dict[int, list[dict[str, Any]]] = {}
-    navigation_values = {"导航一": "背景", "导航二": "个体", "导航三": "团队", "导航四": "机制", "导航五": "行动"}
-    navigation_labels = set(navigation_values.values()) | {"觉醒", "涌现"}
+    role_by_path = role_by_path or {}
+    thresholds = {**DEFAULT_FONT_MIN_PT, **(font_min_pt_by_role or {})}
     for row in rows:
         path = str(row.get("path") or "")
         text = str(row.get("text") or "")
@@ -135,44 +152,18 @@ def _generic_findings(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         slide_match = re.match(r"/slide\[(\d+)\]", path)
         if slide_match:
             rows_by_slide.setdefault(int(slide_match.group(1)), []).append(row)
-        if re.search(r"Designed\s+by\s+sjq", text, re.I):
-            finding = _finding("template-attribution", row, "Visible template author trace remains; resolve template license before removal or preserve attribution in delivery notes")
-            finding["license_review_required"] = True
-            findings.append(finding)
-        if re.search(r"导航[一二三四五]", text):
-            findings.append(_finding(
-                "template-navigation", row, "Template navigation label was not mapped to deck sections",
-                severity="error", property_name="text", replacement=navigation_values.get(text.strip()), deterministic=True,
-            ))
-        if re.search(r"【.*】|（示例）|\(示例\)|图表占位区|内容页标题", text):
-            findings.append(_finding("template-placeholder", row, "Template placeholder or sample label remains", severity="error", operation="remove_leaf", deterministic=True))
-        if re.search(r"U_IR|P_f|g_thres|Kriging|AK-IR|N_MCS|N_IS|逆可靠度|97\.7%|Φ\(2\)", text, re.I):
-            findings.append(_finding("template-formula", row, "Template formula or source-domain sample content remains", severity="error", operation="remove_leaf", deterministic=True))
-        elif re.search(r"组织竞争力公式|^\s*(分子|分母|乘除关系)：", text, re.I):
-            finding = _finding(
-                "formula-like-business-content", row,
-                "Formula-like business content is present; without an exact template identity match it is semantic content and must not be auto-deleted",
-                severity="warning", category="content",
-            )
-            finding["requires_user_confirmation"] = True
-            findings.append(finding)
-        if "87×" in text:
-            findings.append(_finding("numeric-87x", row, "88% minus 1% is 87 percentage points, not 87 times", severity="error", category="data", property_name="text", replacement=text.replace("87×", "87 个百分点"), deterministic=True))
-        if re.search(r"\b87\s*pp\b", text, re.I):
-            findings.append(_finding(
-                "numeric-87pp", row, "Use the locked Chinese percentage-point expression",
-                severity="error", category="data", property_name="text",
-                replacement=re.sub(r"\b87\s*pp\b", "87 个百分点", text, flags=re.I), deterministic=True,
-            ))
-        if "87 个百分点" in text and (size := _font_size(row)) is not None and size > 32:
-            findings.append(_finding(
-                "numeric-display-capacity", row,
-                f"Locked percentage-point display is {size:g}pt in a compact metric slot and wraps in PowerPoint",
-                severity="error", category="layout", property_name="size", replacement="32pt", deterministic=True,
-            ))
         size = _font_size(row)
-        if size is not None and 0 < size < 12 and text.strip():
-            findings.append(_finding("small-font", row, f"Visible text is only {size:g}pt", category="layout"))
+        role = role_by_path.get(path, "body")
+        minimum = float(thresholds.get(role, thresholds.get("body", 12.0)))
+        if size is not None and 0 < size < minimum and text.strip():
+            finding = _finding(
+                "small-font", row,
+                f"Visible {role} text is {size:g}pt; declared minimum is {minimum:g}pt",
+                category="layout",
+            )
+            finding["evidence"]["semantic_role"] = role
+            finding["evidence"]["minimum_pt"] = minimum
+            findings.append(finding)
         name = str((row.get("format") or {}).get("name") or "")
         if row.get("type") == "picture" and re.search(r"公式|equation|formula", name, re.I):
             finding = _finding(
@@ -198,37 +189,51 @@ def _generic_findings(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "evidence": {"numbered_leaf_count": len(digit_labels), "group_count": group_count},
                 "suggested_route": "manual_review", "deterministic": False,
             })
-    selected_by_slide: dict[int, str] = {}
-    for slide, slide_rows in sorted(rows_by_slide.items()):
-        nav_rows = [row for row in slide_rows if str(row.get("text") or "").strip() in navigation_labels]
-        if len(nav_rows) < 4:
-            continue
-        selected = []
-        for row in nav_rows:
-            color = str((row.get("format") or {}).get("color") or "").strip().lower()
-            if color in {"background1", "background 1", "#ffffff", "ffffff", "white"}:
-                selected.append(str(row.get("text") or "").strip())
-        if len(selected) == 1:
-            selected_by_slide[slide] = selected[0]
-    if len(selected_by_slide) >= 4:
-        counts: dict[str, list[int]] = {}
-        for slide, label in selected_by_slide.items():
-            counts.setdefault(label, []).append(slide)
-        dominant_label, dominant_slides = max(counts.items(), key=lambda item: len(item[1]))
-        if len(dominant_slides) >= 4 and len(dominant_slides) / len(selected_by_slide) >= 0.75:
-            findings.append({
-                "finding_id": f"d6-navigation-selection-static-{hashlib.sha256((dominant_label + str(dominant_slides)).encode()).hexdigest()[:10]}",
-                "source_tool": "double6-ppt-cli", "severity": "warning", "category": "navigation",
-                "object": {"slides": dominant_slides}, "source_id": None,
-                "message": f"Navigation selected state remains on {dominant_label} across {len(dominant_slides)} slides; confirm the intended section mapping before changing styles",
-                "evidence": {"selected_label": dominant_label, "slides": dominant_slides, "navigated_slide_count": len(selected_by_slide)},
-                "suggested_route": "manual_review", "deterministic": False,
-                "requires_user_confirmation": True,
-            })
     return findings
 
 
-def _package_hygiene_findings(pptx: Path) -> list[dict[str, Any]]:
+def _declared_text_findings(rows: list[dict[str, Any]], rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    for rule_index, rule in enumerate(rules, 1):
+        if not isinstance(rule, dict):
+            continue
+        pattern = rule.get("pattern")
+        literal = rule.get("text")
+        if not pattern and literal is None:
+            continue
+        try:
+            matcher = re.compile(str(pattern), re.I) if pattern else None
+        except re.error as exc:
+            raise D6PPTError(
+                f"Invalid inspection text rule {rule.get('rule_id') or rule_index}: {exc}",
+                "invalid_content_contract",
+            ) from exc
+        for row in rows:
+            text = str(row.get("text") or "")
+            matched = matcher.search(text) if matcher else str(literal) in text
+            if not matched:
+                continue
+            rule_id = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(rule.get("rule_id") or rule_index)).strip("-")
+            replacement = rule.get("replacement")
+            if replacement is not None and matcher:
+                replacement = matcher.sub(str(replacement), text)
+            elif replacement is not None and literal is not None:
+                replacement = text.replace(str(literal), str(replacement))
+            findings.append(_finding(
+                f"contract-{rule_id}",
+                row,
+                str(rule.get("message") or f"Content contract rule matched: {rule_id}"),
+                severity=str(rule.get("severity") or "error"),
+                category=str(rule.get("category") or "content"),
+                operation=rule.get("operation"),
+                property_name=rule.get("property"),
+                replacement=str(replacement) if replacement is not None else None,
+                deterministic=rule.get("deterministic") is True,
+            ))
+    return findings
+
+
+def _package_hygiene_findings(pptx: Path, sample_patterns: list[str] | None = None) -> list[dict[str, Any]]:
     with zipfile.ZipFile(pptx) as archive:
         names = set(archive.namelist())
         required = {"ppt/presentation.xml", "ppt/_rels/presentation.xml.rels"}
@@ -252,14 +257,16 @@ def _package_hygiene_findings(pptx: Path) -> list[dict[str, Any]]:
         if not nonlogical:
             return []
         sample_parts: list[dict[str, Any]] = []
+        compiled_patterns = []
+        for pattern in sample_patterns or []:
+            try:
+                compiled_patterns.append(re.compile(str(pattern), re.I))
+            except re.error as exc:
+                raise D6PPTError(f"Invalid nonlogical sample pattern: {exc}", "invalid_content_contract") from exc
         for part in nonlogical:
             root = etree.fromstring(archive.read(part))
             text = " ".join(root.xpath(".//a:t/text()", namespaces=PKG_NS))
-            markers = sorted(set(re.findall(
-                r"【[^】]+】|导航[一二三四五]|（示例）|\(示例\)|图表占位区|U_IR|P_f|g_thres|Kriging|AK-IR|逆可靠度",
-                text,
-                re.I,
-            )))
+            markers = sorted({match.group(0) for pattern in compiled_patterns for match in pattern.finditer(text)})
             if markers:
                 sample_parts.append({"part": part, "markers": markers[:12]})
     is_sample = bool(sample_parts)
@@ -463,18 +470,32 @@ def inspect_run(run: Path, runtime_dir: Path | None = None) -> dict[str, Any]:
     clean_query = {k: v for k, v in query.items() if k != "_receipt"}
     write_json(run / "evidence" / "officecli_query_all.json", clean_query)
     rows = _rows(query)
-    findings = _normalize_issues(results["issues"])
-    findings.extend(_generic_findings(rows))
-    findings.extend(_template_findings(run, manifest, pptx, rows))
-    findings.extend(_package_hygiene_findings(pptx))
-    output_profile = build_pptx_profile(pptx)
+    contract: dict[str, Any] = {}
     contract_record = manifest.get("content_contract")
     if isinstance(contract_record, dict) and contract_record.get("copied_path"):
-        from .common import read_json
         contract_path = resolve_run_path(run, contract_record["copied_path"])
         if sha256_file(contract_path) != contract_record.get("sha256"):
             raise D6PPTError("Content contract is stale", "stale_content_contract")
         contract = read_json(contract_path)
+    object_map_path = run / "artifacts" / "object_path_map.json"
+    object_map = read_json(object_map_path) if object_map_path.is_file() else {}
+    role_by_path = {
+        str(item.get("officecli_path")): str(item.get("role"))
+        for item in object_map.get("objects", [])
+        if item.get("officecli_path") and item.get("role")
+    }
+    inspection_rules = contract.get("inspection_rules") if isinstance(contract.get("inspection_rules"), dict) else {}
+    findings = _normalize_issues(results["issues"])
+    findings.extend(_generic_findings(
+        rows,
+        role_by_path=role_by_path,
+        font_min_pt_by_role=inspection_rules.get("font_min_pt_by_role"),
+    ))
+    findings.extend(_declared_text_findings(rows, inspection_rules.get("text_rules", [])))
+    findings.extend(_template_findings(run, manifest, pptx, rows))
+    findings.extend(_package_hygiene_findings(pptx, inspection_rules.get("nonlogical_sample_patterns")))
+    output_profile = build_pptx_profile(pptx)
+    if contract:
         expected_slides = contract.get("expected_slide_count")
         actual_slides = output_profile.get("counts", {}).get("slides")
         if isinstance(expected_slides, int) and actual_slides != expected_slides:
@@ -579,7 +600,7 @@ def inspect_run(run: Path, runtime_dir: Path | None = None) -> dict[str, Any]:
     }
     write_json(run / "evidence" / "findings.json", payload)
     manifest["artifacts"].update({
-        "findings": "evidence/findings.json", "contact_sheet": "review/contact_sheet.png",
+        "findings": "evidence/findings.json",
         "current_pptx_profile": "artifacts/current_pptx_profile.json",
         "inspected_pptx_sha256": sha256_file(pptx),
     })

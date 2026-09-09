@@ -13,6 +13,7 @@ from .common import (
     utc_now,
     write_json,
 )
+from .render_evidence import load_current_render_manifest
 
 
 CAPABILITIES = {"available", "unavailable", "unknown"}
@@ -89,6 +90,19 @@ def resolve_visual_gate(run: Path, pptx_sha256: str) -> tuple[str, dict[str, Any
             visual.get("status") in {"accepted", "accepted_with_warnings"}
             and visual.get("pptx_sha256") == pptx_sha256
         )
+        if valid:
+            try:
+                render = load_current_render_manifest(
+                    run,
+                    pptx_sha256,
+                    expected_tier=visual.get("verification_tier"),
+                )
+                valid = (
+                    visual.get("render_manifest_sha256") == sha256_file(run / "evidence" / "render_manifest.json")
+                    and visual.get("fact_source") == render.get("fact_source")
+                )
+            except D6PPTError:
+                valid = False
         if valid:
             return "pass", visual
     waiver_path = run / "review" / "visual_review_waiver.json"

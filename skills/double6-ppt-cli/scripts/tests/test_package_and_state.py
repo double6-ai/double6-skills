@@ -13,6 +13,7 @@ from double6_ppt_cli.package_hygiene import clean_orphan_slides
 from double6_ppt_cli.inspector import _package_hygiene_findings
 from double6_ppt_cli.patcher import _package_invariants, _set_numeric_headline_size, _set_text_preserving_runs
 from double6_ppt_cli.runs import init_run
+from double6_ppt_cli.render_evidence import record_render_manifest
 from double6_ppt_cli.verifier import _reusable_powerpoint_receipt, _snapshot
 from double6_ppt_cli.schemas import validate_object_map
 
@@ -104,7 +105,7 @@ class PackageAndStateTests(unittest.TestCase):
             root = Path(temp)
             source = root / "source.pptx"
             live_xml = self._orphan_slide_fixture(source)
-            before_findings = _package_hygiene_findings(source)
+            before_findings = _package_hygiene_findings(source, [r"【[^】]+】"])
             self.assertEqual(before_findings[0]["severity"], "error")
             self.assertEqual(before_findings[0]["suggested_route"], "package_clean")
             run = root / "run"
@@ -247,12 +248,19 @@ class PackageAndStateTests(unittest.TestCase):
             roundtrip = evidence / "roundtrip-edit-probe.pptx"
             pdf = render / "powerpoint-render.pdf"
             page = render / "slide-01.png"
-            contact = review / "contact_sheet.png"
-            for path in (roundtrip, pdf, page, contact):
+            contact = review / "contact_sheet-native.png"
+            current = run / "artifacts" / "current.pptx"
+            current.parent.mkdir(parents=True)
+            for path in (roundtrip, pdf, page, contact, current):
                 path.write_bytes(b"evidence")
+            source_sha = sha256_file(current)
+            record_render_manifest(
+                run, current, verification_tier="native", renderer="Microsoft PowerPoint",
+                fact_source="powerpoint", pdf=pdf, pages=[page], contact_sheet=contact,
+            )
             write_json(evidence / "receipt.json", {
                 "status": "pass",
-                "source_pptx_sha256": "a" * 64,
+                "source_pptx_sha256": source_sha,
                 "roundtrip_pptx": "evidence/powerpoint_roundtrip/roundtrip-edit-probe.pptx",
                 "render": {
                     "pdf": str(pdf),
@@ -260,11 +268,11 @@ class PackageAndStateTests(unittest.TestCase):
                     "contact_sheet": str(contact),
                 },
             })
-            reused = _reusable_powerpoint_receipt(run, "a" * 64)
+            reused = _reusable_powerpoint_receipt(run, source_sha)
             self.assertTrue(reused and reused["reused_for_same_pptx_sha"])
             self.assertIsNone(_reusable_powerpoint_receipt(run, "b" * 64))
             page.unlink()
-            self.assertIsNone(_reusable_powerpoint_receipt(run, "a" * 64))
+            self.assertIsNone(_reusable_powerpoint_receipt(run, source_sha))
 
     def test_ooxml_text_and_numeric_size_repairs_preserve_secondary_run_style(self):
         with tempfile.TemporaryDirectory() as temp:

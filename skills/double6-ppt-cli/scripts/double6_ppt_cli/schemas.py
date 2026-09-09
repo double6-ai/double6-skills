@@ -10,7 +10,7 @@ from .common import D6PPTError, LEGACY_SCHEMA_VERSIONS, SCHEMA_VERSION, sha256_f
 
 ROLES = {
     "title", "subtitle", "body", "caption", "label", "data", "chart",
-    "table", "connector", "group_motif", "decorative", "notes",
+    "table", "connector", "group_motif", "decorative", "notes", "footnote", "page_mark",
 }
 PREFERRED_STRUCTURES = {"top_level", "group", "connector", "placeholder", "native_chart", "native_table"}
 PATCH_PROPERTIES = {"text", "color", "fill", "font", "size", "x", "y", "width", "height"}
@@ -53,9 +53,16 @@ def validate_semantic_manifest(data: dict[str, Any], source_root: Path | None = 
         match = obj.get("match")
         if not isinstance(match, dict):
             raise D6PPTError(f"{source_id}: match is required", "invalid_semantic_manifest")
-        methods = [k for k in ("drawingml_name", "text", "connector_ordinal", "group_contains") if match.get(k) is not None]
+        methods = [k for k in ("drawingml_id", "drawingml_name", "text", "connector_ordinal", "group_contains") if match.get(k) is not None]
         if len(methods) != 1:
             raise D6PPTError(f"{source_id}: match must select exactly one primary method", "invalid_semantic_manifest")
+        if methods[0] == "drawingml_id" and (
+            not isinstance(match.get("drawingml_id"), int) or not 2 <= match["drawingml_id"] <= 4294967295
+        ):
+            raise D6PPTError(
+                f"{source_id}: drawingml_id must be an integer from 2 to 4294967295",
+                "invalid_semantic_manifest",
+            )
         if methods[0] == "text" and match.get("ordinal") is None and match.get("source_selector") is None:
             raise D6PPTError(
                 f"{source_id}: text cannot be the sole identity; add ordinal or match.source_selector",

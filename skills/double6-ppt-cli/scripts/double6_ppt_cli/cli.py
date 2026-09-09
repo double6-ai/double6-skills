@@ -30,9 +30,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="d6ppt", description="Double6 native editable PPTX authoring and postflight CLI")
     parser.add_argument("--runtime-dir", type=Path, default=None, help=argparse.SUPPRESS)
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("doctor"); p.add_argument("--json", action="store_true"); p.add_argument("--runtime-dir", type=Path)
+    p = sub.add_parser("doctor"); p.add_argument("--json", action="store_true"); p.add_argument("--runtime-dir", type=Path); p.add_argument("--verify-tier", choices=("auto", "native", "portable"), default="auto"); p.add_argument("--mode", choices=("generate", "postflight", "template-fill"))
     p = sub.add_parser("bootstrap"); p.add_argument("--runtime-dir", type=Path, required=True); p.add_argument("--yes", action="store_true")
-    p = sub.add_parser("init"); p.add_argument("--mode", choices=("generate", "postflight", "template-fill"), required=True); p.add_argument("--source", type=Path, required=True); p.add_argument("--template", type=Path); p.add_argument("--contract", type=Path); p.add_argument("--out", type=Path, required=True)
+    p = sub.add_parser("init"); p.add_argument("--mode", choices=("generate", "postflight", "template-fill"), required=True); p.add_argument("--source", type=Path, required=True); p.add_argument("--template", type=Path); p.add_argument("--contract", type=Path); p.add_argument("--out", type=Path, required=True); p.add_argument("--verify-tier", choices=("auto", "native", "portable"), default="auto"); p.add_argument("--design-profile", "--design", dest="design_profile", choices=("neutral", "academic", "business", "training"), default="neutral")
     p = sub.add_parser("compile"); p.add_argument("--run", type=Path, required=True); p.add_argument("--no-native-charts-and-tables", action="store_true")
     p = sub.add_parser("template-analyze"); p.add_argument("--run", type=Path, required=True)
     p = sub.add_parser("template-asset-import"); p.add_argument("--run", type=Path, required=True); p.add_argument("--asset", type=Path, required=True); p.add_argument("--name", required=True)
@@ -55,11 +55,19 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.command == "doctor":
-            result = doctor(args.runtime_dir)
+            result = doctor(args.runtime_dir, verify_tier=args.verify_tier, mode=args.mode)
         elif args.command == "bootstrap":
             result = bootstrap(args.runtime_dir, confirmed=args.yes)
         elif args.command == "init":
-            result = init_run(args.mode, args.source, args.out, args.template, args.contract)
+            result = init_run(
+                args.mode,
+                args.source,
+                args.out,
+                args.template,
+                args.contract,
+                verify_tier=args.verify_tier,
+                design_profile=args.design_profile,
+            )
         elif args.command == "compile":
             result = compile_run(args.run, native_charts_and_tables=not args.no_native_charts_and_tables)
         elif args.command == "template-analyze":

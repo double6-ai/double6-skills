@@ -71,7 +71,10 @@ def _candidates(root: etree._Element) -> list[etree._Element]:
 def _find(root: etree._Element, obj: dict[str, Any]) -> etree._Element:
     items = _candidates(root)
     match = obj["match"]
-    if match.get("drawingml_name") is not None:
+    if match.get("drawingml_id") is not None:
+        wanted_id = int(match["drawingml_id"])
+        matches = [item for item in items if int(_cnvpr(item).get("id") or 0) == wanted_id]
+    elif match.get("drawingml_name") is not None:
         wanted = str(match["drawingml_name"])
         matches = [item for item in items if _cnvpr(item).get("name") == wanted]
     elif match.get("connector_ordinal") is not None:
@@ -100,9 +103,23 @@ def _find(root: etree._Element, obj: dict[str, Any]) -> etree._Element:
             ordinal = int(ordinal)
             matches = matches[ordinal - 1:ordinal]
     if len(matches) != 1:
+        source_selector = obj.get("source_selector") or {}
+        candidates = [
+            {
+                "drawingml_id": int(_cnvpr(item).get("id") or 0),
+                "drawingml_name": _cnvpr(item).get("name"),
+                "kind": _kind(item),
+                "text": "".join(item.xpath(".//a:t/text()", namespaces=NS)).strip()[:160],
+            }
+            for item in items[:12]
+        ]
         raise D6PPTError(
-            f"Semantic object must resolve uniquely: {obj['source_id']} candidates={len(matches)}",
+            (
+                f"Semantic object must resolve uniquely: {obj['source_id']} candidates={len(matches)}; "
+                f"source={source_selector.get('file') or '<unknown>'}"
+            ),
             "ambiguous_object_mapping",
+            {"source_selector": source_selector, "match": match, "slide_candidates": candidates},
         )
     target = matches[0]
     preferred = obj.get("preferred_structure")

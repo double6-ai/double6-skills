@@ -176,12 +176,6 @@ def _geometry(element: etree._Element) -> dict[str, int | None]:
 
 def _classify(text: str, object_type: str, placeholder: str | None) -> str:
     compact = re.sub(r"\s+", " ", text).strip()
-    if re.search(r"Designed\s+by\s+sjq", compact, re.I):
-        return "attribution"
-    if re.search(r"导航[一二三四五]|\b0[1-5]\b", compact):
-        return "navigation"
-    if re.search(r"【.*】|（示例）|\(示例\)|占位|U_IR|P_f|g_thres|Kriging|AK-IR|97\.7%|逆可靠度", compact, re.I):
-        return "sample_content"
     if placeholder or (object_type in {"shape", "textbox"} and not compact):
         return "content_slot"
     if object_type in {"picture", "chart", "table", "equation", "ole"}:
@@ -272,7 +266,7 @@ def build_pptx_profile(pptx: Path) -> dict[str, Any]:
                     }.get(object_type, "shape")
                     office_path = f"{path_prefix}/{office_element}[@id={shape_id}]"
                     object_id = f"{identity_prefix}:{object_type}:{shape_id}"
-                    role = _classify(text, object_type, placeholder)
+                    role = "navigation" if jump_source_slides else _classify(text, object_type, placeholder)
                     objects.append({
                         "source_object_id": object_id,
                         "source_template_slide": slide_number,
@@ -310,26 +304,6 @@ def build_pptx_profile(pptx: Path) -> dict[str, Any]:
         for name in sorted(names):
             if name.startswith(("ppt/slideMasters/", "ppt/slideLayouts/", "ppt/theme/", "ppt/notesSlides/")):
                 protected_parts[name] = hashlib.sha256(archive.read(name)).hexdigest()
-    formula_slides = {
-        int(obj["source_template_slide"]) for obj in objects
-        if obj.get("role") == "sample_content" and re.search(
-            r"U_IR|P_f|g_thres|Kriging|AK-IR|N_MCS|N_IS|逆可靠度|97\.7%|Φ\(2\)",
-            str(obj.get("text") or ""), re.I,
-        )
-    }
-    media_occurrences = Counter(obj.get("media_sha256") for obj in objects if obj.get("media_sha256"))
-    for obj in objects:
-        name = str(obj.get("drawingml_name") or "")
-        if (
-            obj.get("object_type") == "picture"
-            and (
-                int(obj["source_template_slide"]) in formula_slides
-                or bool(re.search(r"公式|equation|formula", name, re.I))
-            )
-            and media_occurrences.get(obj.get("media_sha256"), 0) <= 2
-            and not re.search(r"logo|校徽|学校|背景|Picture 2", name, re.I)
-        ):
-            obj["role"] = "sample_formula_media"
     return {
         "schema_version": SCHEMA_VERSION,
         "created_at": utc_now(),
@@ -357,6 +331,40 @@ def _default_disposition(obj: dict[str, Any]) -> str:
     return "manual_review"
 
 
+PROFILE_ROLES = {
+    "attribution", "navigation", "sample_content", "sample_formula_media",
+    "content_slot", "design_system", "unknown",
+}
+
+
+def _apply_template_profile_rules(profile: dict[str, Any], rules: list[dict[str, Any]]) -> None:
+    """Apply project-specific template labels only when the content contract declares them."""
+    for index, rule in enumerate(rules, 1):
+        if not isinstance(rule, dict) or rule.get("role") not in PROFILE_ROLES:
+            raise D6PPTError(f"Invalid template profile rule {index}", "invalid_content_contract")
+        text_pattern = rule.get("text_pattern")
+        name_pattern = rule.get("name_pattern")
+        try:
+            text_re = re.compile(str(text_pattern), re.I) if text_pattern else None
+            name_re = re.compile(str(name_pattern), re.I) if name_pattern else None
+        except re.error as exc:
+            raise D6PPTError(f"Invalid template profile rule {index}: {exc}", "invalid_content_contract") from exc
+        if text_re is None and name_re is None and not rule.get("object_type") and not rule.get("slides"):
+            raise D6PPTError(f"Template profile rule {index} has no selector", "invalid_content_contract")
+        selected_slides = {int(value) for value in rule.get("slides", [])}
+        for obj in profile.get("objects", []):
+            if selected_slides and int(obj.get("source_template_slide", 0)) not in selected_slides:
+                continue
+            if rule.get("object_type") and obj.get("object_type") != rule["object_type"]:
+                continue
+            if text_re and not text_re.search(str(obj.get("text") or "")):
+                continue
+            if name_re and not name_re.search(str(obj.get("drawingml_name") or "")):
+                continue
+            obj["role"] = rule["role"]
+            obj["profile_rule_id"] = str(rule.get("rule_id") or f"rule-{index:03d}")
+
+
 def analyze_template(run: Path) -> dict[str, Any]:
     run = run.resolve()
     manifest = load_run(run)
@@ -366,6 +374,13 @@ def analyze_template(run: Path) -> dict[str, Any]:
     library_path = run / "artifacts" / "template.slide_library.json"
     write_json(library_path, library)
     profile = build_pptx_profile(template)
+    contract_record = manifest.get("content_contract")
+    if isinstance(contract_record, dict) and contract_record.get("copied_path"):
+        contract_path = resolve_run_path(run, contract_record["copied_path"])
+        if sha256_file(contract_path) != contract_record.get("sha256"):
+            raise D6PPTError("Content contract is stale", "stale_content_contract")
+        contract = read_json(contract_path)
+        _apply_template_profile_rules(profile, contract.get("template_profile_rules", []))
     profile["content_sha256"] = manifest["input"]["sha256"]
     profile_path = run / "artifacts" / "template_profile.json"
     write_json(profile_path, profile)

@@ -13,7 +13,7 @@ from typing import Any
 from lxml import etree
 
 from .common import (
-    D6PPTError, SCHEMA_VERSION, ensure_owner_writable, load_run, read_json, resolve_run_path, set_status,
+    D6PPTError, SCHEMA_VERSION, ensure_owner_writable, invalidate_pptx_derived_artifacts, load_run, read_json, resolve_run_path, set_status,
     sha256_file, utc_now, write_json,
 )
 from .officecli import OfficeCLI
@@ -368,6 +368,11 @@ def apply_patch(run: Path, spec_path: Path, runtime_dir: Path | None = None) -> 
         next_map_path = run / "artifacts" / f"object_path_map_{patch_id}.json"
         write_json(next_map_path, next_map)
         manifest["artifacts"]["object_path_map"] = str(next_map_path.relative_to(run))
+    stale = invalidate_pptx_derived_artifacts(manifest)
+    if stale:
+        manifest.setdefault("stale_artifacts", []).append({
+            "at": utc_now(), "reason": "pptx_sha_changed_after_patch", "artifacts": stale,
+        })
     manifest["artifacts"].update({
         "current_pptx": str(output.relative_to(run)), "pptx_sha256": after_sha,
         "patch_ledger": "evidence/patch_ledger.json",

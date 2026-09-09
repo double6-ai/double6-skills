@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import platform
 import shutil
@@ -8,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .common import (
-    OFFICECLI_VERSION, PPT_MASTER_COMMIT, RUNTIME_LOCK_SHA, default_runtime_dir,
+    D6PPTError, OFFICECLI_VERSION, PPT_MASTER_COMMIT, RUNTIME_LOCK_SHA, default_runtime_dir,
     sha256_file, skill_root,
 )
 from .powerpoint import find_powerpoint
@@ -58,13 +59,110 @@ def _version(binary: Path | None) -> str | None:
         return None
 
 
-def doctor(runtime_dir: Path | None = None) -> dict[str, Any]:
+CLAW_HUB_OMITTED_VENDOR_FILES = {
+    "skills/ppt-master/scripts/pptx_animation_presets.json",
+    "skills/ppt-master/scripts/pptx_shapes/data/presetShapeDefinitions.xml",
+}
+
+
+def _vendor_integrity(root: Path) -> dict[str, Any]:
+    vendor_root = root / "vendor" / "ppt-master-core"
+    bom_path = vendor_root / "BOM.json"
+    if not bom_path.is_file():
+        return {
+            "status": "fail", "complete": False, "bom": str(bom_path),
+            "reason": "Vendored PPT Master BOM is missing.",
+        }
+    try:
+        bom = json.loads(bom_path.read_text(encoding="utf-8"))
+        entries = bom.get("files", [])
+    except (OSError, json.JSONDecodeError, AttributeError) as exc:
+        return {
+            "status": "fail", "complete": False, "bom": str(bom_path),
+            "reason": f"Vendored PPT Master BOM is invalid: {exc}",
+        }
+    if not isinstance(entries, list) or not entries:
+        return {
+            "status": "fail", "complete": False, "bom": str(bom_path),
+            "reason": "Vendored PPT Master BOM has no file entries.",
+        }
+    missing: list[str] = []
+    mismatched: list[str] = []
+    invalid_entries: list[int] = []
+    seen_paths: set[str] = set()
+    duplicates: list[str] = []
+    for index, entry in enumerate(entries, 1):
+        if not isinstance(entry, dict):
+            invalid_entries.append(index)
+            continue
+        relative = str(entry.get("path") or "")
+        expected = str(entry.get("sha256") or "")
+        if not relative or not expected:
+            invalid_entries.append(index)
+            continue
+        if relative in seen_paths:
+            duplicates.append(relative)
+            continue
+        seen_paths.add(relative)
+        candidate = (vendor_root / relative).resolve()
+        try:
+            candidate.relative_to(vendor_root.resolve())
+        except ValueError:
+            invalid_entries.append(index)
+            continue
+        if not relative or not candidate.is_file():
+            missing.append(relative)
+        elif expected and sha256_file(candidate) != expected:
+            mismatched.append(relative)
+    expected_omissions = sorted(set(missing) & CLAW_HUB_OMITTED_VENDOR_FILES)
+    unexpected_missing = sorted(set(missing) - CLAW_HUB_OMITTED_VENDOR_FILES)
+    declared_count_ok = bom.get("file_count") == len(entries)
+    if mismatched or unexpected_missing or invalid_entries or duplicates or not declared_count_ok:
+        status = "fail"
+    elif expected_omissions:
+        status = "partial"
+    else:
+        status = "pass"
+    return {
+        "status": status,
+        "complete": status == "pass",
+        "bom": str(bom_path),
+        "bom_sha256": sha256_file(bom_path),
+        "ppt_master_commit": PPT_MASTER_COMMIT,
+        "checked_file_count": len(entries),
+        "missing": sorted(missing),
+        "expected_clawhub_omissions": expected_omissions,
+        "unexpected_missing": unexpected_missing,
+        "sha256_mismatches": sorted(mismatched),
+        "invalid_entries": invalid_entries,
+        "duplicate_paths": sorted(set(duplicates)),
+        "declared_file_count": bom.get("file_count"),
+        "declared_file_count_matches": declared_count_ok,
+        "capabilities": {
+            "postflight": status != "fail",
+            "full_generate": status == "pass",
+            "template_fill": status == "pass",
+        },
+        "repair": "Install the complete skill from GitHub or skills.sh when full generate/template-fill capability is required.",
+    }
+
+
+def doctor(
+    runtime_dir: Path | None = None,
+    *,
+    verify_tier: str = "auto",
+    mode: str | None = None,
+) -> dict[str, Any]:
+    if verify_tier not in {"auto", "native", "portable"}:
+        raise D6PPTError("verify tier must be auto, native, or portable", "invalid_verify_tier")
+    if mode not in {None, "generate", "postflight", "template-fill"}:
+        raise D6PPTError("doctor mode must be generate, postflight, or template-fill", "invalid_mode")
     root = skill_root()
     officecli = find_officecli(runtime_dir)
     officecli_version = _version(officecli)
     soffice = find_soffice()
     pdftoppm = shutil.which("pdftoppm")
-    bom_path = root / "vendor" / "ppt-master-core" / "BOM.json"
+    vendor = _vendor_integrity(root)
     python_modules = {}
     for module in ("lxml", "PIL", "pptx", "xlsxwriter"):
         try:
@@ -88,23 +186,60 @@ def doctor(runtime_dir: Path | None = None) -> dict[str, Any]:
             "actual_version": officecli_version,
             "repair": f"python scripts/d6ppt.py bootstrap --runtime-dir {runtime_dir or default_runtime_dir()} --yes",
         },
-        "libreoffice": {"status": "available" if soffice else "unavailable", "path": str(soffice) if soffice else None, "required": False, "reason": "Optional explicit compatibility target; never substitutes for PowerPoint."},
-        "pdf_renderer": {"status": "pass" if pdftoppm else "fail", "path": pdftoppm, "required": True, "reason": "Rasterizes PowerPoint PDF exports for page review."},
+        "libreoffice": {
+            "status": "available" if soffice else "unavailable", "path": str(soffice) if soffice else None,
+            "required": False,
+            "required_for": "portable visual rendering",
+            "reason": "Optional portable renderer and optional native-tier compatibility target.",
+        },
+        "pdf_renderer": {
+            "status": "available" if pdftoppm else "unavailable", "path": pdftoppm,
+            "required_for": "native or portable page rendering",
+            "reason": "Rasterizes renderer PDF exports for page review; a user-approved visual waiver can omit rendering in portable tier.",
+        },
         "fonts": {"status": "pass" if fonts else "warn", "directories": fonts},
-        "vendor": {
-            "status": "pass" if bom_path.is_file() else "fail",
-            "bom": str(bom_path), "bom_sha256": sha256_file(bom_path) if bom_path.is_file() else None,
-            "ppt_master_commit": PPT_MASTER_COMMIT,
-        },
+        "vendor": vendor,
         "powerpoint": {
-            "status": "pass" if powerpoint else "fail",
+            "status": "available" if powerpoint else "unavailable",
             "path": str(powerpoint) if powerpoint else None,
-            "required": True,
+            "required_for": "native tier",
+            "repair": "Install Microsoft PowerPoint, or use --verify-tier portable.",
         },
-        "powerpoint_automation": {"status": "pass" if osascript else "fail", "path": osascript, "required": True},
+        "powerpoint_automation": {
+            "status": "available" if osascript else "unavailable", "path": osascript,
+            "required_for": "native tier",
+            "repair": "On macOS, allow terminal automation when native verification is requested; otherwise use --verify-tier portable.",
+        },
     }
-    required = [checks["python_modules"], checks["officecli"], checks["pdf_renderer"], checks["vendor"], checks["powerpoint"], checks["powerpoint_automation"]]
+    base_ready = checks["python_modules"]["status"] == "pass" and checks["officecli"]["status"] == "pass"
+    vendor_required = mode in {"generate", "template-fill"}
+    vendor_ready = vendor["status"] == "pass" if vendor_required else vendor["status"] != "fail"
+    portable_ready = base_ready and vendor_ready
+    portable_render_ready = portable_ready and bool(soffice) and bool(pdftoppm)
+    native_ready = portable_ready and bool(powerpoint) and bool(osascript) and bool(pdftoppm)
+    if verify_tier == "native":
+        status = "pass" if native_ready else "fail"
+        selected_tier = "native"
+    elif verify_tier == "portable":
+        status = "fail" if not portable_ready else ("pass" if portable_render_ready else "pass_with_warnings")
+        selected_tier = "portable"
+    elif native_ready:
+        status = "pass"
+        selected_tier = "native"
+    elif portable_ready:
+        status = "pass_with_warnings"
+        selected_tier = "portable"
+    else:
+        status = "fail"
+        selected_tier = None
     return {
-        "schema_version": "2.0", "status": "pass" if all(c["status"] == "pass" for c in required) else "fail",
+        "schema_version": "2.0", "status": status,
+        "requested_verify_tier": verify_tier, "selected_verify_tier": selected_tier, "mode": mode,
+        "capabilities": {
+            "native_ready": native_ready,
+            "portable_ready": portable_ready,
+            "portable_render_ready": portable_render_ready,
+            "visual_waiver_required_for_portable": portable_ready and not portable_render_ready,
+        },
         "runtime_lock_sha": RUNTIME_LOCK_SHA, "runtime_dir": str(runtime_dir or default_runtime_dir()), "checks": checks,
     }
