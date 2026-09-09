@@ -15,7 +15,7 @@ from lxml import etree
 from PIL import Image, ImageChops, ImageFilter
 
 from .common import (
-    D6PPTError, SCHEMA_VERSION, load_run, read_json, resolve_run_path, set_status,
+    D6PPTError, SCHEMA_VERSION, load_run, read_json, resolve_run_path, save_run, set_status,
     sha256_file, utc_now, write_json,
 )
 from .doctor import find_soffice
@@ -396,7 +396,7 @@ def _portable_render(run: Path, pptx: Path) -> dict[str, Any]:
     pages = _render_libreoffice(pptx, output, soffice)
     contact = run / "review" / "contact_sheet.png"
     _contact_sheet(pages, contact)
-    pdf = next(output.glob("*.pdf"), None)
+    pdf = next(output.glob("*.pdf"), None) or next((output / "pdf").glob("*.pdf"), None)
     return {
         "status": "pass",
         "application": "LibreOffice",
@@ -463,17 +463,39 @@ def verify_run(
         notes_ok = Counter(before["notes"]) == Counter(after["notes"])
         counts_ok = before["counts"] == after["counts"]
         identities_ok = set(before["identities"]).issubset(set(after["identities"]))
-    visual_gate, visual_receipt = resolve_visual_gate(run, pptx_sha)
+    portable_render = None
+    edit_probe = None
+    if resolved_tier == "portable":
+        # Produce portable visual pages before the visual gate so review/waiver can bind them.
+        portable_render = _portable_render(run, pptx)
+        edit_probe = _portable_editability(client, pptx, run, object_map)
+        manifest.setdefault("artifacts", {})
+        if portable_render and portable_render.get("status") == "pass":
+            manifest["artifacts"]["portable_render"] = "evidence/portable_render"
+            if portable_render.get("contact_sheet"):
+                manifest["artifacts"]["contact_sheet"] = portable_render["contact_sheet"]
+        if edit_probe:
+            manifest["artifacts"]["portable_editability_receipt"] = "evidence/portable_editability/receipt.json"
+        manifest["artifacts"]["verification_tier"] = resolved_tier
+        manifest["powerpoint_status"] = "skipped_portable_tier"
+        save_run(run, manifest)
+    try:
+        visual_gate, visual_receipt = resolve_visual_gate(run, pptx_sha)
+    except D6PPTError as exc:
+        if exc.code == "visual_review_decision_required" and portable_render:
+            details = dict(exc.details or {})
+            details["portable_render"] = {
+                "status": portable_render.get("status"),
+                "page_count": portable_render.get("page_count"),
+                "contact_sheet": portable_render.get("contact_sheet"),
+            }
+            raise D6PPTError(str(exc), exc.code, details) from exc
+        raise
     libreoffice = None
     if compatibility == "libreoffice":
         libreoffice = _optional_libreoffice(run, pptx, before, client, object_map)
     elif compatibility != "none":
         raise D6PPTError("compatibility must be none or libreoffice", "invalid_compatibility_target")
-    portable_render = None
-    edit_probe = None
-    if resolved_tier == "portable":
-        portable_render = _portable_render(run, pptx)
-        edit_probe = _portable_editability(client, pptx, run, object_map)
     warning_count = int(findings.get("warning_count", 0))
     blocking_count = int(findings.get("blocking_count", findings.get("finding_count", 0)))
     contact_sheet_ready = (run / "review" / "contact_sheet.png").is_file()
