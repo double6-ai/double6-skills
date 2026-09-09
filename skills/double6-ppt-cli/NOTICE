@@ -1,0 +1,12 @@
+Double6 PPT CLI
+Copyright 2026 Double6 contributors
+
+Licensed under the Apache License, Version 2.0.
+
+This product includes a modified, reduced subset of PPT Master v4.8.0,
+Copyright its contributors, licensed under the MIT License. The retained
+license and file-level bill of materials are under vendor/ppt-master-core/.
+
+This product depends on, but does not redistribute, iOfficeAI OfficeCLI
+v1.0.144, licensed under the Apache License, Version 2.0. Its upstream NOTICE
+is retained under licenses/OfficeCLI_NOTICE.

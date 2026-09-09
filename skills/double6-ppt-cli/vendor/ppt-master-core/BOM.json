@@ -1,0 +1,1246 @@
+{
+  "schema_version": 1,
+  "status": "complete_for_double6_ppt_cli_v0.2.0_local",
+  "upstream": "https://github.com/hugohe3/ppt-master",
+  "tag": "v4.8.0",
+  "commit": "53c9c2a5e9f1a49096324fba4f95833649c6a0f4",
+  "license": "MIT",
+  "file_count": 137,
+  "total_bytes": 4326390,
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 1069,
+      "sha256": "80cefc234c1ec12a8cece4344f16300c634fa03df7891686fcf979e3828f0921",
+      "origin_path": "LICENSE",
+      "license": "MIT",
+      "category": "attribution_and_license",
+      "why_needed": "Retains the upstream attribution and fail-closed integrity contract."
+    },
+    {
+      "path": "requirements.txt",
+      "bytes": 700,
+      "sha256": "5b9c025632edafb19a53db251b3608b687b3c4387f55416f7f40ed4aa41b934e",
+      "origin_path": "requirements.txt",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/LICENSE",
+      "bytes": 1069,
+      "sha256": "80cefc234c1ec12a8cece4344f16300c634fa03df7891686fcf979e3828f0921",
+      "origin_path": "skills/ppt-master/LICENSE",
+      "license": "MIT",
+      "category": "attribution_and_license",
+      "why_needed": "Retains the upstream attribution and fail-closed integrity contract."
+    },
+    {
+      "path": "skills/ppt-master/SKILL.md",
+      "bytes": 5486,
+      "sha256": "c30f52adeff1950191e62cf08c75cbace299437160d48221f0e79fb73ca70bc8",
+      "origin_path": "skills/ppt-master/SKILL.md",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/SPONSORS.md",
+      "bytes": 4485,
+      "sha256": "46f309860abbf4aca987ee08ff686f7e59d2a5f588755580411464246c10d060",
+      "origin_path": "skills/ppt-master/SPONSORS.md",
+      "license": "MIT",
+      "category": "attribution_and_license",
+      "why_needed": "Retains the upstream attribution and fail-closed integrity contract."
+    },
+    {
+      "path": "skills/ppt-master/SPONSORS_CN.md",
+      "bytes": 4194,
+      "sha256": "37284cf1d109caccab379904cfc575acc2f934e74246cbb66423f8f4912e83d0",
+      "origin_path": "skills/ppt-master/SPONSORS_CN.md",
+      "license": "MIT",
+      "category": "attribution_and_license",
+      "why_needed": "Retains the upstream attribution and fail-closed integrity contract."
+    },
+    {
+      "path": "skills/ppt-master/requirements.txt",
+      "bytes": 7168,
+      "sha256": "f8f512624582e5ddb907e19f8baf8562360931df100e4f70e93050f6bbf7265b",
+      "origin_path": "skills/ppt-master/requirements.txt",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/attribution_guard.py",
+      "bytes": 7421,
+      "sha256": "a18a96e4923ffc5603dadea4a7a83c2b7b561aee660091be16edd519b9622439",
+      "origin_path": "skills/ppt-master/scripts/attribution_guard.py",
+      "license": "MIT",
+      "category": "attribution_and_license",
+      "why_needed": "Retains the upstream attribution and fail-closed integrity contract."
+    },
+    {
+      "path": "skills/ppt-master/scripts/config.py",
+      "bytes": 20118,
+      "sha256": "0c8d281d0885cf756e80e2c2ebc06faff4f805b7793be1cf5aec0f2b8786b283",
+      "origin_path": "skills/ppt-master/scripts/config.py",
+      "license": "MIT",
+      "category": "project_contract_parser",
+      "why_needed": "Required to parse the current project and execution-lock contracts."
+    },
+    {
+      "path": "skills/ppt-master/scripts/console_encoding.py",
+      "bytes": 3053,
+      "sha256": "45f47cb8d9b6f462bf0a1726c3b9664b733ec64f823002463dd1670b7541f42e",
+      "origin_path": "skills/ppt-master/scripts/console_encoding.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/hyperlink_contract.py",
+      "bytes": 13579,
+      "sha256": "c92921c1252c8b4a95f18d6fc447b00bb9463fc7a30f3bc6f59a3a0d511b9825",
+      "origin_path": "skills/ppt-master/scripts/hyperlink_contract.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/language_tags.py",
+      "bytes": 7563,
+      "sha256": "2c84d88bf075923b6f040b4009e32331ad18d1c7f5c0122fcfaff5ac9a6ac20d",
+      "origin_path": "skills/ppt-master/scripts/language_tags.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/native_enhance_pptx.py",
+      "bytes": 1467,
+      "sha256": "ddcac8849c0921011cbd3d521f13edeeb49570bd74e266cac1cec74d1a8c76fb",
+      "origin_path": "skills/ppt-master/scripts/native_enhance_pptx.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/native_enhance_pptx_core.py",
+      "bytes": 89130,
+      "sha256": "1fa772941aa68471e55510b18ef81a97cb1cf1ace65d326b70991ce9a33067ba",
+      "origin_path": "skills/ppt-master/scripts/native_enhance_pptx_core.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/native_payloads.py",
+      "bytes": 24870,
+      "sha256": "4d793b9ec17dc9fd9a43ca7df4f15a7ddeb2692424ac64a31dc72f59744d5443",
+      "origin_path": "skills/ppt-master/scripts/native_payloads.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_animation_presets.json",
+      "bytes": 572130,
+      "sha256": "ddf7b0a0065d17e8acfe8eee021f13771b67d649d4ba9bf8d5eeeb59c5d15e4e",
+      "origin_path": "skills/ppt-master/scripts/pptx_animation_presets.json",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_animations.py",
+      "bytes": 142404,
+      "sha256": "63eeb5fd9f22783229e94d8f4418610ba8a64ac2b75f7a84b9cea0ce17f8e557",
+      "origin_path": "skills/ppt-master/scripts/pptx_animations.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_effects.py",
+      "bytes": 5024,
+      "sha256": "57cb58900d45200074d0bc09f0c9290a8429522a0408a7aa2f1976c20d079f9e",
+      "origin_path": "skills/ppt-master/scripts/pptx_effects.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_opc_validation.py",
+      "bytes": 12373,
+      "sha256": "4b209dc4741b35314ecc4b8279c92c734aac79e9aa25e96c2911d231c67d7e4c",
+      "origin_path": "skills/ppt-master/scripts/pptx_opc_validation.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_shapes/__init__.py",
+      "bytes": 2734,
+      "sha256": "5e49743459f1f2c57ad9198f858004f35d1c892c2a8367b1c903769b446c4339",
+      "origin_path": "skills/ppt-master/scripts/pptx_shapes/__init__.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_shapes/data/LICENSE-APACHE-2.0.txt",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "origin_path": "skills/ppt-master/scripts/pptx_shapes/data/LICENSE-APACHE-2.0.txt",
+      "license": "Apache-2.0",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_shapes/data/LICENSE-OPEN-XML-SDK-MIT.txt",
+      "bytes": 1116,
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+      "origin_path": "skills/ppt-master/scripts/pptx_shapes/data/LICENSE-OPEN-XML-SDK-MIT.txt",
+      "license": "MIT (Open XML SDK provenance)",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_shapes/data/NOTICE.md",
+      "bytes": 2365,
+      "sha256": "57f3e499fbf289e2d03a3a494ea69a5cd1685a707ad8f2618e46144ea1ec88cb",
+      "origin_path": "skills/ppt-master/scripts/pptx_shapes/data/NOTICE.md",
+      "license": "Apache-2.0 AND MIT provenance notice",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_shapes/data/presetShapeDefinitions.xml",
+      "bytes": 538970,
+      "sha256": "4a762444d8d85876881c02a5b1dedf6f73006fcd8acb7b4e393435615b37c780",
+      "origin_path": "skills/ppt-master/scripts/pptx_shapes/data/presetShapeDefinitions.xml",
+      "license": "Apache-2.0",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_shapes/data/shape_type_values.txt",
+      "bytes": 2527,
+      "sha256": "f2c3bdcda8569b358ce3196cfeb183849e33bfc7955fac961dc85fceb6b3b587",
+      "origin_path": "skills/ppt-master/scripts/pptx_shapes/data/shape_type_values.txt",
+      "license": "MIT (Open XML SDK provenance)",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_shapes/errors.py",
+      "bytes": 1017,
+      "sha256": "ee3a22954c6c49eabeb76ae4a26bdea395d8b4318cfde8233758ccd9d28bab6b",
+      "origin_path": "skills/ppt-master/scripts/pptx_shapes/errors.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_shapes/formula.py",
+      "bytes": 11046,
+      "sha256": "4e140cffb5413362746f20abbbdce107f8a4de8a79edcf4843093c662985259f",
+      "origin_path": "skills/ppt-master/scripts/pptx_shapes/formula.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_shapes/loader.py",
+      "bytes": 12654,
+      "sha256": "81e04c63f65d39bcbec3b27322ba04e8706d062add4f85c8cfd8730b6104f422",
+      "origin_path": "skills/ppt-master/scripts/pptx_shapes/loader.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_shapes/models.py",
+      "bytes": 4881,
+      "sha256": "6e1a6f38e8dde4f0a40abb3142e748a03e52ccced5e29684cdd69573527e5423",
+      "origin_path": "skills/ppt-master/scripts/pptx_shapes/models.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_shapes/registry.py",
+      "bytes": 8888,
+      "sha256": "1e2299877aa96f704deacd3216ed3add6d24226d0267941682de755b08dc9155",
+      "origin_path": "skills/ppt-master/scripts/pptx_shapes/registry.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_shapes/semantic_hash.py",
+      "bytes": 14001,
+      "sha256": "e47096d88923df44e38185ada3b32fd1dc9789c04e20809bbabdb5f2d280a597",
+      "origin_path": "skills/ppt-master/scripts/pptx_shapes/semantic_hash.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_shapes/xml_safety.py",
+      "bytes": 634,
+      "sha256": "b411dc284fc176bee652de58ca27a93f293b952c8f804b2aaf44394c574dbc3c",
+      "origin_path": "skills/ppt-master/scripts/pptx_shapes/xml_safety.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_to_svg/__init__.py",
+      "bytes": 684,
+      "sha256": "f09490f56d2a10631be6d849503312b9eb244a0db74e3906a284421aa3f65e3a",
+      "origin_path": "skills/ppt-master/scripts/pptx_to_svg/__init__.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_to_svg/emu_units.py",
+      "bytes": 8845,
+      "sha256": "877ce22705f1cc87ad645ae855d06b4e765b2e29ac9e0489c9a0a45edb0e5bf1",
+      "origin_path": "skills/ppt-master/scripts/pptx_to_svg/emu_units.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_to_svg/preset_authoring.py",
+      "bytes": 32084,
+      "sha256": "31d7eb7c2d5e40ce97906d094ef6304d8159ba4edbe8a1b9fee6e1e9bc497b07",
+      "origin_path": "skills/ppt-master/scripts/pptx_to_svg/preset_authoring.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_to_svg/preset_registry_to_svg.py",
+      "bytes": 6695,
+      "sha256": "41344cfe2cdcd42c88b2a716b7a56f8245be7a1f2076f6284a5075ed46012825",
+      "origin_path": "skills/ppt-master/scripts/pptx_to_svg/preset_registry_to_svg.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_to_svg/preset_svg_markup.py",
+      "bytes": 6284,
+      "sha256": "ee5bf97cd129c7623b92551d9a8a43a183e316ae030249f2196b54ee5adc8848",
+      "origin_path": "skills/ppt-master/scripts/pptx_to_svg/preset_svg_markup.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_transitions.py",
+      "bytes": 100650,
+      "sha256": "df6562372d5be7541bd949131833c25f8762313f8aeeb957ac95952112693aaa",
+      "origin_path": "skills/ppt-master/scripts/pptx_transitions.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/project_management/__init__.py",
+      "bytes": 466,
+      "sha256": "5c449a1823259bac1458910c288c139b722a279ca9ddf5f080ac374a3f9b670c",
+      "origin_path": "skills/ppt-master/scripts/project_management/__init__.py",
+      "license": "MIT",
+      "category": "project_contract_parser",
+      "why_needed": "Required to parse the current project and execution-lock contracts."
+    },
+    {
+      "path": "skills/ppt-master/scripts/project_management/cli.py",
+      "bytes": 53948,
+      "sha256": "0c7e428bcd1f24afe7db8d4beef12eff8bd5845551101a0b0d61f53463be6b7c",
+      "origin_path": "skills/ppt-master/scripts/project_management/cli.py",
+      "license": "MIT",
+      "category": "project_contract_parser",
+      "why_needed": "Required to parse the current project and execution-lock contracts."
+    },
+    {
+      "path": "skills/ppt-master/scripts/project_management/page_context.py",
+      "bytes": 33127,
+      "sha256": "1a9be25e989435c969d4ae1b40b276a9d8bf5f82290f5f74825cb2519583f540",
+      "origin_path": "skills/ppt-master/scripts/project_management/page_context.py",
+      "license": "MIT",
+      "category": "project_contract_parser",
+      "why_needed": "Required to parse the current project and execution-lock contracts."
+    },
+    {
+      "path": "skills/ppt-master/scripts/project_management/paths.py",
+      "bytes": 773,
+      "sha256": "dbc00a7af078f8aedc6eabe14d905a6651f472cd3938be87a08e19cf2753842e",
+      "origin_path": "skills/ppt-master/scripts/project_management/paths.py",
+      "license": "MIT",
+      "category": "project_contract_parser",
+      "why_needed": "Required to parse the current project and execution-lock contracts."
+    },
+    {
+      "path": "skills/ppt-master/scripts/project_management/project_specs.py",
+      "bytes": 55606,
+      "sha256": "b4359083655ecfd3c6992728978de12e87ff7ad1e9cb7fee4e80007a89bdff72",
+      "origin_path": "skills/ppt-master/scripts/project_management/project_specs.py",
+      "license": "MIT",
+      "category": "project_contract_parser",
+      "why_needed": "Required to parse the current project and execution-lock contracts."
+    },
+    {
+      "path": "skills/ppt-master/scripts/project_manager.py",
+      "bytes": 1923,
+      "sha256": "00f1c0474e387cee9f405d08cdb54ded7c0ea54ed28979aac0ddc920efabcf09",
+      "origin_path": "skills/ppt-master/scripts/project_manager.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/project_utils.py",
+      "bytes": 20336,
+      "sha256": "f14b5a4cccb391abdfc21e2dc0e403cd2019bd59abdbde717552d5b143c3bfe3",
+      "origin_path": "skills/ppt-master/scripts/project_utils.py",
+      "license": "MIT",
+      "category": "project_contract_parser",
+      "why_needed": "Required to parse the current project and execution-lock contracts."
+    },
+    {
+      "path": "skills/ppt-master/scripts/register_template.py",
+      "bytes": 45118,
+      "sha256": "9fda9818094613f426e8ab34e95c6fe83c6b43ed03efd4f63917e867162d8739",
+      "origin_path": "skills/ppt-master/scripts/register_template.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/resource_paths.py",
+      "bytes": 10078,
+      "sha256": "9aef0cb2d9c1733b1e5dacfb1d6ed8a4248fd0d42e4ceb95ba2fdd02f4c8de37",
+      "origin_path": "skills/ppt-master/scripts/resource_paths.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/slide_roster.py",
+      "bytes": 1072,
+      "sha256": "f859e04fa5a4c54bdc420a5467458c32269d2af653ec05b61ce7a6ad811e70f7",
+      "origin_path": "skills/ppt-master/scripts/slide_roster.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_finalize/__init__.py",
+      "bytes": 448,
+      "sha256": "7ea7a774c2df7d075e53e792c028953d9c0a9d3e963d6d733df09ce8a177415a",
+      "origin_path": "skills/ppt-master/scripts/svg_finalize/__init__.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_finalize/align_embed_images.py",
+      "bytes": 24205,
+      "sha256": "d39ce6013314b0b68f336e646dd25efb8ee898894815f1dc4254aa4372139e88",
+      "origin_path": "skills/ppt-master/scripts/svg_finalize/align_embed_images.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_finalize/crop_images.py",
+      "bytes": 12233,
+      "sha256": "f687f4c6cb3c843748a4958e77632eec5c235ffe6e548624fa3a0359d462a2bd",
+      "origin_path": "skills/ppt-master/scripts/svg_finalize/crop_images.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_finalize/embed_icons.py",
+      "bytes": 21198,
+      "sha256": "16747c96cf186064bc6cf541178d6aab64ab47fe3ac0216c1e4b0133bde3bc79",
+      "origin_path": "skills/ppt-master/scripts/svg_finalize/embed_icons.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_finalize/embed_images.py",
+      "bytes": 10602,
+      "sha256": "87b8be5633ba167252f605cb6d223937aa9d4a3888a1664c338eb7741f6733de",
+      "origin_path": "skills/ppt-master/scripts/svg_finalize/embed_images.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_finalize/fix_image_aspect.py",
+      "bytes": 13874,
+      "sha256": "5e0519809ffa278a0de91f9ad6e0abde60053a3fc5204701e4452de9f2ce110f",
+      "origin_path": "skills/ppt-master/scripts/svg_finalize/fix_image_aspect.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_finalize/flatten_tspan.py",
+      "bytes": 34531,
+      "sha256": "189f82111cb69e45aac41a437f0d970785b0c9c3e07fb3967c7991f789b61587",
+      "origin_path": "skills/ppt-master/scripts/svg_finalize/flatten_tspan.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_finalize/svg_rect_to_path.py",
+      "bytes": 10998,
+      "sha256": "56fbe63d9e67c5835ac3ebdf25ce6f70e2356e71e1f1c6afd9411a0bb38780c5",
+      "origin_path": "skills/ppt-master/scripts/svg_finalize/svg_rect_to_path.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_quality/__init__.py",
+      "bytes": 351,
+      "sha256": "309303e80c80758ccae1152c45e57cd968bea67c529648e690d0d209f1ee01cb",
+      "origin_path": "skills/ppt-master/scripts/svg_quality/__init__.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_quality/checker.py",
+      "bytes": 295602,
+      "sha256": "435692cd73d1208d8851a6b0fa54e4b7534ba70c55e61a88321eb155f4092ca4",
+      "origin_path": "skills/ppt-master/scripts/svg_quality/checker.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_quality/cli.py",
+      "bytes": 7981,
+      "sha256": "c82497ce34a55bacfe342a7993298078e54c738fee8f2ea4c13f499e30206efe",
+      "origin_path": "skills/ppt-master/scripts/svg_quality/cli.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_quality/svg_contracts.py",
+      "bytes": 44327,
+      "sha256": "d092310abaa349fc2b4c11e9692c7df159c7de780562e04cfc88ef669a5bde11",
+      "origin_path": "skills/ppt-master/scripts/svg_quality/svg_contracts.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_quality/xml_support.py",
+      "bytes": 948,
+      "sha256": "8199887d221c063b6f2334e5c8ccb780c2c5edef6553afae60dfd77677feb55a",
+      "origin_path": "skills/ppt-master/scripts/svg_quality/xml_support.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_quality_checker.py",
+      "bytes": 1534,
+      "sha256": "afc53862a6dc26bf24405f34077392d2366ce1c871e6b822f395af229ecdeb66",
+      "origin_path": "skills/ppt-master/scripts/svg_quality_checker.py",
+      "license": "MIT",
+      "category": "source_quality_gate",
+      "why_needed": "Required by the frozen SVG authoring and final quality gate."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/__init__.py",
+      "bytes": 1043,
+      "sha256": "fa5a8ef67ceeee7b5b33b478639422f4e99c16eb430545059c171cc7727f2a47",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/__init__.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/animation_config.py",
+      "bytes": 58019,
+      "sha256": "ade36fb820f50edaa10fc0a895cbc2c7711b5983266c326049a0e726094a4e57",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/animation_config.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/canvas_contract.py",
+      "bytes": 7507,
+      "sha256": "0ed1a4e45f8f4d5cd2d4896ac2c64322388a2d3be62ed281f2c8214235d3eabf",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/canvas_contract.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/__init__.py",
+      "bytes": 59,
+      "sha256": "9313e6cb2ce93064d10a3f96f65252241a95300efcbfa3de3455fc5e2d1775dd",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/__init__.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/context.py",
+      "bytes": 12539,
+      "sha256": "4fb688875be6b3f4c31328c299cca25187ed9b2a29868042a3f4dc6ba9cc33a1",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/context.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/converter.py",
+      "bytes": 71579,
+      "sha256": "974ab858dd76e829250d4efd7387d2f1ec1d6c470419c827edbedf4b69332f82",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/converter.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/elements.py",
+      "bytes": 179742,
+      "sha256": "2cb51d9ea981e09e770b1773d446755001234d54efeca78130f235f9011a0fac",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/elements.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/hyperlinks.py",
+      "bytes": 5001,
+      "sha256": "576e6a19e38fbe60952831b31ff19fba675d8bc14463e2130e09a06e6eaac21c",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/hyperlinks.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/paths.py",
+      "bytes": 29381,
+      "sha256": "3d8599d6510c9ad32a4b8ef1079a7ae65f0f09abd240f245366e6384b6103b90",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/paths.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/styles.py",
+      "bytes": 25771,
+      "sha256": "01d5d6bc5de56afb3b1effff79f02f045745d0dbb95ca3bacb4097d1e0f3c3e7",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/styles.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/text_properties.py",
+      "bytes": 25881,
+      "sha256": "d8954b6916d7b3afb1c7f01e0d62f209dc9afd654b43ef71c53d4f2ebcd04662",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/text_properties.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/theme_colors.py",
+      "bytes": 10018,
+      "sha256": "09c7ccce9c0839605d1c71fa400654ba71b3c4bb041c34ad1a99101369173e9c",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/theme_colors.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/theme_fonts.py",
+      "bytes": 11764,
+      "sha256": "c3a7b85f41764d3b1ee7b900a2c524c7ea74fc82bc3c27bc24b5574bbb56e004",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/theme_fonts.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/utils.py",
+      "bytes": 125876,
+      "sha256": "1003f1f05822c927b62d4f04ab699184c7cd338abfe8264b6227168dc47b2f40",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/drawingml/utils.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/geometry_properties.py",
+      "bytes": 4894,
+      "sha256": "4408dbc0cc6b9b392ef1d97c613595a5f61b3b6107c79ea892b28365b874de0e",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/geometry_properties.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/__init__.py",
+      "bytes": 12694,
+      "sha256": "4695fc75ad84063b1f21a8178ee9a526fd7d85b0c054f5661a2ac3831f552014",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/__init__.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/chart_data.py",
+      "bytes": 56971,
+      "sha256": "96d9d37144f18c8b12f29764ae53dafda3966513420b7715bd01a75be0eeb732",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/chart_data.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/chart_style.py",
+      "bytes": 29841,
+      "sha256": "7c9addac6bc027bfe70703752124b3be35b39187377b2e90332b28389416b898",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/chart_style.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/chart_xml.py",
+      "bytes": 51933,
+      "sha256": "60c49f6a072da40698db163dd9aba9ec1e5f9fb81ba91d60768de124c2b2f2c7",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/chart_xml.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/chartex.py",
+      "bytes": 21260,
+      "sha256": "58301af31c7ac33795b3a95577f1b90402a446bf87579d149bf7b97d79970b61",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/chartex.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/fallback_hash.py",
+      "bytes": 5237,
+      "sha256": "4620f364c7749a1664ca18b9aa92a7615c39bad40c4a74c13c9798e07467e2d9",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/fallback_hash.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/formula.py",
+      "bytes": 7732,
+      "sha256": "34bb4d29486fd947911e4cec91ec416cd4585ad9f66b1e4405d1cdad00ce0034",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/formula.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/formula_ast.py",
+      "bytes": 8934,
+      "sha256": "373435e78607932e65c33fd1b44acac32314186a2533d5ab9f12c015ee8b26bf",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/formula_ast.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/formula_compiler.py",
+      "bytes": 2019,
+      "sha256": "00c53502660e9266b7f6c2c4ef5236fd03fde0f1cd05b6070809169c8ecafc4d",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/formula_compiler.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/formula_omml.py",
+      "bytes": 39999,
+      "sha256": "07e0db594546646b88772ab772820e959b0efdcc03b51bbaa9df0ce1b990ce6d",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/formula_omml.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/formula_parser.py",
+      "bytes": 86442,
+      "sha256": "4636546110b62a105f11b0554058ed8ccf6154db0bc631147777f9b3b9384088",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/formula_parser.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/formula_profile.py",
+      "bytes": 14976,
+      "sha256": "bedc1382bfc5f0c771f0137d75a3df246fd7d896f7610ff519b14c073b27bbd3",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/formula_profile.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/formula_run_properties.py",
+      "bytes": 7058,
+      "sha256": "eac4cb86857333fce0a84a0d91b7cfb817fca3821d1dd63a28193d977c979ed7",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/formula_run_properties.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/inline_formula.py",
+      "bytes": 11382,
+      "sha256": "da0b066c6b10d7cc69251febbbc4e7eb6d69511055b8631e92b32a419af688c1",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/inline_formula.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/marker_attributes.py",
+      "bytes": 6692,
+      "sha256": "7c7917187c3bf3ae079c23682f432ace47f1e42c2320ac0fc14252cfbe603e8d",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/marker_attributes.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/marker_common.py",
+      "bytes": 26531,
+      "sha256": "1f3a051c15d6527bed846713551c61a4a18bea298ffdc4c93ff9b650ecdf2fd4",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/marker_common.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/marker_status.py",
+      "bytes": 7475,
+      "sha256": "2e84ba4853d5883e8ab7627c7649aec5201ad5409746dd46e5f3aaf316931b0f",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/marker_status.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/table.py",
+      "bytes": 40274,
+      "sha256": "d0723087df28fb83df664a3cbf3060939f919d4d538d77159c54e63c190cdad4",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/table.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/workbook.py",
+      "bytes": 9518,
+      "sha256": "f725bb2dc58aadc8ffc293bba994a91cf0477b871829fffbe965acaa36a5b3ea",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/native_objects/workbook.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/__init__.py",
+      "bytes": 60,
+      "sha256": "78dce81eda479c89d16308e13a536bcd45de039778d80eb0f5a2184415c42f2d",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/__init__.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/builder.py",
+      "bytes": 244233,
+      "sha256": "c5f17e462f55d64b6a3e06c9375080d6cff3c507d59bec59dc55f1010110d8f0",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/builder.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/cli.py",
+      "bytes": 81842,
+      "sha256": "8fdc2ee2bc34290cd143bf71fcbd3945dae694841c2212a84a2c70dd58ba6d64",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/cli.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/dimensions.py",
+      "bytes": 5815,
+      "sha256": "fc46ea5db3dfb8a05aa40876f4773cfa16b0217ae227968bcf891624fbaef676",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/dimensions.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/discovery.py",
+      "bytes": 3532,
+      "sha256": "2aa2ebdadf4e9083602382862ac1d7258d84f58f586c432f48d6085a99f1655c",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/discovery.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/media.py",
+      "bytes": 4534,
+      "sha256": "5d359bfc890d151160a980b46ebc3299efe89972fc5d3972956897c88eef87a3",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/media.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/narration.py",
+      "bytes": 23160,
+      "sha256": "77a7130f0e6471396866e3900fcad995dcb2e25ab3356ac0b56f1a33733a2098",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/narration.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/notes.py",
+      "bytes": 11080,
+      "sha256": "274d91315501af05eda440a2d7569c4ec0b1695aebdd93a68e1c6ce5c3a308c8",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/notes.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/slide_xml.py",
+      "bytes": 5017,
+      "sha256": "922e2a706b8fd510bf398554e98bd5fa2e896cbcaf56186d3717779c149f3dfb",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/slide_xml.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/template_structure.py",
+      "bytes": 131912,
+      "sha256": "e53cc94c48a192afdf5a20dcdc611cbb28cec1a3e056af6359fe708cc7eddaa0",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/template_structure.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/template_validation.py",
+      "bytes": 59280,
+      "sha256": "4f7c1cce0a2c061eb65afe5f90ec38c14cf83f8dc4192e12b889e64c80aed176",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/pptx_package/template_validation.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/semantic_markers.py",
+      "bytes": 7787,
+      "sha256": "fd8a59e49b9846c8f13424b1c73f27860c62a92d04b39883e2b2d7663af5d60e",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/semantic_markers.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/shape_boolean.py",
+      "bytes": 42515,
+      "sha256": "a60c958ea93bec08a83da3ae0d2ea41a60df65248fabf2c59b54425876e00bed",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/shape_boolean.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/text_outline.py",
+      "bytes": 34188,
+      "sha256": "9c5d73707391be3f219c2d99954fbda08db6d82d7f93f9bbff791d8f76550014",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/text_outline.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/tspan_flattener.py",
+      "bytes": 2444,
+      "sha256": "9ca19bce06103f25fd438f7d6f14bd7ea692fd69a6f8810b3edb487adf57bd41",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/tspan_flattener.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx/use_expander.py",
+      "bytes": 21860,
+      "sha256": "be5c7d682949fa8da51df3fa978e81f5703c69c7c7d6d1df35ba1066f4d806fe",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx/use_expander.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/svg_to_pptx.py",
+      "bytes": 691,
+      "sha256": "b47a7bd2ccebd99fdcdc82d5df978d3c065058f3fb7a90d42ea468e2463dad22",
+      "origin_path": "skills/ppt-master/scripts/svg_to_pptx.py",
+      "license": "MIT",
+      "category": "drawingml_compiler",
+      "why_needed": "Required by the editable DrawingML compilation path exercised by RC-002."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/__init__.py",
+      "bytes": 919,
+      "sha256": "f90baa0eb5b41b013538d12c114ca6a7d701317b1691a6b7335f78acab7aca47",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/__init__.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/analyzer.py",
+      "bytes": 12717,
+      "sha256": "2217baff21f3636e90d22eff39f51952b590c73a15f9488d340437f5abd4d72d",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/analyzer.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/applier.py",
+      "bytes": 17715,
+      "sha256": "0a013ef5a2243fde5257fac57129053f1807ec8e436d9c941f42d67948aacd39",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/applier.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/chart_fill.py",
+      "bytes": 16346,
+      "sha256": "79cf5f621453d692c8c8b05828e5a43edcaccc39a8bf22ed0bf7b6ef69a2f8c5",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/chart_fill.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/chart_read.py",
+      "bytes": 3522,
+      "sha256": "f63799f33da61fc5bcb4724c07a706fa3a4286b9223148a7ba41d69bd412a1d4",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/chart_read.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/checker.py",
+      "bytes": 30774,
+      "sha256": "8806cfb764615f88401365466d1b803aee855c265f7f18b06de4baec19b1bb37",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/checker.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/cli.py",
+      "bytes": 8481,
+      "sha256": "7668ae83270a33f9daef5d4e2076dd3664ce20c6d7f1706ee3bc60353206e42d",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/cli.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/clone.py",
+      "bytes": 6701,
+      "sha256": "b5c34d04f78b56d8d055358b2f397877e912b3e5005603269b9d8a5a5b549274",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/clone.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/diagram_read.py",
+      "bytes": 19545,
+      "sha256": "8db0db6fd4249eb7d2804382944e0a74b4fc3abd4e48751b50082e3fc2d7a95b",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/diagram_read.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/edit_safety.py",
+      "bytes": 10521,
+      "sha256": "28511d76db9bd3a7c015d5badaf341d9480935637fe8356e0220fdfc550f9c06",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/edit_safety.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/notes.py",
+      "bytes": 4007,
+      "sha256": "8548715db966468dc98162410a77386917a83aa50c043537158b04e3e86ba7c4",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/notes.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/ooxml.py",
+      "bytes": 8910,
+      "sha256": "63318feda82cc5f145da2dfbe16bcc2037f46e7d4a61985984170a60cbbbc741",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/ooxml.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/package.py",
+      "bytes": 4881,
+      "sha256": "89fd56fc644cb4455908013b4f98ff901915128643b6be228727e61180e9107d",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/package.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/scaffolder.py",
+      "bytes": 2783,
+      "sha256": "21ccb8451ee771e17c5c63aa17e78263a8a8d19c34e735606990c0b95a0bbdcf",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/scaffolder.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/selectors.py",
+      "bytes": 2408,
+      "sha256": "fa7d17777c73a8e996944d625dfa2a3de079089d6c2c8688c7497d9febfd187e",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/selectors.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/table_fill.py",
+      "bytes": 3087,
+      "sha256": "fa258f877e731242992b83e64d0fb6ba6cb9643572831791d57def3c48672702",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/table_fill.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/text_fill.py",
+      "bytes": 4283,
+      "sha256": "80b57dca8c270414b9018b9d31acddad9390c5e0148ad7bbe4629115ca078300",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/text_fill.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/transitions.py",
+      "bytes": 5089,
+      "sha256": "9f118afaf8d3cd920f3e7d2ef7ec64679c5580b2e0a5b1c292f0c0cb02fb2f6e",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/transitions.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx/validator.py",
+      "bytes": 16811,
+      "sha256": "de87885486285babe291b2d2ae83b75848d119a15f430d9b1674a29073917632",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx/validator.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_fill_pptx.py",
+      "bytes": 1238,
+      "sha256": "aac9a777520f2e9f646689929408446d946982d4ce460364beb1798a1e75bf24",
+      "origin_path": "skills/ppt-master/scripts/template_fill_pptx.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/template_preview_pptx.py",
+      "bytes": 17928,
+      "sha256": "019182dceba0c70d7e07533334502917dc5b27f66f71b13020d2a8bb93e4474e",
+      "origin_path": "skills/ppt-master/scripts/template_preview_pptx.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/update_spec.py",
+      "bytes": 15325,
+      "sha256": "b668f0fce5d3af13d85eb29c6c3394c4f13c42f556faba3a44c1b0a37c4de6e3",
+      "origin_path": "skills/ppt-master/scripts/update_spec.py",
+      "license": "MIT",
+      "category": "project_contract_parser",
+      "why_needed": "Required to parse the current project and execution-lock contracts."
+    },
+    {
+      "path": "skills/ppt-master/scripts/visualization_catalog.py",
+      "bytes": 12615,
+      "sha256": "4b808ed0e40c0d6e039f17e7aaabf37920acdf26b86ca309eab464867a8b1576",
+      "origin_path": "skills/ppt-master/scripts/visualization_catalog.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    },
+    {
+      "path": "skills/ppt-master/scripts/workflow_transcript.py",
+      "bytes": 11777,
+      "sha256": "ab85f330f79182363c72bce12f36bd9307011eb71122ad22639c6c66f47c3c21",
+      "origin_path": "skills/ppt-master/scripts/workflow_transcript.py",
+      "license": "MIT",
+      "category": "runtime_support",
+      "why_needed": "Imported by the verified converter or integrity path in the clean-room run."
+    }
+  ],
+  "boundary": "This BOM describes the byte-identical v4.8.0 lean core vendored by double6-ppt-cli 0.2.0-local, including the complete PPTX Template Fill Native package restored from the SHA-verified official release asset."
+}

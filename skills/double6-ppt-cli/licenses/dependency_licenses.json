@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "status": "complete_for_0.2.1_local",
+  "python": [
+    {"name": "lxml", "version": "6.1.2", "license": "BSD-3-Clause"},
+    {"name": "pillow", "version": "11.3.0", "license": "MIT-CMU"},
+    {"name": "python-pptx", "version": "1.0.2", "license": "MIT"},
+    {"name": "skia-pathops", "version": "0.8.0.post2", "license": "BSD-3-Clause"},
+    {"name": "typing_extensions", "version": "4.16.0", "license": "PSF-2.0"},
+    {"name": "uharfbuzz", "version": "0.51.7", "license": "Apache-2.0"},
+    {"name": "XlsxWriter", "version": "3.2.5", "license": "BSD-2-Clause"}
+  ],
+  "node": [
+    {"name": "@officecli/officecli", "version": "1.0.144", "license": "Apache-2.0", "notice_required": true}
+  ],
+  "vendored_data": [
+    {"name": "Apache POI presetShapeDefinitions.xml", "version": "5.4.1 / commit 4554f204cbbf00ecbcaed134fe57e43a1779a612", "license": "Apache-2.0", "notice_required": true},
+    {"name": "Open XML SDK ShapeTypeValues-derived list", "commit": "00967dc871f06776ae969762c6703d062308a6c9", "license": "MIT"}
+  ],
+  "unknown_or_noassertion_count": 0,
+  "evidence": [
+    "evaluation/python_dependency_freeze.txt",
+    "evaluation/node_dependency_tree.json",
+    "official_sources/officecli_npm_v1.0.144.json",
+    "official_sources/OfficeCLI_LICENSE",
+    "official_sources/OfficeCLI_NOTICE"
+  ],
+  "boundary": "This is an engineering license inventory for the 0.2.1-local package, not legal advice or a public-release clearance. Public distribution requires a new audit and authorization."
+}
