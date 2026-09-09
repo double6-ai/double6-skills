@@ -7,6 +7,7 @@
 - portable 交付状态至少 `pass_with_warnings`，声明明确未执行 PowerPoint 原生 roundtrip。
 - `finalize` 接受 `powerpoint_status=skipped_portable_tier`。
 - 文档补全 generate 所需 `spec_lock.md`（含 `pptx_structure.mode: flat`）。
+- 新增 `references/test-report-and-verification-tiers.md`：双档验证说明 + 隔离环境完整测试报告与优化清单。
 
 ## 0.2.1
 

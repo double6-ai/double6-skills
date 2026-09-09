@@ -1,5 +1,7 @@
 # Delivery gates v0.2
 
+> 产品级双档说明、隔离环境完整测试结论与优化清单见 [test-report-and-verification-tiers.md](test-report-and-verification-tiers.md)。
+
 ## 验证档位
 
 `verify` 默认 `--verify-tier auto`：
