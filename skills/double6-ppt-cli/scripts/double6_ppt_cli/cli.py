@@ -45,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("route"); p.add_argument("--run", type=Path, required=True); p.add_argument("--finding", required=True)
     p = sub.add_parser("patch"); p.add_argument("--run", type=Path, required=True); p.add_argument("--spec", type=Path, required=True); p.add_argument("--runtime-dir", type=Path)
     p = sub.add_parser("patch-plan"); p.add_argument("--run", type=Path, required=True); p.add_argument("--out", type=Path, required=True); p.add_argument("--confirm-finding", action="append", default=[])
-    p = sub.add_parser("verify"); p.add_argument("--run", type=Path, required=True); p.add_argument("--runtime-dir", type=Path); p.add_argument("--compatibility", choices=("none", "libreoffice"), default="none")
+    p = sub.add_parser("verify"); p.add_argument("--run", type=Path, required=True); p.add_argument("--runtime-dir", type=Path); p.add_argument("--compatibility", choices=("none", "libreoffice"), default="none"); p.add_argument("--verify-tier", dest="verify_tier", choices=("auto", "native", "portable"), default="auto", help="auto: native when PowerPoint is usable, else portable OfficeCLI tier")
     p = sub.add_parser("finalize"); p.add_argument("--run", type=Path, required=True)
     p = sub.add_parser("self-test"); p.add_argument("--runtime-dir", type=Path); p.add_argument("--integration", action="store_true")
     return parser
@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "patch-plan":
             result = build_patch_plan(args.run, args.out, args.confirm_finding)
         elif args.command == "verify":
-            result = verify_run(args.run, args.runtime_dir, compatibility=args.compatibility)
+            result = verify_run(args.run, args.runtime_dir, compatibility=args.compatibility, tier=args.verify_tier)
         elif args.command == "finalize":
             result = finalize_run(args.run)
         else:

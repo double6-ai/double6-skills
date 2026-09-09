@@ -1,6 +1,6 @@
 ---
 name: double6-ppt-cli
-version: 0.2.1
+version: 0.2.2
 description: 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX。适用于从 Markdown、文本、结构化材料与本地授权图片制作演示文稿，对常规 PPTX 模板做母版/版式/对象级复用，或对已有 PPTX 做可审计质检和受限修复；不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
 metadata:
   openclaw:
@@ -13,22 +13,23 @@ metadata:
         - py
 ---
 
-# Double6 PPT CLI 0.2.1
+# Double6 PPT CLI 0.2.2
 
 > 安装说明：从 [GitHub / skills.sh](https://github.com/double6-ai/double6-skills/tree/main/skills/double6-ppt-cli) 安装可获得完整 vendored PPT Master。ClawHub 包因网关体积限制省略了 `pptx_animation_presets.json` 与 `presetShapeDefinitions.xml`；需要原生 SVG 生成完整能力时，请改用 GitHub 安装。
 
-默认闭环是：`模板分析/原生创作 → 生成副本 → inspect → 确定性修复 → Microsoft PowerPoint 验证 → 可选视觉复核 → finalize`。`issues=0`、OOXML validate 或预览非空都不能替代视觉结论。
+默认闭环是：`模板分析/原生创作 → 生成副本 → inspect → 确定性修复 → 验证（native PowerPoint 或 portable OfficeCLI） → 可选视觉复核 → finalize`。`issues=0`、OOXML validate 或预览非空都不能替代视觉结论。
 
 ## 开始前
 
 1. 运行 `python scripts/d6ppt.py doctor --json`。
 2. OfficeCLI 必须是 `1.0.144`；其它版本 fail closed。只有用户授权安装后才运行 `bootstrap --runtime-dir <path> --yes`，禁止全局安装和自动升级。
-3. Microsoft PowerPoint 与 `osascript` 是默认必需验证目标。PowerPoint 已打开其它演示文稿时返回 `powerpoint_busy`，绝不强关用户文件。
-4. LibreOffice 仅在 `verify --compatibility libreoffice` 时做附加兼容性检查；缺失不影响默认 PowerPoint 验证，也不能替代 PowerPoint。
-5. macOS 上运行目录必须位于用户可直接访问的项目目录，禁止放在 `/private/tmp`；但这不代表 PowerPoint 获得该目录的递归权限，PowerPoint 仍不得直接打开 run/cleanroom 文件。
-6. `inspect` 不调用 Chrome/Chromium 预览，避免隔离 profile 触发钥匙串弹窗。视觉事实源统一由后续 PowerPoint 导出产生。
-7. 交给 PowerPoint 打开的所有副本必须先进入真实系统账户的 `/Users/<account>/Library/Containers/com.microsoft.Powerpoint/Data/tmp/d6ppt/`。真实 home 由系统账户数据库解析，禁止依赖隔离 `$HOME` / `Path.home()`；run 与证据只通过普通文件复制读写。
-8. roundtrip、另存、重开、改字、移动、保存、持久化核验与 PDF 导出合并为一次 PowerPoint 批处理会话。禁止让 PowerPoint 打开 `process/tmp/opencode/diag` 或其它诊断文件，也不得代用户点击文件访问授权。
+3. Microsoft PowerPoint 与 `osascript` 是 **native 档**必需验证目标。PowerPoint 已打开其它演示文稿时返回 `powerpoint_busy`，绝不强关用户文件。
+4. 本机没有 PowerPoint、`osascript` 不可用，或系统拒绝辅助访问（error `-1719`）时，`verify` 默认自动降级为 **portable 档**：OOXML + OfficeCLI 校验与改字探针，可选 LibreOffice 渲染。用 `--verify-tier native` 强制要求 PowerPoint；用 `--verify-tier portable` 跳过 PowerPoint。
+5. LibreOffice 在 portable 档可作渲染事实源；在 native 档仅 `verify --compatibility libreoffice` 时做附加兼容性检查，不能替代 PowerPoint。
+6. macOS 上运行目录必须位于用户可直接访问的项目目录，禁止放在 `/private/tmp`；但这不代表 PowerPoint 获得该目录的递归权限，PowerPoint 仍不得直接打开 run/cleanroom 文件。
+7. `inspect` 不调用 Chrome/Chromium 预览，避免隔离 profile 触发钥匙串弹窗。native 档视觉事实源由 PowerPoint 导出产生；portable 档可由 LibreOffice 渲染补齐。
+8. 交给 PowerPoint 打开的所有副本必须先进入真实系统账户的 `/Users/<account>/Library/Containers/com.microsoft.Powerpoint/Data/tmp/d6ppt/`。真实 home 由系统账户数据库解析，禁止依赖隔离 `$HOME` / `Path.home()`；run 与证据只通过普通文件复制读写。
+9. roundtrip、另存、重开、改字、移动、保存、持久化核验与 PDF 导出合并为一次 PowerPoint 批处理会话。禁止让 PowerPoint 打开 `process/tmp/opencode/diag` 或其它诊断文件，也不得代用户点击文件访问授权。
 
 ## 三种模式
 
@@ -52,10 +53,11 @@ metadata:
 
 ## 视觉策略
 
-- 默认需要视觉检查。声明可用：`visual-policy --capability available --decision perform`；PowerPoint 导出逐页图片后，由视觉模型检查并用 `visual-review` 写 SHA 绑定回执。
+- 默认需要视觉检查。声明可用：`visual-policy --capability available --decision perform`；PowerPoint（native）或 LibreOffice（portable）导出逐页图片后，由视觉模型检查并用 `visual-review` 写 SHA 绑定回执。
 - 能力未知或不可用时返回 `visual_review_decision_required`，先询问是否切换视觉模型。
 - 用户拒绝、没有视觉模型或明确跳过时，运行 `visual-policy --capability <unknown|unavailable> --decision waive --reason <user_declined_switch|no_visual_model|user_requested_skip> --user-ack`。
 - 有效豁免不阻断交付，但最终只能是 `pass_with_warnings`，并明确写“未进行模型视觉质量检查”。PPTX SHA 改变后旧复核和旧豁免失效。没有裸 `--skip`。
+- portable 档未渲染出逐页页面时，必须用户视觉豁免或切换到可渲染环境，不得假装视觉已通过。
 
 ## 安全边界
 

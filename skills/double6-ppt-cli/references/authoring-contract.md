@@ -6,6 +6,8 @@
 
 文本或结构化材料先通过 `init` 固化进 run。Agent 在 `authoring/project/` 中完成内容规划和 SVG authoring；编译器不会替 Agent 猜测事实、观点层级或视觉审美。
 
+generate 项目还必须提供 `authoring/project/spec_lock.md`，且包含 `## pptx_structure` 段与 `mode: flat`（自由版式）或 `mode: structured`（模板结构）。缺少该锁定会在 SVG 质量门 fail closed。
+
 ## PPT Master adapter
 
 - 源目录默认是 `authoring/project/svg_output/`，使用 vendored PPT Master `v4.8.0` 精简内核编译。

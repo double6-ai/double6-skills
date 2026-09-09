@@ -101,16 +101,55 @@ def find_powerpoint() -> Path | None:
     return POWERPOINT_APP if POWERPOINT_APP.exists() else None
 
 
+def detect_powerpoint_capability() -> dict[str, Any]:
+    """Report whether the native PowerPoint gate can be attempted on this host."""
+    app = find_powerpoint()
+    osascript = shutil.which("osascript")
+    reasons: list[str] = []
+    if app is None:
+        reasons.append("Microsoft PowerPoint.app is not installed")
+    if not osascript:
+        reasons.append("osascript is unavailable")
+    return {
+        "available": not reasons,
+        "app": str(app) if app else None,
+        "osascript": osascript,
+        "reason": "; ".join(reasons) if reasons else None,
+    }
+
+
+def is_portable_fallback_error(exc: D6PPTError) -> bool:
+    """True when a native PowerPoint attempt should degrade to the portable tier."""
+    if exc.code in {
+        "powerpoint_missing",
+        "powerpoint_automation_missing",
+        "powerpoint_accessibility_denied",
+    }:
+        return True
+    message = str(exc)
+    details = exc.details if isinstance(exc.details, dict) else {}
+    blob = " ".join(str(value) for value in (message, details.get("message", ""), details.get("stderr", ""), details.get("stdout", "")))
+    return "-1719" in blob or "不允许辅助访问" in blob or "not allowed assistive" in blob.lower()
+
+
 def _run_osascript(script: str, args: list[str], timeout: int = 240) -> subprocess.CompletedProcess[str]:
     if not shutil.which("osascript"):
         raise D6PPTError("osascript is unavailable", "powerpoint_automation_missing")
-    return subprocess.run(
+    proc = subprocess.run(
         ["osascript", "-", *args],
         input=script,
         capture_output=True,
         text=True,
         timeout=timeout,
     )
+    blob = f"{proc.stdout or ''}\n{proc.stderr or ''}"
+    if proc.returncode != 0 and ("-1719" in blob or "不允许辅助访问" in blob):
+        raise D6PPTError(
+            (proc.stderr or proc.stdout or "PowerPoint automation was denied assistive access").strip(),
+            "powerpoint_accessibility_denied",
+            {"stdout": proc.stdout, "stderr": proc.stderr, "returncode": proc.returncode},
+        )
+    return proc
 
 
 def _candidate(rows: list[dict[str, Any]]) -> tuple[int, str, str, str] | None:
