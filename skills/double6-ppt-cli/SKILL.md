@@ -1,9 +1,19 @@
 ---
 name: double6-ppt-cli
+version: 0.2.1
 description: 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX。适用于从 Markdown、文本、结构化材料与本地授权图片制作演示文稿，对常规 PPTX 模板做母版/版式/对象级复用，或对已有 PPTX 做可审计质检和受限修复；不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
+metadata:
+  openclaw:
+    homepage: https://github.com/double6-ai/double6-skills/tree/main/skills/double6-ppt-cli
+    emoji: "📊"
+    requires:
+      anyBins:
+        - python3
+        - python
+        - py
 ---
 
-# Double6 PPT CLI 0.2.1-local
+# Double6 PPT CLI 0.2.1
 
 默认闭环是：`模板分析/原生创作 → 生成副本 → inspect → 确定性修复 → Microsoft PowerPoint 验证 → 可选视觉复核 → finalize`。`issues=0`、OOXML validate 或预览非空都不能替代视觉结论。
 
