@@ -106,7 +106,7 @@ bash run_translate.sh <input-file.pdf> --output-dir <output-dir> \
 - 视觉检查默认要求；用户明确跳过时结果只能是 `pass_with_warnings`，不会伪装成完整视觉通过。
 - vendored `ppt-master-core` 来自 PPT Master v4.8.0，适用其 MIT 许可证；OfficeCLI 作为外部固定依赖由用户自行安装。
 
-入口说明见 [`skills/double6-ppt-cli/SKILL.md`](skills/double6-ppt-cli/SKILL.md)，交付门禁与上游许可证见 [`delivery-gates.md`](skills/double6-ppt-cli/references/delivery-gates.md) 与 [`licenses-and-upstreams.md`](skills/double6-ppt-cli/references/licenses-and-upstreams.md)。
+入口说明见 [`skills/double6-ppt-cli/SKILL.md`](skills/double6-ppt-cli/SKILL.md)，交付门禁与上游许可证见 [`delivery-gates.md`](skills/double6-ppt-cli/references/delivery-gates.md) 与 [`licenses-and-upstreams.md`](skills/double6-ppt-cli/references/licenses-and-upstreams.md)；PowerPoint 可选双档与完整测试报告见 [`test-report-and-verification-tiers.md`](skills/double6-ppt-cli/references/test-report-and-verification-tiers.md)。
 
 ### 个人工作台制作器
 

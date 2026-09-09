@@ -69,4 +69,4 @@ metadata:
 - 补丁后必须证明未点名页文本、母版、版式、主题和备注未变。失败即 `patch_scope_violation`。
 - schema 1.0 仅做内存兼容读取，禁止回写历史证据。
 
-详细合同见 [delivery-gates.md](references/delivery-gates.md)、[repair-policy.md](references/repair-policy.md)、[machine-contracts.md](references/machine-contracts.md) 与 [licenses-and-upstreams.md](references/licenses-and-upstreams.md)。
+详细合同见 [delivery-gates.md](references/delivery-gates.md)、[repair-policy.md](references/repair-policy.md)、[machine-contracts.md](references/machine-contracts.md)、[licenses-and-upstreams.md](references/licenses-and-upstreams.md) 与 [test-report-and-verification-tiers.md](references/test-report-and-verification-tiers.md)（native/portable 双档说明与完整测试报告）。
