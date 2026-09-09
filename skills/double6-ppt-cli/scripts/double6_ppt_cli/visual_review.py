@@ -26,7 +26,7 @@ def record_visual_review(run: Path, status: str, reviewer: str, notes: str) -> d
         render_dir = run / "evidence" / "portable_render"
         fact_source = "libreoffice_portable"
         pages = sorted(render_dir.glob("slide-*.png"), key=lambda path: int(path.stem.split("-")[-1]))
-        pdf = next(render_dir.glob("*.pdf"), None)
+        pdf = next(render_dir.glob("*.pdf"), None) or next((render_dir / "pdf").glob("*.pdf"), None)
     if not pages or not contact_sheet.is_file() or pdf is None or not Path(pdf).is_file():
         raise D6PPTError("Run PowerPoint or portable verification/render before recording visual review", "powerpoint_render_missing")
     payload = {

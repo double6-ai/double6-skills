@@ -154,6 +154,33 @@ class VerifyTierTests(unittest.TestCase):
                     verify_run(run, tier="native")
             self.assertEqual(caught.exception.code, "powerpoint_missing")
 
+    def test_portable_render_finds_pdf_in_nested_dir(self):
+        from double6_ppt_cli.verifier import _portable_render
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            run = root / "run"
+            (run / "review").mkdir(parents=True)
+            pptx = run / "artifacts" / "current.pptx"
+            pptx.parent.mkdir(parents=True)
+            _minimal_pptx(pptx)
+
+            def fake_render(_pptx: Path, out: Path, _soffice: Path) -> list[Path]:
+                out.mkdir(parents=True, exist_ok=True)
+                (out / "pdf").mkdir(exist_ok=True)
+                (out / "pdf" / "current.pdf").write_bytes(b"pdf")
+                page = out / "slide-1.png"
+                page.write_bytes(b"png")
+                return [page]
+
+            with patch("double6_ppt_cli.verifier.find_soffice", return_value=Path("/usr/bin/soffice")), \
+                 patch("double6_ppt_cli.verifier.shutil.which", return_value="/usr/bin/pdftoppm"), \
+                 patch("double6_ppt_cli.verifier._render_libreoffice", side_effect=fake_render), \
+                 patch("double6_ppt_cli.verifier._contact_sheet"):
+                receipt = _portable_render(run, pptx)
+            self.assertEqual(receipt["status"], "pass")
+            self.assertEqual(receipt["pdf"], "evidence/portable_render/pdf/current.pdf")
+
 
 if __name__ == "__main__":
     unittest.main()
