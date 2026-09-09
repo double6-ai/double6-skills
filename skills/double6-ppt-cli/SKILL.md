@@ -15,6 +15,8 @@ metadata:
 
 # Double6 PPT CLI 0.2.1
 
+> 安装说明：从 [GitHub / skills.sh](https://github.com/double6-ai/double6-skills/tree/main/skills/double6-ppt-cli) 安装可获得完整 vendored PPT Master。ClawHub 包因网关体积限制省略了 `pptx_animation_presets.json` 与 `presetShapeDefinitions.xml`；需要原生 SVG 生成完整能力时，请改用 GitHub 安装。
+
 默认闭环是：`模板分析/原生创作 → 生成副本 → inspect → 确定性修复 → Microsoft PowerPoint 验证 → 可选视觉复核 → finalize`。`issues=0`、OOXML validate 或预览非空都不能替代视觉结论。
 
 ## 开始前

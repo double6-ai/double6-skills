@@ -7,3 +7,6 @@ security/
 __pycache__/
 *.pyc
 .DS_Store
+# ClawHub 网关 multipart 体积限制；完整 vendor 仍从 GitHub / skills.sh 安装
+vendor/ppt-master-core/skills/ppt-master/scripts/pptx_animation_presets.json
+vendor/ppt-master-core/skills/ppt-master/scripts/pptx_shapes/data/presetShapeDefinitions.xml
