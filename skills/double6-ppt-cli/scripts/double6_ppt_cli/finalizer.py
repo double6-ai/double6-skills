@@ -46,9 +46,19 @@ def finalize_run(run: Path) -> dict[str, Any]:
     else:
         delivery_status = "local_delivered"
     if verification_tier == "portable":
+        probe_status = (verification.get("officecli_edit_probe") or {}).get("status")
+        render_status = (verification.get("portable_render") or {}).get("status")
+        probe_text = (
+            "OfficeCLI 改字与移动持久化探针通过"
+            if probe_status == "pass" else
+            "因缺少可信对象映射，OfficeCLI 改字探针未自动执行"
+            if probe_status == "not_automated" else
+            "OfficeCLI 改字探针未通过"
+        )
+        render_text = "LibreOffice 逐页渲染已完成" if render_status == "pass" else "portable 逐页渲染不可用"
         compatibility_statement = (
-            "原始交付文件为原生可编辑 PPTX，已通过 OOXML 完整性与 OfficeCLI 校验、以及 OfficeCLI 持久化改字探针；"
-            "本机未执行 Microsoft PowerPoint 原生另存/重开/移动对象门禁。"
+            f"原始交付文件已通过 OOXML 完整性与 OfficeCLI 校验；{probe_text}；{render_text}；"
+            "本机未执行 Microsoft PowerPoint 原生另存、重开和移动对象门禁。"
         )
     else:
         compatibility_statement = (
@@ -73,6 +83,7 @@ def finalize_run(run: Path) -> dict[str, Any]:
         "visual_review_status": verification.get("gates", {}).get("visual_review"),
         "visual_review_receipt": verification.get("visual_receipt"),
         "compatibility_statement": compatibility_statement,
+        "tier_result": verification.get("tier_result"),
         "public_release_authorized": False,
     }
     write_json(run / "delivery" / "delivery_manifest.json", delivery)

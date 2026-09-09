@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from double6_ppt_cli.common import D6PPTError, SCHEMA_VERSION, load_run, save_run, sha256_file, write_json
-from double6_ppt_cli.inspector import _capture_html_preview, _generic_findings
+from double6_ppt_cli.inspector import _capture_html_preview, _declared_text_findings, _generic_findings
 from double6_ppt_cli.powerpoint import (
     PDF_SCRIPT,
     resolve_powerpoint_staging_root,
@@ -18,7 +18,9 @@ from double6_ppt_cli.powerpoint import (
     verify_with_powerpoint,
 )
 from double6_ppt_cli.runs import init_run
+from double6_ppt_cli.render_evidence import record_render_manifest
 from double6_ppt_cli.template_workflow import (
+    _apply_template_profile_rules,
     _apply_confirmed_navigation_states,
     _check_content_slot_bindings,
     _check_numeric_claims,
@@ -245,45 +247,44 @@ class TemplateAndVisualTests(unittest.TestCase):
         self.assertIn("set pdfOutputPosix to item 9 of argv", script)
         self.assertIn("set currentStage to \"export_pdf\"", script)
 
-    def test_business_formula_text_is_manual_review_not_deterministic_residue(self):
+    def test_domain_text_is_not_classified_without_a_declared_rule(self):
         findings = _generic_findings([{
             "path": "/slide[5]/shape[@id=42]",
             "text": "组织竞争力公式：人才密度 × AI 杠杆 / 组织摩擦",
             "type": "shape",
             "format": {},
         }])
+        self.assertEqual(findings, [])
+
+    def test_content_contract_text_rule_controls_case_specific_findings(self):
+        row = {"path": "/slide[2]/shape[@id=10]", "text": "SAMPLE_TOKEN", "type": "shape", "format": {}}
+        findings = _declared_text_findings([row], [{
+            "rule_id": "remove-sample", "text": "SAMPLE_TOKEN", "severity": "error",
+            "category": "template_residue", "operation": "remove_leaf", "deterministic": True,
+        }])
         self.assertEqual(len(findings), 1)
-        self.assertTrue(findings[0]["finding_id"].startswith("d6-formula-like-business-content-"))
-        self.assertEqual(findings[0]["severity"], "warning")
-        self.assertFalse(findings[0]["deterministic"])
-        self.assertTrue(findings[0]["requires_user_confirmation"])
-        self.assertNotIn("suggested_operation", findings[0])
+        self.assertTrue(findings[0]["finding_id"].startswith("d6-contract-remove-sample-"))
+        self.assertTrue(findings[0]["deterministic"])
 
-    def test_static_navigation_selection_is_detected_but_not_auto_fixed(self):
-        rows = []
-        for slide in range(2, 7):
-            for label in ("背景", "个体", "团队", "机制", "行动"):
-                rows.append({
-                    "path": f"/slide[{slide}]/shape[@id={100 + len(rows)}]",
-                    "text": label,
-                    "type": "shape",
-                    "format": {"color": "background1" if label == "背景" else "#254AA5"},
-                })
-        findings = _generic_findings(rows)
-        nav = [item for item in findings if item["finding_id"].startswith("d6-navigation-selection-static-")]
-        self.assertEqual(len(nav), 1)
-        self.assertEqual(nav[0]["severity"], "warning")
-        self.assertEqual(nav[0]["suggested_route"], "manual_review")
-        self.assertTrue(nav[0]["requires_user_confirmation"])
-        self.assertFalse(nav[0]["deterministic"])
+    def test_template_sample_roles_require_declared_profile_rules(self):
+        profile = {"objects": [{
+            "source_template_slide": 3, "object_type": "picture",
+            "drawingml_name": "case-equation-art", "text": "",
+            "role": "unknown",
+        }]}
+        _apply_template_profile_rules(profile, [{
+            "rule_id": "sample-art", "name_pattern": "equation", "object_type": "picture",
+            "role": "sample_formula_media",
+        }])
+        self.assertEqual(profile["objects"][0]["role"], "sample_formula_media")
+        self.assertEqual(profile["objects"][0]["profile_rule_id"], "sample-art")
 
-    def test_formula_named_template_picture_is_documented_as_sample_rule(self):
-        import inspect as python_inspect
-        from double6_ppt_cli.template_workflow import build_pptx_profile
-
-        source = python_inspect.getsource(build_pptx_profile)
-        self.assertIn('re.search(r"公式|equation|formula", name, re.I)', source)
-        self.assertIn('obj["role"] = "sample_formula_media"', source)
+    def test_font_minimums_are_role_aware(self):
+        rows = [{"path": "/slide[1]/shape[@id=2]", "text": "source note", "type": "shape", "format": {"size": "9pt"}}]
+        self.assertEqual(_generic_findings(rows, role_by_path={rows[0]["path"]: "footnote"}), [])
+        findings = _generic_findings(rows, role_by_path={rows[0]["path"]: "body"})
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["evidence"]["semantic_role"], "body")
 
     def test_officecli_html_preview_is_disabled_and_defers_to_powerpoint(self):
         class PreviewMustNotRun:
@@ -379,9 +380,14 @@ class TemplateAndVisualTests(unittest.TestCase):
             run = root / "run"; init_run("postflight", source, run)
             set_visual_policy(run, "available", "perform")
             render = run / "evidence" / "powerpoint_render"; render.mkdir(parents=True)
-            (render / "powerpoint-render.pdf").write_bytes(b"pdf")
-            (render / "slide-1.png").write_bytes(b"png")
-            (run / "review" / "contact_sheet.png").write_bytes(b"sheet")
+            pdf = render / "powerpoint-render.pdf"; pdf.write_bytes(b"pdf")
+            page = render / "slide-1.png"; page.write_bytes(b"png")
+            contact = run / "review" / "contact_sheet-native.png"; contact.write_bytes(b"sheet")
+            record_render_manifest(
+                run, run / "artifacts" / "current.pptx", verification_tier="native",
+                renderer="Microsoft PowerPoint", fact_source="powerpoint",
+                pdf=pdf, pages=[page], contact_sheet=contact,
+            )
             review = record_visual_review(run, "accepted", "vision-model", "all pages reviewed")
             gate, receipt = resolve_visual_gate(run, review["pptx_sha256"])
             self.assertEqual(gate, "pass")

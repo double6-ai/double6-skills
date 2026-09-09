@@ -102,6 +102,7 @@ bash run_translate.sh <input-file.pdf> --output-dir <output-dir> \
 
 - 本机有 Microsoft PowerPoint 与 `osascript` 时走 native 验证；没有或系统拒绝辅助访问时，`verify --verify-tier auto` 自动降级 portable 档（OfficeCLI 校验/改字探针 + 可选 LibreOffice 渲染），交付状态为 `pass_with_warnings`。
 - OfficeCLI 必须为 `1.0.144`，其它版本 fail closed；`--verify-tier native` 可强制要求 PowerPoint。
+- `init --mode generate --design academic|business|training|neutral` 会创建 spec/design 与语义身份草稿；PowerPoint 始终是可选 native 验证能力，显式 portable 会完整跳过它。
 - 不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
 - 视觉检查默认要求；用户明确跳过时结果只能是 `pass_with_warnings`，不会伪装成完整视觉通过。
 - vendored `ppt-master-core` 来自 PPT Master v4.8.0，适用其 MIT 许可证；OfficeCLI 作为外部固定依赖由用户自行安装。
@@ -146,6 +147,7 @@ skills/
 │   └── scripts/
 ├── double6-ppt-cli/
 │   ├── SKILL.md
+│   ├── assets/
 │   ├── references/
 │   ├── scripts/
 │   └── vendor/

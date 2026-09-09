@@ -9,14 +9,36 @@ from unittest.mock import patch
 
 from lxml import etree
 
-from double6_ppt_cli.common import D6PPTError, SCHEMA_VERSION, sha256_file
-from double6_ppt_cli.doctor import doctor
+from double6_ppt_cli.common import D6PPTError, SCHEMA_VERSION, sha256_file, write_json
+from double6_ppt_cli.doctor import CLAW_HUB_OMITTED_VENDOR_FILES, _vendor_integrity, doctor
 from double6_ppt_cli.patcher import apply_patch as apply_bounded_patch
 from double6_ppt_cli.semantic import _find
 from double6_ppt_cli.verifier import _snapshot
 
 
 class NegativeBoundaryTests(unittest.TestCase):
+    def test_vendor_integrity_distinguishes_clawhub_omission_from_corruption(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            vendor = root / "vendor" / "ppt-master-core"
+            vendor.mkdir(parents=True)
+            kept = vendor / "LICENSE"; kept.write_bytes(b"license")
+            omitted = sorted(CLAW_HUB_OMITTED_VENDOR_FILES)[0]
+            write_json(vendor / "BOM.json", {
+                "file_count": 2,
+                "files": [
+                    {"path": "LICENSE", "sha256": sha256_file(kept)},
+                    {"path": omitted, "sha256": "0" * 64},
+                ],
+            })
+            partial = _vendor_integrity(root)
+            self.assertEqual(partial["status"], "partial")
+            self.assertEqual(partial["expected_clawhub_omissions"], [omitted])
+            kept.write_bytes(b"tampered")
+            failed = _vendor_integrity(root)
+            self.assertEqual(failed["status"], "fail")
+            self.assertEqual(failed["sha256_mismatches"], ["LICENSE"])
+
     def test_wrong_officecli_fails_but_missing_libreoffice_is_optional(self) -> None:
         fake = Path("/tmp/officecli-wrong-version")
         with patch("double6_ppt_cli.doctor.find_officecli", return_value=fake), \

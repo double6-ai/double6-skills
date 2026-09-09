@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .common import D6PPTError, SCHEMA_VERSION, load_run, resolve_run_path, save_run, sha256_file, utc_now, write_json
+from .render_evidence import load_current_render_manifest
 
 
 STATUSES = {"accepted", "accepted_with_warnings", "rejected"}
@@ -17,26 +18,23 @@ def record_visual_review(run: Path, status: str, reviewer: str, notes: str) -> d
     if manifest.get("visual_policy", {}).get("capability") != "available":
         raise D6PPTError("Visual review requires declared visual capability", "visual_capability_missing")
     current = resolve_run_path(run, manifest["artifacts"]["current_pptx"])
-    contact_sheet = run / "review" / "contact_sheet.png"
-    render_dir = run / "evidence" / "powerpoint_render"
-    fact_source = "powerpoint"
-    pages = sorted(render_dir.glob("slide-*.png"), key=lambda path: int(path.stem.split("-")[-1]))
-    pdf = render_dir / "powerpoint-render.pdf"
-    if not pages:
-        render_dir = run / "evidence" / "portable_render"
-        fact_source = "libreoffice_portable"
-        pages = sorted(render_dir.glob("slide-*.png"), key=lambda path: int(path.stem.split("-")[-1]))
-        pdf = next(render_dir.glob("*.pdf"), None) or next((render_dir / "pdf").glob("*.pdf"), None)
-    if not pages or not contact_sheet.is_file() or pdf is None or not Path(pdf).is_file():
-        raise D6PPTError("Run PowerPoint or portable verification/render before recording visual review", "powerpoint_render_missing")
+    current_sha = sha256_file(current)
+    expected_tier = manifest.get("artifacts", {}).get("verification_tier")
+    render = load_current_render_manifest(run, current_sha, expected_tier=expected_tier)
+    contact_sheet = resolve_run_path(run, render["contact_sheet"]["path"])
+    pdf = resolve_run_path(run, render["pdf"]["path"])
+    pages = [resolve_run_path(run, item["path"]) for item in render["pages"]]
+    render_manifest_path = run / "evidence" / "render_manifest.json"
     payload = {
         "schema_version": SCHEMA_VERSION,
         "created_at": utc_now(),
         "status": status,
         "reviewer": reviewer,
         "visual_capability": "available",
-        "fact_source": fact_source,
-        "pptx_sha256": sha256_file(current),
+        "fact_source": render["fact_source"],
+        "verification_tier": render["verification_tier"],
+        "pptx_sha256": current_sha,
+        "render_manifest_sha256": sha256_file(render_manifest_path),
         "render_pdf_sha256": sha256_file(Path(pdf)),
         "contact_sheet_sha256": sha256_file(contact_sheet),
         "page_count": len(pages),

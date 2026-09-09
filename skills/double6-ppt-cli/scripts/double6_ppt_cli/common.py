@@ -12,14 +12,21 @@ from typing import Any
 
 SCHEMA_VERSION = "2.0"
 LEGACY_SCHEMA_VERSIONS = {"1.0"}
+SKILL_VERSION = "0.2.3"
 OFFICECLI_VERSION = "1.0.144"
 PPT_MASTER_VERSION = "4.8.0"
 PPT_MASTER_COMMIT = "53c9c2a5e9f1a49096324fba4f95833649c6a0f4"
-RUNTIME_LOCK_INPUT = f"double6-ppt-cli:0.2.1|officecli:{OFFICECLI_VERSION}|ppt-master:{PPT_MASTER_COMMIT}"
+RUNTIME_LOCK_INPUT = f"double6-ppt-cli:{SKILL_VERSION}|officecli:{OFFICECLI_VERSION}|ppt-master:{PPT_MASTER_COMMIT}"
 RUNTIME_LOCK_SHA = hashlib.sha256(RUNTIME_LOCK_INPUT.encode()).hexdigest()[:16]
 STATUSES = {
     "initialized", "authored", "compiled", "inspected", "repair_needed",
     "verified", "verified_with_warnings", "local_delivered", "delivered_with_warnings", "blocked",
+}
+PPTX_DERIVED_ARTIFACT_KEYS = {
+    "findings", "inspected_pptx_sha256", "verification_receipt", "verification_tier",
+    "render_manifest", "powerpoint_receipt", "powerpoint_render", "portable_render",
+    "portable_editability_receipt", "delivery_manifest", "visual_review", "visual_review_waiver",
+    "contact_sheet", "libreoffice_roundtrip", "current_pptx_profile", "inspection_map",
 }
 
 
@@ -97,6 +104,16 @@ def skill_root() -> Path:
 
 def default_runtime_dir() -> Path:
     return Path.home() / ".cache" / "double6-ppt-cli" / RUNTIME_LOCK_SHA
+
+
+def invalidate_pptx_derived_artifacts(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    artifacts = manifest.setdefault("artifacts", {})
+    stale = []
+    for key in sorted(PPTX_DERIVED_ARTIFACT_KEYS):
+        if key in artifacts:
+            stale.append({"key": key, "value": artifacts.pop(key)})
+    manifest["powerpoint_status"] = "unverified"
+    return stale
 
 
 def run_manifest_path(run: Path) -> Path:

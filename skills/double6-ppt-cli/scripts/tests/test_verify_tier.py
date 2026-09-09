@@ -55,6 +55,7 @@ class VerifyTierTests(unittest.TestCase):
         self.assertEqual(_resolve_verify_tier("auto", {"available": True}, None), "native")
         # reusable native receipt keeps native even if current capability is false
         self.assertEqual(_resolve_verify_tier("auto", capability, {"status": "pass"}), "native")
+        self.assertEqual(_resolve_verify_tier("portable", {"available": True}, {"status": "pass"}), "portable")
 
     def test_accessibility_denied_is_portable_fallback(self):
         exc = D6PPTError("osascript 不允许辅助访问", "powerpoint_roundtrip_failed")
@@ -176,7 +177,7 @@ class VerifyTierTests(unittest.TestCase):
             with patch("double6_ppt_cli.verifier.find_soffice", return_value=Path("/usr/bin/soffice")), \
                  patch("double6_ppt_cli.verifier.shutil.which", return_value="/usr/bin/pdftoppm"), \
                  patch("double6_ppt_cli.verifier._render_libreoffice", side_effect=fake_render), \
-                 patch("double6_ppt_cli.verifier._contact_sheet"):
+                 patch("double6_ppt_cli.verifier._contact_sheet", side_effect=lambda _pages, path: path.write_bytes(b"sheet")):
                 receipt = _portable_render(run, pptx)
             self.assertEqual(receipt["status"], "pass")
             self.assertEqual(receipt["pdf"], "evidence/portable_render/pdf/current.pdf")

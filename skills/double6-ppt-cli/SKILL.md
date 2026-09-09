@@ -1,6 +1,6 @@
 ---
 name: double6-ppt-cli
-version: 0.2.2
+version: 0.2.3
 description: 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX。适用于从 Markdown、文本、结构化材料与本地授权图片制作演示文稿，对常规 PPTX 模板做母版/版式/对象级复用，或对已有 PPTX 做可审计质检和受限修复；不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
 metadata:
   openclaw:
@@ -13,7 +13,7 @@ metadata:
         - py
 ---
 
-# Double6 PPT CLI 0.2.2
+# Double6 PPT CLI 0.2.3
 
 > 安装说明：从 [GitHub / skills.sh](https://github.com/double6-ai/double6-skills/tree/main/skills/double6-ppt-cli) 安装可获得完整 vendored PPT Master。ClawHub 包因网关体积限制省略了 `pptx_animation_presets.json` 与 `presetShapeDefinitions.xml`；需要原生 SVG 生成完整能力时，请改用 GitHub 安装。
 
@@ -21,12 +21,12 @@ metadata:
 
 ## 开始前
 
-1. 运行 `python scripts/d6ppt.py doctor --json`。
+1. 运行 `python scripts/d6ppt.py doctor --json --mode <generate|postflight|template-fill> --verify-tier <auto|native|portable>`。doctor 会按目标模式和档位报告能力；PowerPoint 缺失只会阻断 native 档。
 2. OfficeCLI 必须是 `1.0.144`；其它版本 fail closed。只有用户授权安装后才运行 `bootstrap --runtime-dir <path> --yes`，禁止全局安装和自动升级。
 3. Microsoft PowerPoint 与 `osascript` 是 **native 档**必需验证目标。PowerPoint 已打开其它演示文稿时返回 `powerpoint_busy`，绝不强关用户文件。
 4. 本机没有 PowerPoint、`osascript` 不可用，或系统拒绝辅助访问（error `-1719`）时，`verify` 默认自动降级为 **portable 档**：OOXML + OfficeCLI 校验与改字探针，可选 LibreOffice 渲染。用 `--verify-tier native` 强制要求 PowerPoint；用 `--verify-tier portable` 跳过 PowerPoint。
 5. LibreOffice 在 portable 档可作渲染事实源；在 native 档仅 `verify --compatibility libreoffice` 时做附加兼容性检查，不能替代 PowerPoint。
-6. macOS 上运行目录必须位于用户可直接访问的项目目录，禁止放在 `/private/tmp`；但这不代表 PowerPoint 获得该目录的递归权限，PowerPoint 仍不得直接打开 run/cleanroom 文件。
+6. macOS 上 auto/native 运行目录必须位于用户可直接访问的项目目录，禁止放在 `/private/tmp`；显式 portable 档不调用 PowerPoint，可在隔离临时目录运行。普通用户目录并不自动向 PowerPoint 开放递归访问，PowerPoint 仍不得直接打开 run/cleanroom 文件。
 7. `inspect` 不调用 Chrome/Chromium 预览，避免隔离 profile 触发钥匙串弹窗。native 档视觉事实源由 PowerPoint 导出产生；portable 档可由 LibreOffice 渲染补齐。
 8. 交给 PowerPoint 打开的所有副本必须先进入真实系统账户的 `/Users/<account>/Library/Containers/com.microsoft.Powerpoint/Data/tmp/d6ppt/`。真实 home 由系统账户数据库解析，禁止依赖隔离 `$HOME` / `Path.home()`；run 与证据只通过普通文件复制读写。
 9. roundtrip、另存、重开、改字、移动、保存、持久化核验与 PDF 导出合并为一次 PowerPoint 批处理会话。禁止让 PowerPoint 打开 `process/tmp/opencode/diag` 或其它诊断文件，也不得代用户点击文件访问授权。
@@ -35,7 +35,7 @@ metadata:
 
 ### 原生生成
 
-`init --mode generate --source <content> --out <run>`，按 [authoring-contract.md](references/authoring-contract.md) 准备 PPT Master SVG 项目和稳定对象身份，再依次 `compile → inspect → repair → verify → finalize`。
+`init --mode generate --source <content> --design <neutral|academic|business|training> --verify-tier <auto|native|portable> --out <run>` 会生成 `spec_lock.md`、`design_spec.md`、`svg_output/` 与语义清单示例。填完草稿并按 [authoring-contract.md](references/authoring-contract.md) 准备稳定对象身份，再依次 `compile → inspect → repair → verify → finalize`。设计包提供颜色、字号与工作结构，不会替 Agent 自动完成版式；需要复用现成版式时使用 template-fill。
 
 ### 模板填充
 
@@ -49,11 +49,11 @@ metadata:
 
 ### 已有 PPTX 质检与修复
 
-`init --mode postflight --source <deck.pptx> [--template <template.pptx>] [--contract <content-contract.json>] --out <run>`。`inspect` 会生成稳定 inspection map、残留/导航/数字/容量/溢出/小字/空白/主题漂移 findings；包内存在未挂入逻辑页且仍含模板示例的 slide parts 时给出阻断 finding，并指向 `package-clean`。同一导航项在多数页面持续处于选中态时会报告为 `manual_review`，因为 postflight 没有 template-fill 的章节起始页映射可证明正确高亮项。`patch-plan` 只纳入确定性叶子操作；图片必须用 `--confirm-finding <id>` 单独确认。然后运行 `patch` 并重新 `inspect`。
+`init --mode postflight --source <deck.pptx> [--template <template.pptx>] [--contract <content-contract.json>] --out <run>`。`inspect` 会生成稳定 inspection map，并报告 OfficeCLI 问题、小字、空白与结构漂移。业务专属的残留文字、数字显示、模板角色和非逻辑页示例标记必须由 content contract 声明，通用检查器不内置某个案例的词、导航标签或数字。`patch-plan` 只纳入确定性叶子操作；图片必须用 `--confirm-finding <id>` 单独确认。然后运行 `patch` 并重新 `inspect`。
 
 ## 视觉策略
 
-- 默认需要视觉检查。声明可用：`visual-policy --capability available --decision perform`；PowerPoint（native）或 LibreOffice（portable）导出逐页图片后，由视觉模型检查并用 `visual-review` 写 SHA 绑定回执。
+- 默认需要视觉检查。声明可用：`visual-policy --capability available --decision perform`；PowerPoint（native）或 LibreOffice（portable）导出逐页图片后，由视觉模型检查并用 `visual-review` 写 SHA 绑定回执。`render_manifest.json` 同时绑定当前 PPTX、档位、渲染器、PDF、逐页 PNG 与 contact sheet；任一文件变化都会使视觉回执失效。
 - 能力未知或不可用时返回 `visual_review_decision_required`，先询问是否切换视觉模型。
 - 用户拒绝、没有视觉模型或明确跳过时，运行 `visual-policy --capability <unknown|unavailable> --decision waive --reason <user_declined_switch|no_visual_model|user_requested_skip> --user-ack`。
 - 有效豁免不阻断交付，但最终只能是 `pass_with_warnings`，并明确写“未进行模型视觉质量检查”。PPTX SHA 改变后旧复核和旧豁免失效。没有裸 `--skip`。
@@ -63,7 +63,7 @@ metadata:
 
 - 原文件永不覆盖；所有修改只写 run 副本并保留前后 package diff。
 - 自动修复只限唯一稳定叶子路径、当前 SHA、DrawingML ID/type、内容指纹、finding、来源对象与理由全部匹配的 `set_property` / `remove_leaf`。
-- `组织竞争力公式`、`分子/分母/乘除关系` 等业务语义文本不因“像公式”而成为可删除模板残留；没有模板对象身份或媒体 SHA 的精确证明时只能进入人工复核。
+- 业务语义文本不会仅因“像公式”成为可删除模板残留；只有 content contract 或模板对象身份与媒体 SHA 明确证明后，才可进入对应处置。
 - 不自动删除母版、版式、组合对象、共享关系或语义图片；不做模糊删除、大面积重排、审美重做和跨页扩散。
 - `package-clean` 不是通用 OOXML 垃圾回收器：只处理已证明未使用的 slide 关系和不可达非逻辑 slide；仍被 live XML、自定义放映或其它保留 part 引用的对象 fail closed。
 - 补丁后必须证明未点名页文本、母版、版式、主题和备注未变。失败即 `patch_scope_violation`。

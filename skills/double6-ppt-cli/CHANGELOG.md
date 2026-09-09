@@ -1,5 +1,15 @@
 # double6-ppt-cli 变更记录
 
+## 0.2.3
+
+- `doctor` 按 mode 与 `auto|native|portable` 档位报告能力；PowerPoint 与 `osascript` 只对 native 必需，vendor BOM 会逐文件校验 SHA 并识别 ClawHub 省略项。
+- `init --mode generate --design <profile>` 生成可填写的 `spec_lock.md`、`design_spec.md`、SVG 目录和语义清单示例；compile 对未完成草稿给出下一步。
+- 支持 vendored PPT Master 的 `data-pptx-shape-id` / `match.drawingml_id` 稳定身份，歧义错误列出来源文件与候选对象。
+- native/portable 统一写 SHA 绑定的 `render_manifest.json`，视觉回执再绑定该清单；显式 portable 不会被旧 native 回执覆盖。
+- portable 的改字探针、渲染和最终声明按实际状态生成，并增加一行 `tier_result`。
+- 删除通用检查器与模板画像中的案例词、导航和数字硬编码，改由 content contract 声明；增加 `footnote` / `page_mark` 角色字号阈值。
+- 回归测试扩至 56 项。
+
 ## 0.2.2
 
 - `verify` 增加双档：`--verify-tier auto|native|portable`。本机无 PowerPoint、`osascript` 不可用或系统拒绝辅助访问时，auto 自动降级 portable（OfficeCLI 持久化改字探针 + 可选 LibreOffice 渲染）。

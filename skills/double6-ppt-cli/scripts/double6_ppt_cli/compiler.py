@@ -4,9 +4,42 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .common import D6PPTError, load_run, save_run, set_status, sha256_file, skill_root, utc_now, write_json
+from .common import D6PPTError, invalidate_pptx_derived_artifacts, load_run, save_run, set_status, sha256_file, skill_root, utc_now, write_json
 from .semantic import apply_semantic_contract
 from .source_adapter import prepare_ppt_master_project
+
+
+def _check_authoring_scaffold(project: Path, semantic: Path) -> None:
+    missing = []
+    if not project.is_dir():
+        missing.append("authoring/project")
+    if not semantic.is_file():
+        missing.append("authoring/semantic_manifest.json")
+    spec = project / "spec_lock.md"
+    if project.is_dir() and not spec.is_file():
+        missing.append("authoring/project/spec_lock.md")
+    if missing:
+        raise D6PPTError(
+            "Generate authoring is incomplete: " + ", ".join(missing),
+            "authoring_incomplete",
+            {
+                "next_steps": [
+                    "Complete authoring/project/spec_lock.md and design_spec.md.",
+                    "Create SVG pages under authoring/project/svg_output/.",
+                    "Copy authoring/semantic_manifest.example.json to authoring/semantic_manifest.json and replace the example objects.",
+                ]
+            },
+        )
+    spec_text = spec.read_text(encoding="utf-8")
+    if "[fill" in spec_text or "- status: draft" in spec_text:
+        raise D6PPTError(
+            "The generated spec_lock scaffold still contains draft fields",
+            "authoring_scaffold_incomplete",
+            {
+                "path": str(spec),
+                "next_step": "Fill every [fill] field and change '- status: draft' to '- status: confirmed'.",
+            },
+        )
 
 
 def compile_run(run: Path, *, native_charts_and_tables: bool = True) -> dict:
@@ -17,8 +50,7 @@ def compile_run(run: Path, *, native_charts_and_tables: bool = True) -> dict:
         raise D6PPTError("compile is only available for generate runs", "invalid_command_for_mode")
     project = run / "authoring" / "project"
     semantic = run / "authoring" / "semantic_manifest.json"
-    if not project.is_dir() or not semantic.is_file():
-        raise D6PPTError("authoring/project and authoring/semantic_manifest.json are required", "authoring_incomplete")
+    _check_authoring_scaffold(project, semantic)
     set_status(run, manifest, "authored", "authoring_contract_present")
     build_project = run / "build" / "ppt-master-project"
     prepare_ppt_master_project(
@@ -67,14 +99,7 @@ def compile_run(run: Path, *, native_charts_and_tables: bool = True) -> dict:
     })
     current_pptx_sha = manifest["artifacts"]["pptx_sha256"]
     if prior_pptx_sha and prior_pptx_sha != current_pptx_sha:
-        stale_keys = (
-            "findings", "contact_sheet", "inspected_pptx_sha256", "verification_receipt",
-            "libreoffice_roundtrip", "delivery_manifest",
-        )
-        stale = []
-        for key in stale_keys:
-            if key in manifest["artifacts"]:
-                stale.append({"key": key, "value": manifest["artifacts"].pop(key)})
+        stale = invalidate_pptx_derived_artifacts(manifest)
         manifest.setdefault("stale_artifacts", []).append({
             "at": utc_now(),
             "reason": "pptx_sha_changed_after_recompile",
