@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-08-22T00:17:08+08:00",
+  "status": "frozen_for_double6_ppt_cli_v0.2.1_local",
+  "upstreams": [
+    {
+      "name": "ppt-master",
+      "official_repository": "https://github.com/hugohe3/ppt-master",
+      "release_url": "https://github.com/hugohe3/ppt-master/releases/tag/v4.8.0",
+      "tag": "v4.8.0",
+      "commit": "53c9c2a5e9f1a49096324fba4f95833649c6a0f4",
+      "published_at": "2026-08-16T15:04:40Z",
+      "license": "MIT",
+      "license_sha256": "80cefc234c1ec12a8cece4344f16300c634fa03df7891686fcf979e3828f0921",
+      "official_release_asset": {
+        "name": "ppt-master-skill-v4.8.0.zip",
+        "bytes": 58401638,
+        "sha256": "29dc7d303147f34d5308f140bce189c4676c77c32756b793e353f968a70e0f4c"
+      },
+      "integration_boundary": "vendored_137_file_lean_core; complete Template Fill Native package restored byte-identically from the SHA-verified official v4.8.0 release asset; Double6 integration lives outside vendor tree"
+    },
+    {
+      "name": "OfficeCLI",
+      "official_repository": "https://github.com/iOfficeAI/OfficeCLI",
+      "release_url": "https://github.com/iOfficeAI/OfficeCLI/releases/tag/v1.0.144",
+      "npm_package": "@officecli/officecli@1.0.144",
+      "tag": "v1.0.144",
+      "commit": "1ced45e900782c5083ed550ddf328ee974e425e7",
+      "published_at": "2026-08-13T10:53:09Z",
+      "license": "Apache-2.0",
+      "license_sha256": "7e282402a5a6db33995fe638bb3fe79013f9884d8f7d15a42e481c1e86aadda1",
+      "notice_sha256": "3a4715b268e148a8e9566f5e835f766f5c95c3da4d6e5ddd908806a258a2f07b",
+      "integration_boundary": "pinned_external_runtime_dependency; do_not_vendor binary; fail closed on versions other than 1.0.144"
+    }
+  ],
+  "identity_exclusion": {
+    "package": "officecli@0.2.121",
+    "repository": "https://github.com/officecli/officecli",
+    "reason": "This is a separate same-name line. Its official npm metadata says UNLICENSED and it is not the evaluated iOfficeAI/@officecli package."
+  },
+  "claim_boundary": "Official release metadata and licenses establish identity and redistribution obligations, not product quality."
+}

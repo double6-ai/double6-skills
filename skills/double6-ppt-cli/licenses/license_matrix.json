@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "status": "pass_for_0.2.1_local",
+  "components": [
+    {
+      "component": "lean_ppt_master_core_candidate",
+      "license": "MIT",
+      "planned_form": "vendored_137_file_lean_core_unmodified",
+      "required_actions": ["retain_upstream_LICENSE", "preserve_attribution_guard", "record_modified_files_in_MODIFICATIONS"]
+    },
+    {
+      "component": "official_officecli_runtime",
+      "license": "Apache-2.0",
+      "planned_form": "pinned_external_dependency",
+      "required_actions": ["retain_LICENSE_and_NOTICE_in_any_redistribution", "state_no_upstream_endorsement", "do_not_silently_upgrade"]
+    },
+    {
+      "component": "drawingml_preset_geometry_data",
+      "license": "Apache-2.0 for Apache POI XML; MIT for Open XML SDK-derived completeness list",
+      "planned_form": "vendored_data_required_by_verified_converter",
+      "required_actions": ["retain_both_license_files", "retain_pptx_shapes_data_NOTICE", "preserve_source_commits_and_shas"]
+    },
+    {
+      "component": "double6_ppt_cli_original_integration",
+      "license": "Apache-2.0",
+      "planned_form": "shared_skill_source_for_local_delivery",
+      "required_actions": ["retain_root_LICENSE_and_NOTICE", "do_not_claim_upstream_endorsement", "re_audit_before_public_distribution"]
+    }
+  ],
+  "asset_policy": "No external icons, sounds, image-generation references, examples, templates, logos or brand assets entered the candidate.",
+  "unknown_source_asset_count": 0,
+  "result": "No known license blocker for the 0.2.1-local package under the frozen boundaries. Public distribution is not authorized and requires a new formal package audit."
+}
