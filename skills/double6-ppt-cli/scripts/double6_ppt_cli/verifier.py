@@ -21,8 +21,19 @@ from .common import (
 from .doctor import find_soffice
 from .officecli import OfficeCLI
 from .package_diff import compare_parts
-from .powerpoint import verify_with_powerpoint
+from .powerpoint import (
+    _contact_sheet,
+    detect_powerpoint_capability,
+    is_portable_fallback_error,
+    verify_with_powerpoint,
+)
 from .visual_policy import resolve_visual_gate
+
+VERIFY_TIERS = {"auto", "native", "portable"}
+PORTABLE_CLAIM_BOUNDARY = (
+    "Portable tier: OOXML + OfficeCLI persistence/edit probe completed. "
+    "Microsoft PowerPoint native roundtrip was not performed on this host."
+)
 
 
 A_NS = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main", "p": "http://schemas.openxmlformats.org/presentationml/2006/main"}
@@ -352,11 +363,68 @@ def _optional_libreoffice(
     return receipt
 
 
+def _resolve_verify_tier(
+    requested: str,
+    capability: dict[str, Any],
+    reusable: dict[str, Any] | None,
+) -> str:
+    if requested not in VERIFY_TIERS:
+        raise D6PPTError("verify tier must be auto, native, or portable", "invalid_verify_tier")
+    if reusable is not None:
+        return "native"
+    if requested == "native":
+        return "native"
+    if requested == "portable":
+        return "portable"
+    return "native" if capability.get("available") else "portable"
+
+
+def _portable_render(run: Path, pptx: Path) -> dict[str, Any]:
+    soffice = find_soffice()
+    pdftoppm = shutil.which("pdftoppm")
+    if not soffice or not pdftoppm:
+        return {
+            "status": "not_available",
+            "soffice": str(soffice) if soffice else None,
+            "pdftoppm": pdftoppm,
+            "claim_boundary": "No LibreOffice/pdftoppm on this host; portable visual pages are unavailable.",
+        }
+    output = run / "evidence" / "portable_render"
+    if output.exists():
+        shutil.rmtree(output)
+    output.mkdir(parents=True, exist_ok=True)
+    pages = _render_libreoffice(pptx, output, soffice)
+    contact = run / "review" / "contact_sheet.png"
+    _contact_sheet(pages, contact)
+    pdf = next(output.glob("*.pdf"), None)
+    return {
+        "status": "pass",
+        "application": "LibreOffice",
+        "fact_source": "libreoffice_portable",
+        "page_count": len(pages),
+        "pages": [str(path.relative_to(run)) for path in pages],
+        "pdf": str(pdf.relative_to(run)) if pdf else None,
+        "contact_sheet": str(contact.relative_to(run)),
+        "claim_boundary": "Portable tier page rasterization uses LibreOffice, not Microsoft PowerPoint.",
+    }
+
+
+def _portable_editability(client: OfficeCLI, pptx: Path, run: Path, object_map: dict[str, Any] | None) -> dict[str, Any]:
+    probe = run / "evidence" / "portable_editability"
+    probe.mkdir(parents=True, exist_ok=True)
+    working = probe / "edit-probe.pptx"
+    shutil.copy2(pptx, working)
+    result = _edit_probe(client, working, object_map)
+    write_json(probe / "receipt.json", result)
+    return result
+
+
 def verify_run(
     run: Path,
     runtime_dir: Path | None = None,
     *,
     compatibility: str = "none",
+    tier: str = "auto",
 ) -> dict[str, Any]:
     run = run.resolve()
     manifest = load_run(run)
@@ -371,73 +439,133 @@ def verify_run(
     office_validate = client.validate(pptx)
     map_rel = manifest["artifacts"].get("object_path_map")
     object_map = read_json(resolve_run_path(run, map_rel)) if map_rel else None
-    powerpoint = _reusable_powerpoint_receipt(run, pptx_sha)
-    if powerpoint is None:
-        try:
-            powerpoint = verify_with_powerpoint(pptx, run, client)
-        except D6PPTError as exc:
-            set_status(run, manifest, "blocked", "verify_powerpoint", {"code": exc.code, "message": str(exc)})
-            raise
-    powerpoint_roundtrip = resolve_run_path(run, powerpoint["roundtrip_pptx"])
-    after = _snapshot(powerpoint_roundtrip)
-    notes_ok = Counter(before["notes"]) == Counter(after["notes"])
-    counts_ok = before["counts"] == after["counts"]
-    identities_ok = set(before["identities"]).issubset(set(after["identities"]))
+    capability = detect_powerpoint_capability()
+    reusable = _reusable_powerpoint_receipt(run, pptx_sha)
+    resolved_tier = _resolve_verify_tier(tier, capability, reusable)
+    powerpoint: dict[str, Any] | None = None
+    portable_fallback_reason: dict[str, Any] | None = None
+    if resolved_tier == "native":
+        powerpoint = reusable
+        if powerpoint is None:
+            try:
+                powerpoint = verify_with_powerpoint(pptx, run, client)
+            except D6PPTError as exc:
+                if tier == "native" or not is_portable_fallback_error(exc):
+                    set_status(run, manifest, "blocked", "verify_powerpoint", {"code": exc.code, "message": str(exc)})
+                    raise
+                resolved_tier = "portable"
+                portable_fallback_reason = {"code": exc.code, "message": str(exc)}
+    notes_ok = counts_ok = identities_ok = True
+    powerpoint_roundtrip: Path | None = None
+    if powerpoint is not None:
+        powerpoint_roundtrip = resolve_run_path(run, powerpoint["roundtrip_pptx"])
+        after = _snapshot(powerpoint_roundtrip)
+        notes_ok = Counter(before["notes"]) == Counter(after["notes"])
+        counts_ok = before["counts"] == after["counts"]
+        identities_ok = set(before["identities"]).issubset(set(after["identities"]))
     visual_gate, visual_receipt = resolve_visual_gate(run, pptx_sha)
     libreoffice = None
     if compatibility == "libreoffice":
         libreoffice = _optional_libreoffice(run, pptx, before, client, object_map)
     elif compatibility != "none":
         raise D6PPTError("compatibility must be none or libreoffice", "invalid_compatibility_target")
+    portable_render = None
+    edit_probe = None
+    if resolved_tier == "portable":
+        portable_render = _portable_render(run, pptx)
+        edit_probe = _portable_editability(client, pptx, run, object_map)
     warning_count = int(findings.get("warning_count", 0))
     blocking_count = int(findings.get("blocking_count", findings.get("finding_count", 0)))
+    contact_sheet_ready = (run / "review" / "contact_sheet.png").is_file()
+    if resolved_tier == "native":
+        render_gate = "pass" if contact_sheet_ready else "fail"
+        powerpoint_gates = {
+            "powerpoint_roundtrip": "pass" if powerpoint and powerpoint.get("status") == "pass" else "fail",
+            "powerpoint_notes_preserved": "pass" if notes_ok else "fail",
+            "powerpoint_object_counts_preserved": "pass" if counts_ok else "fail",
+            "powerpoint_object_identities_preserved": "pass" if identities_ok else "fail",
+            "powerpoint_second_text_edit_and_object_move": "pass" if (
+                ("text_persisted=true" in (powerpoint or {}).get("operation_result", "")
+                 or "title_persisted=true" in (powerpoint or {}).get("operation_result", ""))
+                and "move_persisted=true" in (powerpoint or {}).get("operation_result", "")
+            ) else "fail",
+        }
+    else:
+        render_gate = "pass" if portable_render and portable_render.get("status") == "pass" else "not_available"
+        edit_status = (edit_probe or {}).get("status")
+        powerpoint_gates = {
+            "powerpoint_roundtrip": "skipped_portable_tier",
+            "portable_full_page_render": render_gate,
+            "officecli_edit_probe": "pass" if edit_status == "pass" else ("warn" if edit_status == "not_automated" else "fail"),
+        }
     gates = {
         "ooxml_package": "pass",
         "officecli_validate": "pass" if office_validate.get("success", office_validate.get("ok", True)) else "fail",
-        "full_page_powerpoint_render": "pass" if (run / "review" / "contact_sheet.png").is_file() else "fail",
+        "full_page_render": render_gate,
         "automated_blocking_findings_closed": "pass" if blocking_count == 0 else "fail",
         "automated_warning_findings": "warn" if warning_count else "pass",
         "visual_review": visual_gate,
-        "powerpoint_roundtrip": "pass" if powerpoint.get("status") == "pass" else "fail",
-        "powerpoint_notes_preserved": "pass" if notes_ok else "fail",
-        "powerpoint_object_counts_preserved": "pass" if counts_ok else "fail",
-        "powerpoint_object_identities_preserved": "pass" if identities_ok else "fail",
-        "powerpoint_second_text_edit_and_object_move": "pass" if (
-            ("text_persisted=true" in powerpoint.get("operation_result", "")
-             or "title_persisted=true" in powerpoint.get("operation_result", ""))
-            and "move_persisted=true" in powerpoint.get("operation_result", "")
-        ) else "fail",
+        **powerpoint_gates,
         "unreplayed_patches": "pass" if not manifest.get("unreplayed_patches") else "fail",
         "libreoffice_compatibility": libreoffice["status"] if libreoffice else "not_requested",
+        "verification_tier": "pass",
     }
     failed = [name for name, status in gates.items() if status == "fail"]
-    warnings = [name for name, status in gates.items() if status in {"warn", "skipped_with_user_ack"}]
+    warnings = [name for name, status in gates.items() if status in {"warn", "skipped_with_user_ack", "not_available"}]
+    if resolved_tier == "portable":
+        warnings.append("verification_tier=portable")
     status = "fail" if failed else ("pass_with_warnings" if warnings else "pass")
+    powerpoint_status = "verified" if resolved_tier == "native" else "skipped_portable_tier"
     receipt = {
         "schema_version": SCHEMA_VERSION,
         "created_at": utc_now(),
         "status": status,
         "source_pptx_sha256": pptx_sha,
         "before_counts": before["counts"],
-        "powerpoint_status": "verified",
-        "powerpoint_receipt": "evidence/powerpoint_roundtrip/receipt.json",
+        "verification_tier": resolved_tier,
+        "powerpoint_capability": capability,
+        "powerpoint_fallback_reason": portable_fallback_reason,
+        "powerpoint_status": powerpoint_status,
+        "powerpoint_receipt": (
+            "evidence/powerpoint_roundtrip/receipt.json" if resolved_tier == "native" else None
+        ),
         "powerpoint_roundtrip": powerpoint,
-        "powerpoint_package_diff": compare_parts(pptx, powerpoint_roundtrip),
+        "powerpoint_package_diff": (
+            compare_parts(pptx, powerpoint_roundtrip) if powerpoint_roundtrip else None
+        ),
+        "portable_render": portable_render,
+        "officecli_edit_probe": edit_probe,
         "visual_receipt": visual_receipt,
         "libreoffice_compatibility": libreoffice,
         "gates": gates,
         "compatibility_claim": (
-            "Validated as a native editable PPTX in Microsoft PowerPoint with Save As/reopen, "
-            "persistent text edit and object movement."
+            (
+                "Validated as a native editable PPTX in Microsoft PowerPoint with Save As/reopen, "
+                "persistent text edit and object movement."
+                if resolved_tier == "native"
+                else PORTABLE_CLAIM_BOUNDARY
+            )
             + (" Visual quality was not assessed by a vision-capable model." if visual_gate == "skipped_with_user_ack" else "")
         ),
     }
     write_json(run / "evidence" / "verification_receipt.json", receipt)
     manifest["artifacts"].update({
         "verification_receipt": "evidence/verification_receipt.json",
-        "powerpoint_receipt": "evidence/powerpoint_roundtrip/receipt.json",
-        "powerpoint_render": "evidence/powerpoint_render",
+        "verification_tier": resolved_tier,
     })
-    manifest["powerpoint_status"] = "verified"
+    if resolved_tier == "native":
+        manifest["artifacts"].update({
+            "powerpoint_receipt": "evidence/powerpoint_roundtrip/receipt.json",
+            "powerpoint_render": "evidence/powerpoint_render",
+        })
+        manifest["powerpoint_status"] = "verified"
+    else:
+        manifest["artifacts"].pop("powerpoint_receipt", None)
+        manifest["artifacts"].pop("powerpoint_render", None)
+        if portable_render and portable_render.get("status") == "pass":
+            manifest["artifacts"]["portable_render"] = "evidence/portable_render"
+        if edit_probe:
+            manifest["artifacts"]["portable_editability_receipt"] = "evidence/portable_editability/receipt.json"
+        manifest["powerpoint_status"] = "skipped_portable_tier"
     set_status(run, manifest, "blocked" if failed else ("verified_with_warnings" if warnings else "verified"), "verify", gates)
     return receipt

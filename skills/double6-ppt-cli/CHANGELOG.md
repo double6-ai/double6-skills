@@ -1,5 +1,12 @@
 # double6-ppt-cli 变更记录
 
+## 0.2.2
+
+- `verify` 增加双档：`--verify-tier auto|native|portable`。本机无 PowerPoint、`osascript` 不可用或系统拒绝辅助访问时，auto 自动降级 portable（OfficeCLI 持久化改字探针 + 可选 LibreOffice 渲染）。
+- portable 交付状态至少 `pass_with_warnings`，声明明确未执行 PowerPoint 原生 roundtrip。
+- `visual-review` 在 portable 档可绑定 LibreOffice 渲染页；`finalize` 接受 `powerpoint_status=skipped_portable_tier`。
+- 文档补全 generate 所需 `spec_lock.md`（含 `pptx_structure.mode: flat`）。
+
 ## 0.2.1
 
 - 首次以 v0.2.1 精简包内容发布到 GitHub `double6-ai/double6-skills`，并同步 skills.sh 与 ClawHub。

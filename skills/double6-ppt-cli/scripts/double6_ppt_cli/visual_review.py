@@ -17,19 +17,27 @@ def record_visual_review(run: Path, status: str, reviewer: str, notes: str) -> d
     if manifest.get("visual_policy", {}).get("capability") != "available":
         raise D6PPTError("Visual review requires declared visual capability", "visual_capability_missing")
     current = resolve_run_path(run, manifest["artifacts"]["current_pptx"])
-    render_dir = run / "evidence" / "powerpoint_render"
-    pages = sorted(render_dir.glob("slide-*.png"), key=lambda path: int(path.stem.split("-")[-1]))
     contact_sheet = run / "review" / "contact_sheet.png"
-    if not pages or not contact_sheet.is_file():
-        raise D6PPTError("Run PowerPoint verification/render before recording visual review", "powerpoint_render_missing")
+    render_dir = run / "evidence" / "powerpoint_render"
+    fact_source = "powerpoint"
+    pages = sorted(render_dir.glob("slide-*.png"), key=lambda path: int(path.stem.split("-")[-1]))
+    pdf = render_dir / "powerpoint-render.pdf"
+    if not pages:
+        render_dir = run / "evidence" / "portable_render"
+        fact_source = "libreoffice_portable"
+        pages = sorted(render_dir.glob("slide-*.png"), key=lambda path: int(path.stem.split("-")[-1]))
+        pdf = next(render_dir.glob("*.pdf"), None)
+    if not pages or not contact_sheet.is_file() or pdf is None or not Path(pdf).is_file():
+        raise D6PPTError("Run PowerPoint or portable verification/render before recording visual review", "powerpoint_render_missing")
     payload = {
         "schema_version": SCHEMA_VERSION,
         "created_at": utc_now(),
         "status": status,
         "reviewer": reviewer,
         "visual_capability": "available",
+        "fact_source": fact_source,
         "pptx_sha256": sha256_file(current),
-        "powerpoint_render_sha256": sha256_file(render_dir / "powerpoint-render.pdf"),
+        "render_pdf_sha256": sha256_file(Path(pdf)),
         "contact_sheet_sha256": sha256_file(contact_sheet),
         "page_count": len(pages),
         "pages": [{"page": index, "path": str(path.relative_to(run)), "sha256": sha256_file(path)} for index, path in enumerate(pages, 1)],

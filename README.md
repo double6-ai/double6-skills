@@ -8,7 +8,7 @@ Double6 AI 维护的开源 agent skills。仓库目前包含四个可以独立�
 |---|---|---|---|
 | [`double6-deep-research`](skills/double6-deep-research/) | 研究开放性问题、比较多个对象、形成有证据的决策建议，并交付可核验的完整报告 | 宿主 agent 已提供并允许使用搜索、网页或材料读取能力；Python 3.10+ 仅用于可选的交付校验 | 可公开使用 |
 | [`double6-pdf-translation`](skills/double6-pdf-translation/) | 将非扫描版英文 PDF 翻译为简体中文，尽量保留原始版式，并生成中文单语与中英双语 PDF | Python 3.11、`pdf2zh_next`、用户自行配置的 OpenAI-compatible 模型服务 | 可公开使用，但需要先配置运行环境 |
-| [`double6-ppt-cli`](skills/double6-ppt-cli/) | 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX，覆盖 Markdown/结构化材料创作、模板对象级填充，以及已有 PPTX 的质检与受限修复 | Python 3、OfficeCLI `1.0.144`、macOS 上的 Microsoft PowerPoint 与 `osascript`；LibreOffice 仅作可选兼容检查 | 可公开使用，但需要本机 PowerPoint 与固定版本 OfficeCLI |
+| [`double6-ppt-cli`](skills/double6-ppt-cli/) | 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX，覆盖 Markdown/结构化材料创作、模板对象级填充，以及已有 PPTX 的质检与受限修复 | Python 3、OfficeCLI `1.0.144`；有 Microsoft PowerPoint 时走 native 验证，无 PowerPoint 可降级 portable 档（OfficeCLI + 可选 LibreOffice） | 可公开使用；完整 native 闭环建议本机 PowerPoint，portable 档交付为 `pass_with_warnings` |
 | [`double6-workbench-builder`](skills/double6-workbench-builder/) | 把反复要做的真实事情（学习台、备考台、任务面板、记录与复盘等）构建为离线优先、严格单文件的本地个人工作台，个人数据只留在当前设备 | Python 3（仅标准库）；浏览器验收可选 Playwright + Chromium | 可公开使用（实验性） |
 
 这些 skill 都不会随仓库分发模型、API key、搜索服务、OfficeCLI 二进制或第三方 PDF 后端。请根据任务选择安装，不必复制整个仓库。
@@ -93,14 +93,15 @@ bash run_translate.sh <input-file.pdf> --output-dir <output-dir> \
 ### 可编辑 PPTX 闭环
 
 ```text
-请使用 $double6-ppt-cli 基于这份材料生成可编辑 PPTX，并完成 inspect / repair / PowerPoint 验证闭环。
+请使用 $double6-ppt-cli 基于这份材料生成可编辑 PPTX，并完成 inspect / repair / 验证闭环。
 ```
 
-这个 skill 默认闭环是 `模板分析/原生创作 → 生成副本 → inspect → 确定性修复 → Microsoft PowerPoint 验证 → 可选视觉复核 → finalize`。它支持原生生成、模板填充和已有 PPTX 质检修复三种模式；原文件永不覆盖，自动修复只允许确定性叶子操作。
+这个 skill 默认闭环是 `模板分析/原生创作 → 生成副本 → inspect → 确定性修复 → 验证 → 可选视觉复核 → finalize`。它支持原生生成、模板填充和已有 PPTX 质检修复三种模式；原文件永不覆盖，自动修复只允许确定性叶子操作。
 
 适用边界：
 
-- 默认必需本机 Microsoft PowerPoint 与 `osascript`；OfficeCLI 必须为 `1.0.144`，其它版本 fail closed。
+- 本机有 Microsoft PowerPoint 与 `osascript` 时走 native 验证；没有或系统拒绝辅助访问时，`verify --verify-tier auto` 自动降级 portable 档（OfficeCLI 校验/改字探针 + 可选 LibreOffice 渲染），交付状态为 `pass_with_warnings`。
+- OfficeCLI 必须为 `1.0.144`，其它版本 fail closed；`--verify-tier native` 可强制要求 PowerPoint。
 - 不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
 - 视觉检查默认要求；用户明确跳过时结果只能是 `pass_with_warnings`，不会伪装成完整视觉通过。
 - vendored `ppt-master-core` 来自 PPT Master v4.8.0，适用其 MIT 许可证；OfficeCLI 作为外部固定依赖由用户自行安装。
@@ -126,7 +127,7 @@ bash run_translate.sh <input-file.pdf> --output-dir <output-dir> \
 ## 安全与隐私
 
 - 不要把 API key、`.env`、私有文档、研究快照或运行产物提交到仓库。
-- 安装 skill 前建议先阅读其 `SKILL.md`、脚本和依赖说明；PDF 翻译 skill 会执行本地进程、写入指定输出目录并访问用户配置的网络服务；PPT skill 会读写本地 run 副本，并驱动本机 PowerPoint 做验证。
+- 安装 skill 前建议先阅读其 `SKILL.md`、脚本和依赖说明；PDF 翻译 skill 会执行本地进程、写入指定输出目录并访问用户配置的网络服务；PPT skill 会读写本地 run 副本，并在 native 档驱动本机 PowerPoint 做验证。
 - 深度研究结果可能包含网页摘录或用户提供的材料。公开研究 bundle 前，请自行检查版权、个人信息和保密要求。
 - 仓库不包含本地治理工具、验收报告、缓存、测试运行产物、OfficeCLI 二进制或第三方 PDF 后端源码。
 
