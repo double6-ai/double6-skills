@@ -32,10 +32,15 @@ cp -R skills/double6-ppt-cli <agent-skills-dir>/
 cp -R skills/double6-workbench-builder <agent-skills-dir>/
 ```
 
-也可以从公开目录安装工作台制作器：
+也可以从公开目录安装：
 
 ```bash
+# skills.sh（GitHub 源）
+npx skills add double6-ai/double6-skills --skill double6-ppt-cli
 npx skills add double6-ai/double6-skills --skill double6-workbench-builder
+
+# ClawHub
+clawhub install double6-ppt-cli
 clawhub install double6-workbench-builder
 ```
 
