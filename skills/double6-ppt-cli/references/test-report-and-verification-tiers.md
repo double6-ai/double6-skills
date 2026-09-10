@@ -273,3 +273,18 @@ portable 成功交付时：
 
 注意：c10 的视觉门必须 **先 verify 产出 render → visual-policy/review → 再 verify**；先 review 会因无 render 清单失败。
 
+## 12. 十维案例逐项深测结论
+
+| 案例 | 深测结论 |
+|---|---|
+| c01 | academic generate **完整 portable 闭环** delivered |
+| c02 | draft 缺 semantic 时 `authoring_incomplete` + next_steps |
+| c03 | **原生 chart 正路径跑通**（marker+JSON+fallback 几何）；语义 name 回退修复 |
+| c04 | numeric_claims 3 blocking；visual 后 verify 仍 fail（findings 未清） |
+| c05 | SAMPLE_TOKEN remove_leaf 后仅剩「正常正文」 |
+| c06 | 有效计划先 pass；篡改冻结资产后命中 **`stale_template_asset`** |
+| c07 | `navigation_style_ambiguous` 且无残留输出 |
+| c08 | draft 指出下一行应改 status: confirmed |
+| c09 | slide count 合同正确 blocking |
+| c10 | portable 全闭环；视觉门顺序已文档化 |
+
