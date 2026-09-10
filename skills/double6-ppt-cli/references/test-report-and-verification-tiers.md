@@ -243,3 +243,16 @@ portable 成功交付时：
 3. `navigation_targets` 的 label 必须等于 `update_navigation` 后的新文案。
 4. 每个带旧 `hlinksldjump` 的对象都要有 `navigation_source_targets` 覆盖其源模板目标页。
 
+## 10. 0.2.5 postflight 确定性 patch 压测
+
+| 步骤 | 结果 |
+|---|---|
+| 故意埋错 | `学完你会什么？`、`半天五个模块` |
+| content contract `text_rules` | 2 条 deterministic `set_property` + replacement |
+| inspect | 2 blocking；`suggested_operation=set_property` 且带 `suggested_value` |
+| patch-plan | 2 patches；small-font 等 28 项跳过（manual_or_non_leaf） |
+| patch | 2 ops 成功；仅 slide2/3 变；master/layout/theme 未变；OfficeCLI validate pass |
+| re-inspect | **0 blocking**；文案已恢复 |
+
+结论：有 object map / 叶子路径 + 合同声明 replacement 时，确定性文本修复闭环可用。无合同时 `no_safe_patch` 仍是正确 fail-closed。
+
