@@ -74,6 +74,16 @@ def _find(root: etree._Element, obj: dict[str, Any]) -> etree._Element:
     if match.get("drawingml_id") is not None:
         wanted_id = int(match["drawingml_id"])
         matches = [item for item in items if int(_cnvpr(item).get("id") or 0) == wanted_id]
+        # Native chart/table markers often keep the SVG id as cNvPr name and
+        # assign a new drawingml id; fall back to source_selector.id as name.
+        if not matches and obj.get("preferred_structure") in {"native_chart", "native_table"}:
+            selector_id = str((obj.get("source_selector") or {}).get("id") or "")
+            if selector_id:
+                matches = [
+                    item for item in items
+                    if _cnvpr(item).get("name") == selector_id
+                    or (_cnvpr(item).get("name") or "").endswith(selector_id)
+                ]
     elif match.get("drawingml_name") is not None:
         wanted = str(match["drawingml_name"])
         matches = [item for item in items if _cnvpr(item).get("name") == wanted]
@@ -113,10 +123,18 @@ def _find(root: etree._Element, obj: dict[str, Any]) -> etree._Element:
             }
             for item in items[:12]
         ]
+        preferred = obj.get("preferred_structure")
+        hint = ""
+        if preferred in {"native_chart", "native_table"}:
+            hint = (
+                " Hint: native chart/table objects must be produced by a root-level "
+                f"<g data-pptx-replace-with=\"{preferred.replace('native_', '')}\"> marker "
+                "with data-pptx-shape-id and JSON metadata; a plain SVG diagram group is not a native object."
+            )
         raise D6PPTError(
             (
                 f"Semantic object must resolve uniquely: {obj['source_id']} candidates={len(matches)}; "
-                f"source={source_selector.get('file') or '<unknown>'}"
+                f"source={source_selector.get('file') or '<unknown>'}{hint}"
             ),
             "ambiguous_object_mapping",
             {"source_selector": source_selector, "match": match, "slide_candidates": candidates},

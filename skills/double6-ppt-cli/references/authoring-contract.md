@@ -53,3 +53,17 @@ Authoring 结构约束（quality gate + semantic contract）：
 ```
 
 对应 SVG 元素示例：`<text id="title" data-pptx-shape-id="1001" ...>标题</text>`。角色可使用 `footnote` 与 `page_mark`；inspect 默认允许二者低至 9pt，项目也可在 content contract 的 `inspection_rules.font_min_pt_by_role` 覆盖阈值。
+
+## 原生 chart / table
+
+`compile` 默认启用 `--native-charts-and-tables`。真正的原生对象必须是根级：
+
+```xml
+<g id="chart" data-pptx-bounds="64 200 600 300" data-pptx-shape-id="1002"
+   data-pptx-replace-with="chart">
+  <metadata type="application/json">{"type":"bar","categories":["A","B"],"series":[{"name":"S1","values":[1,2]}]}</metadata>
+</g>
+```
+
+并在 semantic manifest 使用 `preferred_structure: native_chart` + `match.drawingml_id: 1002`。普通示意图 group **不会**变成原生 chart；缺 JSON metadata 会在 vendor 阶段 fail closed。
+

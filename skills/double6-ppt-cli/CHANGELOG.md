@@ -1,5 +1,12 @@
 # double6-ppt-cli 变更记录
 
+## 0.2.6
+
+- `semantic` 对 `preferred_structure: native_chart|native_table` 增加 name 回退：`match.drawingml_id` 未命中时，按 `source_selector.id` 匹配 `cNvPr@name`（vendor 原生图表常不保留 `data-pptx-shape-id`）。
+- 原生 chart/table 映射失败时错误信息包含 marker/JSON metadata 提示。
+- `authoring-contract.md` 补充 `data-pptx-replace-with="chart|table"` + `<metadata type="application/json">` 合同与 fallback 几何要求。
+- 新增回归：`test_native_chart_semantic.py`（共 61 项）。
+
 ## 0.2.5
 
 - `template-apply` 在 vendor 产出后、导航状态/图片重定向失败时会删除不完整的 `template-filled.pptx`，避免同一 run 被 `artifact_exists` 永久阻塞。
