@@ -216,3 +216,12 @@ portable 成功交付时：
 2. 嵌套 wrapper group 不能作为 flatten 选择器目标。
 3. inspect `read_json` 局部 import 导致崩溃。
 4. portable verify 重渲染使视觉回执失效，形成无法 finalize 的死锁。
+
+## 8. 0.2.4 第二轮压测（无需改代码）
+
+| 轮次 | 模式 | 素材 | 结果 |
+|---|---|---|---|
+| R5 | generate / training | 非技术同事 AI 素养工作坊 | 一次 compile 通过；native PowerPoint visual accepted；`delivered_with_warnings` |
+| R6 | template-fill | 腾讯研究院 10 页研究简报模板（213 objects）+ 结构化 JSON | analyze→check-plan（0 error）→apply→inspect 0 blocking→portable visual→`delivered_with_warnings` |
+
+结论：0.2.4 修复后，真实复杂模板与 training design 均可稳定走通；剩余 warning 以模板自带小字号与 text_capacity 为主。
