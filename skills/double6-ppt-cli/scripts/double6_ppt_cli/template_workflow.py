@@ -1365,20 +1365,25 @@ def apply_template_plan(run: Path, plan_path: Path, runtime_dir: Path | None = N
             report.get("validated_navigation_links", []),
         )
         vendor_apply_plan(vendor_template, plan, output, transition="keep", transition_duration=0.5)
-    navigation_links, navigation_output_diff = _inject_confirmed_navigation_links(
-        output,
-        report.get("validated_navigation_links", []),
-    )
-    navigation_states, navigation_state_diff = _apply_confirmed_navigation_states(
-        output,
-        report.get("validated_navigation_links", []),
-    )
-    image_replacements, image_package_diff = _replace_confirmed_images(
-        output,
-        run,
-        profile,
-        report.get("validated_image_edits", []),
-    )
+    try:
+        navigation_links, navigation_output_diff = _inject_confirmed_navigation_links(
+            output,
+            report.get("validated_navigation_links", []),
+        )
+        navigation_states, navigation_state_diff = _apply_confirmed_navigation_states(
+            output,
+            report.get("validated_navigation_links", []),
+        )
+        image_replacements, image_package_diff = _replace_confirmed_images(
+            output,
+            run,
+            profile,
+            report.get("validated_image_edits", []),
+        )
+    except Exception:
+        # Incomplete vendor output must not block a clean retry in this run.
+        output.unlink(missing_ok=True)
+        raise
     client = OfficeCLI(runtime_dir, run / "logs")
     removals = []
     for item in plan.get("object_dispositions", []):

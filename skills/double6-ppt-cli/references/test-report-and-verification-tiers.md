@@ -225,3 +225,21 @@ portable 成功交付时：
 | R6 | template-fill | 腾讯研究院 10 页研究简报模板（213 objects）+ 结构化 JSON | analyze→check-plan（0 error）→apply→inspect 0 blocking→portable visual→`delivered_with_warnings` |
 
 结论：0.2.4 修复后，真实复杂模板与 training design 均可稳定走通；剩余 warning 以模板自带小字号与 text_capacity 为主。
+
+## 9. 0.2.5 图片替换 + 导航压测
+
+| 能力 | 结果 |
+|---|---|
+| TOC 侧栏模板（每页 3 个填充导航钮） | analyze/check-plan 通过 |
+| 图片替换（SHA 锁定资产） | apply 成功；新媒体 part + 关系重定向 |
+| 内部跳转重建 | 9 条 link + 9 条 selected/unselected 状态 |
+| package-clean | 删除 3 个孤儿 slide part 与 9 条未引用跳转关系 |
+| apply 失败清理 | 新增：vendor 后失败会删除不完整输出，允许同 run 重试 |
+
+现场约束（Agent 必读）：
+
+1. 导航对象必须是带 **显式 solidFill** 的形状；纯文本框无 fill 会 `navigation_style_ambiguous`。
+2. 每个逻辑页必须能证明 **恰好 1 个 selected 样式 + 重复 unselected 样式**；侧栏 TOC 是推荐形态。
+3. `navigation_targets` 的 label 必须等于 `update_navigation` 后的新文案。
+4. 每个带旧 `hlinksldjump` 的对象都要有 `navigation_source_targets` 覆盖其源模板目标页。
+

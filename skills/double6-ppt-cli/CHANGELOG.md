@@ -1,5 +1,11 @@
 # double6-ppt-cli 变更记录
 
+## 0.2.5
+
+- `template-apply` 在 vendor 产出后、导航状态/图片重定向失败时会删除不完整的 `template-filled.pptx`，避免同一 run 被 `artifact_exists` 永久阻塞。
+- 新增回归测试 `test_apply_cleanup.py`。
+- 压测记录：TOC 侧栏模板可完成图片替换（SHA 锁定）与 9 条内部跳转重建；选中态样式要求每页恰好 1 selected + 重复 unselected。
+
 ## 0.2.4
 
 - 修复 `inspect` 在存在 object map 时触发的 `UnboundLocalError: read_json`（局部 import 遮蔽模块导入）。
