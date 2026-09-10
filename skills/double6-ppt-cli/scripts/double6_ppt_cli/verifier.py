@@ -394,6 +394,23 @@ def _resolve_verify_tier(
 
 
 def _portable_render(run: Path, pptx: Path) -> dict[str, Any]:
+    pptx_sha = sha256_file(pptx)
+    try:
+        existing = load_current_render_manifest(run, pptx_sha, expected_tier="portable")
+        page_rel = [str(item["path"]) for item in existing.get("pages", [])]
+        return {
+            "status": "pass",
+            "application": existing.get("renderer") or "LibreOffice",
+            "fact_source": existing.get("fact_source") or "libreoffice_portable",
+            "page_count": len(page_rel),
+            "pages": page_rel,
+            "pdf": str(existing["pdf"]["path"]),
+            "contact_sheet": str(existing["contact_sheet"]["path"]),
+            "reused_existing_manifest": True,
+            "claim_boundary": "Portable tier page rasterization uses LibreOffice, not Microsoft PowerPoint.",
+        }
+    except D6PPTError:
+        pass
     soffice = find_soffice()
     pdftoppm = shutil.which("pdftoppm")
     if not soffice or not pdftoppm:

@@ -1,7 +1,7 @@
 ---
 name: double6-ppt-cli
-version: 0.2.3
-description: 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX。适用于从 Markdown、文本、结构化材料与本地授权图片制作演示文稿，对常规 PPTX 模板做母版/版式/对象级复用，或对已有 PPTX 做可审计质检和受限修复；不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
+version: 0.2.4
+description: 基于 ppt-master 与 iOfficeAI/OfficeCLI 两个开源项目，生成、套用模板、读取、检查和闭环修复原生 PPTX；“可编辑”重点指保留原生对象与稳定身份，方便 Agent 多轮定位、修改和复查。适用于从 Markdown、文本、结构化材料与本地授权图片制作演示文稿，复用常规 PPTX 模板，或质检和受限修复已有 PPTX；不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
 metadata:
   openclaw:
     homepage: https://github.com/double6-ai/double6-skills/tree/main/skills/double6-ppt-cli
@@ -13,9 +13,18 @@ metadata:
         - py
 ---
 
-# Double6 PPT CLI 0.2.3
+# Double6 PPT CLI 0.2.4
 
 > 安装说明：从 [GitHub / skills.sh](https://github.com/double6-ai/double6-skills/tree/main/skills/double6-ppt-cli) 安装可获得完整 vendored PPT Master。ClawHub 包因网关体积限制省略了 `pptx_animation_presets.json` 与 `presetShapeDefinitions.xml`；需要原生 SVG 生成完整能力时，请改用 GitHub 安装。
+
+## 项目定位与开源依赖
+
+本 Skill 使用了两个开源项目，并在其上增加 Double6 的集成代码、工作流约束、状态记录和质量门：
+
+- [ppt-master](https://github.com/hugohe3/ppt-master) `v4.8.0`（MIT）：精简内核随 Skill 一同提供，承担原生生成、模板分析与模板填充能力。
+- [iOfficeAI/OfficeCLI](https://github.com/iOfficeAI/OfficeCLI) `v1.0.144`（Apache-2.0）：作为固定版本的外部运行依赖，承担 PPTX 结构读取、检查、确定性操作和 portable 验证；其二进制不包含在 Skill 包内。
+
+本 Skill 所说的“可编辑 PPTX”，重点是方便 Agent 多轮编辑。输出保留原生 DrawingML 对象，并通过稳定对象身份、inspection map、补丁计划、前后 package diff 和验证回执，让 Agent 能在后续轮次定位同一对象、继续修改并重新检查。文件也可以在 PowerPoint 中人工编辑；当前可编辑性验收主要衡量 Agent 重复编辑的可靠性。
 
 默认闭环是：`模板分析/原生创作 → 生成副本 → inspect → 确定性修复 → 验证（native PowerPoint 或 portable OfficeCLI） → 可选视觉复核 → finalize`。`issues=0`、OOXML validate 或预览非空都不能替代视觉结论。
 

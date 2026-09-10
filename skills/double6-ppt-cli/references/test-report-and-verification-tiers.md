@@ -91,8 +91,8 @@ portable 成功交付时：
 ### 2.1 测试范围与素材
 
 - **模式**：`generate`（**不使用** template-fill；不提供模板 pptx）。
-- **素材**：`/Users/mario/Downloads/paper` 下论文本地 PDF 抽取文本（先 LitLLMs，后 ACL 2024 *Can LLM Summarizers Adapt…*）。
-- **环境**：隔离目录 `/Users/mario/double6-skills-test-env`（与主仓库 worktree 分离）。
+- **素材**：本地下载目录中的论文 PDF 抽取文本（先 LitLLMs，后 ACL 2024 *Can LLM Summarizers Adapt…*）。
+- **环境**：独立测试目录（与主仓库 worktree 分离）。
 - **闭环**：`init → authoring → compile → inspect → verify → visual-review → finalize`。
 
 ### 2.2 两轮设计对比
@@ -188,15 +188,31 @@ portable 成功交付时：
 | 0.2.2 | `verify --verify-tier auto\|native\|portable`；portable OfficeCLI/LO 路径；visual 可绑 portable 页；finalize 接受 `skipped_portable_tier`；文档补齐 `spec_lock` 要求；修正 portable 渲染顺序与 PDF 路径 |
 | 0.2.3 | 分档 doctor、generate/design 骨架、稳定 DrawingML ID、角色字号阈值、声明式案例规则、完整 vendor 校验、render manifest 与动态 portable 声明 |
 
-更细的代码级变更见仓库根与 skill 的 `CHANGELOG.md`。
+本轮代码级变更范围以本报告和公开仓库历史为准。
 
 ---
 
 ## 6. 维护者检查清单（下次发版前）
 
-- [x] `python -m unittest discover -s scripts/tests` 全绿（56 项，含 `test_verify_tier.py`）
+- [x] `python -m unittest discover -s scripts/tests` 全绿（58 项，含 `test_verify_tier.py` / `test_inspector_bindings.py` / `test_portable_render_reuse.py`）
 - [x] 无 PowerPoint / 辅助访问环境下的 portable 路径可 `finalize`，并保留 warning
 - [x] auto/native 选择、强制 portable 优先级和 native fail-closed 有回归测试
 - [x] generate 初始化会创建骨架，未确认草稿的错误信息可直接照做
 - [x] `visual-review` 通过同一 render manifest 覆盖 PowerPoint 与 LibreOffice 事实源
 - [x] README / SKILL.md / ClawHub 安装边界一致
+- [x] 0.2.4：inspect 局部 import 与 portable 重渲染死锁已修复，并有回归测试
+
+## 7. 0.2.4 隔离环境三模式实测
+
+| 模式 | 主题/素材 | 档位 | 结果 |
+|---|---|---|---|
+| generate | 企业 AI 代码评审落地策略（business design） | native PowerPoint | compile → inspect 0 blocking → visual accepted_with_warnings → `delivered_with_warnings` |
+| template-fill | 3 页极简模板 + 入职 30-60-90 结构化 JSON | portable | analyze → check-plan → apply → portable visual → `delivered_with_warnings` |
+| postflight | 对 generate 交付物做质检 | portable | inspect 0 blocking → portable visual → `delivered_with_warnings`；无确定性叶子修复时 `no_safe_patch` 属预期 |
+
+现场踩坑（已修复或写入 authoring contract）：
+
+1. 脚手架 `design_spec.md` 缺 `## IX. Content Outline` 会直接 quality fail。
+2. 嵌套 wrapper group 不能作为 flatten 选择器目标。
+3. inspect `read_json` 局部 import 导致崩溃。
+4. portable verify 重渲染使视觉回执失效，形成无法 finalize 的死锁。

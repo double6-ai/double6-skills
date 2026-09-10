@@ -568,7 +568,6 @@ def inspect_run(run: Path, runtime_dir: Path | None = None) -> dict[str, Any]:
     findings = deduplicated
     map_path = run / "artifacts" / "object_path_map.json"
     if map_path.is_file():
-        from .common import read_json
         path_to_source = {item["officecli_path"]: item["source_id"] for item in read_json(map_path).get("objects", [])}
         for finding in findings:
             finding["source_id"] = path_to_source.get(finding["object"].get("officecli_path"))
