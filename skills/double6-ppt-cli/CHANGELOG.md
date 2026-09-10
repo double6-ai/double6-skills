@@ -1,5 +1,13 @@
 # double6-ppt-cli 变更记录
 
+## 0.2.4
+
+- 修复 `inspect` 在存在 object map 时触发的 `UnboundLocalError: read_json`（局部 import 遮蔽模块导入）。
+- 修复 portable `verify` 每次强制重渲染导致视觉回执 SHA 失效、无法 finalize 的死锁；现在优先复用当前 PPTX + portable 档位下完整的 render manifest。
+- `design_spec.md` 脚手架补齐 PPT Master 质量门要求的 `## IX. Content Outline` 与 `Audience move` 占位，避免 init 后 compile 必炸。
+- `authoring-contract.md` 补充：根级 `<g>` 必须声明 `data-pptx-bounds`；可 flatten 的内容组必须是 SVG 根级直接子节点；段落多行用 `tspan`。
+- 新增回归测试：`test_inspector_bindings.py`、`test_portable_render_reuse.py`（共 58 项）。
+
 ## 0.2.3
 
 - `doctor` 按 mode 与 `auto|native|portable` 档位报告能力；PowerPoint 与 `osascript` 只对 native 必需，vendor BOM 会逐文件校验 SHA 并识别 ClawHub 省略项。

@@ -8,6 +8,15 @@
 
 generate 项目还必须提供 `authoring/project/spec_lock.md`，且包含 `## pptx_structure` 段与 `mode: flat`（自由版式）或 `mode: structured`（模板结构）。`init --mode generate --design <profile>` 会创建待确认草稿；未填字段或仍为 draft 时，`compile` 会返回可执行的下一步。
 
+同时必须提供 `authoring/project/design_spec.md`，且包含 **精确标题** `## IX. Content Outline`。PPT Master 的 communication-trace 门禁会检查该 section：其中每页必须有 `### Slide NN`（或具体页码）块，并在块内写一行 `- Audience move: ...`。缺少该 section 会导致 `svg_quality_failed`。
+
+Authoring 结构约束（quality gate + semantic contract）：
+
+1. 根级可见 `<g>` 必须写 `data-pptx-bounds`，且 bounds 要覆盖文字实际墨迹（含 font-size 度量），否则 `svg_quality_failed`。
+2. 同一段落的多行文案用一个 `<text>` + 正 `dy` 的 `<tspan>`；语义独立的文本框保持独立。
+3. 需要 `preferred_structure` 为 `top_level`/`placeholder` 的对象，其 `source_selector.id` 必须指向 **SVG 根级直接子 group**，由 adapter 去分组；嵌套在更深 wrapper 内的 group 会 `unsafe_source_flatten`。
+4. 不要把卡片/流程步骤包进额外的 `cards`/`flow` 包装 group 再要求 flatten——包装层本身应去掉，或改成不参与 flatten 的 `data-pptx-role="decoration"`。
+
 ## PPT Master adapter
 
 - 源目录默认是 `authoring/project/svg_output/`，使用 vendored PPT Master `v4.8.0` 精简内核编译。
