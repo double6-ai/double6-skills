@@ -256,3 +256,20 @@ portable 成功交付时：
 
 结论：有 object map / 叶子路径 + 合同声明 replacement 时，确定性文本修复闭环可用。无合同时 `no_safe_patch` 仍是正确 fail-closed。
 
+## 11. 十维压测（0.2.5）
+
+| # | 案例 | 维度 | 结果 |
+|---|---|---|---|
+| c01 | academic design generate | 设计档 | init/scaffold/compile 通过 |
+| c02 | neutral draft | 负向 | `authoring_incomplete`，下一步可执行 |
+| c03 | 伪 chart 结构 | 负向 | fail-closed（selector/质量门） |
+| c04 | numeric_claims | 合同 | 命中 operand/expected findings |
+| c05 | SAMPLE_TOKEN remove_leaf | 确定性删除 | patch 后 reinspect 干净 |
+| c06 | 篡改冻结资产 | 负向 | check-plan 阻断（含 plan 级 error） |
+| c07 | 导航无选中态样式 | 负向 | `navigation_style_ambiguous` 且不残留输出 |
+| c08 | spec 仍为 draft | 负向 | `authoring_scaffold_incomplete` |
+| c09 | expected_slide_count | 合同 | 5 vs 3 finding |
+| c10 | portable 全闭环 | 交付 | visual 门顺序正确后 `delivered_with_warnings` |
+
+注意：c10 的视觉门必须 **先 verify 产出 render → visual-policy/review → 再 verify**；先 review 会因无 render 清单失败。
+
