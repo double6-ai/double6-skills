@@ -34,7 +34,7 @@ metadata:
 2. OfficeCLI 必须是 `1.0.144`；其它版本 fail closed。只有用户授权安装后才运行 `bootstrap --runtime-dir <path> --yes`，禁止全局安装和自动升级。
 3. Microsoft PowerPoint 与 `osascript` 是 **native 档**必需验证目标。PowerPoint 已打开其它演示文稿时返回 `powerpoint_busy`，绝不强关用户文件。
 4. 本机没有 PowerPoint、`osascript` 不可用，或系统拒绝辅助访问（error `-1719`）时，`verify` 默认自动降级为 **portable 档**：OOXML + OfficeCLI 校验与改字探针，可选 LibreOffice 渲染。用 `--verify-tier native` 强制要求 PowerPoint；用 `--verify-tier portable` 跳过 PowerPoint。
-5. LibreOffice 在 portable 档可作渲染事实源；在 native 档仅 `verify --compatibility libreoffice` 时做附加兼容性检查，不能替代 PowerPoint。
+5. LibreOffice 在 portable 档可作渲染事实源；在 native 档仅 `verify --compatibility libreoffice` 时做附加兼容性检查，不能替代 PowerPoint。LO Save As 常重编号 DrawingML ID/丢自定义名；text/notes/visual/edit-probe 通过而 identity 漂移时记为 `pass_with_warnings`。
 6. macOS 上 auto/native 运行目录必须位于用户可直接访问的项目目录，禁止放在 `/private/tmp`；显式 portable 档不调用 PowerPoint，可在隔离临时目录运行。普通用户目录并不自动向 PowerPoint 开放递归访问，PowerPoint 仍不得直接打开 run/cleanroom 文件。
 7. `inspect` 不调用 Chrome/Chromium 预览，避免隔离 profile 触发钥匙串弹窗。native 档视觉事实源由 PowerPoint 导出产生；portable 档可由 LibreOffice 渲染补齐。
 8. 交给 PowerPoint 打开的所有副本必须先进入真实系统账户的 `/Users/<account>/Library/Containers/com.microsoft.Powerpoint/Data/tmp/d6ppt/`。真实 home 由系统账户数据库解析，禁止依赖隔离 `$HOME` / `Path.home()`；run 与证据只通过普通文件复制读写。
@@ -80,4 +80,5 @@ metadata:
 
 详细合同见 [delivery-gates.md](references/delivery-gates.md)、[repair-policy.md](references/repair-policy.md)、[machine-contracts.md](references/machine-contracts.md)、[licenses-and-upstreams.md](references/licenses-and-upstreams.md) 与 [test-report-and-verification-tiers.md](references/test-report-and-verification-tiers.md)（native/portable 双档说明与完整测试报告）。
 
-- WPS 当前不是验证档；`wpscli ppt2pdf` 仅作诊断导出，不得声称 WPS 已验证。
+- WPS 当前不是验证档；`wpscli ppt2pdf` 仅作诊断导出（常限用户目录可读路径），`ppt2photo` 可能要求会员。**不得**声称「WPS 已验证」。
+- OfficeCLI 必须锁定 `1.0.144`；本机 `~/.officecli/config.json` 若 `autoUpdate: true` 可能被升到 1.0.148 导致 doctor fail closed，应重装 `@officecli/officecli@1.0.144` 并关闭自动升级。
