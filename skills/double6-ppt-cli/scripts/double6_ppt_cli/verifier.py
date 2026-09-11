@@ -362,12 +362,26 @@ def _optional_libreoffice(
     probe = roundtrip_dir / "edit_probe.pptx"
     shutil.copy2(roundtrip, probe)
     edit_probe = _edit_probe(client, probe, object_map)
-    status = "pass" if text_ok and notes_ok and identities_ok and visual_roundtrip["status"] == "pass" else "fail"
+    # LibreOffice Save As commonly renumbers DrawingML IDs and may drop custom
+    # cNvPr names. Content + visual preservation is the honest compatibility bar;
+    # identity drift alone should not hard-fail an otherwise healthy roundtrip.
+    core_ok = text_ok and notes_ok and visual_roundtrip["status"] == "pass"
+    edit_ok = edit_probe.get("status") in {"pass", "not_automated"}
+    if core_ok and edit_ok and identities_ok:
+        status = "pass"
+    elif core_ok and edit_ok:
+        status = "pass_with_warnings"
+    else:
+        status = "fail"
     receipt = {
         "schema_version": SCHEMA_VERSION, "created_at": utc_now(), "status": status,
         "source_pptx_sha256": before["sha256"], "roundtrip_pptx": str(roundtrip.relative_to(run)),
         "roundtrip_pptx_sha256": after["sha256"],
         "text_preserved": text_ok, "notes_preserved": notes_ok, "object_identities_preserved": identities_ok,
+        "identity_claim_boundary": (
+            "LibreOffice may renumber DrawingML IDs or drop custom names; identity drift is a warning "
+            "when text/notes/visual/edit-probe still pass."
+        ) if core_ok and edit_ok and not identities_ok else None,
         "before_counts": before["counts"], "after_counts": after["counts"], "edit_probe": edit_probe,
         "libreoffice_visual_comparison": visual_roundtrip,
         "libreoffice_roundtrip_officecli_validation": roundtrip_validate,

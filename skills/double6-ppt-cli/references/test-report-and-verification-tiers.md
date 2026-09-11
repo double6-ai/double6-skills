@@ -300,3 +300,13 @@ portable 成功交付时：
 
 修复：Fill Native 写字可能产出 `a:endParaRPr` 在 `a:r` 之前的非法顺序；Double6 apply 后规范化，OfficeCLI validate 恢复 pass。
 
+## 14. PowerPoint / LibreOffice / WPS 三路实测
+
+| 目标 | 命令/工具 | 结果 |
+|---|---|---|
+| Microsoft PowerPoint native | `verify --verify-tier native` | roundtrip/edit-probe/PDF 渲染 pass；`powerpoint_status=verified` |
+| LibreOffice 兼容 | `verify --compatibility libreoffice` | text/notes/visual/edit pass；identity 漂移 → **pass_with_warnings** |
+| WPS | `wpscli ppt2pdf/ppt2photo` | `ppt2pdf` 成功；`ppt2photo` 会员墙；非验证档 |
+
+环境备注：OfficeCLI 被自动升级到 1.0.148 时 doctor fail closed，需重装 `@officecli/officecli@1.0.144` 并建议关闭 `~/.officecli/config.json` 的 `autoUpdate`。
+
