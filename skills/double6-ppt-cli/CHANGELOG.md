@@ -1,6 +1,11 @@
 # double6-ppt-cli 变更记录
 
+## 0.2.10
+
+- 同步发布 0.2.9 依赖策略到 GitHub / ClawHub（ClawHub 仅含 .clawhubignore 后的必要文件）。
+
 ## 0.2.9
+
 
 - OfficeCLI 版本策略放宽：bootstrap **只下载 pin `1.0.144`**；运行时接受 pin 与更新 1.x（`warn` + 风险提示 + 可选 bootstrap 对齐），不再因「非精确等于 1.0.144」一刀切 fail closed。major 错误或过旧才 fail。
 - runtime lock 不再包含 skill 版本，避免 skill 升级导致 OfficeCLI 缓存目录漂移；doctor 会回退扫描 `~/.cache/double6-ppt-cli/*`。
