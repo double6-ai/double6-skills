@@ -43,6 +43,64 @@ NS = {"p": PML, "a": AML, "r": RML, "pr": PKG_REL}
 SLIDE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
 SLIDE_JUMP_ACTION = "ppaction://hlinksldjump"
 
+# ECMA-376 CT_TextParagraph child order used to repair Fill Native output.
+_PARAGRAPH_CHILD_ORDER = {
+    f"{{{AML}}}pPr": 0,
+    f"{{{AML}}}r": 10,
+    f"{{{AML}}}br": 20,
+    f"{{{AML}}}fld": 30,
+    f"{{{AML}}}endParaRPr": 40,
+}
+
+
+def _normalize_txbody_paragraph_order(pptx: Path) -> int:
+    """Fix a:p child order after vendor text fill (endParaRPr must follow runs)."""
+    changed_parts = 0
+    try:
+        with zipfile.ZipFile(pptx, "r") as archive:
+            entries = {info.filename: archive.read(info.filename) for info in archive.infolist() if not info.is_dir()}
+    except zipfile.BadZipFile:
+        return 0
+    for name, data in list(entries.items()):
+        if not (name.startswith("ppt/slides/") or name.startswith("ppt/slideLayouts/") or name.startswith("ppt/slideMasters/")):
+            continue
+        if not name.endswith(".xml"):
+            continue
+        try:
+            root = etree.fromstring(data)
+        except etree.XMLSyntaxError:
+            continue
+        dirty = False
+        for paragraph in root.xpath(".//a:p", namespaces=NS):
+            children = list(paragraph)
+            keys = [
+                (_PARAGRAPH_CHILD_ORDER.get(child.tag, 50), index, child)
+                for index, child in enumerate(children)
+            ]
+            ordered = [child for _k, _i, child in sorted(keys, key=lambda item: (item[0], item[1]))]
+            if ordered != children:
+                for child in children:
+                    paragraph.remove(child)
+                for child in ordered:
+                    paragraph.append(child)
+                dirty = True
+        if dirty:
+            entries[name] = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+            changed_parts += 1
+    if not changed_parts:
+        return 0
+    with tempfile.NamedTemporaryFile(prefix="d6-txbody-order-", suffix=".pptx", dir=pptx.parent, delete=False) as handle:
+        temp_path = Path(handle.name)
+    try:
+        with zipfile.ZipFile(temp_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for name, data in entries.items():
+                archive.writestr(name, data)
+        temp_path.replace(pptx)
+    finally:
+        temp_path.unlink(missing_ok=True)
+    return changed_parts
+
+
 DISPOSITIONS = {
     "keep_design",
     "replace_content",
@@ -1365,6 +1423,8 @@ def apply_template_plan(run: Path, plan_path: Path, runtime_dir: Path | None = N
             report.get("validated_navigation_links", []),
         )
         vendor_apply_plan(vendor_template, plan, output, transition="keep", transition_duration=0.5)
+    # Vendor text fill can append a:r after an existing endParaRPr; normalize schema order.
+    _normalize_txbody_paragraph_order(output)
     try:
         navigation_links, navigation_output_diff = _inject_confirmed_navigation_links(
             output,

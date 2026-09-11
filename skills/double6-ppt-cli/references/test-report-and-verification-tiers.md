@@ -288,3 +288,15 @@ portable 成功交付时：
 | c09 | slide count 合同正确 blocking |
 | c10 | portable 全闭环；视觉门顺序已文档化 |
 
+## 13. 互联网模板 template-fill 压测
+
+模板来源：GitHub `scanny/python-pptx` 官方测试语料 raw 下载。
+
+| 模板 | 特征 | 结果 |
+|---|---|---|
+| `test.pptx` | 标题+副标题 | check/apply/inspect/visual/finalize 通过 |
+| `no-core-props.pptx` | 极简单页 | 同上 |
+| `test_slides.pptx` | 图片+表格+group+连接线 | 图片替换 2 处；validate 通过（修复段落顺序后） |
+
+修复：Fill Native 写字可能产出 `a:endParaRPr` 在 `a:r` 之前的非法顺序；Double6 apply 后规范化，OfficeCLI validate 恢复 pass。
+
