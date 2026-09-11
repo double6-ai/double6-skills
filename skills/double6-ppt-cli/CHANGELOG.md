@@ -1,6 +1,13 @@
 # double6-ppt-cli 变更记录
 
+## 0.2.7
+
+- 修复 Fill Native 改字后 `a:p` 子节点顺序错误（`endParaRPr` 出现在 `a:r` 之前）导致 OfficeCLI `validate` 失败：apply 后在 Double6 侧按 ECMA-376 顺序规范化 `a:p` 子节点，不改 vendor 树。
+- 互联网模板压测（python-pptx 官方测试语料 3 个 PPTX）：`test.pptx` / `no-core-props.pptx` / `test_slides.pptx`（含图片/表格/group）template-fill 全闭环通过；`test_slides` 图片替换 2 处成功。
+- 新增回归：`test_txbody_order.py`（共 62 项）。
+
 ## 0.2.6
+
 
 - `semantic` 对 `preferred_structure: native_chart|native_table` 增加 name 回退：`match.drawingml_id` 未命中时，按 `source_selector.id` 匹配 `cNvPr@name`（vendor 原生图表常不保留 `data-pptx-shape-id`）。
 - 原生 chart/table 映射失败时错误信息包含 marker/JSON metadata 提示。
