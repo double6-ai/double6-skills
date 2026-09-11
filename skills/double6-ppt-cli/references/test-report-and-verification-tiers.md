@@ -310,3 +310,12 @@ portable 成功交付时：
 
 环境备注：OfficeCLI 被自动升级到 1.0.148 时 doctor fail closed，需重装 `@officecli/officecli@1.0.144` 并建议关闭 `~/.officecli/config.json` 的 `autoUpdate`。
 
+## 15. 依赖版本兼容策略（0.2.9）
+
+| 依赖 | 安装策略 | 运行时策略 |
+|---|---|---|
+| OfficeCLI | bootstrap 固定安装 pin `1.0.144` | 接受 pin 与更新 1.x；`warn` 可继续；major/过旧 fail |
+| ppt-master | vendored 完整包 + BOM SHA | 不自动跟随上游；损坏/Omission 按 doctor 判定 |
+
+用户可选自动适配：`python scripts/d6ppt.py bootstrap --runtime-dir <path> --yes` 始终只装 pin，不跟随 latest。
+

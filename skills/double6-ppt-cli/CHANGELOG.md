@@ -1,6 +1,14 @@
 # double6-ppt-cli 变更记录
 
+## 0.2.9
+
+- OfficeCLI 版本策略放宽：bootstrap **只下载 pin `1.0.144`**；运行时接受 pin 与更新 1.x（`warn` + 风险提示 + 可选 bootstrap 对齐），不再因「非精确等于 1.0.144」一刀切 fail closed。major 错误或过旧才 fail。
+- runtime lock 不再包含 skill 版本，避免 skill 升级导致 OfficeCLI 缓存目录漂移；doctor 会回退扫描 `~/.cache/double6-ppt-cli/*`。
+- ppt-master 继续以 vendored BOM 校验为准（不跟随上游自动升级）。
+- 新增 `classify_officecli_version` 与回归测试。
+
 ## 0.2.8
+
 
 - LibreOffice 兼容门：text/notes/visual/edit-probe 通过而 object identity 漂移时改为 `pass_with_warnings`（LO Save As 常见重编号），不再硬失败。
 - 明确 WPS 边界：非验证档；`wpscli ppt2pdf` 可作诊断 PDF，`ppt2photo` 可能需会员；禁止声称 WPS 已验证。

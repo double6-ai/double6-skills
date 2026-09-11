@@ -12,11 +12,15 @@ from typing import Any
 
 SCHEMA_VERSION = "2.0"
 LEGACY_SCHEMA_VERSIONS = {"1.0"}
-SKILL_VERSION = "0.2.3"
-OFFICECLI_VERSION = "1.0.144"
+SKILL_VERSION = "0.2.9"
+# Bootstrap always installs this exact OfficeCLI version.
+OFFICECLI_PIN_VERSION = "1.0.144"
+# Runtime accepts the pin and later 1.x builds (upstream ships quickly).
+OFFICECLI_MIN_VERSION = OFFICECLI_PIN_VERSION
+OFFICECLI_VERSION = OFFICECLI_PIN_VERSION
 PPT_MASTER_VERSION = "4.8.0"
 PPT_MASTER_COMMIT = "53c9c2a5e9f1a49096324fba4f95833649c6a0f4"
-RUNTIME_LOCK_INPUT = f"double6-ppt-cli:{SKILL_VERSION}|officecli:{OFFICECLI_VERSION}|ppt-master:{PPT_MASTER_COMMIT}"
+RUNTIME_LOCK_INPUT = f"officecli:{OFFICECLI_PIN_VERSION}|ppt-master:{PPT_MASTER_COMMIT}"
 RUNTIME_LOCK_SHA = hashlib.sha256(RUNTIME_LOCK_INPUT.encode()).hexdigest()[:16]
 STATUSES = {
     "initialized", "authored", "compiled", "inspected", "repair_needed",
@@ -28,6 +32,65 @@ PPTX_DERIVED_ARTIFACT_KEYS = {
     "portable_editability_receipt", "delivery_manifest", "visual_review", "visual_review_waiver",
     "contact_sheet", "libreoffice_roundtrip", "current_pptx_profile", "inspection_map",
 }
+
+
+def parse_version(value: str | None) -> tuple[int, ...] | None:
+    if not value:
+        return None
+    parts: list[int] = []
+    for token in str(value).strip().split("."):
+        digits = "".join(ch for ch in token if ch.isdigit())
+        if not digits:
+            break
+        parts.append(int(digits))
+    return tuple(parts) if parts else None
+
+
+def classify_officecli_version(actual: str | None, *, pin: str = OFFICECLI_PIN_VERSION, minimum: str = OFFICECLI_MIN_VERSION) -> dict[str, Any]:
+    """Classify an installed OfficeCLI version against the pin/compat policy."""
+    pin_v = parse_version(pin)
+    min_v = parse_version(minimum) or pin_v
+    actual_v = parse_version(actual)
+    if actual_v is None:
+        return {
+            "status": "fail",
+            "reason": "missing",
+            "message": f"OfficeCLI is not installed; bootstrap installs pinned {pin}.",
+            "risk": None,
+            "action": "bootstrap",
+        }
+    if pin_v is None or min_v is None:
+        return {"status": "fail", "reason": "invalid_policy", "message": "Invalid OfficeCLI version policy", "risk": None, "action": "bootstrap"}
+    if actual_v[0] != pin_v[0]:
+        return {
+            "status": "fail",
+            "reason": "major_mismatch",
+            "message": f"OfficeCLI {actual} major version differs from pin {pin}; runtime contract is 1.x only.",
+            "risk": "high",
+            "action": "bootstrap",
+        }
+    if actual_v < min_v:
+        return {
+            "status": "fail",
+            "reason": "too_old",
+            "message": f"OfficeCLI {actual} is older than minimum compatible {minimum}.",
+            "risk": "high",
+            "action": "bootstrap",
+        }
+    if actual_v == pin_v:
+        return {"status": "pass", "reason": "pinned", "message": f"OfficeCLI {actual} matches pin {pin}.", "risk": None, "action": "none"}
+    # newer 1.x: usable with risk warning
+    direction = "newer" if actual_v > pin_v else "older_but_compatible"
+    return {
+        "status": "warn",
+        "reason": "not_pinned",
+        "message": (
+            f"OfficeCLI {actual} is {direction} than pin {pin}. Continuing with compatibility risk; "
+            f"run bootstrap to re-pin if behavior looks wrong."
+        ),
+        "risk": "medium" if actual_v > pin_v else "low",
+        "action": "bootstrap_optional",
+    }
 
 
 class D6PPTError(RuntimeError):

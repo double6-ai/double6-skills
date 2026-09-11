@@ -1,6 +1,6 @@
 ---
 name: double6-ppt-cli
-version: 0.2.8
+version: 0.2.9
 description: 基于 ppt-master 与 iOfficeAI/OfficeCLI 两个开源项目，生成、套用模板、读取、检查和闭环修复原生 PPTX；“可编辑”重点指保留原生对象与稳定身份，方便 Agent 多轮定位、修改和复查。适用于从 Markdown、文本、结构化材料与本地授权图片制作演示文稿，复用常规 PPTX 模板，或质检和受限修复已有 PPTX；不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
 metadata:
   openclaw:
@@ -13,7 +13,7 @@ metadata:
         - py
 ---
 
-# Double6 PPT CLI 0.2.8
+# Double6 PPT CLI 0.2.9
 
 > 安装说明：从 [GitHub / skills.sh](https://github.com/double6-ai/double6-skills/tree/main/skills/double6-ppt-cli) 安装可获得完整 vendored PPT Master。ClawHub 包因网关体积限制省略了 `pptx_animation_presets.json` 与 `presetShapeDefinitions.xml`；需要原生 SVG 生成完整能力时，请改用 GitHub 安装。
 
@@ -31,7 +31,7 @@ metadata:
 ## 开始前
 
 1. 运行 `python scripts/d6ppt.py doctor --json --mode <generate|postflight|template-fill> --verify-tier <auto|native|portable>`。doctor 会按目标模式和档位报告能力；PowerPoint 缺失只会阻断 native 档。
-2. OfficeCLI 必须是 `1.0.144`；其它版本 fail closed。只有用户授权安装后才运行 `bootstrap --runtime-dir <path> --yes`，禁止全局安装和自动升级。
+2. OfficeCLI **bootstrap 固定安装 pin `1.0.144`**；运行时接受 pin 与更新的 **1.x**（同 major）。非 pin 版本 doctor 报 `warn` 并提示风险，可继续使用；需要对齐时执行 `bootstrap --runtime-dir <path> --yes` 重新装 pin。major ≠ 1 或低于最低兼容版才 fail。只有用户授权后才运行 bootstrap，禁止全局安装。ppt-master 以 vendored BOM 为准。
 3. Microsoft PowerPoint 与 `osascript` 是 **native 档**必需验证目标。PowerPoint 已打开其它演示文稿时返回 `powerpoint_busy`，绝不强关用户文件。
 4. 本机没有 PowerPoint、`osascript` 不可用，或系统拒绝辅助访问（error `-1719`）时，`verify` 默认自动降级为 **portable 档**：OOXML + OfficeCLI 校验与改字探针，可选 LibreOffice 渲染。用 `--verify-tier native` 强制要求 PowerPoint；用 `--verify-tier portable` 跳过 PowerPoint。
 5. LibreOffice 在 portable 档可作渲染事实源；在 native 档仅 `verify --compatibility libreoffice` 时做附加兼容性检查，不能替代 PowerPoint。LO Save As 常重编号 DrawingML ID/丢自定义名；text/notes/visual/edit-probe 通过而 identity 漂移时记为 `pass_with_warnings`。
@@ -81,4 +81,4 @@ metadata:
 详细合同见 [delivery-gates.md](references/delivery-gates.md)、[repair-policy.md](references/repair-policy.md)、[machine-contracts.md](references/machine-contracts.md)、[licenses-and-upstreams.md](references/licenses-and-upstreams.md) 与 [test-report-and-verification-tiers.md](references/test-report-and-verification-tiers.md)（native/portable 双档说明与完整测试报告）。
 
 - WPS 当前不是验证档；`wpscli ppt2pdf` 仅作诊断导出（常限用户目录可读路径），`ppt2photo` 可能要求会员。**不得**声称「WPS 已验证」。
-- OfficeCLI 必须锁定 `1.0.144`；本机 `~/.officecli/config.json` 若 `autoUpdate: true` 可能被升到 1.0.148 导致 doctor fail closed，应重装 `@officecli/officecli@1.0.144` 并关闭自动升级。
+- OfficeCLI pin 为 `1.0.144`；若 `~/.officecli` 自动升级导致行为异常，可 `bootstrap` 重新装 pin，或接受 1.x 兼容风险继续使用。

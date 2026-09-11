@@ -13,7 +13,10 @@ class OfficeCLI:
     def __init__(self, runtime_dir: Path | None = None, log_dir: Path | None = None, timeout: int = 120):
         self.binary = find_officecli(runtime_dir)
         if not self.binary:
-            raise D6PPTError("OfficeCLI v1.0.144 is not installed in the pinned runtime", "officecli_missing")
+            raise D6PPTError(
+                "OfficeCLI is not installed in the runtime; run bootstrap to install the pinned 1.0.144 build",
+                "officecli_missing",
+            )
         self.log_dir = log_dir
         self.timeout = timeout
 

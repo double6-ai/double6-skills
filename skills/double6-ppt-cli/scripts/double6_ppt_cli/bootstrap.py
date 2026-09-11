@@ -5,7 +5,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .common import D6PPTError, OFFICECLI_VERSION, RUNTIME_LOCK_SHA, SCHEMA_VERSION, skill_root, utc_now, write_json
+from .common import (
+    D6PPTError,
+    OFFICECLI_PIN_VERSION,
+    RUNTIME_LOCK_SHA,
+    SCHEMA_VERSION,
+    skill_root,
+    utc_now,
+    write_json,
+)
 
 
 def bootstrap(runtime_dir: Path, *, confirmed: bool = False) -> dict:
@@ -30,14 +38,23 @@ def bootstrap(runtime_dir: Path, *, confirmed: bool = False) -> dict:
     if not npm:
         raise D6PPTError("npm is required to install the pinned OfficeCLI dependency", "npm_missing")
     node_dir.mkdir(parents=True, exist_ok=True)
-    proc = subprocess.run([npm, "install", "--ignore-scripts=false", "--save-exact", f"@officecli/officecli@{OFFICECLI_VERSION}"], cwd=node_dir, capture_output=True, text=True, timeout=900)
-    log.append({"command": "npm install @officecli/officecli", "returncode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr})
+    # Always install the pin only; never follow latest.
+    proc = subprocess.run(
+        [npm, "install", "--ignore-scripts=false", "--save-exact", f"@officecli/officecli@{OFFICECLI_PIN_VERSION}"],
+        cwd=node_dir,
+        capture_output=True,
+        text=True,
+        timeout=900,
+    )
+    log.append({"command": f"npm install @officecli/officecli@{OFFICECLI_PIN_VERSION}", "returncode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr})
     if proc.returncode:
         raise D6PPTError("Pinned OfficeCLI installation failed", "bootstrap_failed", log)
     receipt = {
         "schema_version": SCHEMA_VERSION, "status": "pass", "created_at": utc_now(),
         "runtime_dir": str(runtime_dir), "runtime_lock_sha": RUNTIME_LOCK_SHA,
-        "officecli_version": OFFICECLI_VERSION, "commands": log,
+        "officecli_version": OFFICECLI_PIN_VERSION,
+        "install_policy": "exact_pin_only",
+        "commands": log,
     }
     write_json(runtime_dir / "bootstrap_receipt.json", receipt)
     return receipt
