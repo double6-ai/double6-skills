@@ -42,7 +42,7 @@ class NegativeBoundaryTests(unittest.TestCase):
     def test_wrong_officecli_fails_but_missing_libreoffice_is_optional(self) -> None:
         fake = Path("/tmp/officecli-wrong-version")
         with patch("double6_ppt_cli.doctor.find_officecli", return_value=fake), \
-             patch("double6_ppt_cli.doctor._version", return_value="1.0.999"), \
+             patch("double6_ppt_cli.doctor._version", return_value="2.0.0"), \
              patch("double6_ppt_cli.doctor.find_soffice", return_value=None), \
              patch("double6_ppt_cli.doctor.find_powerpoint", return_value=Path("/Applications/Microsoft PowerPoint.app")), \
              patch("double6_ppt_cli.doctor.shutil.which", side_effect=lambda name: f"/usr/bin/{name}" if name in {"pdftoppm", "osascript"} else None):
@@ -51,6 +51,17 @@ class NegativeBoundaryTests(unittest.TestCase):
         self.assertEqual(result["checks"]["officecli"]["status"], "fail")
         self.assertEqual(result["checks"]["libreoffice"]["status"], "unavailable")
         self.assertFalse(result["checks"]["libreoffice"]["required"])
+
+    def test_newer_officecli_1x_warns_but_remains_usable(self) -> None:
+        fake = Path("/tmp/officecli-newer")
+        with patch("double6_ppt_cli.doctor.find_officecli", return_value=fake), \
+             patch("double6_ppt_cli.doctor._version", return_value="1.0.999"), \
+             patch("double6_ppt_cli.doctor.find_soffice", return_value=Path("/usr/bin/soffice")), \
+             patch("double6_ppt_cli.doctor.find_powerpoint", return_value=None), \
+             patch("double6_ppt_cli.doctor.shutil.which", side_effect=lambda name: f"/usr/bin/{name}" if name == "pdftoppm" else None):
+            result = doctor(Path("/tmp/d6ppt-runtime"), verify_tier="portable", mode="postflight")
+        self.assertEqual(result["checks"]["officecli"]["status"], "warn")
+        self.assertTrue(result["capabilities"]["portable_ready"])
 
     def test_corrupt_pptx_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

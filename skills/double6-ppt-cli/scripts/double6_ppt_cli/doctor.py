@@ -10,7 +10,7 @@ from typing import Any
 
 from .common import (
     D6PPTError, OFFICECLI_VERSION, PPT_MASTER_COMMIT, RUNTIME_LOCK_SHA, default_runtime_dir,
-    sha256_file, skill_root,
+    classify_officecli_version, sha256_file, skill_root,
 )
 from .powerpoint import find_powerpoint
 
@@ -22,11 +22,29 @@ def _officecli_candidates(runtime_dir: Path | None = None) -> list[Path]:
     runtime = runtime_dir or default_runtime_dir()
     values.extend([
         runtime / "node" / "node_modules" / ".bin" / "officecli",
+        runtime / "node" / "node_modules" / "@officecli" / "officecli" / "officecli.js",
         runtime / "node" / "node_modules" / "@officecli" / "officecli" / "vendor" / "officecli",
     ])
+    # Fallback: previous skill-version lock dirs under the cache root.
+    cache_root = Path.home() / ".cache" / "double6-ppt-cli"
+    if cache_root.is_dir():
+        for child in sorted(cache_root.iterdir(), reverse=True):
+            values.extend([
+                child / "node" / "node_modules" / ".bin" / "officecli",
+                child / "node" / "node_modules" / "@officecli" / "officecli" / "officecli.js",
+            ])
     if shutil.which("officecli"):
         values.append(Path(shutil.which("officecli") or ""))
-    return values
+    # de-dupe while preserving order
+    seen = set()
+    unique = []
+    for item in values:
+        key = str(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+    return unique
 
 
 def find_officecli(runtime_dir: Path | None = None) -> Path | None:
@@ -160,6 +178,7 @@ def doctor(
     root = skill_root()
     officecli = find_officecli(runtime_dir)
     officecli_version = _version(officecli)
+    officecli_policy = classify_officecli_version(officecli_version)
     soffice = find_soffice()
     pdftoppm = shutil.which("pdftoppm")
     vendor = _vendor_integrity(root)
@@ -180,11 +199,15 @@ def doctor(
         "python": {"status": "pass", "version": platform.python_version()},
         "python_modules": {"status": "pass" if all(v == "available" for v in python_modules.values()) else "fail", "modules": python_modules},
         "officecli": {
-            "status": "pass" if officecli_version == OFFICECLI_VERSION else "fail",
+            "status": officecli_policy["status"],
             "path": str(officecli) if officecli else None,
             "expected_version": OFFICECLI_VERSION,
             "actual_version": officecli_version,
+            "policy": officecli_policy,
+            "risk": officecli_policy.get("risk"),
+            "message": officecli_policy.get("message"),
             "repair": f"python scripts/d6ppt.py bootstrap --runtime-dir {runtime_dir or default_runtime_dir()} --yes",
+            "auto_adapt": officecli_policy["status"] == "warn",
         },
         "libreoffice": {
             "status": "available" if soffice else "unavailable", "path": str(soffice) if soffice else None,
@@ -211,7 +234,10 @@ def doctor(
             "repair": "On macOS, allow terminal automation when native verification is requested; otherwise use --verify-tier portable.",
         },
     }
-    base_ready = checks["python_modules"]["status"] == "pass" and checks["officecli"]["status"] == "pass"
+    base_ready = (
+        checks["python_modules"]["status"] == "pass"
+        and checks["officecli"]["status"] in {"pass", "warn"}
+    )
     vendor_required = mode in {"generate", "template-fill"}
     vendor_ready = vendor["status"] == "pass" if vendor_required else vendor["status"] != "fail"
     portable_ready = base_ready and vendor_ready
