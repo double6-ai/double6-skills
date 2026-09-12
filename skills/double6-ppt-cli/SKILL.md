@@ -17,6 +17,17 @@ metadata:
 
 > 安装说明：从 [GitHub / skills.sh](https://github.com/double6-ai/double6-skills/tree/main/skills/double6-ppt-cli) 安装可获得完整 vendored PPT Master。ClawHub 包因网关体积限制省略了 `pptx_animation_presets.json` 与 `presetShapeDefinitions.xml`；需要原生 SVG 生成完整能力时，请改用 GitHub 安装。
 
+## 平台边界（不要误解为「必须 macOS」）
+
+| 能力 | 是否需要 macOS / Microsoft PowerPoint |
+|---|---|
+| 安装 skill、`doctor`、bootstrap OfficeCLI | **否**。只要 Python 3 + npm（bootstrap 时） |
+| generate / template-fill / postflight 编译与 inspect | **否** |
+| `--verify-tier portable` 验证与交付 | **否**。OfficeCLI 校验/改字探针；可选 LibreOffice 渲染 |
+| `--verify-tier native` / auto 且环境有 PowerPoint | **是（当前实现）**。依赖 macOS `osascript` + Microsoft PowerPoint.app 做原生 roundtrip |
+
+非 Mac / 无 PowerPoint 时请显式使用 `--verify-tier portable`，不要强制 native。下面大量路径与 `/private/tmp`、PowerPoint 容器说明，只约束 **macOS native 档**。
+
 ## 项目定位与开源依赖
 
 本 Skill 使用了两个开源项目，并在其上增加 Double6 的集成代码、工作流约束、状态记录和质量门：

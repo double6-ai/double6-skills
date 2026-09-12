@@ -225,13 +225,13 @@ def doctor(
         "powerpoint": {
             "status": "available" if powerpoint else "unavailable",
             "path": str(powerpoint) if powerpoint else None,
-            "required_for": "native tier",
-            "repair": "Install Microsoft PowerPoint, or use --verify-tier portable.",
+            "required_for": "native tier (macOS + Microsoft PowerPoint)",
+            "repair": "Install Microsoft PowerPoint on macOS, or use --verify-tier portable on any OS.",
         },
         "powerpoint_automation": {
             "status": "available" if osascript else "unavailable", "path": osascript,
-            "required_for": "native tier",
-            "repair": "On macOS, allow terminal automation when native verification is requested; otherwise use --verify-tier portable.",
+            "required_for": "native tier (macOS only)",
+            "repair": "On macOS, allow terminal automation for native verification; otherwise use --verify-tier portable (no macOS/PowerPoint required).",
         },
     }
     base_ready = (
