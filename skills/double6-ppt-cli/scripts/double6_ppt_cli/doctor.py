@@ -10,9 +10,30 @@ from typing import Any
 
 from .common import (
     D6PPTError, OFFICECLI_VERSION, PPT_MASTER_COMMIT, RUNTIME_LOCK_SHA, default_runtime_dir,
-    classify_officecli_version, sha256_file, skill_root,
+    classify_officecli_version, content_sha_matches, sha256_file, skill_root,
 )
 from .powerpoint import find_powerpoint
+
+
+def _bin_names() -> tuple[str, ...]:
+    if os.name == "nt":
+        return ("officecli.cmd", "officecli.exe", "officecli.js", "officecli")
+    return ("officecli", "officecli.js")
+
+
+def officecli_argv(binary: Path | None) -> list[str]:
+    """Build a portable OfficeCLI command; .js entries need node on Windows/POSIX."""
+    if not binary:
+        return []
+    if binary.suffix.lower() == ".js":
+        node = shutil.which("node")
+        if not node:
+            raise D6PPTError(
+                "OfficeCLI JavaScript entry requires node on PATH; install Node.js or bootstrap the runtime",
+                "officecli_node_missing",
+            )
+        return [node, str(binary)]
+    return [str(binary)]
 
 
 def _officecli_candidates(runtime_dir: Path | None = None) -> list[Path]:
@@ -20,8 +41,9 @@ def _officecli_candidates(runtime_dir: Path | None = None) -> list[Path]:
     if os.environ.get("D6PPT_OFFICECLI"):
         values.append(Path(os.environ["D6PPT_OFFICECLI"]))
     runtime = runtime_dir or default_runtime_dir()
+    for name in _bin_names():
+        values.append(runtime / "node" / "node_modules" / ".bin" / name)
     values.extend([
-        runtime / "node" / "node_modules" / ".bin" / "officecli",
         runtime / "node" / "node_modules" / "@officecli" / "officecli" / "officecli.js",
         runtime / "node" / "node_modules" / "@officecli" / "officecli" / "vendor" / "officecli",
     ])
@@ -29,10 +51,9 @@ def _officecli_candidates(runtime_dir: Path | None = None) -> list[Path]:
     cache_root = Path.home() / ".cache" / "double6-ppt-cli"
     if cache_root.is_dir():
         for child in sorted(cache_root.iterdir(), reverse=True):
-            values.extend([
-                child / "node" / "node_modules" / ".bin" / "officecli",
-                child / "node" / "node_modules" / "@officecli" / "officecli" / "officecli.js",
-            ])
+            for name in _bin_names():
+                values.append(child / "node" / "node_modules" / ".bin" / name)
+            values.append(child / "node" / "node_modules" / "@officecli" / "officecli" / "officecli.js")
     if shutil.which("officecli"):
         values.append(Path(shutil.which("officecli") or ""))
     # de-dupe while preserving order
@@ -130,7 +151,7 @@ def _vendor_integrity(root: Path) -> dict[str, Any]:
             continue
         if not relative or not candidate.is_file():
             missing.append(relative)
-        elif expected and sha256_file(candidate) != expected:
+        elif expected and not content_sha_matches(candidate, expected):
             mismatched.append(relative)
     expected_omissions = sorted(set(missing) & CLAW_HUB_OMITTED_VENDOR_FILES)
     unexpected_missing = sorted(set(missing) - CLAW_HUB_OMITTED_VENDOR_FILES)
@@ -162,6 +183,25 @@ def _vendor_integrity(root: Path) -> dict[str, Any]:
             "template_fill": status == "pass",
         },
         "repair": "Install the complete skill from GitHub or skills.sh when full generate/template-fill capability is required.",
+    }
+
+
+def _officecli_runtime_probe(binary: Path | None) -> dict[str, Any]:
+    if not binary:
+        return {"ok": False, "reason": "missing_binary"}
+    try:
+        command = officecli_argv(binary)
+    except D6PPTError as exc:
+        return {"ok": False, "reason": exc.code, "message": str(exc)}
+    try:
+        proc = subprocess.run(command + ["--version"], capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"ok": False, "reason": "launch_failed", "command": command, "message": str(exc)}
+    return {
+        "ok": proc.returncode == 0,
+        "command": command,
+        "returncode": proc.returncode,
+        "version_line": (proc.stdout or proc.stderr).strip().splitlines()[:1],
     }
 
 
@@ -208,6 +248,7 @@ def doctor(
             "message": officecli_policy.get("message"),
             "repair": f"python scripts/d6ppt.py bootstrap --runtime-dir {runtime_dir or default_runtime_dir()} --yes",
             "auto_adapt": officecli_policy["status"] == "warn",
+            "runtime_probe": _officecli_runtime_probe(officecli),
         },
         "libreoffice": {
             "status": "available" if soffice else "unavailable", "path": str(soffice) if soffice else None,

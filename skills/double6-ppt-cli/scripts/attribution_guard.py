@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from double6_ppt_cli.common import content_sha_matches, sha256_file
 import json
 import sys
 from pathlib import Path
@@ -11,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def sha(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return sha256_file(path)
 
 
 def main() -> int:
@@ -32,7 +33,7 @@ def main() -> int:
             path = ROOT / "vendor" / "ppt-master-core" / entry["path"]
             if not path.is_file():
                 errors.append(f"vendor_missing:{entry['path']}")
-            elif sha(path) != entry["sha256"]:
+            elif not content_sha_matches(path, entry["sha256"]):
                 errors.append(f"vendor_modified:{entry['path']}")
     result = {"status": "pass" if not errors else "fail", "errors": errors}
     print(json.dumps(result, ensure_ascii=False, indent=2))

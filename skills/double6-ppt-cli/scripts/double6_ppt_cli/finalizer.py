@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .common import D6PPTError, SCHEMA_VERSION, load_run, read_json, resolve_run_path, set_status, sha256_file, utc_now, write_json
+from .common import D6PPTError, SCHEMA_VERSION, load_run, read_json, resolve_run_path, set_status, sha256_file, utc_now, write_json, rel_posix
 
 
 def finalize_run(run: Path) -> dict[str, Any]:
@@ -72,7 +72,7 @@ def finalize_run(run: Path) -> dict[str, Any]:
     delivery = {
         "schema_version": SCHEMA_VERSION, "created_at": utc_now(), "status": delivery_status,
         "run_id": manifest["run_id"], "mode": manifest["mode"],
-        "artifact": str(current.relative_to(run)), "artifact_sha256": current_sha,
+        "artifact": rel_posix(current, run), "artifact_sha256": current_sha,
         "gates": verification.get("gates"), "warnings": warnings,
         "verification_tier": verification_tier,
         "libreoffice_receipt": (

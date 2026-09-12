@@ -18,8 +18,7 @@ from .common import (
     set_status,
     sha256_file,
     utc_now,
-    write_json,
-)
+    write_json, rel_posix)
 from .package_diff import compare_parts
 
 
@@ -235,13 +234,13 @@ def clean_orphan_slides(run: Path) -> dict[str, Any]:
             "created_at": utc_now(),
             "status": "pass",
             "result": "no_change",
-            "source_pptx": str(current.relative_to(run)),
+            "source_pptx": rel_posix(current, run),
             "source_pptx_sha256": before_sha,
             "logical_slide_count": len(logical_slides),
             "retained_nonlogical_slides": retained,
         }
         write_json(receipt_path, receipt)
-        manifest["artifacts"]["package_cleanup_receipt"] = str(receipt_path.relative_to(run))
+        manifest["artifacts"]["package_cleanup_receipt"] = rel_posix(receipt_path, run)
         from .common import save_run
         save_run(run, manifest)
         return receipt
@@ -263,9 +262,9 @@ def clean_orphan_slides(run: Path) -> dict[str, Any]:
         "created_at": utc_now(),
         "status": "pass",
         "result": "cleaned",
-        "source_pptx": str(current.relative_to(run)),
+        "source_pptx": rel_posix(current, run),
         "source_pptx_sha256": before_sha,
-        "output_pptx": str(output.relative_to(run)),
+        "output_pptx": rel_posix(output, run),
         "output_pptx_sha256": after_sha,
         "logical_slide_count": len(logical_slides),
         "removed_relationships": removed_relationships,
@@ -287,9 +286,9 @@ def clean_orphan_slides(run: Path) -> dict[str, Any]:
             "at": utc_now(), "reason": "pptx_sha_changed_after_package_clean", "artifacts": stale,
         })
     manifest["artifacts"].update({
-        "current_pptx": str(output.relative_to(run)),
+        "current_pptx": rel_posix(output, run),
         "pptx_sha256": after_sha,
-        "package_cleanup_receipt": str(receipt_path.relative_to(run)),
+        "package_cleanup_receipt": rel_posix(receipt_path, run),
     })
     manifest["unreplayed_patches"] = []
     set_status(run, manifest, "compiled", "package_clean", {

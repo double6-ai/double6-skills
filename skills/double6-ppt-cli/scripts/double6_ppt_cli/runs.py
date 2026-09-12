@@ -6,8 +6,7 @@ from pathlib import Path
 
 from .common import (
     D6PPTError, OFFICECLI_VERSION, PPT_MASTER_COMMIT, PPT_MASTER_VERSION,
-    RUNTIME_LOCK_SHA, SCHEMA_VERSION, copy_input, ensure_owner_writable, sha256_tree, skill_root, utc_now, write_json,
-)
+    RUNTIME_LOCK_SHA, SCHEMA_VERSION, copy_input, ensure_owner_writable, sha256_tree, skill_root, utc_now, write_json, rel_posix)
 
 
 RUN_DIRS = ("input", "authoring", "artifacts", "evidence", "logs", "review", "delivery", "patches", "plans")
@@ -141,7 +140,7 @@ def init_run(
     else:
         source_target = out / "input" / ("source" if source.is_dir() else source.name)
         copy_input(source, source_target)
-        source_copy = str(source_target.relative_to(out))
+        source_copy = rel_posix(source_target, out)
         current_pptx = None
         if source.is_dir() and (source / "svg_output").is_dir():
             shutil.copytree(source, out / "authoring" / "project")
@@ -169,7 +168,7 @@ def init_run(
         shutil.copy2(template, template_copy)
         template_record = {
             "original_path": str(template),
-            "copied_path": str(template_copy.relative_to(out)),
+            "copied_path": rel_posix(template_copy, out),
             "sha256": sha256_tree(template),
         }
     contract_record = None
@@ -178,7 +177,7 @@ def init_run(
         shutil.copy2(contract, contract_copy)
         contract_record = {
             "original_path": str(contract),
-            "copied_path": str(contract_copy.relative_to(out)),
+            "copied_path": rel_posix(contract_copy, out),
             "sha256": sha256_tree(contract),
         }
     manifest = {

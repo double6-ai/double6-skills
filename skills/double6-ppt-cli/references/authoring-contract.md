@@ -67,3 +67,12 @@ Authoring 结构约束（quality gate + semantic contract）：
 
 并在 semantic manifest 使用 `preferred_structure: native_chart` + `match.drawingml_id: 1002`。普通示意图 group **不会**变成原生 chart；缺 JSON metadata 会在 vendor 阶段 fail closed。
 
+## 多行文本与居中
+
+- 同一段落的多行文案：所有 `<tspan>` 的 `x` 必须**等于**父 `<text>` 的 `x`；居中用 `text-anchor="middle"`，不要给每行不同 x。
+- 未在 `spec_lock.md` `## typography` 声明、且出现次数 > 2 的字号会被质量门阻断；请声明干净阶梯（避免 20/22 这类无感差值）。
+- `data-pptx-bounds` 必须覆盖真实墨迹宽度；中文混排请按质量门同宽算法估宽，或预留足够留白。
+
+## generate 模式能力边界
+
+`init --design <profile>` 只给颜色/字号/工作结构，**不自动套版式**。要好看请：1) 自己设计完整 SVG 版式；或 2) 改用 template-fill 复用现成模板。vendored ppt-master 精简核不包含上游 `workflows/` 版式库。

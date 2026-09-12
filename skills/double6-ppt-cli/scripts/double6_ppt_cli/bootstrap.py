@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -24,13 +25,14 @@ def bootstrap(runtime_dir: Path, *, confirmed: bool = False) -> dict:
     venv = runtime_dir / "python"
     node_dir = runtime_dir / "node"
     log = []
-    if not (venv / "bin" / "python").is_file():
+    venv_python = venv / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python")
+    if not venv_python.is_file():
         proc = subprocess.run([sys.executable, "-m", "venv", str(venv)], capture_output=True, text=True, timeout=180)
         log.append({"command": "python -m venv", "returncode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr})
         if proc.returncode:
             raise D6PPTError("Could not create Python runtime", "bootstrap_failed", log)
     requirements = skill_root() / "requirements-core.lock"
-    proc = subprocess.run([str(venv / "bin" / "python"), "-m", "pip", "install", "-r", str(requirements)], capture_output=True, text=True, timeout=900)
+    proc = subprocess.run([str(venv_python), "-m", "pip", "install", "-r", str(requirements)], capture_output=True, text=True, timeout=900)
     log.append({"command": "pip install", "returncode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr})
     if proc.returncode:
         raise D6PPTError("Pinned Python dependency installation failed", "bootstrap_failed", log)

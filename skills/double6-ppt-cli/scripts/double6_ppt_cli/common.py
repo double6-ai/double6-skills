@@ -12,7 +12,7 @@ from typing import Any
 
 SCHEMA_VERSION = "2.0"
 LEGACY_SCHEMA_VERSIONS = {"1.0"}
-SKILL_VERSION = "0.2.11"
+SKILL_VERSION = "0.2.12"
 # Bootstrap always installs this exact OfficeCLI version.
 OFFICECLI_PIN_VERSION = "1.0.144"
 # Runtime accepts the pin and later 1.x builds (upstream ships quickly).
@@ -110,6 +110,21 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def sha256_file_normalized(path: Path) -> str:
+    """SHA-256 after normalizing CRLF/CR to LF (Git autocrlf-safe)."""
+    data = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return hashlib.sha256(data).hexdigest()
+
+
+def content_sha_matches(path: Path, expected: str) -> bool:
+    return sha256_file(path) == expected or sha256_file_normalized(path) == expected
+
+
+def rel_posix(path: Path, root: Path) -> str:
+    """Run-relative path always using forward slashes for cross-platform artifacts."""
+    return path.resolve().relative_to(root.resolve()).as_posix()
 
 
 def sha256_tree(path: Path) -> str:

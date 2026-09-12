@@ -1,6 +1,6 @@
 ---
 name: double6-ppt-cli
-version: 0.2.11
+version: 0.2.12
 description: 基于 ppt-master 与 iOfficeAI/OfficeCLI 两个开源项目，生成、套用模板、读取、检查和闭环修复原生 PPTX；“可编辑”重点指保留原生对象与稳定身份，方便 Agent 多轮定位、修改和复查。适用于从 Markdown、文本、结构化材料与本地授权图片制作演示文稿，复用常规 PPTX 模板，或质检和受限修复已有 PPTX；不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
 metadata:
   openclaw:
@@ -13,7 +13,7 @@ metadata:
         - py
 ---
 
-# Double6 PPT CLI 0.2.11
+# Double6 PPT CLI 0.2.12
 
 > 安装说明：从 [GitHub / skills.sh](https://github.com/double6-ai/double6-skills/tree/main/skills/double6-ppt-cli) 安装可获得完整 vendored PPT Master。ClawHub 包因网关体积限制省略了 `pptx_animation_presets.json` 与 `presetShapeDefinitions.xml`；需要原生 SVG 生成完整能力时，请改用 GitHub 安装。
 
@@ -27,6 +27,13 @@ metadata:
 | `--verify-tier native` / auto 且环境有 PowerPoint | **是（当前实现）**。依赖 macOS `osascript` + Microsoft PowerPoint.app 做原生 roundtrip |
 
 非 Mac / 无 PowerPoint 时请显式使用 `--verify-tier portable`，不要强制 native。下面大量路径与 `/private/tmp`、PowerPoint 容器说明，只约束 **macOS native 档**。
+
+## Windows / 跨平台注意
+
+- CLI、portable 档、template-fill/postflight 均可在 Windows 运行；OfficeCLI 通过 `officecli.cmd` + PATH 上的 `node` 调用。
+- vendor BOM 校验对 CRLF/LF 已做归一化；`core.autocrlf` 不会导致 137/137 误报。
+- native PowerPoint 自动化目前仍是 macOS（`osascript`）。Windows 可探测已安装 PowerPoint，但 skill 未实现 COM 原生档，请用 `--verify-tier portable`。
+- run 清单内路径统一为正斜杠，产物可跨平台搬运。
 
 ## 项目定位与开源依赖
 

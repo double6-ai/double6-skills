@@ -16,8 +16,7 @@ from PIL import Image, ImageChops, ImageFilter
 
 from .common import (
     D6PPTError, SCHEMA_VERSION, load_run, read_json, resolve_run_path, save_run, set_status,
-    sha256_file, utc_now, write_json,
-)
+    sha256_file, utc_now, write_json, rel_posix)
 from .doctor import find_soffice
 from .officecli import OfficeCLI
 from .package_diff import compare_parts
@@ -375,7 +374,7 @@ def _optional_libreoffice(
         status = "fail"
     receipt = {
         "schema_version": SCHEMA_VERSION, "created_at": utc_now(), "status": status,
-        "source_pptx_sha256": before["sha256"], "roundtrip_pptx": str(roundtrip.relative_to(run)),
+        "source_pptx_sha256": before["sha256"], "roundtrip_pptx": rel_posix(roundtrip, run),
         "roundtrip_pptx_sha256": after["sha256"],
         "text_preserved": text_ok, "notes_preserved": notes_ok, "object_identities_preserved": identities_ok,
         "identity_claim_boundary": (
@@ -461,9 +460,9 @@ def _portable_render(run: Path, pptx: Path) -> dict[str, Any]:
         "application": "LibreOffice",
         "fact_source": "libreoffice_portable",
         "page_count": len(pages),
-        "pages": [str(path.relative_to(run)) for path in pages],
-        "pdf": str(pdf.relative_to(run)) if pdf else None,
-        "contact_sheet": str(contact.relative_to(run)),
+        "pages": [rel_posix(path, run) for path in pages],
+        "pdf": rel_posix(pdf, run) if pdf else None,
+        "contact_sheet": rel_posix(contact, run),
         "claim_boundary": "Portable tier page rasterization uses LibreOffice, not Microsoft PowerPoint.",
     }
 

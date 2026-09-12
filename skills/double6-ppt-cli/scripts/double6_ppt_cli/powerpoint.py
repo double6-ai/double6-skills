@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import os
-import pwd
 import re
+try:  # POSIX-only; native tier is macOS-first, but the module must import on Windows
+    import pwd
+except ImportError:  # pragma: no cover - Windows
+    pwd = None  # type: ignore[assignment]
 import shutil
 import subprocess
+import sys
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from PIL import Image, ImageDraw
 
-from .common import D6PPTError, SCHEMA_VERSION, sha256_file, utc_now, write_json
+from .common import D6PPTError, SCHEMA_VERSION, sha256_file, utc_now, write_json, rel_posix
 from .render_evidence import record_render_manifest
 if TYPE_CHECKING:
     from .officecli import OfficeCLI
@@ -60,6 +64,8 @@ end run
 
 def _system_user_home() -> Path:
     """Resolve the login account home without trusting an isolated HOME."""
+    if pwd is None:  # non-POSIX (Windows)
+        return Path(os.path.expanduser("~")).resolve()
     return Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()
 
 
@@ -98,7 +104,20 @@ def validate_powerpoint_path(path: Path, staging_root: Path) -> Path:
     return resolved
 
 
+def _windows_powerpoint_exe() -> Path | None:
+    candidates = [
+        Path(os.environ.get("PROGRAMFILES", r"C:\Program Files")) / "Microsoft Office" / "root" / "Office16" / "POWERPNT.EXE",
+        Path(os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")) / "Microsoft Office" / "root" / "Office16" / "POWERPNT.EXE",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def find_powerpoint() -> Path | None:
+    if sys.platform == "win32":
+        return _windows_powerpoint_exe()
     return POWERPOINT_APP if POWERPOINT_APP.exists() else None
 
 
@@ -107,14 +126,24 @@ def detect_powerpoint_capability() -> dict[str, Any]:
     app = find_powerpoint()
     osascript = shutil.which("osascript")
     reasons: list[str] = []
-    if app is None:
-        reasons.append("Microsoft PowerPoint.app is not installed")
-    if not osascript:
-        reasons.append("osascript is unavailable")
+    platform_note = None
+    if sys.platform == "win32":
+        if app is None:
+            reasons.append("Microsoft PowerPoint POWERPNT.EXE was not found in standard Office paths")
+        # Native automation in this skill is AppleScript-based (macOS).
+        reasons.append("native PowerPoint automation is not implemented for Windows in this skill; use --verify-tier portable")
+        platform_note = "windows_native_automation_unsupported"
+    else:
+        if app is None:
+            reasons.append("Microsoft PowerPoint.app is not installed")
+        if not osascript:
+            reasons.append("osascript is unavailable")
     return {
         "available": not reasons,
         "app": str(app) if app else None,
         "osascript": osascript,
+        "platform": sys.platform,
+        "platform_note": platform_note,
         "reason": "; ".join(reasons) if reasons else None,
     }
 
@@ -307,7 +336,7 @@ def verify_with_powerpoint(pptx: Path, run: Path, client: OfficeCLI) -> dict[str
         "status": "pass",
         "application": "Microsoft PowerPoint",
         "source_pptx_sha256": sha256_file(pptx),
-        "roundtrip_pptx": str(output.relative_to(run)),
+        "roundtrip_pptx": rel_posix(output, run),
         "roundtrip_pptx_sha256": sha256_file(output),
         "edit_probe_performed": candidate is not None,
         "batch_session_count": 1,

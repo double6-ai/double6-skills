@@ -1,6 +1,18 @@
 # double6-ppt-cli 变更记录
 
+## 0.2.12
+
+- **Windows 兼容（来自真实 Windows 测试反馈）**：
+  - `powerpoint.py` 不再顶层硬依赖 `pwd`；Windows 可 import 全 CLI。
+  - `bootstrap` 使用 `Scripts/python.exe`。
+  - vendor BOM 校验容忍 CRLF/LF；新增 `.gitattributes` 保护 vendor 树。
+  - OfficeCLI 优先 `officecli.cmd`；`.js` 入口前置 `node`；控制台输出 bytes + 多编码回退（GBK/UTF-8）。
+  - run 清单路径统一 `rel_posix`（正斜杠）。
+  - `doctor` 区分「Windows 不支持 native 自动化」与「未安装 PowerPoint」，并探测 OfficeCLI/node 可启动性。
+- 文档：tspan x 约束、字号阶梯、generate 版式边界。
+
 ## 0.2.11
+
 
 - 澄清平台边界：安装与 portable 档不要求 macOS；仅 native PowerPoint 验证依赖 macOS + Microsoft PowerPoint + osascript。
 - README / SKILL.md / doctor 文案避免用户误判「必须苹果系统」。
