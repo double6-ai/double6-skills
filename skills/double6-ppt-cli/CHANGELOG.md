@@ -1,6 +1,12 @@
 # double6-ppt-cli 变更记录
 
+## 0.2.11
+
+- 澄清平台边界：安装与 portable 档不要求 macOS；仅 native PowerPoint 验证依赖 macOS + Microsoft PowerPoint + osascript。
+- README / SKILL.md / doctor 文案避免用户误判「必须苹果系统」。
+
 ## 0.2.10
+
 
 - 同步发布 0.2.9 依赖策略到 GitHub / ClawHub（ClawHub 仅含 .clawhubignore 后的必要文件）。
 
