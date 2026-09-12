@@ -76,3 +76,26 @@ Authoring 结构约束（quality gate + semantic contract）：
 ## generate 模式能力边界
 
 `init --design <profile>` 只给颜色/字号/工作结构，**不自动套版式**。要好看请：1) 自己设计完整 SVG 版式；或 2) 改用 template-fill 复用现成模板。vendored ppt-master 精简核不包含上游 `workflows/` 版式库。
+
+## 字号：px 与 pt
+
+`viewBox 0 0 1280 720` 对应 13.333in×7.5in，因此 **1 SVG px = 0.75pt**。`inspect` 的小字号阈值是 **pt**：
+
+| role | 下限 pt | 最小 px（向上取整） |
+|---|---|---|
+| title | 20 | 27 |
+| subtitle | 16 | 22 |
+| body | 12 | 16 |
+| caption / label / data | 10 | 14 |
+| footnote / page_mark | 9 | 12 |
+
+`## typography` **必须保留 `body` 键**（其它角色名可扩展）。出现次数 > 2 的每个字号都要声明。
+
+## 外部渲染证据（Windows / 自定义渲染器）
+
+PowerPoint COM 等外部渲染完成后，登记到 run 再走 visual 闭环：
+
+```bash
+python scripts/d6ppt.py render-import --run <run>   --pdf export.pdf --pages slide-1.png slide-2.png   --contact-sheet contact.png   --tier portable --renderer powerpoint-com   --fact-source "PowerPoint desktop export"
+```
+

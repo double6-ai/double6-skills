@@ -72,8 +72,18 @@ def compile_run(run: Path, *, native_charts_and_tables: bool = True) -> dict:
         "stdout": quality.stdout, "stderr": quality.stderr,
     })
     if quality.returncode != 0:
+        details = {"stdout_tail": quality.stdout[-4000:], "stderr_tail": quality.stderr[-2000:]}
+        # Surface project-level issues that are easy to miss in per-file scan output.
+        report_path = build_project / "validation" / "svg_quality_report.json"
+        if report_path.is_file():
+            try:
+                import json as _json
+                report = _json.loads(report_path.read_text(encoding="utf-8"))
+                details["project_issues"] = report.get("project_issues") or report.get("issues") or []
+            except Exception:
+                pass
         set_status(run, manifest, "blocked", "svg_quality_failed", quality.stdout[-4000:] + quality.stderr[-4000:])
-        raise D6PPTError("PPT Master SVG quality gate failed", "svg_quality_failed")
+        raise D6PPTError("PPT Master SVG quality gate failed", "svg_quality_failed", details)
     command = [sys.executable, str(converter), str(build_project), "-o", str(raw), "--conversion-trace", str(trace), "--pptx-structure", "flat"]
     if native_charts_and_tables:
         command.append("--native-charts-and-tables")
