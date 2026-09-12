@@ -28,8 +28,7 @@ from .common import (
     sha256_file,
     skill_root,
     utc_now,
-    write_json,
-)
+    write_json, rel_posix)
 from .officecli import OfficeCLI
 from .package_diff import compare_parts
 
@@ -147,7 +146,7 @@ def import_template_asset(run: Path, asset: Path, name: str) -> dict[str, Any]:
         shutil.copy2(asset, destination)
     record = {
         "name": name,
-        "copied_path": str(destination.relative_to(run)),
+        "copied_path": rel_posix(destination, run),
         "sha256": digest,
         "extension": extension,
         "content_type": content_type,
@@ -472,9 +471,9 @@ def analyze_template(run: Path) -> dict[str, Any]:
     scaffold_path = run / "plans" / "template_plan_scaffold.json"
     write_json(scaffold_path, scaffold)
     manifest["artifacts"].update({
-        "template_library": str(library_path.relative_to(run)),
-        "template_profile": str(profile_path.relative_to(run)),
-        "template_plan_scaffold": str(scaffold_path.relative_to(run)),
+        "template_library": rel_posix(library_path, run),
+        "template_profile": rel_posix(profile_path, run),
+        "template_plan_scaffold": rel_posix(scaffold_path, run),
     })
     set_status(run, manifest, "authored", "template_analyze", {"object_count": len(profile["objects"])})
     return {
@@ -894,7 +893,7 @@ def check_template_plan(run: Path, plan_path: Path) -> dict[str, Any]:
             "plan_slide": plan_slide,
             "source_object_id": source_object_id,
             "asset_name": asset_name,
-            "asset_path": str(asset_path.relative_to(run)),
+            "asset_path": rel_posix(asset_path, run),
             "asset_sha256": actual_asset_sha,
             "extension": asset_record.get("extension"),
             "content_type": asset_record.get("content_type"),
@@ -1029,7 +1028,7 @@ def check_template_plan(run: Path, plan_path: Path) -> dict[str, Any]:
     write_json(report_path, report)
     manifest["artifacts"].update({
         "template_plan": str(plan_path.resolve()),
-        "template_check_report": str(report_path.relative_to(run)),
+        "template_check_report": rel_posix(report_path, run),
     })
     if summary["error"]:
         set_status(run, manifest, "repair_needed", "template_check_plan", summary)
@@ -1495,7 +1494,7 @@ def apply_template_plan(run: Path, plan_path: Path, runtime_dir: Path | None = N
         "template_sha256": sha256_file(template),
         "content_sha256": manifest["input"]["sha256"],
         "plan_sha256": sha256_file(plan_path.resolve()),
-        "output": str(output.relative_to(run)),
+        "output": rel_posix(output, run),
         "output_sha256": output_sha,
         "removed_sample_objects": removals,
         "stripped_source_navigation_objects": stripped_navigation,
@@ -1511,11 +1510,11 @@ def apply_template_plan(run: Path, plan_path: Path, runtime_dir: Path | None = N
     receipt_path = run / "evidence" / "template_apply_receipt.json"
     write_json(receipt_path, receipt)
     manifest["artifacts"].update({
-        "current_pptx": str(output.relative_to(run)),
+        "current_pptx": rel_posix(output, run),
         "pptx_sha256": output_sha,
         "template_plan": str(plan_path.resolve()),
-        "template_apply_receipt": str(receipt_path.relative_to(run)),
-        "output_profile": str(output_profile_path.relative_to(run)),
+        "template_apply_receipt": rel_posix(receipt_path, run),
+        "output_profile": rel_posix(output_profile_path, run),
     })
     manifest["unreplayed_patches"] = []
     for stale in (run / "review" / "visual_review.json", run / "review" / "visual_review_waiver.json"):

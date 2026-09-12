@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import sys
 import tempfile
+import os
+import sys
 import unittest
 import zipfile
 import stat
@@ -23,6 +26,7 @@ class PackageAndStateTests(unittest.TestCase):
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("a.xml", value)
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS /private/tmp guard")
     def test_macos_private_tmp_run_is_rejected_before_powerpoint_access(self):
         with tempfile.TemporaryDirectory() as temp:
             source = Path(temp) / "source.pptx"

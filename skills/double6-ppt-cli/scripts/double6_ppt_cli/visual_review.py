@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .common import D6PPTError, SCHEMA_VERSION, load_run, resolve_run_path, save_run, sha256_file, utc_now, write_json
+from .common import D6PPTError, SCHEMA_VERSION, load_run, resolve_run_path, save_run, sha256_file, utc_now, write_json, rel_posix
 from .render_evidence import load_current_render_manifest
 
 
@@ -38,7 +38,7 @@ def record_visual_review(run: Path, status: str, reviewer: str, notes: str) -> d
         "render_pdf_sha256": sha256_file(Path(pdf)),
         "contact_sheet_sha256": sha256_file(contact_sheet),
         "page_count": len(pages),
-        "pages": [{"page": index, "path": str(path.relative_to(run)), "sha256": sha256_file(path)} for index, path in enumerate(pages, 1)],
+        "pages": [{"page": index, "path": rel_posix(path, run), "sha256": sha256_file(path)} for index, path in enumerate(pages, 1)],
         "notes": notes,
     }
     output = run / "review" / "visual_review.json"

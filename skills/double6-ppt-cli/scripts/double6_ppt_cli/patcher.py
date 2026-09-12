@@ -14,8 +14,7 @@ from lxml import etree
 
 from .common import (
     D6PPTError, SCHEMA_VERSION, ensure_owner_writable, invalidate_pptx_derived_artifacts, load_run, read_json, resolve_run_path, set_status,
-    sha256_file, utc_now, write_json,
-)
+    sha256_file, utc_now, write_json, rel_posix)
 from .officecli import OfficeCLI
 from .package_diff import compare_parts
 from .schemas import validate_object_map, validate_patch_spec
@@ -333,8 +332,8 @@ def apply_patch(run: Path, spec_path: Path, runtime_dir: Path | None = None) -> 
     ledger_path = run / "evidence" / "patch_ledger.json"
     ledger = read_json(ledger_path) if ledger_path.is_file() else {"schema_version": SCHEMA_VERSION, "entries": []}
     record = {
-        "patch_id": patch_id, "created_at": utc_now(), "before_pptx": str(current.relative_to(run)),
-        "before_sha256": current_sha, "after_pptx": str(output.relative_to(run)), "after_sha256": after_sha,
+        "patch_id": patch_id, "created_at": utc_now(), "before_pptx": rel_posix(current, run),
+        "before_sha256": current_sha, "after_pptx": rel_posix(output, run), "after_sha256": after_sha,
         "spec_sha256": sha256_file(spec_path), "operations": entries, "affected_package_parts": diff,
         "validate": {k: v for k, v in validation.items() if k != "_receipt"},
         "scope_invariants": {
@@ -367,14 +366,14 @@ def apply_patch(run: Path, spec_path: Path, runtime_dir: Path | None = None) -> 
         next_map["derived_from_object_map_sha256"] = spec["object_map_sha256"]
         next_map_path = run / "artifacts" / f"object_path_map_{patch_id}.json"
         write_json(next_map_path, next_map)
-        manifest["artifacts"]["object_path_map"] = str(next_map_path.relative_to(run))
+        manifest["artifacts"]["object_path_map"] = rel_posix(next_map_path, run)
     stale = invalidate_pptx_derived_artifacts(manifest)
     if stale:
         manifest.setdefault("stale_artifacts", []).append({
             "at": utc_now(), "reason": "pptx_sha_changed_after_patch", "artifacts": stale,
         })
     manifest["artifacts"].update({
-        "current_pptx": str(output.relative_to(run)), "pptx_sha256": after_sha,
+        "current_pptx": rel_posix(output, run), "pptx_sha256": after_sha,
         "patch_ledger": "evidence/patch_ledger.json",
     })
     manifest["unreplayed_patches"] = []
