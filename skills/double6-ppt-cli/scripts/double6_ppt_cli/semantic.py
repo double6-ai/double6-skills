@@ -199,10 +199,12 @@ def apply_semantic_contract(
     object_map_path: Path,
     source_root: Path,
 ) -> dict[str, Any]:
-    from .common import read_json
+    from .common import read_json, write_json
 
     semantic = read_json(semantic_manifest_path)
     validate_semantic_manifest(semantic, source_root)
+    # Persist any auto-filled source_files[].sha256 so later validations are stable.
+    write_json(semantic_manifest_path, semantic)
     by_slide: dict[int, list[dict[str, Any]]] = {}
     for obj in semantic["objects"]:
         by_slide.setdefault(int(obj["slide"]), []).append(obj)

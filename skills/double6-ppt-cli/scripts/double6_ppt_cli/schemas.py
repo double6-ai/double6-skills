@@ -71,8 +71,18 @@ def validate_semantic_manifest(data: dict[str, Any], source_root: Path | None = 
     if source_root is not None:
         for entry in data.get("source_files", []):
             path = source_root / entry["path"]
-            if not path.is_file() or sha256_file(path) != entry.get("sha256"):
+            if not path.is_file():
                 raise D6PPTError(f"Source file is missing or stale: {entry.get('path')}", "stale_source")
+            expected = entry.get("sha256")
+            if not expected:
+                # Auto-fill so authors need not precompute hashes.
+                entry["sha256"] = sha256_file(path)
+                continue
+            if sha256_file(path) != expected:
+                raise D6PPTError(
+                    f"Source file is missing or stale: {entry.get('path')} (sha256 mismatch; recompute source_files[].sha256)",
+                    "stale_source",
+                )
 
 
 def validate_object_map(data: dict[str, Any], pptx: Path, semantic_manifest: Path | None = None) -> None:

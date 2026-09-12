@@ -230,7 +230,13 @@ def doctor(
         except ImportError:
             python_modules[module] = "missing"
     fonts = []
-    for directory in (Path.home() / "Library/Fonts", Path("/Library/Fonts"), Path("/usr/share/fonts")):
+    for directory in (
+        Path.home() / "Library/Fonts",
+        Path("/Library/Fonts"),
+        Path("/usr/share/fonts"),
+        Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts",
+        Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Microsoft" / "Windows" / "Fonts",
+    ):
         if directory.exists():
             fonts.append(str(directory))
     powerpoint = find_powerpoint()

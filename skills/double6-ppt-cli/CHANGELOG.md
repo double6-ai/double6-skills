@@ -1,6 +1,16 @@
 # double6-ppt-cli 变更记录
 
+## 0.2.13
+
+- **P0 bootstrap 自举**：`cli.py` 改为子命令延迟导入；全新环境无需 lxml 即可 `bootstrap`/`doctor`。
+- **Windows fonts**：doctor 扫描 `%WINDIR%\Fonts` 与 LocalAppData 字体目录。
+- **`render-import` 子命令**：登记外部渲染（PowerPoint COM 等）PDF/逐页图/联系表，绑定 SHA 后走 visual 闭环。
+- **source_files[].sha256 自动填充**：缺失时按当前 SVG 计算并回写；不匹配仍 fail。
+- **compile 错误 details** 提升 project-level issues，避免只报 `svg_quality_failed`。
+- 文档：`body` 必填、px↔pt=0.75 对照表、render-import 用法。
+
 ## 0.2.12
+
 
 - **Windows 兼容（来自真实 Windows 测试反馈）**：
   - `powerpoint.py` 不再顶层硬依赖 `pwd`；Windows 可 import 全 CLI。
