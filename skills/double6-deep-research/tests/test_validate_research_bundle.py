@@ -17,7 +17,6 @@ SCRIPT_PATH = (
     / "scripts"
     / "validate_research_bundle.py"
 )
-sys.path.insert(0, str(SCRIPT_PATH.parent))
 SKILL_PATH = SCRIPT_PATH.parents[1] / "SKILL.md"
 REPORT_QUALITY_PATH = (
     SCRIPT_PATH.parents[1] / "references" / "report-quality.md"
@@ -323,6 +322,44 @@ def passing_review(candidate_hashes: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def research_plan_for(record: dict[str, Any]) -> str:
+    lines = [
+        "# 研究计划",
+        "",
+        "## 要回答的问题",
+        "",
+    ]
+    for question in record.get("questions", []):
+        if isinstance(question, dict) and str(question.get("question", "")).strip():
+            lines.append(f"- {question['question']}")
+    lines.extend(
+        [
+            "",
+            "## 准备查的来源",
+            "",
+            "- 优先打开官方或一手正文。",
+            "",
+            "## 会标成未知的内容",
+            "",
+            "- 打不开正文的对象和数字标成未知。",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def with_open_questions(report: str, record: dict[str, Any]) -> str:
+    lines = ["## 还没查完", ""]
+    for question in record.get("questions", []):
+        if not isinstance(question, dict) or question.get("status") == "answered":
+            continue
+        lines.append(
+            f"- {question.get('question', '')} 下一步：{question.get('next_step', '')}"
+        )
+    lines.append("")
+    return report.replace("# 研究报告\n\n", "# 研究报告\n\n" + "\n".join(lines), 1)
+
+
 class Bundle:
     def __init__(
         self,
@@ -334,6 +371,11 @@ class Bundle:
         self.write_text(
             "request_snapshot.md",
             "# 请求\n\n请深入研究目标方案是否满足当前核心要求，并给出证据和限制。",
+        )
+        self.write_text("research_plan.md", research_plan_for(record))
+        self.write_text(
+            "research_log.md",
+            "主体研究：先核对问题，再打开能支持结论的正文。\n",
         )
         self.write_text("final_report.md", report)
         self.write_json("research_record.json", record)
@@ -849,7 +891,7 @@ class ValidateResearchBundleTests(unittest.TestCase):
         )
         record = partial_record()
         record["key_claims"][0]["claim"] = "目标方案部分满足核心要求"
-        bundle = Bundle(self.root, report, record)
+        bundle = Bundle(self.root, with_open_questions(report, record), record)
 
         result = bundle.result()
 
@@ -873,36 +915,8 @@ class ValidateResearchBundleTests(unittest.TestCase):
                 "independent_evidence_required": True,
             }
         )
-        record["stop_decision"].update(
-            {
-                "coverage_complete": False,
-                "missing_required_source_kinds": {
-                    "Q1": ["independent_evaluation"]
-                },
-                "missing_independent_evidence": ["Q1"],
-            }
-        )
-        record["stop_decision"]["remaining_high_priority_gaps"].extend(
-            [
-                {
-                    "question_id": "Q1",
-                    "gap_type": "missing_source_kind",
-                    "missing_items": ["independent_evaluation"],
-                    "gap": "缺少独立评测类型来源",
-                    "current_evidence": "目前只有官方正文",
-                    "next_step": "寻找并核验独立评测",
-                },
-                {
-                    "question_id": "Q1",
-                    "gap_type": "missing_independent_evidence",
-                    "missing_items": ["independent"],
-                    "gap": "缺少利益关系独立的证据",
-                    "current_evidence": "目前只有第一方材料",
-                    "next_step": "寻找无利益关系的独立来源",
-                },
-            ]
-        )
-        bundle = Bundle(self.root, report, record)
+        record.pop("stop_decision")
+        bundle = Bundle(self.root, with_open_questions(report, record), record)
 
         result = bundle.result()
 
@@ -936,6 +950,7 @@ class ValidateResearchBundleTests(unittest.TestCase):
                 "next_step": "补充目标场景实测。",
             }
         )
+        q2.pop("next_step")
         record["questions"].append(q2)
         record["sources"][0]["question_ids"].append("Q2")
         for research_round in record["research_rounds"]:
@@ -955,8 +970,60 @@ class ValidateResearchBundleTests(unittest.TestCase):
         result = bundle.result()
 
         self.assertIn(
+            "partial_question_next_step_missing:Q2:expected_field=next_step",
+            result["errors"],
+        )
+        self.assertNotIn(
             "partial_open_question_gap_missing:Q2",
             result["errors"],
+        )
+
+    def test_invalid_source_fields_name_the_allowed_values(self) -> None:
+        report, _ = complete_report()
+        report = report.replace(
+            "目标方案目前满足核心要求",
+            "目标方案部分满足核心要求，Q1 证据待补充",
+        )
+        record = partial_record()
+        record["key_claims"][0]["claim"] = "目标方案部分满足核心要求"
+        record["questions"][0]["id"] = "0"
+        record["questions"][0].pop("question_id")
+        record["sources"][0]["source_kind"] = "survey"
+        record["sources"][0]["content_origin"] = "search_result"
+        bundle = Bundle(self.root, report, record)
+
+        result = bundle.result()
+
+        joined = "\n".join(result["errors"])
+        self.assertIn("expected_field=question_id", joined)
+        self.assertIn("found_field=id", joined)
+        self.assertIn("field=source_kind:allowed=", joined)
+        self.assertIn("official_document", joined)
+        self.assertIn("field=content_origin:allowed=", joined)
+        self.assertIn("host_opened_page", joined)
+        self.assertIn("user_provided_material", joined)
+
+    def test_invalid_claim_and_impact_name_the_allowed_values(self) -> None:
+        report, _ = complete_report()
+        report = report.replace(
+            "目标方案目前满足核心要求",
+            "目标方案部分满足核心要求，Q1 证据待补充",
+        )
+        record = partial_record()
+        record["key_claims"][0]["claim"] = "目标方案部分满足核心要求"
+        record["key_claims"][0]["claim_type"] = "opinion"
+        record["research_rounds"][0]["conclusion_impact"]["Q1"] = "stable"
+        bundle = Bundle(self.root, report, record)
+
+        result = bundle.result()
+
+        joined = "\n".join(result["errors"])
+        self.assertIn("field=claim_type:allowed=", joined)
+        self.assertIn("current_fact", joined)
+        self.assertIn("quantitative", joined)
+        self.assertIn(
+            "field=conclusion_impact:allowed=changed|narrowed|none|strengthened",
+            joined,
         )
 
     def test_partial_cli_returns_success(self) -> None:
@@ -967,7 +1034,7 @@ class ValidateResearchBundleTests(unittest.TestCase):
         )
         record = partial_record()
         record["key_claims"][0]["claim"] = "目标方案部分满足核心要求"
-        Bundle(self.root, report, record)
+        Bundle(self.root, with_open_questions(report, record), record)
 
         completed = subprocess.run(
             [sys.executable, str(SCRIPT_PATH), str(self.root)],
@@ -1392,6 +1459,313 @@ class ValidateResearchBundleTests(unittest.TestCase):
             "research_round_target_questions:R1",
             result["errors"],
         )
+
+    def test_quantitative_claim_must_match_saved_page(self) -> None:
+        report, _ = complete_report()
+        report = report.replace(
+            "目标方案目前满足核心要求，并且现有官方材料能够直接支持这一关键结论 [A1]。",
+            "目标方案目前满足核心要求，并且现有官方材料能够直接支持这一关键结论 [A1]。官方正文写明准确率是 51.5% [A1]。",
+        )
+        record = complete_record()
+        record["key_claims"][0]["claim_type"] = "quantitative"
+        record["key_claims"][0]["claim"] = "官方正文写明准确率是 51.5%"
+        record["key_claims"][0]["evidence_quote"] = "准确率是 51.5%"
+        bundle = Bundle(self.root, report, record)
+
+        missing = bundle.result()
+
+        self.assertTrue(
+            any("51.5%" in error for error in missing["errors"]),
+            missing["errors"],
+        )
+        snapshot = self.root / "snapshots"
+        snapshot.mkdir()
+        page = snapshot / "a1.txt"
+        page.write_text("表 3 写明准确率是 51.5%。\n", encoding="utf-8")
+        record["sources"][0]["snapshot_path"] = "snapshots/a1.txt"
+        record["sources"][0]["snapshot_sha256"] = hashlib.sha256(
+            page.read_bytes()
+        ).hexdigest()
+        bundle.write_json("research_record.json", record)
+
+        matched = bundle.result()
+
+        self.assertEqual(matched["status"], "ok", matched["errors"])
+
+    def test_comparison_cells_stay_empty_until_page_is_opened(self) -> None:
+        report, headings = complete_report()
+        report = report.replace(
+            headings["limitations"],
+            """## 对象比较
+
+| 对象 | 价格 |
+| --- | --- |
+| 甲 | 未知 |
+| 乙 | 980元 [A1] |
+| 丙 | 未知 480元 |
+
+## 限制与未知事项
+""",
+        )
+        record = complete_record()
+        record["report_sections"]["limitations"] = "## 限制与未知事项"
+        bundle = Bundle(self.root, report, record)
+
+        result = bundle.result()
+
+        joined = "\n".join(result["errors"])
+        self.assertIn("quantitative_not_in_opened_page:", joined)
+        self.assertIn("980元", joined)
+        self.assertIn("comparison_unknown_cell_has_number:", joined)
+        self.assertNotIn("comparison_cell_unfilled:", joined)
+
+    def test_common_aliases_are_normalized_into_the_receipt(self) -> None:
+        report, _ = complete_report()
+        report = report.replace(
+            "目标方案目前满足核心要求",
+            "目标方案部分满足核心要求，Q1 证据待补充",
+        )
+        record = partial_record()
+        record["key_claims"][0]["claim"] = "目标方案部分满足核心要求"
+        record["key_claims"][0]["claim_type"] = "fact"
+        record["research_rounds"][0]["conclusion_impact"]["Q1"] = "unchanged"
+        record["research_rounds"][0]["checks_completed"]["Q1"] = ["omission_scan"]
+        bundle = Bundle(self.root, with_open_questions(report, record), record)
+
+        result = bundle.result()
+
+        self.assertEqual(result["status"], "ok", result["errors"])
+        notes = "\n".join(result["checks"]["normalizations"])
+        self.assertIn("fact->current_fact", notes)
+        self.assertIn("unchanged->none", notes)
+        self.assertIn("removed_non_check:omission_scan", notes)
+
+    def test_partial_report_leads_with_open_questions(self) -> None:
+        report, _ = complete_report()
+        report = report.replace(
+            "目标方案目前满足核心要求",
+            "目标方案部分满足核心要求，Q1 证据待补充",
+        )
+        record = partial_record()
+        record["key_claims"][0]["claim"] = "目标方案部分满足核心要求"
+        bundle = Bundle(self.root, report, record)
+
+        result = bundle.result()
+
+        self.assertIn("unresolved_section_missing", result["errors"])
+
+    def test_gap_fill_keeps_closed_questions_and_lists_open_ones(self) -> None:
+        report, _ = complete_report()
+        report = report.replace(
+            "目标方案目前满足核心要求",
+            "目标方案部分满足核心要求，Q1 证据待补充",
+        )
+        record = partial_record()
+        record["key_claims"][0]["claim"] = "目标方案部分满足核心要求"
+        record["continuation"] = {
+            "mode": "gap_fill",
+            "frozen_question_ids": [],
+            "open_question_ids": ["Q1"],
+        }
+        report = with_open_questions(report, record).replace(
+            "## 还没查完",
+            "## 本次只补这些缺口\n\n- 目标方案是否满足核心要求？\n\n## 还没查完",
+            1,
+        )
+        bundle = Bundle(self.root, report, record)
+
+        result = bundle.result()
+
+        self.assertEqual(result["status"], "ok", result["errors"])
+        record["questions"][0]["status"] = "answered"
+        bundle.write_json("research_record.json", record)
+
+        closed = bundle.result()
+
+        self.assertIn(
+            "continuation_open_question_already_closed:Q1",
+            closed["errors"],
+        )
+
+    def test_decision_assumptions_stop_at_three_and_must_be_written(self) -> None:
+        report, _ = complete_report()
+        record = complete_record()
+        record["decision_task"] = True
+        record["decision_assumptions"] = [
+            "城市按杭州",
+            "周期按五年",
+            "预算按已给出的车型",
+            "再加一条会改变结论的条件",
+        ]
+        bundle = Bundle(self.root, report, record)
+
+        over_limit = bundle.result()
+
+        self.assertIn("decision_assumptions_over_limit", over_limit["errors"])
+        record["decision_assumptions"] = ["城市按杭州"]
+        bundle.write_json("research_record.json", record)
+        bundle.write_text(
+            "request_snapshot.md",
+            "# 请求\n\n请比较杭州家庭五年用车成本。\n\n## 假设\n\n城市按杭州。\n",
+        )
+
+        written = bundle.result()
+
+        self.assertEqual(written["status"], "ok", written["errors"])
+
+    def test_plain_language_plan_and_open_questions_are_accepted(self) -> None:
+        report, _ = complete_report()
+        report = report.replace(
+            "目标方案目前满足核心要求",
+            "目标方案部分满足核心要求，Q1 证据待补充",
+        )
+        record = partial_record()
+        record["key_claims"][0]["claim"] = "目标方案部分满足核心要求"
+        report = with_open_questions(report, record).replace(
+            "## 还没查完",
+            "## Still open",
+            1,
+        ).replace(
+            "下一步：取得目标地域的本地测量结果。",
+            "接下来改查目标地域的实测。",
+        )
+        bundle = Bundle(self.root, report, record)
+        bundle.write_text(
+            "research_plan.md",
+            research_plan_for(record).replace("？", "?"),
+        )
+
+        result = bundle.result()
+
+        self.assertEqual(result["status"], "ok", result["errors"])
+
+    def test_negated_number_does_not_need_a_saved_page(self) -> None:
+        report, _ = complete_report()
+        report = report.replace(
+            "不外推到未测试环境。",
+            "不外推到未测试环境。法律条文里没有写 1.13。",
+        )
+        bundle = Bundle(self.root, report, complete_record())
+
+        result = bundle.result()
+
+        self.assertEqual(result["status"], "ok", result["errors"])
+
+    def test_bare_price_date_and_chinese_percent_need_saved_pages(self) -> None:
+        report, _ = complete_report()
+        report = report.replace(
+            "不外推到未测试环境。",
+            "不外推到未测试环境。商店标价是 980 [A1]。页面写的截止日期是 2025年6月30日 [A1]。官方写成百分之十 [A1]。",
+        )
+        bundle = Bundle(self.root, report, complete_record())
+
+        missing = bundle.result()
+
+        joined = "\n".join(missing["errors"])
+        self.assertIn("980", joined)
+        self.assertIn("2025年6月30日", joined)
+        self.assertIn("百分之十", joined)
+        self._save_snapshot(bundle, "售价 980。截止日期 2025年6月30日。比例为 10%。\n")
+
+        matched = bundle.result()
+
+        self.assertEqual(matched["status"], "ok", matched["errors"])
+
+    def test_quote_whitespace_still_matches_saved_page(self) -> None:
+        report, _ = complete_report()
+        report = report.replace(
+            "不外推到未测试环境。",
+            "不外推到未测试环境。官方正文写明准确率是 51.5 % [A1]。",
+        )
+        record = complete_record()
+        record["key_claims"][0]["claim_type"] = "quantitative"
+        record["key_claims"][0]["claim"] = "准确率是 51.5 %"
+        record["key_claims"][0]["evidence_quote"] = "准确率是 51.5 %"
+        bundle = Bundle(self.root, report, record)
+        self._save_snapshot(bundle, "表中准确率是 51.5%。\n")
+
+        result = bundle.result()
+
+        self.assertEqual(result["status"], "ok", result["errors"])
+
+    def test_english_comparison_and_first_column_numbers_are_checked(self) -> None:
+        report, headings = complete_report()
+        report = report.replace(
+            headings["limitations"],
+            """## Comparison
+
+| Item | Price |
+| --- | --- |
+| 会员 980元 | 未知 |
+| Home | 980 yuan, seen on the homepage |
+
+## 比较口径
+
+这里只说明按标价比较，不填数字。
+
+## 限制与未知事项
+""",
+        )
+        record = complete_record()
+        record["report_sections"]["limitations"] = "## 限制与未知事项"
+        bundle = Bundle(self.root, report, record)
+
+        result = bundle.result()
+
+        joined = "\n".join(result["errors"])
+        self.assertIn("980元", joined)
+        self.assertIn("980 yuan", joined)
+        self.assertNotIn("comparison_table_missing", joined)
+
+    def test_english_assumptions_heading_is_accepted(self) -> None:
+        report, _ = complete_report()
+        record = complete_record()
+        record["decision_task"] = True
+        record["decision_assumptions"] = ["城市按杭州"]
+        bundle = Bundle(self.root, report, record)
+        bundle.write_text(
+            "request_snapshot.md",
+            "# Request\n\nCompare five-year cost.\n\n## Assumptions\n\n城市按杭州。\n",
+        )
+
+        result = bundle.result()
+
+        self.assertEqual(result["status"], "ok", result["errors"])
+
+    def test_decision_cue_without_assumptions_is_only_a_warning(self) -> None:
+        report, _ = complete_report()
+        bundle = Bundle(self.root, report, complete_record())
+        bundle.write_text(
+            "request_snapshot.md",
+            "# 请求\n\n请帮我看该买哪一款，并给出证据。\n",
+        )
+
+        result = bundle.result()
+
+        self.assertEqual(result["status"], "ok", result["errors"])
+        self.assertIn("decision_assumptions_not_recorded", result["warnings"])
+
+    def test_skill_keeps_delivery_directory_boundary(self) -> None:
+        skill = SKILL_PATH.read_text(encoding="utf-8")
+        privacy = PRIVACY_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("写入仅限该目录", skill)
+        self.assertIn("不联网", skill)
+        self.assertNotIn("`official`、`news`", skill)
+        self.assertIn("交付目录", privacy)
+
+    def _save_snapshot(self, bundle: Bundle, text: str) -> None:
+        snapshot = self.root / "snapshots"
+        snapshot.mkdir(exist_ok=True)
+        page = snapshot / "a1.txt"
+        page.write_text(text, encoding="utf-8")
+        record_path = self.root / "research_record.json"
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record["sources"][0]["snapshot_path"] = "snapshots/a1.txt"
+        record["sources"][0]["snapshot_sha256"] = hashlib.sha256(
+            page.read_bytes()
+        ).hexdigest()
+        bundle.write_json("research_record.json", record)
 
 
 if __name__ == "__main__":
