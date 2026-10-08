@@ -14,10 +14,12 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
-SKILL_VERSION = "2.0.1"
+SKILL_VERSION = "2.2.1"
 SCHEMA_VERSION = 2
 REQUIRED_FILES = (
     "request_snapshot.md",
+    "research_plan.md",
+    "research_log.md",
     "final_report.md",
     "research_record.json",
 )
@@ -92,6 +94,99 @@ RESEARCH_STRATEGY_TYPES = {
     "user_material",
 }
 CONCLUSION_IMPACTS = {"changed", "strengthened", "narrowed", "none"}
+CLAIM_TYPE_ALIASES = {
+    "fact": "current_fact",
+    "calculation": "quantitative",
+}
+CONCLUSION_IMPACT_ALIASES = {
+    "unchanged": "none",
+    "no_change": "none",
+}
+SOURCE_KIND_ALIASES = {
+    "official": "official_document",
+    "news": "journalism",
+}
+STAKEHOLDER_ALIASES = {
+    "first-party": "first_party",
+    "third-party": "interested_third_party",
+}
+NON_CHECK_STRATEGIES = RESEARCH_STRATEGY_TYPES - COVERAGE_CHECKS
+UNRESOLVED_ALIASES = (
+    "还没查完",
+    "未完成",
+    "未闭合",
+    "still open",
+    "open questions",
+    "what remains",
+    "gaps",
+)
+CONTINUATION_ALIASES = (
+    "本次只补这些缺口",
+    "gaps to fill",
+    "this pass only",
+)
+PLAN_HEADING_GROUPS = (
+    ("questions", ("要回答的问题", "questions to answer", "research questions", "questions")),
+    ("sources", ("准备查的来源", "sources to open", "sources to check", "sources")),
+    ("unknowns", ("会标成未知的内容", "marked unknown", "will be unknown", "unknowns")),
+)
+DECISION_ALIASES = ("假设", "assumptions")
+DECISION_CUES = (
+    "预算",
+    "该买",
+    "选哪",
+    "哪一款",
+    "decide between",
+    "which option",
+    "should i buy",
+)
+EXACT_UNKNOWN_CELLS = {"无", "—", "-", "n/a", "na"}
+UNKNOWN_MARKERS = (
+    "未知",
+    "未核到",
+    "这次没核到",
+    "未打开",
+    "不适用",
+    "unknown",
+    "not available",
+    "not opened",
+)
+ASSUMPTION_MARKERS = ("假设", "推算", "assumption", "estimated")
+NEGATION_PATTERN = re.compile(
+    r"没有|未写|没写|未载|没核|未核|找不到|未见|不是|"
+    r"\bnot found\b|\bnot in\b|\bdoes not\b|\bdoesn't\b|\bno such\b|\babsent\b",
+    re.IGNORECASE,
+)
+QUANTITATIVE_TOKEN_PATTERN = re.compile(
+    r"(?:"
+    r"\d{4}年\d{1,2}月\d{1,2}日"
+    r"|\d{4}-\d{2}-\d{2}"
+    r"|[$¥£€]\s?\d+(?:[.,]\d+)?(?:\s?(?:billion|million|thousand))?"
+    r"|\d+(?:[.,]\d+)?\s*[%％]"
+    r"|百分之(?:\d+(?:\.\d+)?|[零〇一二三四五六七八九十百千万两]+)"
+    r"|\d+(?:\.\d+)?\s?(?:万元|亿元|万亿元|万亿|美元|迪拉姆|元|万|亿)"
+    r"|\d+(?:\.\d+)?\s?(?:yuan|dollars|usd)\b"
+    r"|\d{1,3}(?:,\d{3})+(?:\.\d+)?"
+    r"|\d+\.\d+"
+    r"|第(?:\d+|[零〇一二三四五六七八九十百千万两]+)名"
+    r"|(?<!\d)(?!(?:19|20)\d{2}(?!\d))\d{3,6}(?!\d)"
+    r")",
+    re.IGNORECASE,
+)
+CN_SMALL_DIGITS = {
+    "零": 0,
+    "〇": 0,
+    "一": 1,
+    "二": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+}
 PREMATURE_STOP_KEYS = {
     "tool_result_limit_used",
     "preset_source_count_used",
@@ -136,6 +231,10 @@ AUTHORIAL_SNAPSHOT_PATTERN = re.compile(
 )
 REPORT_MIN_SUBSTANTIVE_CHARS = 100
 ANSWER_SECTION_MIN_SUBSTANTIVE_CHARS = 40
+
+
+def join_allowed(allowed: set[str]) -> str:
+    return "|".join(sorted(allowed))
 
 
 def substantive_chars(text: str) -> int:
@@ -283,7 +382,9 @@ def validate_string_list(
     if allowed is not None:
         for item in normalized:
             if item not in allowed:
-                errors.append(f"{error_key}_invalid:{item}")
+                errors.append(
+                    f"{error_key}_invalid:{item}:allowed={join_allowed(allowed)}"
+                )
     return normalized
 
 
@@ -330,12 +431,336 @@ def canonical_url(value: Any) -> str | None:
     return urlunsplit((parsed.scheme.lower(), netloc, path, query, ""))
 
 
+def apply_alias(
+    value: Any,
+    aliases: dict[str, str],
+    notes: list[str],
+    path: str,
+) -> Any:
+    if isinstance(value, str) and value in aliases:
+        notes.append(f"{path}:{value}->{aliases[value]}")
+        return aliases[value]
+    return value
+
+
+def strip_non_checks(value: Any, notes: list[str], path: str) -> Any:
+    if not isinstance(value, list):
+        return value
+    kept: list[Any] = []
+    for item in value:
+        if isinstance(item, str) and item in NON_CHECK_STRATEGIES:
+            notes.append(f"{path}:removed_non_check:{item}")
+            continue
+        kept.append(item)
+    return kept
+
+
+def normalize_record(record: dict[str, Any]) -> list[str]:
+    """接受常见同义词，并去掉误写入检查名单的策略名。不改写原文件。"""
+    notes: list[str] = []
+    claims = record.get("key_claims")
+    if isinstance(claims, list):
+        for index, claim in enumerate(claims):
+            if isinstance(claim, dict):
+                claim["claim_type"] = apply_alias(
+                    claim.get("claim_type"),
+                    CLAIM_TYPE_ALIASES,
+                    notes,
+                    f"key_claims[{index}].claim_type",
+                )
+    sources = record.get("sources")
+    if isinstance(sources, list):
+        for index, source in enumerate(sources):
+            if not isinstance(source, dict):
+                continue
+            source["source_kind"] = apply_alias(
+                source.get("source_kind"),
+                SOURCE_KIND_ALIASES,
+                notes,
+                f"sources[{index}].source_kind",
+            )
+            source["stakeholder_relation"] = apply_alias(
+                source.get("stakeholder_relation"),
+                STAKEHOLDER_ALIASES,
+                notes,
+                f"sources[{index}].stakeholder_relation",
+            )
+    questions = record.get("questions")
+    if isinstance(questions, list):
+        for question in questions:
+            if not isinstance(question, dict):
+                continue
+            requirements = question.get("coverage_requirements")
+            if not isinstance(requirements, dict):
+                continue
+            question_id = str(question.get("question_id", "")).strip() or "?"
+            requirements["required_checks"] = strip_non_checks(
+                requirements.get("required_checks"),
+                notes,
+                f"{question_id}.required_checks",
+            )
+    rounds = record.get("research_rounds")
+    if isinstance(rounds, list):
+        for research_round in rounds:
+            if not isinstance(research_round, dict):
+                continue
+            round_id = str(research_round.get("round_id", "")).strip() or "?"
+            impact = research_round.get("conclusion_impact")
+            if isinstance(impact, dict):
+                for key, value in list(impact.items()):
+                    impact[key] = apply_alias(
+                        value,
+                        CONCLUSION_IMPACT_ALIASES,
+                        notes,
+                        f"{round_id}.conclusion_impact.{key}",
+                    )
+            checks = research_round.get("checks_completed")
+            if isinstance(checks, dict):
+                for key, value in list(checks.items()):
+                    checks[key] = strip_non_checks(
+                        value,
+                        notes,
+                        f"{round_id}.checks_completed.{key}",
+                    )
+    stop = record.get("stop_decision")
+    if isinstance(stop, dict):
+        unchecked = stop.get("unchecked_required_checks")
+        if isinstance(unchecked, dict):
+            for key, value in list(unchecked.items()):
+                unchecked[key] = strip_non_checks(
+                    value,
+                    notes,
+                    f"stop_decision.unchecked_required_checks.{key}",
+                )
+    return notes
+
+
+def quantitative_tokens(text: str) -> list[str]:
+    return QUANTITATIVE_TOKEN_PATTERN.findall(text)
+
+
+def compact(text: str) -> str:
+    return re.sub(r"\s+", "", text).casefold()
+
+
+def loose(text: str) -> str:
+    return re.sub(r"[\s\W_]+", "", text, flags=re.UNICODE).casefold()
+
+
+def loose_contains(haystack: str, needle: str) -> bool:
+    folded = loose(needle)
+    return bool(folded) and folded in loose(haystack)
+
+
+def find_heading(text: str, aliases: tuple[str, ...]) -> str:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not re.fullmatch(r"#{1,6}\s+.+", stripped):
+            continue
+        title = re.sub(r"^#{1,6}\s+", "", stripped).casefold()
+        if any(alias.casefold() in title for alias in aliases):
+            return stripped
+    return ""
+
+
+def canonical_day(value: str) -> str | None:
+    value = value.strip()
+    iso = re.match(r"(\d{4})-(\d{2})-(\d{2})", value)
+    if iso:
+        return f"{iso.group(1)}-{iso.group(2)}-{iso.group(3)}"
+    chinese = re.fullmatch(r"(\d{4})年(\d{1,2})月(\d{1,2})日", value)
+    if chinese:
+        return (
+            f"{chinese.group(1)}-"
+            f"{int(chinese.group(2)):02d}-"
+            f"{int(chinese.group(3)):02d}"
+        )
+    return None
+
+
+def recorded_calendar_days(record: dict[str, Any]) -> set[str]:
+    days: set[str] = set()
+
+    def add(value: Any) -> None:
+        if isinstance(value, str):
+            day = canonical_day(value)
+            if day:
+                days.add(day)
+
+    add(record.get("research_as_of"))
+    sources = record.get("sources")
+    if isinstance(sources, list):
+        for source in sources:
+            if not isinstance(source, dict):
+                continue
+            add(source.get("accessed_at"))
+            add(source.get("published_at"))
+    return days
+
+
+def claim_tokens(text: str, recorded_days: set[str]) -> list[str]:
+    tokens: list[str] = []
+    for token in quantitative_tokens(text):
+        day = canonical_day(token)
+        if day and day in recorded_days:
+            continue
+        tokens.append(token)
+    return tokens
+
+
+def parse_cn_small(text: str) -> int | None:
+    if text == "十":
+        return 10
+    if text == "百":
+        return 100
+    if "十" in text:
+        left, _, right = text.partition("十")
+        if left == "":
+            tens = 1
+        elif left in CN_SMALL_DIGITS:
+            tens = CN_SMALL_DIGITS[left]
+        else:
+            return None
+        if right == "":
+            ones = 0
+        elif right in CN_SMALL_DIGITS:
+            ones = CN_SMALL_DIGITS[right]
+        else:
+            return None
+        return tens * 10 + ones
+    if text in CN_SMALL_DIGITS:
+        return CN_SMALL_DIGITS[text]
+    return None
+
+
+def percent_digits(token: str) -> str | None:
+    match = re.fullmatch(r"百分之(.+)", token.strip())
+    if not match:
+        return None
+    rest = match.group(1)
+    if re.fullmatch(r"\d+(?:\.\d+)?", rest):
+        return rest
+    value = parse_cn_small(rest)
+    if value is None:
+        return None
+    return str(value)
+
+
+def number_core(token: str) -> str:
+    match = re.search(r"\d+(?:[.,]\d+)*", token)
+    if not match:
+        return ""
+    return match.group(0).replace(",", "")
+
+
+def token_in_text(haystack: str, token: str) -> bool:
+    folded = compact(haystack)
+    if compact(token) in folded:
+        return True
+    day = canonical_day(token)
+    if day:
+        year, month, day_num = day.split("-")
+        variants = (
+            day,
+            f"{year}年{int(month)}月{int(day_num)}日",
+            f"{year}/{int(month)}/{int(day_num)}",
+        )
+        return any(compact(item) in folded for item in variants)
+    percent = percent_digits(token)
+    if percent is not None:
+        return f"{percent}%" in folded or f"{percent}％" in folded
+    if re.search(r"[%％]|百分之|第|名", token):
+        return False
+    core = number_core(token)
+    return bool(core) and core in folded.replace(",", "")
+
+
+def compact_contains(haystack: str, needle: str) -> bool:
+    folded = compact(needle)
+    return bool(folded) and folded in compact(haystack)
+
+
+def has_marker(text: str, markers: tuple[str, ...]) -> bool:
+    folded = text.casefold()
+    return any(marker.casefold() in folded for marker in markers)
+
+
+def cell_is_unknown(cell: str) -> bool:
+    if cell.strip().casefold() in EXACT_UNKNOWN_CELLS:
+        return True
+    return has_marker(cell, UNKNOWN_MARKERS)
+
+
+def follow_up_present(section: str, question_text: str) -> bool:
+    folded_question = loose(question_text)
+    chunks = [chunk for chunk in re.split(r"\n+", section) if chunk.strip()]
+    contexts = [
+        chunk
+        for chunk in chunks
+        if folded_question and folded_question in loose(chunk)
+    ] or [section]
+    for chunk in contexts:
+        remaining = loose(chunk).replace(folded_question, "", 1)
+        if substantive_chars(remaining) >= 4:
+            return True
+    return False
+
+
+def split_sentences(text: str) -> list[str]:
+    return [
+        part.strip()
+        for part in re.split(r"[。！？\n]", text)
+        if part.strip()
+    ]
+
+
+def heading_sections(report: str) -> list[tuple[str, str]]:
+    sections: list[tuple[str, str]] = []
+    current_heading = ""
+    body: list[str] = []
+    for line in report.splitlines():
+        if re.fullmatch(r"#{1,6}\s+.+", line.strip()):
+            if current_heading:
+                sections.append((current_heading, "\n".join(body)))
+            current_heading = line.strip()
+            body = []
+        else:
+            body.append(line)
+    if current_heading:
+        sections.append((current_heading, "\n".join(body)))
+    return sections
+
+
+def markdown_table_rows(text: str) -> list[list[list[str]]]:
+    tables: list[list[list[str]]] = []
+    current: list[list[str]] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        is_row = (
+            stripped.startswith("|")
+            and stripped.endswith("|")
+            and stripped.count("|") >= 2
+        )
+        if is_row:
+            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+            if cells and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
+                continue
+            current.append(cells)
+        elif current:
+            tables.append(current)
+            current = []
+    if current:
+        tables.append(current)
+    return tables
+
+
 def validate_source(
     bundle: Path,
     source: Any,
     question_ids: set[str],
     source_ids: set[str],
     source_access_statuses: dict[str, str],
+    snapshot_texts: dict[str, str],
     errors: list[str],
 ) -> None:
     if not isinstance(source, dict):
@@ -361,13 +786,25 @@ def validate_source(
     if published_at is not None and not valid_iso_date_or_datetime(published_at):
         errors.append(f"source_published_at_invalid:{source_id}")
     if source.get("access_status") not in SOURCE_ACCESS_STATUSES:
-        errors.append(f"source_access_status_invalid:{source_id}")
+        errors.append(
+            f"source_access_status_invalid:{source_id}:"
+            f"field=access_status:allowed={join_allowed(SOURCE_ACCESS_STATUSES)}"
+        )
     if source.get("content_origin") not in SOURCE_ORIGINS:
-        errors.append(f"source_origin_invalid:{source_id}")
+        errors.append(
+            f"source_origin_invalid:{source_id}:"
+            f"field=content_origin:allowed={join_allowed(SOURCE_ORIGINS)}"
+        )
     if source.get("source_kind") not in SOURCE_KINDS:
-        errors.append(f"source_kind_invalid:{source_id}")
+        errors.append(
+            f"source_kind_invalid:{source_id}:"
+            f"field=source_kind:allowed={join_allowed(SOURCE_KINDS)}"
+        )
     if source.get("stakeholder_relation") not in STAKEHOLDER_RELATIONS:
-        errors.append(f"source_stakeholder_relation_invalid:{source_id}")
+        errors.append(
+            f"source_stakeholder_relation_invalid:{source_id}:"
+            f"field=stakeholder_relation:allowed={join_allowed(STAKEHOLDER_RELATIONS)}"
+        )
 
     covered_questions = source.get("question_ids")
     if not isinstance(covered_questions, list) or not covered_questions:
@@ -384,6 +821,7 @@ def validate_source(
     source_access_statuses[source_id] = str(
         source.get("access_status", "")
     ).strip()
+    snapshot_texts.setdefault(source_id, "")
 
     snapshot_value = source.get("snapshot_path")
     if snapshot_value is None:
@@ -404,6 +842,7 @@ def validate_source(
     if not declared_sha or sha256_file(snapshot) != declared_sha:
         errors.append(f"source_snapshot_sha_mismatch:{source_id}")
     snapshot_text = read_text(snapshot, errors)
+    snapshot_texts[source_id] = snapshot_text
     if snapshot_text and AUTHORIAL_SNAPSHOT_PATTERN.search(snapshot_text):
         errors.append(f"researcher_authored_snapshot:{source_id}")
 
@@ -415,7 +854,10 @@ def validate_report_sections(
 ) -> None:
     sections = record.get("report_sections")
     if not isinstance(sections, dict):
-        errors.append("report_sections_missing")
+        errors.append(
+            "report_sections_missing:expected_object_keys="
+            + join_allowed(REQUIRED_REPORT_SECTIONS)
+        )
         return
     for section_key in sorted(REQUIRED_REPORT_SECTIONS):
         heading = sections.get(section_key)
@@ -460,7 +902,10 @@ def validate_questions(
             continue
         question_id = str(question.get("question_id", "")).strip()
         if not question_id:
-            errors.append(f"question_id_missing:{index}")
+            detail = "expected_field=question_id"
+            if str(question.get("id", "")).strip():
+                detail += ":found_field=id"
+            errors.append(f"question_id_missing:{index}:{detail}")
             continue
         if question_id in question_ids:
             errors.append(f"duplicate_question_id:{question_id}")
@@ -470,12 +915,21 @@ def validate_questions(
             errors.append(f"question_text_missing:{question_id}")
         status = question.get("status")
         if status not in QUESTION_STATUSES:
-            errors.append(f"question_status_invalid:{question_id}")
+            errors.append(
+                f"question_status_invalid:{question_id}:"
+                f"field=status:allowed={join_allowed(QUESTION_STATUSES)}"
+            )
         if research_status == "complete" and status != "answered":
             errors.append(f"complete_question_not_answered:{question_id}")
         requirements = question.get("coverage_requirements")
         if not isinstance(requirements, dict):
-            errors.append(f"question_coverage_requirements_missing:{question_id}")
+            errors.append(
+                f"question_coverage_requirements_missing:{question_id}:"
+                "expected_field=coverage_requirements:"
+                "expected_fields=required_source_kinds|"
+                "independent_evidence_required|required_checks|"
+                "required_objects|required_dimensions"
+            )
         else:
             validate_string_list(
                 requirements.get("required_source_kinds"),
@@ -535,9 +989,15 @@ def validate_questions(
             errors.append(f"question_answer_section_missing:{question_id}")
         if research_status == "partial" and status != "answered":
             if not str(question.get("current_evidence", "")).strip():
-                errors.append(f"partial_question_current_evidence_missing:{question_id}")
+                errors.append(
+                    f"partial_question_current_evidence_missing:{question_id}:"
+                    "expected_field=current_evidence"
+                )
             if not str(question.get("next_step", "")).strip():
-                errors.append(f"partial_question_next_step_missing:{question_id}")
+                errors.append(
+                    f"partial_question_next_step_missing:{question_id}:"
+                    "expected_field=next_step"
+                )
     if research_status == "partial" and all(
         item.get("status") == "answered" for item in questions
     ):
@@ -609,7 +1069,10 @@ def validate_key_claims(
         claims.append(claim)
         claim_type = claim.get("claim_type")
         if claim_type not in CLAIM_TYPES:
-            errors.append(f"key_claim_type_invalid:{claim_id}")
+            errors.append(
+                f"key_claim_type_invalid:{claim_id}:"
+                f"field=claim_type:allowed={join_allowed(CLAIM_TYPES)}"
+            )
         claim_text = str(claim.get("claim", "")).strip()
         matching_units = [
             unit for unit in units if claim_text and claim_text in unit
@@ -726,7 +1189,10 @@ def validate_round_impact_map(
     errors: list[str],
 ) -> dict[str, str]:
     if not isinstance(value, dict):
-        errors.append(f"research_round_conclusion_impact_invalid:{round_id}")
+        errors.append(
+            f"research_round_conclusion_impact_invalid:{round_id}:"
+            f"field=conclusion_impact:allowed={join_allowed(CONCLUSION_IMPACTS)}"
+        )
         return {}
     normalized: dict[str, str] = {}
     for question_id, impact in value.items():
@@ -743,7 +1209,8 @@ def validate_round_impact_map(
         if impact not in CONCLUSION_IMPACTS:
             errors.append(
                 f"research_round_conclusion_impact_invalid:"
-                f"{round_id}:{question_id}"
+                f"{round_id}:{question_id}:"
+                f"field=conclusion_impact:allowed={join_allowed(CONCLUSION_IMPACTS)}"
             )
         elif isinstance(question_id, str):
             normalized[question_id] = impact
@@ -779,7 +1246,10 @@ def validate_rounds(
             errors.append(f"duplicate_research_round_id:{round_id}")
         round_ids.add(round_id)
         if item.get("round_type") not in RESEARCH_ROUND_TYPES:
-            errors.append(f"research_round_type_invalid:{round_id}")
+            errors.append(
+                f"research_round_type_invalid:{round_id}:"
+                f"field=round_type:allowed={join_allowed(RESEARCH_ROUND_TYPES)}"
+            )
         targets = validate_string_list(
             item.get("target_question_ids"),
             error_key=f"research_round_target_questions:{round_id}",
@@ -1133,12 +1603,728 @@ def build_coverage_diagnostics(
     return diagnostics
 
 
-from research_review_validation import (
-    candidate_hashes,
-    validate_independent_review,
-    validate_stop_decision,
-)
+def validate_gap(
+    gap: Any,
+    question_ids: set[str],
+    prefix: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(gap, dict):
+        errors.append(f"{prefix}_gap_not_object")
+        return
+    question_id = gap.get("question_id")
+    if not isinstance(question_id, str) or question_id not in question_ids:
+        errors.append(f"{prefix}_gap_unknown_question:{question_id}")
+    for field in ("gap", "current_evidence", "next_step"):
+        if not str(gap.get(field, "")).strip():
+            errors.append(f"{prefix}_gap_field_missing:{question_id}:{field}")
+    gap_type = gap.get("gap_type")
+    if gap_type not in {
+        "missing_source_kind",
+        "missing_independent_evidence",
+        "unchecked_required_check",
+        "unchecked_object",
+        "unchecked_dimension",
+        "unresolved_conflict",
+        "other",
+    }:
+        errors.append(f"{prefix}_gap_type_invalid:{question_id}")
+    validate_string_list(
+        gap.get("missing_items"),
+        error_key=f"{prefix}_gap_missing_items:{question_id}",
+        errors=errors,
+        require_nonempty=True,
+    )
 
+
+def validate_stop_item_map(
+    value: Any,
+    *,
+    field: str,
+    question_ids: set[str],
+    errors: list[str],
+    allowed: set[str] | None = None,
+) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        errors.append(f"stop_{field}_invalid")
+        return {}
+    normalized: dict[str, list[str]] = {}
+    for question_id, items in value.items():
+        if question_id not in question_ids:
+            errors.append(f"stop_{field}_unknown_question:{question_id}")
+        parsed = validate_string_list(
+            items,
+            error_key=f"stop_{field}:{question_id}",
+            errors=errors,
+            allowed=allowed,
+            require_nonempty=True,
+        )
+        if parsed:
+            normalized[question_id] = sorted(parsed)
+    return normalized
+
+
+def validate_stop_decision(
+    record: dict[str, Any],
+    research_status: str,
+    question_ids: set[str],
+    coverage_diagnostics: list[dict[str, Any]],
+    errors: list[str],
+) -> None:
+    if research_status == "partial":
+        return
+    stop = record.get("stop_decision")
+    if not isinstance(stop, dict):
+        errors.append("stop_decision_missing")
+        return
+    if stop.get("status") != research_status:
+        errors.append("stop_decision_status_mismatch")
+    expected_source_kinds = {
+        item["question_id"]: item["missing_source_kinds"]
+        for item in coverage_diagnostics
+        if item["missing_source_kinds"]
+    }
+    expected_independent = sorted(
+        item["question_id"]
+        for item in coverage_diagnostics
+        if item["independent_evidence_missing"]
+    )
+    expected_checks = {
+        item["question_id"]: item["missing_checks"]
+        for item in coverage_diagnostics
+        if item["missing_checks"]
+    }
+    expected_objects = {
+        item["question_id"]: item["missing_objects"]
+        for item in coverage_diagnostics
+        if item["missing_objects"]
+    }
+    expected_dimensions = {
+        item["question_id"]: item["missing_dimensions"]
+        for item in coverage_diagnostics
+        if item["missing_dimensions"]
+    }
+    declared_source_kinds = validate_stop_item_map(
+        stop.get("missing_required_source_kinds"),
+        field="missing_required_source_kinds",
+        question_ids=question_ids,
+        errors=errors,
+        allowed=SOURCE_KINDS,
+    )
+    declared_checks = validate_stop_item_map(
+        stop.get("unchecked_required_checks"),
+        field="unchecked_required_checks",
+        question_ids=question_ids,
+        errors=errors,
+        allowed=COVERAGE_CHECKS,
+    )
+    declared_objects = validate_stop_item_map(
+        stop.get("unchecked_objects"),
+        field="unchecked_objects",
+        question_ids=question_ids,
+        errors=errors,
+    )
+    declared_dimensions = validate_stop_item_map(
+        stop.get("unchecked_dimensions"),
+        field="unchecked_dimensions",
+        question_ids=question_ids,
+        errors=errors,
+    )
+    declared_independent = validate_string_list(
+        stop.get("missing_independent_evidence"),
+        error_key="stop_missing_independent_evidence",
+        errors=errors,
+    )
+    for question_id in declared_independent:
+        if question_id not in question_ids:
+            errors.append(
+                f"stop_missing_independent_evidence_unknown_question:{question_id}"
+            )
+    if declared_source_kinds != expected_source_kinds:
+        errors.append("stop_missing_source_kinds_mismatch")
+    if sorted(declared_independent) != expected_independent:
+        errors.append("stop_missing_independent_evidence_mismatch")
+    if declared_checks != expected_checks:
+        errors.append("stop_unchecked_required_checks_mismatch")
+    if declared_objects != expected_objects:
+        errors.append("stop_unchecked_objects_mismatch")
+    if declared_dimensions != expected_dimensions:
+        errors.append("stop_unchecked_dimensions_mismatch")
+
+    conflicts = stop.get("unresolved_high_priority_conflicts")
+    if not isinstance(conflicts, list):
+        errors.append("stop_unresolved_conflicts_invalid")
+        conflicts = []
+    for index, conflict in enumerate(conflicts):
+        if not isinstance(conflict, dict):
+            errors.append(f"stop_conflict_not_object:{index}")
+            continue
+        question_id = conflict.get("question_id")
+        if not isinstance(question_id, str) or question_id not in question_ids:
+            errors.append(f"stop_conflict_unknown_question:{question_id}")
+        for field in ("conflict", "current_evidence", "next_step"):
+            if not str(conflict.get(field, "")).strip():
+                errors.append(
+                    f"stop_conflict_field_missing:{question_id}:{field}"
+                )
+
+    coverage_complete = not any(
+        (
+            expected_source_kinds,
+            expected_independent,
+            expected_checks,
+            expected_objects,
+            expected_dimensions,
+            conflicts,
+        )
+    )
+    if stop.get("coverage_complete") is not coverage_complete:
+        errors.append("stop_coverage_complete_mismatch")
+
+    premature_checks = stop.get("premature_stop_checks")
+    if not isinstance(premature_checks, dict):
+        errors.append("premature_stop_checks_invalid")
+        premature_checks = {}
+    if set(premature_checks) != PREMATURE_STOP_KEYS:
+        errors.append("premature_stop_checks_keys_invalid")
+    for key in PREMATURE_STOP_KEYS:
+        if not isinstance(premature_checks.get(key), bool):
+            errors.append(f"premature_stop_check_invalid:{key}")
+
+    remaining = stop.get("remaining_high_priority_gaps")
+    if not isinstance(remaining, list):
+        errors.append("remaining_high_priority_gaps_invalid")
+        remaining = []
+    if research_status == "complete":
+        if remaining:
+            errors.append("complete_high_priority_gaps_not_closed")
+        if not str(stop.get("adequacy_rationale", "")).strip():
+            errors.append("stop_adequacy_rationale_missing")
+        if not str(
+            stop.get("why_more_search_unlikely_to_change_conclusions", "")
+        ).strip():
+            errors.append("stop_stability_reason_missing")
+        if not coverage_complete:
+            errors.append("complete_coverage_not_closed")
+        for key in PREMATURE_STOP_KEYS:
+            if premature_checks.get(key) is True:
+                errors.append(f"complete_premature_stop:{key}")
+    elif research_status == "blocked":
+        if not str(stop.get("blocking_conditions", "")).strip():
+            errors.append("blocked_conditions_missing")
+        if not str(stop.get("unblock_requirements", "")).strip():
+            errors.append("blocked_unblock_requirements_missing")
+        for gap in remaining:
+            validate_gap(gap, question_ids, "blocked", errors)
+
+
+def candidate_hashes(bundle: Path, errors: list[str]) -> dict[str, str]:
+    hashes: dict[str, str] = {}
+    for filename in CANDIDATE_FILES:
+        path = bundle / filename
+        if path.is_file():
+            try:
+                hashes[filename] = sha256_file(path)
+            except OSError as exc:
+                errors.append(f"candidate_hash_failed:{filename}:{exc}")
+    return hashes
+
+
+def validate_independent_review(
+    bundle: Path,
+    question_ids: set[str],
+    claim_ids: set[str],
+    current_hashes: dict[str, str],
+    errors: list[str],
+) -> str:
+    review_path = bundle / "independent_review.json"
+    if not review_path.is_file():
+        return "not_reviewed"
+    review = read_json(review_path, errors)
+    verdict = review.get("verdict")
+    if verdict not in REVIEW_VERDICTS:
+        errors.append("review_verdict_invalid")
+        return "invalid"
+    if review.get("independence_basis") not in REVIEW_INDEPENDENCE_BASES:
+        errors.append("review_independence_basis_invalid")
+    if not valid_iso_date_or_datetime(review.get("reviewed_at")):
+        errors.append("reviewed_at_invalid")
+    if review.get("candidate_files_modified") is not False:
+        errors.append("review_candidate_files_modified_not_false")
+
+    declared_hashes = review.get("candidate_file_sha256")
+    if not isinstance(declared_hashes, dict):
+        errors.append("review_candidate_hashes_missing")
+    else:
+        for filename, actual_hash in current_hashes.items():
+            if declared_hashes.get(filename) != actual_hash:
+                errors.append(f"review_candidate_hash_mismatch:{filename}")
+
+    counts = review.get("counts")
+    valid_counts = isinstance(counts, dict)
+    if not valid_counts:
+        errors.append("review_counts_missing")
+        counts = {}
+    for severity in sorted(FINDING_SEVERITIES):
+        value = counts.get(severity)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            errors.append(f"review_count_invalid:{severity}")
+
+    findings = review.get("findings")
+    if not isinstance(findings, list):
+        errors.append("review_findings_invalid")
+        findings = []
+    calculated_counts = {severity: 0 for severity in FINDING_SEVERITIES}
+    for index, finding in enumerate(findings):
+        if not isinstance(finding, dict):
+            errors.append(f"review_finding_not_object:{index}")
+            continue
+        severity = finding.get("severity")
+        if severity not in FINDING_SEVERITIES:
+            errors.append(f"review_finding_severity_invalid:{index}")
+            continue
+        calculated_counts[severity] += 1
+        if not str(finding.get("description", "")).strip():
+            errors.append(f"review_finding_description_missing:{index}")
+    if valid_counts:
+        for severity in FINDING_SEVERITIES:
+            if counts.get(severity) != calculated_counts[severity]:
+                errors.append(f"review_count_mismatch:{severity}")
+
+    sampled_fact_checks = review.get("sampled_fact_checks")
+    if not isinstance(sampled_fact_checks, list):
+        errors.append("review_sampled_fact_checks_invalid")
+        sampled_fact_checks = []
+    elif not sampled_fact_checks and not str(
+        review.get("no_sampleable_facts_reason", "")
+    ).strip():
+        errors.append("review_sampled_fact_checks_or_reason_missing")
+    for index, fact_check in enumerate(sampled_fact_checks):
+        if not isinstance(fact_check, dict):
+            errors.append(f"review_fact_check_not_object:{index}")
+            continue
+        if not str(fact_check.get("fact", "")).strip():
+            errors.append(f"review_fact_check_fact_missing:{index}")
+        if fact_check.get("status") not in REVIEW_CLAIM_STATUSES:
+            errors.append(f"review_fact_check_status_invalid:{index}")
+        if not str(fact_check.get("notes", "")).strip():
+            errors.append(f"review_fact_check_notes_missing:{index}")
+    depth_assessment = review.get("depth_assessment")
+    if depth_assessment not in REVIEW_DEPTH_ASSESSMENTS:
+        errors.append("review_depth_assessment_invalid")
+    if not isinstance(review.get("coverage_requirements_adequate"), bool):
+        errors.append("review_coverage_requirements_adequate_invalid")
+    if not isinstance(review.get("premature_stop"), bool):
+        errors.append("review_premature_stop_invalid")
+    if not isinstance(review.get("saturation_check_credible"), bool):
+        errors.append("review_saturation_check_credible_invalid")
+    missing_source_roles = validate_string_list(
+        review.get("missing_source_roles"),
+        error_key="review_missing_source_roles",
+        errors=errors,
+    )
+    omitted_objects = validate_string_list(
+        review.get("omitted_objects"),
+        error_key="review_omitted_objects",
+        errors=errors,
+    )
+    omitted_dimensions = validate_string_list(
+        review.get("omitted_dimensions"),
+        error_key="review_omitted_dimensions",
+        errors=errors,
+    )
+
+    coverage = review.get("question_coverage")
+    covered_questions: set[str] = set()
+    if not isinstance(coverage, list):
+        errors.append("review_question_coverage_missing")
+        coverage = []
+    for index, item in enumerate(coverage):
+        if not isinstance(item, dict):
+            errors.append(f"review_question_coverage_not_object:{index}")
+            continue
+        question_id = item.get("question_id")
+        if not isinstance(question_id, str) or question_id not in question_ids:
+            errors.append(f"review_unknown_question:{question_id}")
+        elif question_id in covered_questions:
+            errors.append(f"review_duplicate_question:{question_id}")
+        else:
+            covered_questions.add(question_id)
+        if item.get("status") not in REVIEW_QUESTION_STATUSES:
+            errors.append(f"review_question_status_invalid:{question_id}")
+        if not str(item.get("notes", "")).strip():
+            errors.append(f"review_question_notes_missing:{question_id}")
+    for question_id in sorted(question_ids - covered_questions):
+        errors.append(f"review_question_not_covered:{question_id}")
+
+    checks = review.get("critical_claim_checks")
+    checked_claims: set[str] = set()
+    if not isinstance(checks, list):
+        errors.append("review_critical_claim_checks_missing")
+        checks = []
+    for index, item in enumerate(checks):
+        if not isinstance(item, dict):
+            errors.append(f"review_claim_check_not_object:{index}")
+            continue
+        claim_id = item.get("claim_id")
+        if not isinstance(claim_id, str) or claim_id not in claim_ids:
+            errors.append(f"review_unknown_claim:{claim_id}")
+        elif claim_id in checked_claims:
+            errors.append(f"review_duplicate_claim:{claim_id}")
+        else:
+            checked_claims.add(claim_id)
+        if item.get("status") not in REVIEW_CLAIM_STATUSES:
+            errors.append(f"review_claim_status_invalid:{claim_id}")
+        if not str(item.get("notes", "")).strip():
+            errors.append(f"review_claim_notes_missing:{claim_id}")
+    for claim_id in sorted(claim_ids - checked_claims):
+        errors.append(f"review_claim_not_checked:{claim_id}")
+
+    blocker = counts.get("blocker")
+    major = counts.get("major")
+    should_pass = blocker == 0 and major == 0
+    if verdict == "pass" and not should_pass:
+        errors.append("review_pass_has_blocker_or_major")
+    if verdict == "fail" and should_pass:
+        errors.append("review_fail_without_blocker_or_major")
+    if verdict == "pass":
+        if any(
+            not isinstance(item, dict)
+            or item.get("status") != "complete"
+            for item in coverage
+        ):
+            errors.append("review_pass_question_not_complete")
+        if any(
+            not isinstance(item, dict)
+            or item.get("status") != "verified"
+            for item in checks
+        ):
+            errors.append("review_pass_claim_not_verified")
+        if any(
+            not isinstance(item, dict)
+            or item.get("status") != "verified"
+            for item in sampled_fact_checks
+        ):
+            errors.append("review_pass_sampled_fact_not_verified")
+        if depth_assessment != "adequate":
+            errors.append("review_pass_depth_insufficient")
+        if review.get("coverage_requirements_adequate") is not True:
+            errors.append("review_pass_coverage_requirements_inadequate")
+        if review.get("premature_stop") is not False:
+            errors.append("review_pass_premature_stop")
+        if review.get("saturation_check_credible") is not True:
+            errors.append("review_pass_saturation_not_credible")
+        if missing_source_roles:
+            errors.append("review_pass_missing_source_roles")
+        if omitted_objects:
+            errors.append("review_pass_omitted_objects")
+        if omitted_dimensions:
+            errors.append("review_pass_omitted_dimensions")
+    return verdict
+
+
+def validate_quantitative_span(
+    span: str,
+    *,
+    label: str,
+    snapshot_texts: dict[str, str],
+    source_access_statuses: dict[str, str],
+    recorded_days: set[str],
+    errors: list[str],
+) -> None:
+    tokens = claim_tokens(span, recorded_days)
+    if not tokens:
+        return
+    if NEGATION_PATTERN.search(span):
+        return
+    if has_marker(span, UNKNOWN_MARKERS + ASSUMPTION_MARKERS):
+        return
+    cited = [
+        source_id
+        for source_id in BRACKET_REFERENCE_PATTERN.findall(span)
+        if source_id in source_access_statuses
+    ]
+    if not cited:
+        errors.append(f"quantitative_uncited:{label}:{tokens[0]}")
+        return
+    opened = [
+        source_id
+        for source_id in cited
+        if source_access_statuses.get(source_id) in KEY_CLAIM_SOURCE_STATUSES
+    ]
+    if not opened:
+        errors.append(f"quantitative_source_not_opened:{label}:{tokens[0]}")
+        return
+    for token in tokens:
+        if any(
+            token_in_text(snapshot_texts.get(source_id, ""), token)
+            for source_id in opened
+        ):
+            continue
+        errors.append(f"quantitative_not_in_opened_page:{label}:{token}")
+
+
+def validate_quantitative_evidence(
+    report: str,
+    record: dict[str, Any],
+    questions: list[dict[str, Any]],
+    snapshot_texts: dict[str, str],
+    source_access_statuses: dict[str, str],
+    errors: list[str],
+) -> None:
+    recorded_days = recorded_calendar_days(record)
+    sections = record.get("report_sections")
+    sources_heading = ""
+    question_labels: dict[str, str] = {}
+    if isinstance(sections, dict):
+        raw_sources = sections.get("sources")
+        if isinstance(raw_sources, str):
+            sources_heading = raw_sources.strip()
+    for question in questions:
+        heading = str(question.get("answer_section", "")).strip()
+        question_id = str(question.get("question_id", "")).strip() or "?"
+        if heading:
+            question_labels[heading] = question_id
+    for heading, body in heading_sections(report):
+        if heading == sources_heading:
+            continue
+        label_prefix = question_labels.get(heading, heading)
+        for index, sentence in enumerate(split_sentences(body)):
+            validate_quantitative_span(
+                sentence,
+                label=f"{label_prefix}:{index}",
+                snapshot_texts=snapshot_texts,
+                source_access_statuses=source_access_statuses,
+                recorded_days=recorded_days,
+                errors=errors,
+            )
+    claims = record.get("key_claims")
+    if not isinstance(claims, list):
+        return
+    for claim in claims:
+        if not isinstance(claim, dict):
+            continue
+        claim_id = str(claim.get("claim_id", "")).strip() or "?"
+        claim_text = str(claim.get("claim", "")).strip()
+        tokens = claim_tokens(claim_text, recorded_days)
+        if claim.get("claim_type") != "quantitative" and not tokens:
+            continue
+        if NEGATION_PATTERN.search(claim_text) or has_marker(
+            claim_text,
+            UNKNOWN_MARKERS + ASSUMPTION_MARKERS,
+        ):
+            continue
+        quote = str(claim.get("evidence_quote", "")).strip()
+        if not quote:
+            errors.append(f"quantitative_evidence_quote_missing:{claim_id}")
+            continue
+        source_ids = claim.get("source_ids")
+        opened = [
+            source_id
+            for source_id in source_ids
+            if isinstance(source_id, str)
+            and source_access_statuses.get(source_id) in KEY_CLAIM_SOURCE_STATUSES
+        ] if isinstance(source_ids, list) else []
+        if not any(
+            compact_contains(snapshot_texts.get(source_id, ""), quote)
+            for source_id in opened
+        ):
+            errors.append(f"quantitative_evidence_quote_not_in_snapshot:{claim_id}")
+        for token in tokens:
+            if not token_in_text(quote, token):
+                errors.append(f"quantitative_token_not_in_quote:{claim_id}:{token}")
+
+
+def validate_comparison_tables(
+    report: str,
+    record: dict[str, Any],
+    source_access_statuses: dict[str, str],
+    snapshot_texts: dict[str, str],
+    errors: list[str],
+) -> None:
+    recorded_days = recorded_calendar_days(record)
+    for heading, body in heading_sections(report):
+        for table_index, table in enumerate(markdown_table_rows(body)):
+            for row_index, row in enumerate(table):
+                for cell_index, cell in enumerate(row):
+                    tokens = claim_tokens(cell, recorded_days)
+                    if not tokens:
+                        continue
+                    label = f"{heading}:{table_index}:{row_index}:{cell_index}"
+                    if cell_is_unknown(cell):
+                        errors.append(f"comparison_unknown_cell_has_number:{label}")
+                        continue
+                    if has_marker(cell, ASSUMPTION_MARKERS):
+                        continue
+                    validate_quantitative_span(
+                        cell,
+                        label=label,
+                        snapshot_texts=snapshot_texts,
+                        source_access_statuses=source_access_statuses,
+                        recorded_days=recorded_days,
+                        errors=errors,
+                    )
+
+
+def unresolved_heading(report: str, record: dict[str, Any]) -> str:
+    sections = record.get("report_sections")
+    if isinstance(sections, dict):
+        named = sections.get("unresolved")
+        if isinstance(named, str) and exact_heading_exists(report, named.strip()):
+            return named.strip()
+    return find_heading(report, UNRESOLVED_ALIASES)
+
+
+def validate_reader_gaps(
+    report: str,
+    record: dict[str, Any],
+    questions: list[dict[str, Any]],
+    research_status: str,
+    errors: list[str],
+) -> None:
+    if research_status != "partial":
+        return
+    heading = unresolved_heading(report, record)
+    if not heading:
+        errors.append("unresolved_section_missing")
+        return
+    sections = record.get("report_sections")
+    summary = (
+        sections.get("executive_summary")
+        if isinstance(sections, dict)
+        else None
+    )
+    if isinstance(summary, str) and exact_heading_exists(report, summary):
+        if report.find(heading) > report.find(summary):
+            errors.append("unresolved_section_not_before_summary")
+    section = section_text(report, heading)
+    for question in questions:
+        if question.get("status") == "answered":
+            continue
+        question_id = str(question.get("question_id", "")).strip() or "?"
+        question_text = str(question.get("question", "")).strip()
+        if question_text and not loose_contains(section, question_text):
+            errors.append(f"unresolved_question_missing:{question_id}")
+            continue
+        if question_text and not follow_up_present(section, question_text):
+            errors.append(f"unresolved_next_step_missing:{question_id}")
+
+
+def validate_research_plan(
+    plan: str,
+    questions: list[dict[str, Any]],
+    errors: list[str],
+) -> None:
+    if substantive_chars(plan) < 20:
+        errors.append("research_plan_too_short")
+    found: dict[str, str] = {}
+    for key, aliases in PLAN_HEADING_GROUPS:
+        heading = find_heading(plan, aliases)
+        if not heading:
+            errors.append(f"research_plan_section_missing:{key}")
+            continue
+        found[key] = heading
+    question_section = section_text(plan, found.get("questions", ""))
+    for question in questions:
+        question_text = str(question.get("question", "")).strip()
+        question_id = str(question.get("question_id", "")).strip() or "?"
+        if question_text and not loose_contains(question_section, question_text):
+            errors.append(f"research_plan_question_missing:{question_id}")
+
+
+def validate_research_log(
+    log: str,
+    errors: list[str],
+) -> None:
+    if substantive_chars(log) < 8:
+        errors.append("research_log_too_short")
+
+
+def validate_continuation(
+    report: str,
+    record: dict[str, Any],
+    questions: list[dict[str, Any]],
+    errors: list[str],
+) -> None:
+    continuation = record.get("continuation")
+    if continuation is None:
+        return
+    if not isinstance(continuation, dict):
+        errors.append("continuation_not_object")
+        return
+    if continuation.get("mode") != "gap_fill":
+        errors.append("continuation_mode_invalid:allowed=gap_fill")
+        return
+    heading = find_heading(report, CONTINUATION_ALIASES)
+    if not heading:
+        errors.append("continuation_section_missing")
+        return
+    question_by_id = {
+        str(question.get("question_id", "")).strip(): question
+        for question in questions
+    }
+    section = section_text(report, heading)
+    frozen = continuation.get("frozen_question_ids")
+    open_ids = continuation.get("open_question_ids")
+    if not isinstance(frozen, list) or not isinstance(open_ids, list):
+        errors.append("continuation_question_lists_missing")
+        return
+    if not open_ids:
+        errors.append("continuation_open_questions_missing")
+    for question_id in frozen:
+        question = question_by_id.get(question_id)
+        if question is None:
+            errors.append(f"continuation_unknown_frozen_question:{question_id}")
+        elif question.get("status") != "answered":
+            errors.append(f"continuation_frozen_question_not_closed:{question_id}")
+    for question_id in open_ids:
+        question = question_by_id.get(question_id)
+        if question is None:
+            errors.append(f"continuation_unknown_open_question:{question_id}")
+            continue
+        if question.get("status") == "answered":
+            errors.append(f"continuation_open_question_already_closed:{question_id}")
+        question_text = str(question.get("question", "")).strip()
+        if question_text and not loose_contains(section, question_text):
+            errors.append(f"continuation_open_question_not_listed:{question_id}")
+
+
+def validate_decision_assumptions(
+    request: str,
+    report: str,
+    record: dict[str, Any],
+    errors: list[str],
+) -> None:
+    if record.get("decision_task") is not True:
+        return
+    assumptions = record.get("decision_assumptions")
+    if not isinstance(assumptions, list) or not assumptions:
+        errors.append("decision_assumptions_missing")
+        return
+    if len(assumptions) > 3:
+        errors.append("decision_assumptions_over_limit")
+    if not find_heading(request, DECISION_ALIASES) and not find_heading(
+        report, DECISION_ALIASES
+    ):
+        errors.append("decision_assumptions_section_missing")
+    for index, item in enumerate(assumptions):
+        if not isinstance(item, str) or not item.strip():
+            errors.append(f"decision_assumption_invalid:{index}")
+            continue
+        if not loose_contains(request, item) and not loose_contains(report, item):
+            errors.append(f"decision_assumption_not_written:{index}")
+
+
+def warn_unmarked_decision(
+    request: str,
+    record: dict[str, Any],
+    warnings: list[str],
+) -> None:
+    if record.get("decision_task") is True:
+        return
+    folded = request.casefold()
+    if any(cue.casefold() in folded for cue in DECISION_CUES):
+        warnings.append("decision_assumptions_not_recorded")
 
 
 def validate_bundle(bundle: Path) -> dict[str, Any]:
@@ -1169,8 +2355,11 @@ def validate_bundle(bundle: Path) -> dict[str, Any]:
         }
 
     request = read_text(bundle / "request_snapshot.md", errors)
+    plan = read_text(bundle / "research_plan.md", errors)
+    log = read_text(bundle / "research_log.md", errors)
     report = read_text(bundle / "final_report.md", errors)
     record = read_json(bundle / "research_record.json", errors)
+    normalizations = normalize_record(record)
 
     if record.get("schema_version") != SCHEMA_VERSION:
         errors.append(
@@ -1203,6 +2392,7 @@ def validate_bundle(bundle: Path) -> dict[str, Any]:
 
     source_ids: set[str] = set()
     source_access_statuses: dict[str, str] = {}
+    snapshot_texts: dict[str, str] = {}
     source_stakeholder_relations: dict[str, str] = {}
     source_question_ids: dict[str, set[str]] = {}
     sources_value = record.get("sources")
@@ -1219,6 +2409,7 @@ def validate_bundle(bundle: Path) -> dict[str, Any]:
             question_ids,
             source_ids,
             source_access_statuses,
+            snapshot_texts,
             errors,
         )
         if isinstance(source, dict):
@@ -1304,14 +2495,30 @@ def validate_bundle(bundle: Path) -> dict[str, Any]:
         record,
         research_status,
         question_ids,
-        {
-            str(question.get("question_id", "")).strip()
-            for question in questions
-            if question.get("status") != "answered"
-        },
         coverage_diagnostics,
         errors,
     )
+    validate_research_plan(plan, questions, errors)
+    validate_research_log(log, errors)
+    validate_reader_gaps(report, record, questions, research_status, errors)
+    validate_quantitative_evidence(
+        report,
+        record,
+        questions,
+        snapshot_texts,
+        source_access_statuses,
+        errors,
+    )
+    validate_comparison_tables(
+        report,
+        record,
+        source_access_statuses,
+        snapshot_texts,
+        errors,
+    )
+    validate_continuation(report, record, questions, errors)
+    validate_decision_assumptions(request, report, record, errors)
+    warn_unmarked_decision(request, record, warnings)
 
     hashes = candidate_hashes(bundle, errors)
     review_status = validate_independent_review(
@@ -1346,6 +2553,7 @@ def validate_bundle(bundle: Path) -> dict[str, Any]:
             "key_claim_count": len(claim_ids),
             "research_round_count": len(rounds),
             "question_coverage": coverage_diagnostics,
+            "normalizations": normalizations,
             "candidate_file_sha256": hashes,
         }
     )
@@ -1359,8 +2567,9 @@ def validate_bundle(bundle: Path) -> dict[str, Any]:
         "checks": checks,
         "scope_note": (
             "本 validator 检查结构化状态、逐问题来源与检查覆盖、饱和停止、关键引用、"
-            "候选文件完整性与独立审阅合同；它不联网验证外部事实，覆盖要求是否合理及"
-            "报告质量仍由独立 reviewer 裁决。"
+            "表格里的数字、已保存页面中的数字、读者稿里的未完成项、候选文件完整性与"
+            "独立审阅合同。它不联网重抓网页；页面里没有保存下来的数字仍算未核到。"
+            "覆盖要求是否合理及报告质量仍由独立 reviewer 裁决。"
         ),
     }
 

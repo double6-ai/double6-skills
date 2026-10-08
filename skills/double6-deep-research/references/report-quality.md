@@ -186,7 +186,7 @@ schema v2 把研究完成度与复核结果分开。`research_record.json` 只�
 }
 ```
 
-schema v1 bundle 需要迁移后再使用 2.0.0 validator：
+schema v1 bundle 需要迁移后再使用 2.1.1 validator：
 
 - 把顶层 `status` 改为 `research_status`；
 - 增加 `research_as_of` 和 `report_sections`；
@@ -198,7 +198,21 @@ schema v1 bundle 需要迁移后再使用 2.0.0 validator：
 - 按下文补齐 `partial`／`blocked` 的结构化字段。
 
 validator 对旧 schema 失败关闭并返回 `schema_version_invalid:expected_2`，避免把缺少新状态
-和审阅合同的旧记录误判为 2.0.0 合格交付。
+和审阅合同的旧记录误判为 2.1.1 合格交付。
+
+2.2.0 仍使用 schema 2，并追加这些交付要求：
+
+- `research_plan.md` 在打开网页前写好，包含要回答的问题、准备查的来源和会标成未知的内容；
+- `research_log.md` 记录每轮打开了什么、还缺什么；
+- 部分完成的 `final_report.md` 在执行摘要前写 `## 还没查完`；
+- 价格、百分比、小数、千分位数字和名次必须出现在所引来源已经保存的正文里，关键句带上 `evidence_quote`；
+- 比较数字时使用表格；没打开的格子写未知，不把具体数字和未知写在同一格。标题里有“比较”但只是在讲口径时，不必为了标题硬做一张表；
+- 续跑使用 `continuation.mode=gap_fill`，并在报告中列出 `## 本次只补这些缺口`；
+- 决策题用 `decision_task` 和最多三条 `decision_assumptions`，并写进 `## 假设`。
+
+2.2.1 仍使用 schema 2。标题可以跟随用户语言：计划、未完成项、续跑和假设接受上面这些中文标题，也接受 `Questions`、`Sources`、`Unknowns`、`Still open`、`Open questions`、`Gaps to fill` 和 `Assumptions`。问号全角半角、原句里的空格不影响核对。没带单位的三到六位价格、中文日期和“百分之十”也要出现在已保存页面里；表格第一列和表头里的数字同样核对。只讲口径、没有表格的章节不再被要求做成表。
+
+检查程序会把 `fact`、`calculation`、`unchanged`、`official`、`news` 归一成规范词，并把误放进检查名单的 `omission_scan` 去掉。它仍不重新上网。
 
 `research_as_of` 使用 `YYYY-MM-DD` 或带时区的 ISO 8601 时间。涉及当前状态、价格、政策、
 版本或排名时，还要优先记录各来源的 `published_at`，必要时在具体 claim 附近说明更窄的
@@ -321,7 +335,9 @@ claim。保存快照时只能保存宿主实际取得的正文或文档，不能
 
 `strategy_types` 只能使用 `primary_sources`、`independent_validation`、
 `counterevidence`、`freshness`、`omission_scan`、`user_material`。
-`conclusion_impact` 只能是 `changed`、`strengthened`、`narrowed` 或 `none`。
+`conclusion_impact` 只能是 `changed`、`strengthened`、`narrowed` 或 `none`。没有变化时写
+`none`。写成 `unchanged` 时检查程序会归一成 `none`。`omission_scan` 是 `strategy_types` 里的策略，不是
+`required_checks` 或 `checks_completed` 的检查名。
 
 完整交付要求每个问题按 `main_research → coverage_gap_check →
 adversarial_saturation_check` 的顺序经过上述三种职责。最后一次饱和检查必须重新完成该问题
@@ -337,9 +353,11 @@ adversarial_saturation_check` 的顺序经过上述三种职责。最后一次�
 - `partial`：至少一个问题未完整回答，但已有可交付证据；
 - `blocked`：授权、工具、访问或核心证据条件使研究无法继续。
 
-`stop_decision.status` 必须与 `research_status` 相同。
+`complete` 和 `blocked` 的 `stop_decision.status` 必须与 `research_status` 相同。
+`partial` 不要求 `stop_decision`。未闭合问题写在问题对象上，检查程序把算出的缺口放进
+回执的 `question_coverage`，不要求研究记录再抄一份相同的缺口表。
 
-停止证明中的覆盖字段使用以下形态：
+`complete` 和 `blocked` 的停止证明使用以下形态：
 
 - `missing_required_source_kinds`、`unchecked_required_checks`、`unchecked_objects`、
   `unchecked_dimensions`：以问题 ID 为 key、缺失项数组为 value，只保留存在缺口的问题；
@@ -350,8 +368,9 @@ adversarial_saturation_check` 的顺序经过上述三种职责。最后一次�
 - `premature_stop_checks`：完整列出 `tool_result_limit_used`、
   `preset_source_count_used`、`time_limit_used`、`fixed_round_count_used`。
 
-前三类覆盖缺口由 validator 根据问题要求、来源和研究轮次重新计算，声明值必须与计算结果
-完全一致。`complete` 时全部缺口为空，且所有提前停止项都必须为 `false`。
+前三类覆盖缺口由 validator 根据问题要求、来源和研究轮次重新计算。`complete` 和
+`blocked` 的声明值必须与计算结果完全一致。`complete` 时全部缺口为空，且所有提前停止项
+都必须为 `false`。`partial` 不声明这张表。
 
 `partial` 时，每个未完整回答的问题必须增加：
 
@@ -363,26 +382,9 @@ adversarial_saturation_check` 的顺序经过上述三种职责。最后一次�
 }
 ```
 
-并在 `remaining_high_priority_gaps` 中逐项记录：
-
-```json
-{
-  "question_id": "Q2",
-  "gap_type": "missing_independent_evidence",
-  "missing_items": ["independent"],
-  "gap": "仍缺少什么",
-  "current_evidence": "目前能确认到哪里",
-  "next_step": "如何关闭缺口"
-}
-```
-
-`gap_type` 只能是 `missing_source_kind`、`missing_independent_evidence`、
-`unchecked_required_check`、`unchecked_object`、`unchecked_dimension`、
-`unresolved_conflict` 或 `other`。`partial` 中每个由 validator 推导出的覆盖缺口都必须在
-`remaining_high_priority_gaps` 中逐项登记；其它无法通过公开研究闭合的问题使用 `other`。
-每个状态不是 `answered` 的问题也必须至少有一个 gap。`partial` 至少要有主体研究轮；
-访问、授权或资源限制导致未完成缺口／饱和检查时，把对应必要检查登记为 gap，而不是伪造
-已经执行的轮次。
+`partial` 至少要有主体研究轮。访问、授权或资源限制导致未完成缺口或饱和检查时，把下一步
+写在该问题的 `next_step`，不要伪造已经执行的轮次。检查程序仍会计算缺了哪些来源类型、
+独立证据、检查、对象和维度，并写入回执；这些计算结果不要求再抄回 `stop_decision`。
 
 `blocked` 时还必须记录 `blocking_conditions` 和 `unblock_requirements`。阻塞发生在开始
 研究之前时，`sources`、`key_claims` 和 `research_rounds` 可以为空，但仍应交付范围、
