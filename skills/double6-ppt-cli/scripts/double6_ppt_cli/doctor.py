@@ -180,7 +180,7 @@ def _vendor_integrity(root: Path) -> dict[str, Any]:
         "capabilities": {
             "postflight": status != "fail",
             "full_generate": status == "pass",
-            "template_fill": status == "pass",
+            "template_fill": status == "pass" and (root / "vendor" / "ppt-master-core" / "skills" / "ppt-master" / "scripts" / "template_fill_pptx" / "__init__.py").is_file(),
         },
         "repair": "Install the complete skill from GitHub or skills.sh when full generate/template-fill capability is required.",
     }
@@ -287,6 +287,8 @@ def doctor(
     )
     vendor_required = mode in {"generate", "template-fill"}
     vendor_ready = vendor["status"] == "pass" if vendor_required else vendor["status"] != "fail"
+    if mode == "template-fill" and not vendor.get("capabilities", {}).get("template_fill"):
+        vendor_ready = False
     portable_ready = base_ready and vendor_ready
     portable_render_ready = portable_ready and bool(soffice) and bool(pdftoppm)
     native_ready = portable_ready and bool(powerpoint) and bool(osascript) and bool(pdftoppm)
