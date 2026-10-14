@@ -8,7 +8,7 @@ Want to support the project or discuss a partnership? See the [sponsorship guide
 
 ## Current Model Recommendation
 
-For the best results, use **[Kimi K3](https://www.kimi.com/code/?aff=ppt-master)** (or Claude) to drive the workflow, paired with **`gpt-image-2`** (OpenAI) or **`gemini-3.1-flash-image`** (Google) for AI image generation. If model capability is limiting output quality, upgrade the driving model before weakening the workflow or its quality requirements.
+For the best results, use **[Kimi K3](https://www.kimi.com/code/?aff=ppt-master)** (or Claude) to drive the workflow, paired with **`gpt-image-2`** (OpenAI) or **`gemini-nano-banana-2.1`** (Google) for AI image generation. If model capability is limiting output quality, upgrade the driving model before weakening the workflow or its quality requirements.
 
 ## Kimi
 
@@ -18,7 +18,7 @@ For the best results, use **[Kimi K3](https://www.kimi.com/code/?aff=ppt-master)
 
 Thanks to [Kimi](https://www.kimi.com/code/?aff=ppt-master) for sponsoring PPT Master. [Kimi K3](https://platform.kimi.ai/docs/guide/kimi-k3-quickstart) is the world's first open 3T-class model, featuring native vision and a 1-million-token context window. With PPT Master, K3 can understand PDFs, DOCX files, web pages, and other source material, structure the narrative, and generate a natively editable PPTX.
 
-**Try [Kimi Code](https://www.kimi.com/code/?aff=ppt-master), or access the API through the Kimi Open Platform ([中文站](https://platform.kimi.com?aff=ppt-master) | [Global](https://platform.kimi.ai?aff=ppt-master)).**
+**Try a [Kimi Code plan](https://www.kimi.com/code/?aff=ppt-master) ([中文站](https://www.kimi.com/code/?aff=ppt-master) | [Global](https://www.kimi.ai/code/?aff=ppt-master)), or access the API through the Kimi Open Platform ([中文站](https://platform.kimi.com?aff=ppt-master) | [Global](https://platform.kimi.ai?aff=ppt-master)).**
 
 ## Model Access Partners
 
@@ -28,11 +28,11 @@ Thanks to [Kimi](https://www.kimi.com/code/?aff=ppt-master) for sponsoring PPT M
 
 [PackyCode](https://www.packyapi.ai/register?aff=ppt-master) provides relay access to Claude Code, Codex, Gemini, and other services. Register through the dedicated link and enter the promo code **`ppt-master`** during recharge to receive 10% off.
 
-### APIKEY.FUN
+### APIKEY.FAN
 
-<a href="https://apikey.fun/register?aff=PPT-MASTER"><img src="https://raw.githubusercontent.com/hugohe3/ppt-master/main/docs/assets/sponsors/apikey-fun.png" alt="APIKEY.FUN" width="150"></a>
+<a href="https://apikey.fan/register?aff=PPT-MASTER"><img src="https://raw.githubusercontent.com/hugohe3/ppt-master/main/docs/assets/sponsors/apikey-fan.png" alt="APIKEY.FAN" width="150"></a>
 
-[APIKEY.FUN](https://apikey.fun/register?aff=PPT-MASTER) provides enterprise-grade access to Claude, OpenAI, Gemini, and other mainstream models. Register through the dedicated link to receive up to a permanent 5% discount on top-ups.
+[APIKEY.FAN](https://apikey.fan/register?aff=PPT-MASTER) provides enterprise-grade access to Claude, OpenAI, Gemini, and other mainstream models. Register through the dedicated link to receive up to a permanent 5% discount on top-ups.
 
 ### RunAPI
 
@@ -40,11 +40,11 @@ Thanks to [Kimi](https://www.kimi.com/code/?aff=ppt-master) for sponsoring PPT M
 
 [RunAPI](https://runapi.host/register?aff=WMLJ) provides access to 150+ models, including OpenAI, Claude, Gemini, DeepSeek, and Grok, through one API key. Register through the dedicated link and contact an administrator to claim **¥7 in free credit**.
 
-### YouYun ZhiSuan
+### APIMart
 
-<a href="https://www.compshare.cn/coding-plan?ytag=GPU_YY-git_pptmaster0624"><img src="https://raw.githubusercontent.com/hugohe3/ppt-master/main/docs/assets/sponsors/youyun.png" alt="YouYun ZhiSuan" width="150"></a>
+<a href="https://go.apimart.ai/gh-ppt-master1"><img src="https://raw.githubusercontent.com/hugohe3/ppt-master/main/docs/assets/sponsors/apimart.png" alt="APIMart" width="150"></a>
 
-[YouYun ZhiSuan](https://www.compshare.cn/coding-plan?ytag=GPU_YY-git_pptmaster0624), UCloud's AI cloud platform, provides domestic and international model APIs, CodingPlan packages, enterprise concurrency, technical support, and invoicing. Register through the dedicated link to receive up to **¥10 in free trial credit**. PPT Master is also available there as a hosted Agent for users who do not want to deploy it locally.
+[APIMart](https://go.apimart.ai/gh-ppt-master1) is a low-cost API platform for AI image and video generation, with GPT-Image-2 from **$0.006 per image**. One async API covers both image and video: submit a task, get an ID, and fetch results by polling or callback. Pay-as-you-go with no monthly fee; register through the dedicated link to get started.
 
 ## Infrastructure Support
 

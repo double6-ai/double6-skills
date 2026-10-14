@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
+import copy
 import hashlib
 import json
 import math
+import posixpath
 import re
 import shutil
 import sys
+import tempfile
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import unquote
 from xml.etree import ElementTree as ET
 
 _SCRIPTS_DIR = Path(__file__).resolve().parents[1]
@@ -20,24 +26,51 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from attribution_guard import require_skill_integrity  # noqa: E402
+from authoring_roundtrip import (  # noqa: E402
+    AuthoringRoundtripError,
+    RoundtripPage,
+    is_flat_authoring_bundle,
+    materialize_flat_authoring_roundtrip,
+    roundtrip_source_fingerprint,
+)
 from console_encoding import configure_utf8_stdio  # noqa: E402
 from language_tags import (  # noqa: E402
     LanguageTagError,
     normalize_language_tag,
 )
 from native_payloads import PAYLOAD_STORE_RELATIVE_PATH  # noqa: E402
+from pptx_embedded_fonts import (  # noqa: E402
+    EmbeddedFontBundle,
+    EmbeddedFontError,
+    load_embedded_font_bundle,
+)
 from pptx_animations import (  # noqa: E402
     ANIMATIONS,
     animation_seconds_to_milliseconds,
     normalize_animation_effect,
     normalize_animation_trigger,
+    read_slide_click_dependencies,
 )
 from pptx_transitions import (  # noqa: E402
+    DEFAULT_TRANSITION_DURATION,
     LEGACY_TRANSITION_KEYS,
     NATIVE_TRANSITION_KEYS,
     normalize_transition_effect_request,
     validate_seconds,
 )
+from pptx_workspace import (  # noqa: E402
+    AUTHORING_SVG_FLAT_DIR,
+    ROUNDTRIP_MANIFEST_PATH,
+    ROUNDTRIP_PAGE_PLAN_PATH,
+    WorkspaceResourceSpec,
+    conversion_report_path,
+    load_roundtrip_manifest,
+    native_structure_path,
+    slide_animation_config_sha256,
+    source_pptx_path,
+    workspace_resource_specs,
+)
+from slide_roster import discover_slide_svgs  # noqa: E402
 
 configure_utf8_stdio()
 
@@ -51,14 +84,19 @@ if __package__ in {None, ''}:
 
 from .dimensions import CANVAS_FORMATS, get_project_info
 from .discovery import NotesFileReadError, find_notes_files, find_svg_files
-from .builder import create_pptx_with_native_svg
+from .builder import RoundtripSlidePatch, create_pptx_with_native_svg
 from ..native_objects import (
     native_fallback_kind,
+    native_object_projection_warnings,
     native_replacement_kind,
     native_replacement_status,
 )
 from ..native_objects.marker_status import native_marker_release_block_reason
-from ..drawingml.theme_colors import ThemeColorError, load_theme_color_spec
+from ..drawingml.theme_colors import (
+    ThemeColorError,
+    ThemeColorSpec,
+    load_theme_color_spec,
+)
 from ..drawingml.context import (
     TEXT_FLOW_PRESERVE,
     TEXT_FLOW_REFLOW,
@@ -66,8 +104,12 @@ from ..drawingml.context import (
 )
 from ..drawingml.theme_fonts import (
     ThemeFontError,
+    ThemeFontFace,
+    ThemeFontSpec,
+    infer_master_text_style_spec,
     load_master_text_style_spec,
     load_theme_font_spec,
+    load_theme_font_spec_from_pages,
 )
 from ..drawingml.utils import unsafe_exported_font_faces
 from .narration import (
@@ -77,8 +119,13 @@ from .narration import (
     probe_audio_duration,
 )
 from .template_structure import (
+    PptxStructureLock,
+    SOURCE_THEMES_FILENAME,
     TemplateStructureError,
+    load_native_structure_contract,
     load_pptx_structure_lock,
+    load_template_source_themes,
+    parse_optional_layout_slides,
     parse_template_slides,
     structured_layout_definition_files,
     template_lock_errors,
@@ -87,14 +134,809 @@ from .template_structure import (
 from ..animation_config import (
     animation_group_effect_entries,
     load_animation_config,
+    resolve_slide_animation_config,
     validate_animation_config,
     validate_animation_config_errors,
     validate_transition_config,
 )
-
-
 def _as_dict(value: object) -> dict:
     return value if isinstance(value, dict) else {}
+
+
+def _path_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open('rb') as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _roundtrip_slide_parts(
+    row: dict[str, object],
+    *,
+    include_structure: bool,
+) -> set[str]:
+    """Return package owners that make one semantic sidecar slide-relevant."""
+    keys = ["sourcePart"]
+    if include_structure:
+        keys.extend(["layoutPart", "masterPart"])
+    parts = {
+        str(row[key])
+        for key in keys
+        if isinstance(row.get(key), str) and row.get(key)
+    }
+    note = row.get("notes")
+    if isinstance(note, dict) and isinstance(note.get("sourcePart"), str):
+        parts.add(str(note["sourcePart"]))
+    return parts
+
+
+def _resource_owner_parts(item: dict[str, object]) -> set[str]:
+    raw = item.get("ownerParts")
+    if not isinstance(raw, list):
+        raw = item.get("sourceParts")
+    return {
+        str(value)
+        for value in raw or []
+        if isinstance(value, str) and value
+    }
+
+
+def _resource_slide_indices(
+    item: dict[str, object],
+    slide_rows: dict[int, dict[str, object]],
+    *,
+    include_structure: bool,
+) -> set[int]:
+    owners = _resource_owner_parts(item)
+    return {
+        index
+        for index, row in slide_rows.items()
+        if owners & _roundtrip_slide_parts(
+            row,
+            include_structure=include_structure,
+        )
+    }
+
+
+def _changed_roundtrip_resource_pages(
+    resources: tuple[WorkspaceResourceSpec, ...],
+    manifest: dict[str, object],
+    pages: tuple[RoundtripPage, ...],
+) -> dict[int, frozenset[str]]:
+    """Map changed materialized resources to every referencing output page."""
+    raw_slides = manifest.get("slides")
+    if not isinstance(raw_slides, list):
+        raise RuntimeError("Round-trip manifest slides must be an array")
+    slide_rows = {
+        int(row["index"]): row
+        for row in raw_slides
+        if isinstance(row, dict) and isinstance(row.get("index"), int)
+    }
+    affected: dict[int, set[str]] = {}
+    for resource in resources:
+        if not resource.changed:
+            continue
+        source_slides = {
+            index
+            for index, row in slide_rows.items()
+            if set(resource.owner_parts) & _roundtrip_slide_parts(
+                row,
+                include_structure=True,
+            )
+        }
+        for page in pages:
+            if page.source_slide in source_slides:
+                affected.setdefault(page.output_index, set()).add(
+                    resource.workspace_path.as_posix()
+                )
+    return {
+        index: frozenset(paths)
+        for index, paths in affected.items()
+    }
+
+
+def _roundtrip_animation_config_for_pages(
+    config: dict[str, object],
+    pages: tuple[RoundtripPage, ...],
+) -> dict[str, object]:
+    """Key per-slide motion by output SVG stem, inheriting source rows for copies."""
+    expanded = copy.deepcopy(config)
+    raw_slides = expanded.get("slides")
+    if not isinstance(raw_slides, dict):
+        raise RuntimeError("Round-trip animation sidecar slides must be an object")
+    output_slides: dict[str, object] = {}
+    for page_index, page in enumerate(pages):
+        output_stem = page.svg_stem
+        source_stem = Path(page.source_svg_name).stem
+        if output_stem in raw_slides:
+            selected = copy.deepcopy(raw_slides[output_stem])
+            row_origin = "declares"
+        elif source_stem in raw_slides:
+            selected = copy.deepcopy(raw_slides[source_stem])
+            row_origin = "inherits"
+        else:
+            continue
+        if isinstance(selected, dict):
+            morph = selected.get("morph")
+            if isinstance(morph, dict):
+                original_from = morph.get("from")
+                previous_page = pages[page_index - 1] if page_index else None
+                previous_source_stem = (
+                    Path(previous_page.source_svg_name).stem
+                    if previous_page is not None
+                    else None
+                )
+                if (
+                    isinstance(original_from, str)
+                    and original_from.strip()
+                    and previous_page is not None
+                    and original_from == previous_page.svg_stem
+                ):
+                    pass
+                elif (
+                    isinstance(original_from, str)
+                    and original_from.strip()
+                    and previous_page is not None
+                    and original_from == previous_source_stem
+                ):
+                    morph["from"] = previous_page.svg_stem
+                elif isinstance(original_from, str) and original_from.strip():
+                    previous_label = (
+                        f'"{previous_page.svg_stem}" from '
+                        f'"{previous_source_stem}"'
+                        if previous_page is not None
+                        else "no previous output page"
+                    )
+                    raise RuntimeError(
+                        f'Round-trip output page "{output_stem}" {row_origin} '
+                        f'Morph from "{original_from}", but it follows '
+                        f'{previous_label}; add an explicit animations.json '
+                        f'row for "{output_stem}" that overrides morph.from '
+                        'for this output adjacency, or remove that Morph row'
+                    )
+        output_slides[output_stem] = selected
+    expanded["slides"] = output_slides
+    return expanded
+
+
+def _roundtrip_note_changed(
+    project_path: Path,
+    row: dict[str, object],
+    page: RoundtripPage,
+) -> bool:
+    """Return whether one output page changes its inherited source notes."""
+    relative = Path("notes") / f"{page.svg_stem}.md"
+    output_note = project_path / relative
+    if page.svg_name != page.source_svg_name:
+        return output_note.is_file()
+
+    note = row.get("notes")
+    if note is None:
+        return output_note.is_file()
+    if not isinstance(note, dict):
+        raise RuntimeError(
+            f"Round-trip manifest slide {page.source_slide} notes metadata "
+            "must be an object"
+        )
+    note_file = note.get("file")
+    if not isinstance(note_file, str) or not note_file:
+        raise RuntimeError(
+            f"Round-trip manifest slide {page.source_slide} notes metadata "
+            "must declare notes.file"
+        )
+    expected_file = relative.as_posix()
+    if note_file != expected_file:
+        raise RuntimeError(
+            f"Round-trip manifest slide {page.source_slide} notes.file must be "
+            f"{expected_file!r} for {page.svg_name}; got {note_file!r}"
+        )
+    expected_sha = note.get("sha256")
+    if not isinstance(expected_sha, str):
+        raise RuntimeError(
+            f"Round-trip manifest slide {page.source_slide} notes metadata "
+            "must declare notes.sha256"
+        )
+    return not output_note.is_file() or _path_sha256(output_note) != expected_sha
+
+
+def _roundtrip_passthrough_candidates(
+    project_path: Path,
+    native_files: list[Path],
+    pages: tuple[RoundtripPage, ...],
+    *,
+    source_dir: str,
+    authoring_report: dict[str, object] | None,
+    changed_resource_pages: frozenset[int],
+) -> set[int]:
+    """Return source slides whose visual and editable sidecars are unchanged."""
+    manifest = load_roundtrip_manifest(project_path)
+    if manifest is None or manifest.get('schema') != 'ppt-master.roundtrip-workspace.v1':
+        raise RuntimeError(
+            "Round-trip export requires analysis/roundtrip_manifest.json "
+            "with schema ppt-master.roundtrip-workspace.v1"
+        )
+    raw_slides = manifest.get('slides')
+    if not isinstance(raw_slides, list):
+        return set()
+    slide_rows = {
+        int(row['index']): row
+        for row in raw_slides
+        if isinstance(row, dict) and isinstance(row.get('index'), int)
+    }
+    if len(pages) != len(native_files):
+        raise RuntimeError(
+            "Round-trip output page roster differs from materialized SVG files"
+        )
+
+    candidates: set[int] = set()
+    if authoring_report is not None:
+        raw_documents = authoring_report.get('documents')
+        if not isinstance(raw_documents, list):
+            return set()
+        reports = {
+            str(row.get('file')): row
+            for row in raw_documents
+            if isinstance(row, dict) and isinstance(row.get('file'), str)
+        }
+        for page in pages:
+            if page.source_slide not in slide_rows:
+                raise RuntimeError(
+                    f"Round-trip manifest has no source slide {page.source_slide}"
+                )
+            report = reports.get(page.svg_name)
+            if not isinstance(report, dict):
+                continue
+            if (
+                report.get('document_unchanged') is True
+                and
+                isinstance(report.get('source_ref_count'), int)
+                and report.get('source_ref_count') == report.get('unchanged_refs')
+                and int(report.get('edited_refs') or 0) == 0
+                and int(report.get('deleted_refs') or 0) == 0
+                and int(report.get('authored_unreferenced') or 0) == 0
+                and report.get('defs_changed') is False
+            ):
+                candidates.add(page.output_index)
+    elif source_dir == 'svg':
+        files_by_name = {path.name: path for path in native_files}
+        for page in pages:
+            row = slide_rows[page.source_slide]
+            relative = row.get('layeredSvg')
+            expected = row.get('layeredSvgSha256')
+            if not isinstance(relative, str) or not isinstance(expected, str):
+                continue
+            path = files_by_name.get(Path(relative).name)
+            if path is not None and _path_sha256(path) == expected:
+                candidates.add(page.output_index)
+    else:
+        return set()
+
+    sidecars = manifest.get('sidecars')
+    animation = sidecars.get('animations') if isinstance(sidecars, dict) else None
+    if not isinstance(animation, dict):
+        return set()
+    animation_file = animation.get('file')
+    if not isinstance(animation_file, str):
+        raise RuntimeError(
+            "Round-trip manifest must declare sidecars.animations.file"
+        )
+    current_animation = project_path / animation_file
+    if not current_animation.is_file():
+        return set()
+    try:
+        current_animation_config = json.loads(
+            current_animation.read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            f"Cannot read round-trip animation sidecar {current_animation}: {exc}"
+        ) from exc
+    if not isinstance(current_animation_config, dict):
+        raise RuntimeError(
+            f"Round-trip animation sidecar must be a JSON object: {current_animation}"
+        )
+    expanded_animation_config = _roundtrip_animation_config_for_pages(
+        current_animation_config,
+        pages,
+    )
+    pages_by_output = {page.output_index: page for page in pages}
+    for index in tuple(candidates):
+        page = pages_by_output[index]
+        expected = slide_rows[page.source_slide].get("animationSha256")
+        if not isinstance(expected, str):
+            raise RuntimeError(
+                f"Round-trip manifest slide {page.source_slide} lacks "
+                "animationSha256"
+            )
+        actual = slide_animation_config_sha256(
+            expanded_animation_config,
+            page.svg_stem,
+        )
+        if actual != expected:
+            candidates.discard(index)
+
+    for index in tuple(candidates):
+        page = pages_by_output[index]
+        row = slide_rows[page.source_slide]
+        if _roundtrip_note_changed(project_path, row, page):
+            candidates.discard(index)
+        derived = row.get("derivedResources")
+        if not isinstance(derived, list):
+            raise RuntimeError(
+                f"Round-trip manifest slide {page.source_slide} lacks "
+                "derivedResources"
+            )
+        for resource_index, raw in enumerate(derived):
+            if not isinstance(raw, dict):
+                raise RuntimeError(
+                    f"Round-trip slide {index} derivedResources[{resource_index}] "
+                    "must be an object"
+                )
+            relative = raw.get("file")
+            expected_sha = raw.get("sha256")
+            if not isinstance(relative, str) or not isinstance(expected_sha, str):
+                raise RuntimeError(
+                    f"Round-trip slide {index} derived resource is incomplete"
+                )
+            path = (project_path / relative).resolve()
+            try:
+                path.relative_to(project_path.resolve())
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"Round-trip derived resource escapes the project: {relative}"
+                ) from exc
+            if not path.is_file() or _path_sha256(path) != expected_sha:
+                candidates.discard(index)
+                break
+    candidates.difference_update(changed_resource_pages)
+    return candidates
+
+
+def _roundtrip_slide_patches(
+    project_path: Path,
+    authoring_report: dict[str, object] | None,
+    passthrough_slides: set[int],
+    pages: tuple[RoundtripPage, ...],
+    *,
+    changed_resource_pages: frozenset[int],
+    force_visual_changed: bool,
+    force_motion_changed: bool,
+    force_transition_changed: bool,
+    force_transition_replaced: bool,
+    force_animation_changed: bool,
+    force_notes_changed: bool,
+    force_advance_changed: bool = False,
+) -> dict[int, RoundtripSlidePatch]:
+    """Build strict source-overlay metadata for edited authoring slides."""
+    if authoring_report is None:
+        return {}
+    manifest = load_roundtrip_manifest(project_path)
+    if manifest is None:
+        raise RuntimeError("Round-trip manifest is missing")
+    raw_slides = manifest.get("slides")
+    if not isinstance(raw_slides, list):
+        raise RuntimeError("Round-trip manifest slides must be an array")
+    slide_rows = {
+        int(row["index"]): row
+        for row in raw_slides
+        if isinstance(row, dict) and isinstance(row.get("index"), int)
+    }
+    sidecars = manifest.get("sidecars")
+    animation = sidecars.get("animations") if isinstance(sidecars, dict) else None
+    animation_file = animation.get("file") if isinstance(animation, dict) else None
+    if not isinstance(animation_file, str):
+        raise RuntimeError(
+            "Round-trip manifest must declare sidecars.animations.file"
+        )
+    try:
+        animation_config = json.loads(
+            (project_path / animation_file).read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            f"Cannot read round-trip animation sidecar: {exc}"
+        ) from exc
+    if not isinstance(animation_config, dict):
+        raise RuntimeError("Round-trip animation sidecar must be a JSON object")
+    animation_config = _roundtrip_animation_config_for_pages(
+        animation_config,
+        pages,
+    )
+    baseline = animation.get("baseline")
+    if not isinstance(baseline, dict):
+        # Older workspaces stored only a combined hash. Recover their import
+        # projection in memory from the immutable source, without publishing it.
+        from pptx_to_svg.converter import ConvertOptions, convert_pptx_to_svg
+
+        baseline = convert_pptx_to_svg(
+            source_pptx_path(project_path),
+            options=ConvertOptions(inheritance_mode="both", roundtrip=True),
+        ).animation_config
+    animation_defaults = _as_dict(_as_dict(animation_config.get("defaults")).get("animation"))
+    baseline_defaults = _as_dict(_as_dict(baseline.get("defaults")).get("animation"))
+    defaults_transition = _as_dict(_as_dict(animation_config.get("defaults")).get("transition"))
+    baseline_defaults_transition = _as_dict(_as_dict(baseline.get("defaults")).get("transition"))
+
+    documents = authoring_report.get("documents")
+    if not isinstance(documents, list):
+        raise RuntimeError("Authoring round-trip report documents must be an array")
+    pages_by_file = {page.svg_name: page for page in pages}
+    if len(documents) != len(pages):
+        raise RuntimeError(
+            "Authoring round-trip report differs from the output page plan"
+        )
+    patches: dict[int, RoundtripSlidePatch] = {}
+    for raw in documents:
+        if not isinstance(raw, dict) or not isinstance(raw.get("file"), str):
+            raise RuntimeError("Authoring round-trip document report is incomplete")
+        page = pages_by_file.get(str(raw["file"]))
+        if page is None:
+            raise RuntimeError(
+                f"Unexpected authoring round-trip slide name: {raw['file']}"
+            )
+        if raw.get("source_slide") != page.source_slide:
+            raise RuntimeError(
+                f"Authoring round-trip source mapping changed for {page.svg_name}"
+            )
+        index = page.output_index
+        if index in passthrough_slides:
+            continue
+        row = slide_rows.get(page.source_slide)
+        if row is None:
+            raise RuntimeError(
+                f"Round-trip manifest has no source slide {page.source_slide} "
+                "for authoring overlay"
+            )
+        slide_config = _as_dict(
+            _as_dict(animation_config.get("slides")).get(page.svg_stem)
+        )
+        baseline_slide = _as_dict(
+            _as_dict(baseline.get("slides")).get(Path(page.source_svg_name).stem)
+        )
+        slide_transition_config = _as_dict(slide_config.get("transition"))
+        baseline_transition = _as_dict(baseline_slide.get("transition"))
+        def _transition_key_changed(key: str) -> bool:
+            # A slide row wins; otherwise a user-edited default (different from
+            # the import baseline default) is a deck-wide request.
+            if key in slide_transition_config:
+                return slide_transition_config[key] != baseline_transition.get(key)
+            return (
+                key in defaults_transition
+                and defaults_transition[key] != baseline_defaults_transition.get(key)
+            )
+
+        transition_replaced = force_transition_replaced or any(
+            _transition_key_changed(key)
+            for key in ("effect", "effect_options", "duration", "sound")
+        )
+        advance_changed = force_advance_changed or _transition_key_changed("auto_advance")
+        transition_changed = force_transition_changed or transition_replaced or advance_changed
+        animation_changed = force_animation_changed or (
+            (
+                ("animation" in slide_config or animation_defaults != baseline_defaults)
+                and resolve_slide_animation_config(animation_defaults, _as_dict(slide_config.get("animation")))
+                != resolve_slide_animation_config(baseline_defaults, _as_dict(baseline_slide.get("animation")))
+            )
+            or (
+                "groups" in slide_config
+                and _as_dict(slide_config.get("groups")) != _as_dict(baseline_slide.get("groups"))
+            )
+        )
+        motion_changed = (
+            force_motion_changed
+            or transition_changed
+            or animation_changed
+        )
+
+        def _ref_set(field: str) -> frozenset[str]:
+            value = raw.get(field)
+            if not isinstance(value, list) or not all(
+                isinstance(item, str) for item in value
+            ):
+                raise RuntimeError(
+                    f"Authoring round-trip slide {index} has invalid {field}"
+                )
+            return frozenset(value)
+
+        authoring_visual_changed = (
+            force_visual_changed
+            or int(raw.get("edited_refs") or 0) > 0
+            or int(raw.get("deleted_refs") or 0) > 0
+            or int(raw.get("authored_unreferenced") or 0) > 0
+            or raw.get("defs_changed") is True
+        )
+        patches[index] = RoundtripSlidePatch(
+            source_ref_ids=_ref_set("source_ref_ids"),
+            edited_ref_ids=_ref_set("edited_ref_ids"),
+            deleted_ref_ids=_ref_set("deleted_ref_ids"),
+            visual_changed=(
+                authoring_visual_changed
+                or index in changed_resource_pages
+            ),
+            authoring_visual_changed=authoring_visual_changed,
+            motion_changed=motion_changed,
+            transition_changed=transition_changed,
+            transition_replaced=transition_replaced,
+            animation_changed=animation_changed,
+            advance_changed=advance_changed,
+            notes_changed=(
+                force_notes_changed
+                or _roundtrip_note_changed(project_path, row, page)
+            ),
+        )
+    return patches
+
+
+def _report_roundtrip_omitted_opaque_payloads(
+    project_path: Path,
+    pages: tuple[RoundtripPage, ...],
+) -> None:
+    """Report omitted source slides whose private payloads drop with the page."""
+    manifest = load_roundtrip_manifest(project_path)
+    if manifest is None:
+        return
+    resources = manifest.get("resources")
+    items = resources.get("items") if isinstance(resources, dict) else None
+    raw_slides = manifest.get("slides")
+    if not isinstance(items, list) or not isinstance(raw_slides, list):
+        return
+    slide_rows = {
+        int(row["index"]): row
+        for row in raw_slides
+        if isinstance(row, dict) and isinstance(row.get("index"), int)
+    }
+    kept_source_slides = {page.source_slide for page in pages}
+    omitted_payloads: dict[int, set[str]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("kind")
+        source_parts = item.get("sourceParts")
+        chart_native_payload = (
+            kind == "native-payload"
+            and isinstance(source_parts, list)
+            and bool(source_parts)
+            and all(
+                isinstance(source_part, str)
+                and source_part.startswith("ppt/charts/")
+                for source_part in source_parts
+            )
+        )
+        if chart_native_payload:
+            continue
+        payload_kind = {
+            "audio": "audio",
+            "sound": "audio",
+            "video": "video",
+            "native-payload": "opaque native payload",
+        }.get(kind)
+        if payload_kind is None:
+            continue
+        for index in _resource_slide_indices(
+            item,
+            slide_rows,
+            include_structure=False,
+        ):
+            if index not in kept_source_slides:
+                omitted_payloads.setdefault(index, set()).add(payload_kind)
+    if not omitted_payloads:
+        return
+    details = "; ".join(
+        f"source slide {index}: {', '.join(sorted(kinds))}"
+        for index, kinds in sorted(omitted_payloads.items())
+    )
+    print(
+        "Note: page_plan.json omits source slide(s) whose private payloads "
+        "are dropped with the page: " + details,
+        file=sys.stderr,
+    )
+
+
+def _opaque_roundtrip_slide_dependencies(
+    project_path: Path,
+) -> dict[int, list[str]]:
+    """Map source slides that own video/audio/opaque relationships."""
+    manifest = load_roundtrip_manifest(project_path)
+    if manifest is None:
+        return {}
+    resources = manifest.get('resources')
+    items = resources.get('items') if isinstance(resources, dict) else None
+    if not isinstance(items, list):
+        return {}
+    raw_slides = manifest.get("slides")
+    if not isinstance(raw_slides, list):
+        return {}
+    slide_rows = {
+        int(row["index"]): row
+        for row in raw_slides
+        if isinstance(row, dict) and isinstance(row.get("index"), int)
+    }
+    dependencies: dict[int, list[str]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get('kind')
+        owners = _resource_owner_parts(item)
+        notes_owned = any(
+            owner.startswith("ppt/notesSlides/notesSlide")
+            for owner in owners
+        )
+        source_parts = item.get('sourceParts')
+        chart_native_payload = (
+            kind == 'native-payload'
+            and isinstance(source_parts, list)
+            and bool(source_parts)
+            and all(
+                isinstance(source_part, str)
+                and source_part.startswith('ppt/charts/')
+                for source_part in source_parts
+            )
+        )
+        if (
+            not notes_owned
+            and kind not in {'audio', 'native-payload', 'video'}
+        ) or chart_native_payload:
+            continue
+        workspace_path = item.get('workspacePath')
+        if not isinstance(workspace_path, str):
+            continue
+        for index in _resource_slide_indices(
+            item,
+            slide_rows,
+            include_structure=False,
+        ):
+            dependencies.setdefault(index, []).append(workspace_path)
+    return {
+        index: sorted(set(paths))
+        for index, paths in dependencies.items()
+    }
+
+
+def _opaque_roundtrip_dependency_owner_refs(
+    project_path: Path,
+    dependencies: dict[int, list[str]],
+) -> dict[int, dict[str, frozenset[str]]]:
+    """Map opaque resource paths to owning Slide-local source refs."""
+    manifest = load_roundtrip_manifest(project_path)
+    if manifest is None:
+        return {}
+    raw_slides = manifest.get("slides")
+    resources = manifest.get("resources")
+    items = resources.get("items") if isinstance(resources, dict) else None
+    if not isinstance(raw_slides, list) or not isinstance(items, list):
+        return {}
+    slide_rows = {
+        int(row["index"]): row
+        for row in raw_slides
+        if isinstance(row, dict) and isinstance(row.get("index"), int)
+    }
+    package_parts: dict[int, dict[str, str]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        workspace_path = item.get("workspacePath")
+        package_part = item.get("packagePart")
+        if not isinstance(workspace_path, str) or not isinstance(
+            package_part,
+            str,
+        ):
+            continue
+        for index in _resource_slide_indices(
+            item,
+            slide_rows,
+            include_structure=False,
+        ):
+            if workspace_path in dependencies.get(index, ()):
+                package_parts.setdefault(index, {})[workspace_path] = (
+                    package_part
+                )
+
+    relationship_namespace = (
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    )
+    presentation_namespace = (
+        "http://schemas.openxmlformats.org/presentationml/2006/main"
+    )
+    shape_tags = {
+        f"{{{presentation_namespace}}}{name}"
+        for name in ("cxnSp", "graphicFrame", "grpSp", "pic", "sp")
+    }
+    owner_paths: dict[int, dict[str, set[str]]] = {}
+    source_path = source_pptx_path(project_path)
+    try:
+        with zipfile.ZipFile(source_path) as archive:
+            names = set(archive.namelist())
+            for index, paths_by_package_part in package_parts.items():
+                row = slide_rows.get(index)
+                source_part = row.get("sourcePart") if row else None
+                if not isinstance(source_part, str):
+                    continue
+                rels_part = posixpath.join(
+                    posixpath.dirname(source_part),
+                    "_rels",
+                    posixpath.basename(source_part) + ".rels",
+                )
+                if source_part not in names or rels_part not in names:
+                    continue
+                rels_root = ET.fromstring(archive.read(rels_part))
+                paths_by_relationship: dict[str, set[str]] = {}
+                for relationship in rels_root:
+                    relationship_id = relationship.get("Id")
+                    target = relationship.get("Target")
+                    if (
+                        not relationship_id
+                        or not target
+                        or relationship.get("TargetMode") == "External"
+                    ):
+                        continue
+                    target_part = posixpath.normpath(posixpath.join(
+                        posixpath.dirname(source_part),
+                        unquote(target),
+                    ))
+                    for workspace_path, package_part in (
+                        paths_by_package_part.items()
+                    ):
+                        if target_part == package_part:
+                            paths_by_relationship.setdefault(
+                                relationship_id,
+                                set(),
+                            ).add(workspace_path)
+                if not paths_by_relationship:
+                    continue
+                slide_root = ET.fromstring(archive.read(source_part))
+                parent_by_id = {
+                    id(child): parent
+                    for parent in slide_root.iter()
+                    for child in list(parent)
+                }
+                for element in slide_root.iter():
+                    relationship_ids = {
+                        value
+                        for name, value in element.attrib.items()
+                        if name.startswith(f"{{{relationship_namespace}}}")
+                        and value in paths_by_relationship
+                    }
+                    if not relationship_ids:
+                        continue
+                    current: ET.Element | None = element
+                    while current is not None:
+                        if current.tag in shape_tags:
+                            non_visual = next(
+                                (
+                                    candidate
+                                    for candidate in current.iter()
+                                    if candidate.tag
+                                    == f"{{{presentation_namespace}}}cNvPr"
+                                ),
+                                None,
+                            )
+                            shape_id = (
+                                non_visual.get("id")
+                                if non_visual is not None
+                                else None
+                            )
+                            if shape_id:
+                                source_ref = f"slide:{shape_id}"
+                                for relationship_id in relationship_ids:
+                                    owner_paths.setdefault(index, {}).setdefault(
+                                        source_ref,
+                                        set(),
+                                    ).update(
+                                        paths_by_relationship[relationship_id]
+                                    )
+                        current = parent_by_id.get(id(current))
+    except (ET.ParseError, KeyError, OSError, zipfile.BadZipFile) as exc:
+        raise RuntimeError(
+            f"Cannot resolve opaque round-trip resource owners: {exc}"
+        ) from exc
+    return {
+        index: {
+            source_ref: frozenset(paths)
+            for source_ref, paths in refs.items()
+        }
+        for index, refs in owner_paths.items()
+    }
 
 
 _PPTX_STRUCTURE_SECTION_RE = re.compile(
@@ -129,6 +971,145 @@ _CSS_GENERIC_FONT_FAMILIES = frozenset({
 
 class PptxPostflightValidationError(RuntimeError):
     """Reject a generated PPTX that fails package postflight validation."""
+
+
+def _load_diagnostic_import_source(
+    project_path: Path,
+) -> tuple[
+    ThemeColorSpec | None,
+    ThemeFontSpec | None,
+    bytes | None,
+    EmbeddedFontBundle | None,
+]:
+    """Load source-document evidence emitted for diagnostic round-trip."""
+    report_path = conversion_report_path(project_path)
+    if not report_path.is_file():
+        return None, None, None, None
+    try:
+        report = json.loads(report_path.read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ThemeColorError(
+            f'Cannot read diagnostic import theme from {report_path}: {exc}'
+        ) from exc
+    if not isinstance(report, dict):
+        raise ThemeColorError(
+            f'Diagnostic import report must be a JSON object: {report_path}'
+        )
+    source_document = report.get('sourceDocument')
+    if not isinstance(source_document, dict):
+        return None, None, None, None
+    theme = source_document.get('theme')
+    if not isinstance(theme, dict):
+        color_spec = None
+        font_spec = None
+        theme_xml = None
+    else:
+        color_spec = _diagnostic_theme_color_spec(theme.get('colors'))
+        font_spec = _diagnostic_theme_font_spec(theme.get('fonts'))
+        theme_xml = _diagnostic_theme_xml(theme.get('ooxml'))
+    embedded_fonts = load_embedded_font_bundle(
+        project_path,
+        source_document.get('embeddedFonts'),
+    )
+    return color_spec, font_spec, theme_xml, embedded_fonts
+
+
+def _diagnostic_theme_color_spec(value: object) -> ThemeColorSpec | None:
+    """Build an exact source color scheme without semantic role promotion."""
+    if not isinstance(value, dict):
+        return None
+    required_slots = {
+        'dk1', 'lt1', 'dk2', 'lt2',
+        'accent1', 'accent2', 'accent3',
+        'accent4', 'accent5', 'accent6',
+        'hlink', 'folHlink',
+    }
+    slots: dict[str, str] = {}
+    for slot, raw_color in value.items():
+        if slot not in required_slots or not isinstance(raw_color, str):
+            continue
+        color = raw_color.strip().lstrip('#').upper()
+        if re.fullmatch(r'[0-9A-F]{6}', color):
+            slots[slot] = color
+    if not required_slots.issubset(slots):
+        return None
+    return ThemeColorSpec(
+        slots=slots,
+        roles={},
+        role_slots={},
+    )
+
+
+def _diagnostic_theme_font_spec(value: object) -> ThemeFontSpec | None:
+    """Build exact major/minor theme faces from importer evidence."""
+    if not isinstance(value, dict):
+        return None
+
+    def face(prefix: str) -> ThemeFontFace | None:
+        latin = value.get(f'{prefix}Latin')
+        east_asian = (
+            value.get(f'{prefix}EastAsia')
+            or value.get(f'{prefix}ScriptHans')
+            or latin
+        )
+        complex_script = value.get(f'{prefix}ComplexScript') or latin
+        if not all(
+            isinstance(item, str) and item.strip()
+            for item in (latin, east_asian, complex_script)
+        ):
+            return None
+        return ThemeFontFace(
+            latin=latin.strip(),
+            ea=east_asian.strip(),
+            cs=complex_script.strip(),
+        )
+
+    major = face('major')
+    minor = face('minor')
+    if major is None or minor is None:
+        return None
+    return ThemeFontSpec(
+        major=major,
+        minor=minor,
+        major_family=major.ea,
+        minor_family=minor.ea,
+    )
+
+
+def _diagnostic_theme_xml(value: object) -> bytes | None:
+    """Validate the complete source theme part stored by pptx_to_svg."""
+    if not isinstance(value, dict):
+        return None
+    if value.get('encoding') != 'base64':
+        raise ThemeColorError('Diagnostic source theme OOXML must use base64')
+    payload = value.get('payload')
+    expected_sha256 = value.get('sha256')
+    if not isinstance(payload, str) or not isinstance(expected_sha256, str):
+        raise ThemeColorError(
+            'Diagnostic source theme OOXML requires payload and sha256'
+        )
+    try:
+        raw = base64.b64decode(payload, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ThemeColorError(
+            'Diagnostic source theme OOXML payload is not canonical base64'
+        ) from exc
+    if hashlib.sha256(raw).hexdigest() != expected_sha256.strip().lower():
+        raise ThemeColorError(
+            'Diagnostic source theme OOXML sha256 does not match its payload'
+        )
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError as exc:
+        raise ThemeColorError(
+            f'Diagnostic source theme OOXML is malformed: {exc}'
+        ) from exc
+    dml_namespace = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+    if root.tag != f'{{{dml_namespace}}}theme':
+        raise ThemeColorError(
+            'Diagnostic source theme OOXML root must be a:theme'
+        )
+    return raw
 
 
 @dataclass
@@ -170,7 +1151,7 @@ def _package_part_counts(pptx_path: Path) -> dict[str, object]:
         'zip_integrity': 'passed' if bad_member is None else 'failed',
         'corrupt_member': bad_member,
         'slides': count(r'ppt/slides/slide\d+\.xml'),
-        'notes': count(r'ppt/notesSlides/notesSlide\d+\.xml'),
+        'notes': count(r'ppt/notesSlides/notesSlide[^/]+\.xml'),
         'masters': count(r'ppt/slideMasters/slideMaster\d+\.xml'),
         'layouts': count(r'ppt/slideLayouts/slideLayout\d+\.xml'),
     }
@@ -358,6 +1339,8 @@ def _postflight_warning_summaries(
     external_image_count: int,
     generic_font_stack_count: int,
     unsafe_font_face_count: int,
+    dangerous_nonconforming_export: bool,
+    dangerous_normalization_count: int,
 ) -> tuple[str, ...]:
     """Return stable warning summaries for the terminal receipt."""
     warnings: list[str] = []
@@ -373,7 +1356,41 @@ def _postflight_warning_summaries(
         warnings.append(f'generic_only_font_stacks={generic_font_stack_count}')
     if unsafe_font_face_count:
         warnings.append(f'unsafe_exported_font_faces={unsafe_font_face_count}')
+    if dangerous_nonconforming_export:
+        warnings.append('dangerous_nonconforming_svg_export=enabled')
+    if dangerous_normalization_count:
+        warnings.append(
+            f'dangerous_compatibility_normalizations={dangerous_normalization_count}'
+        )
     return tuple(warnings)
+
+
+def _conversion_trace_dangerous_normalization_count(
+    conversion_trace_path: Path | None,
+) -> int:
+    """Count compatibility normalizations retained in a conversion trace."""
+    if conversion_trace_path is None or not conversion_trace_path.is_file():
+        return 0
+    try:
+        payload = json.loads(conversion_trace_path.read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return 0
+    if not isinstance(payload, dict):
+        return 0
+    count = 0
+    slides = payload.get('slides')
+    if isinstance(slides, list):
+        for slide in slides:
+            if not isinstance(slide, dict):
+                continue
+            normalizations = slide.get('dangerous_normalizations')
+            if not isinstance(normalizations, list):
+                continue
+            count += sum(
+                1 for normalization in normalizations
+                if isinstance(normalization, dict)
+            )
+    return count
 
 
 def _write_postflight_report(
@@ -386,6 +1403,8 @@ def _write_postflight_report(
     backup_path: Path | None,
     conversion_trace_path: Path | None,
     deck_motion: dict[str, object],
+    dangerous_nonconforming_export: bool,
+    authoring_roundtrip: dict[str, object] | None,
 ) -> _PostflightReceipt:
     """Write the unified package/resource audit for a successful PPTX."""
     try:
@@ -404,13 +1423,22 @@ def _write_postflight_report(
             f"{package['slides']} != {len(svg_files)}"
         )
     source_audit = _source_resource_audit(svg_files)
-    source_fingerprint = _svg_source_fingerprint(svg_files)
+    source_fingerprint = (
+        roundtrip_source_fingerprint(project_path)
+        if authoring_roundtrip is not None
+        else _svg_source_fingerprint(svg_files)
+    )
     quality = _quality_report_context(project_path, source_fingerprint)
     quality_gate, introduced_warning_count = _quality_gate_status(quality)
     unresolved_tokens = source_audit['unresolved_template_tokens']
     external_image_count = source_audit['images']['external']
     generic_only_font_stacks = source_audit['fonts']['generic_only_stacks']
     unsafe_font_faces = source_audit['fonts']['unsafe_exported_faces']
+    dangerous_normalization_count = (
+        _conversion_trace_dangerous_normalization_count(
+            conversion_trace_path
+        )
+    )
     if quality_gate == 'failed':
         report_status = 'failed'
     elif (
@@ -420,6 +1448,7 @@ def _write_postflight_report(
         and not unsafe_font_faces
         and not introduced_warning_count
         and quality_gate == 'passed'
+        and not dangerous_nonconforming_export
     ):
         report_status = 'passed'
     else:
@@ -438,6 +1467,7 @@ def _write_postflight_report(
             'svg_slide_count': len(svg_files),
             'layout_definition_count': len(layout_definition_files),
             'fingerprint': source_fingerprint,
+            'authoring_roundtrip': authoring_roundtrip,
         },
         'package': package,
         'checks': {
@@ -451,6 +1481,17 @@ def _write_postflight_report(
             ),
             'transitions': 'enforced-at-build',
             'animations': 'enforced-at-build',
+            'project_svg_contract': 'enforced-at-build',
+            'compatibility_normalization': (
+                'warning'
+                if dangerous_nonconforming_export
+                else 'not-applicable'
+            ),
+            'authoring_roundtrip': (
+                'materialized-from-flat-authoring'
+                if authoring_roundtrip is not None
+                else 'not-applicable'
+            ),
             'quality_gate': quality_gate,
             'quality_warnings': (
                 'passed' if not introduced_warning_count else 'warning'
@@ -469,6 +1510,14 @@ def _write_postflight_report(
         },
         'quality': quality,
         'resources': source_audit,
+        'export_policy': {
+            'project_svg_contract': (
+                'strict-after-dangerous-normalization'
+                if dangerous_nonconforming_export
+                else 'strict'
+            ),
+            'dangerous_normalization_count': dangerous_normalization_count,
+        },
         'deck_motion': deck_motion,
         'backup_path': str(backup_path.resolve()) if backup_path else None,
         'conversion_trace_path': (
@@ -489,6 +1538,8 @@ def _write_postflight_report(
         external_image_count=external_image_count,
         generic_font_stack_count=len(generic_only_font_stacks),
         unsafe_font_face_count=len(unsafe_font_faces),
+        dangerous_nonconforming_export=dangerous_nonconforming_export,
+        dangerous_normalization_count=dangerous_normalization_count,
     )
     return _PostflightReceipt(
         output_path=output_path,
@@ -528,9 +1579,14 @@ def _load_deck_motion_handoff(
     if report.get('status') not in {'passed', 'passed-with-warnings'}:
         raise ValueError('deck-motion handoff report is not a successful export')
     source = _as_dict(report.get('source'))
-    if source.get('fingerprint') != _svg_source_fingerprint(svg_files):
+    current_fingerprint = (
+        roundtrip_source_fingerprint(project_path)
+        if source.get('authoring_roundtrip') is not None
+        else _svg_source_fingerprint(svg_files)
+    )
+    if source.get('fingerprint') != current_fingerprint:
         raise ValueError(
-            'deck-motion handoff does not match the current svg_output; '
+            'deck-motion handoff does not match the current source inputs; '
             'run the base export again'
         )
     motion = report.get('deck_motion')
@@ -595,26 +1651,54 @@ def _declared_canvas_viewbox(project_path: Path) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
+_XML_LANG_ATTR = '{http://www.w3.org/XML/1998/namespace}lang'
+
+
+def _svg_root_language(project_path: Path) -> str | None:
+    """Return the ``lang`` / ``xml:lang`` the first svg_output page declares.
+
+    Quick has no lock; its pages carry the deck language on the root
+    ``<svg lang="...">`` instead.
+    """
+    pages = discover_slide_svgs(project_path / 'svg_output')
+    for page in pages[:1]:
+        try:
+            with open(str(page), 'rb') as page_file:
+                for _event, elem in ET.iterparse(page_file, events=('start',)):
+                    value = elem.get('lang') or elem.get(_XML_LANG_ATTR)
+                    if isinstance(value, str) and value.strip():
+                        try:
+                            return normalize_language_tag(value)
+                        except LanguageTagError as exc:
+                            raise LanguageTagError(
+                                f'{page.name} root lang is invalid: {exc}'
+                            ) from exc
+                    return None
+        except ET.ParseError:
+            return None
+    return None
+
+
 def _declared_primary_language(project_path: Path) -> str | None:
-    """Return the canonical content language declared by the execution lock."""
+    """Return the canonical content language: the lock's, else the first page's root lang."""
     lock_path = project_path / 'spec_lock.md'
     try:
         from update_spec import parse_lock
 
         lock = parse_lock(lock_path)
     except (OSError, ValueError):
-        return None
+        lock = {}
     communication = lock.get('communication', {})
     value = communication.get('primary_language')
-    if not isinstance(value, str) or not value.strip():
-        return None
-    try:
-        return normalize_language_tag(value)
-    except LanguageTagError as exc:
-        raise LanguageTagError(
-            'spec_lock.md communication.primary_language '
-            f'is invalid: {exc}'
-        ) from exc
+    if isinstance(value, str) and value.strip():
+        try:
+            return normalize_language_tag(value)
+        except LanguageTagError as exc:
+            raise LanguageTagError(
+                'spec_lock.md communication.primary_language '
+                f'is invalid: {exc}'
+            ) from exc
+    return _svg_root_language(project_path)
 
 
 def _print_structure_contract_error(
@@ -672,6 +1756,48 @@ def _native_object_fallbacks(svg_files: list[Path]) -> list[tuple[str, str, str]
     return fallbacks
 
 
+def _native_object_projection_findings(
+    svg_files: list[Path],
+) -> list[tuple[str, str, str]]:
+    """Return SVG-first Chart/Table details that native metadata would discard."""
+    findings: list[tuple[str, str, str]] = []
+    for svg_path in svg_files:
+        try:
+            root = ET.parse(svg_path).getroot()
+        except (OSError, ET.ParseError):
+            continue
+        parent_map = {
+            child: parent
+            for parent in root.iter()
+            for child in parent
+        }
+        for elem in root.iter():
+            if elem.tag.rsplit('}', 1)[-1] == 'metadata':
+                continue
+            if native_replacement_kind(elem) not in {'chart', 'table'}:
+                continue
+            marker_id = elem.get('id') or elem.get('data-name') or '<unnamed>'
+            ancestors: list[ET.Element] = []
+            parent = parent_map.get(elem)
+            while parent is not None and parent is not root:
+                if parent.tag.rsplit('}', 1)[-1] == 'g':
+                    ancestors.append(parent)
+                parent = parent_map.get(parent)
+            try:
+                warnings = native_object_projection_warnings(
+                    elem,
+                    ancestors=tuple(reversed(ancestors)),
+                    document_root=root,
+                )
+            except RuntimeError as exc:
+                warnings = [f"projection validation failed: {exc}"]
+            findings.extend(
+                (svg_path.name, marker_id, warning)
+                for warning in warnings
+            )
+    return findings
+
+
 def _release_blocked_graphics(
     svg_files: list[Path],
 ) -> list[tuple[str, str, str]]:
@@ -722,13 +1848,39 @@ def _recorded_narration_on_click_slides(
     animation: str | None,
     animation_trigger: str,
     animation_cli_overrides: dict[str, bool],
+    *,
+    roundtrip_source: Path | None = None,
+    roundtrip_pages: tuple[RoundtripPage, ...] = (),
+    roundtrip_patches: dict[int, RoundtripSlidePatch] | None = None,
 ) -> list[str]:
     """Return slides whose effective recorded-video animation trigger is on-click."""
     if animation_cli_overrides.get('animation') and animation is None:
         return []
     slides_cfg = _as_dict(_as_dict(animation_config).get('slides'))
     blocked: list[str] = []
+    preserved: dict[str, tuple[int, tuple[int, ...]]] = {}
+    if roundtrip_source is not None:
+        from pptx_to_svg.ooxml_loader import OoxmlPackage
+
+        with OoxmlPackage(roundtrip_source) as package:
+            for page in roundtrip_pages:
+                slide_patch = (roundtrip_patches or {}).get(page.output_index)
+                if slide_patch is not None and slide_patch.animation_changed:
+                    continue
+                source = package.get_slide(page.source_slide)
+                preserved[page.svg_stem] = (
+                    page.source_slide,
+                    read_slide_click_dependencies(ET.tostring(source.part.xml)),
+                )
     for svg_path in ref_files:
+        if svg_path.stem in preserved:
+            source_index, shape_ids = preserved[svg_path.stem]
+            if shape_ids:
+                blocked.append(
+                    f"{svg_path.stem} (source slide {source_index}; shape id(s): "
+                    + ', '.join(str(shape_id) for shape_id in shape_ids) + ')'
+                )
+            continue
         slide_cfg = _as_dict(slides_cfg.get(svg_path.stem))
         anim_cfg = _as_dict(slide_cfg.get('animation'))
 
@@ -789,10 +1941,18 @@ def _resolve_animation_config_source(
     *,
     recorded_narration: bool,
     no_animations: bool,
+    roundtrip: bool,
 ) -> str | None:
     """Resolve the animation sidecar selected for this export."""
     if requested_config is not None or not recorded_narration or no_animations:
         return requested_config
+
+    if roundtrip:
+        return (
+            'animations.json'
+            if (project_path / 'animations.json').is_file()
+            else None
+        )
 
     canonical_exists = (project_path / 'animations.json').is_file()
     narration_exists = (project_path / 'narration_animations.json').is_file()
@@ -804,6 +1964,7 @@ def _resolve_animation_config_source(
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point for the SVG to PPTX conversion tool."""
     require_skill_integrity()
+    roundtrip_summary_line: str | None = None
     transition_choices = [
         'none',
         *NATIVE_TRANSITION_KEYS,
@@ -817,13 +1978,14 @@ def main(argv: list[str] | None = None) -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f'''
 Examples:
-    %(prog)s examples/ppt169_demo                         # Default: native pptx -> exports/, svg_output -> backup/<ts>/
-    %(prog)s examples/ppt169_demo -o out.pptx            # Explicit path (no backup/)
-    %(prog)s projects/quick_generate_demo --quick-generate # Lockless flat export with normal postflight
+    %(prog)s projects/ppt169_demo                         # Default: native pptx -> exports/, svg_output -> backup/<ts>/
+    %(prog)s projects/ppt169_demo -o out.pptx            # Explicit path (no backup/)
+    %(prog)s projects/quick_generate_demo --quick-generate # Lockless inferred structure + postflight
+    %(prog)s <import_workspace> --roundtrip               # authoring-svg-flat/ with source restoration
 
     # Disable transition / change transition effect
-    %(prog)s examples/ppt169_demo -t none
-    %(prog)s examples/ppt169_demo -t push --transition-duration 1.0
+    %(prog)s projects/ppt169_demo -t none
+    %(prog)s projects/ppt169_demo -t push --transition-duration 1.0
 
 SVG source directory (-s):
     output   - svg_output (hand-authored source; native default)
@@ -870,7 +2032,7 @@ Speaker notes:
     - Disabled by default in Quick Generate; use --with-notes to enable
 
 Recorded narration:
-    %(prog)s examples/ppt169_demo --recorded-narration audio \\
+    %(prog)s projects/ppt169_demo --recorded-narration audio \\
       --inherit-motion-from validation/<base>.report.json
     - Keeps speaker notes when enabled
     - Prepares PowerPoint recorded timings and narrations
@@ -884,7 +2046,7 @@ Recorded narration:
     - Sets slide auto-advance from audio duration so video export can use
       "recorded timings and narrations"
     - Rejects on-click object animations; use after-previous or with-previous
-    %(prog)s examples/ppt169_demo --narration-audio-dir audio
+    %(prog)s projects/ppt169_demo --narration-audio-dir audio
     - Lower-level audio embedding: embeds matched files but allows partial matches
     - Use only when you do not need a complete recorded-timings export
 ''',
@@ -893,8 +2055,8 @@ Recorded narration:
     parser.add_argument('project_path', type=str, help='Project directory path')
     parser.add_argument('-o', '--output', type=str, default=None, help='Output file path')
     parser.add_argument('-s', '--source', type=str, default=None,
-                        help='Native SVG source directory. Default: svg_output/. '
-                             'Pass output/final/<name> only for diagnostics.')
+                        help='Project-relative SVG source directory. Default: '
+                             'svg_output/. Pass another directory explicitly.')
     parser.add_argument('-f', '--format', type=str,
                         choices=list(CANVAS_FORMATS.keys()), default=None,
                         help='Require SVG canvases to match this registered format')
@@ -905,8 +2067,43 @@ Recorded narration:
         help=(
             'Export a Quick Generate SVG roster from svg_output/ without '
             'spec_lock.md. Require a matching final quality report, infer one '
-            'consistent canvas, use a flat package with converter defaults, '
-            'and support normal export capabilities.'
+            'consistent canvas, infer flat versus structured output from the '
+            'complete SVG roster, and support normal export capabilities.'
+        ),
+    )
+    parser.add_argument(
+        '--primary-language',
+        type=str,
+        default=None,
+        metavar='TAG',
+        help=(
+            'Deck language as a BCP-47 tag (vi-VN, he-IL). Overrides '
+            'spec_lock.md communication.primary_language and the root '
+            '<svg lang="..."> of the first page; sets run proofing language, '
+            'right-to-left defaults, theme script slots, and docProps.'
+        ),
+    )
+    parser.add_argument(
+        '--roundtrip',
+        action='store_true',
+        help=(
+            'Source-preserving import export from authoring-svg-flat/ against '
+            'the validated sources/source.pptx and analysis contracts emitted '
+            'by pptx_to_svg.py --roundtrip. Unchanged authoring objects recover '
+            'their source semantics; edited inline objects remain authored SVG, '
+            'while atomic source-proxy edits fail closed. No '
+            'other -s/--source directory is accepted in round-trip mode.'
+        ),
+    )
+    parser.add_argument(
+        '--enable-dangerous-nonconforming-svg-export',
+        action='store_true',
+        help=(
+            'Apply supported compatibility normalizations to svg_output/ or an '
+            'explicit -s/--source, then run the ordinary strict converter. '
+            'Cannot be combined with --roundtrip or --quick-generate. '
+            'Unnormalized contract, resource, conversion, relationship, and '
+            'package failures remain blocking.'
         ),
     )
 
@@ -955,9 +2152,9 @@ Recorded narration:
         action='store_true',
         default=False,
         help=(
-            'Replace explicit data-pptx-replace-with chart/table groups with '
+            'Replace opt-in data-pptx-replace-with chart/table groups with '
             'PowerPoint native Chart/Table objects. This data-object route may '
-            'normalize styling or omit fallback-only visuals. Default off: groups '
+            'normalize styling or omit fallback-only visuals. Default-off markers '
             'export as editable SVG-derived DrawingML shapes. The default-flow '
             'output uses <project>_<ts>_native_charts_tables.pptx.'
         ),
@@ -982,7 +2179,9 @@ Recorded narration:
         help=(
             'PPTX structure strategy for native export. Omitting this flag reads '
             'spec_lock.md; a legacy lock without pptx_structure.mode defaults to '
-            'flat. Flat is the style-reference/free-design/brand-only release mode and '
+            'flat. Quick Generate requires omission and infers flat/structured '
+            'from its complete SVG roster. Flat is the style-reference/free-design/'
+            'brand-only release mode and '
             'builds one clean project-owned Master plus Blank Layout while keeping '
             'all SVG objects slide-local; structured is the mirror/layout reuse '
             'mode and requires complete explicit metadata. baseline, template, '
@@ -1031,6 +2230,10 @@ Recorded narration:
                         help='Transition duration in seconds (default: 0.4)')
     parser.add_argument('--auto-advance', type=non_negative_float, default=None,
                         help='Auto-advance interval in seconds (default: manual advance)')
+    parser.add_argument('--kiosk', action='store_true',
+                        help='Export as a looping kiosk show: PowerPoint ignores click and '
+                             'keyboard advance, so only --auto-advance timings and hyperlinks '
+                             'move between slides')
 
     parser.add_argument('-a', '--animation', type=str, choices=animation_choices,
                         default=None,
@@ -1128,6 +2331,7 @@ Recorded narration:
     raw_argv = list(argv) if argv is not None else sys.argv[1:]
     legacy_native_objects = '--native-objects' in raw_argv
     args = parser.parse_args(raw_argv)
+    compatibility_export = args.enable_dangerous_nonconforming_svg_export
     if legacy_native_objects:
         print(
             'Warning: --native-objects is deprecated; use '
@@ -1153,12 +2357,58 @@ Recorded narration:
         )
         return 1
 
+    if compatibility_export:
+        conflicts: list[str] = []
+        if args.roundtrip:
+            conflicts.append('--roundtrip')
+        if args.quick_generate:
+            conflicts.append('--quick-generate')
+        if args.pptx_structure not in {None, 'flat'}:
+            conflicts.append('--pptx-structure must be omitted or flat')
+        if conflicts:
+            print(
+                'Error: --enable-dangerous-nonconforming-svg-export cannot '
+                'be used because ' + ', '.join(conflicts),
+                file=sys.stderr,
+            )
+            return 1
+        print(
+            'Warning: dangerous nonconforming SVG export is enabled. Supported '
+            'compatibility rewrites will run before strict conversion; visual '
+            'fidelity must be reviewed.',
+            file=sys.stderr,
+        )
+
+    if args.roundtrip:
+        conflicts: list[str] = []
+        if args.quick_generate:
+            conflicts.append('--quick-generate')
+        if args.source not in {None, AUTHORING_SVG_FLAT_DIR.as_posix()}:
+            conflicts.append(
+                '-s/--source must be omitted or authoring-svg-flat'
+            )
+        if args.pptx_structure is not None:
+            conflicts.append('--pptx-structure must be omitted')
+        if conflicts:
+            print(
+                "Error: --roundtrip cannot be used because "
+                + ", ".join(conflicts),
+                file=sys.stderr,
+            )
+            return 1
+        args.source = AUTHORING_SVG_FLAT_DIR.as_posix()
+        args.pptx_structure = 'preserve'
+
+    diagnostic_source = args.source not in {None, 'output'}
+
     if args.quick_generate:
         conflicts: list[str] = []
         if args.source not in {None, 'output'}:
             conflicts.append('--source must be omitted or output')
-        if args.pptx_structure not in {None, 'flat'}:
-            conflicts.append('--pptx-structure must be omitted or flat')
+        if args.pptx_structure is not None:
+            conflicts.append(
+                '--pptx-structure must be omitted; Quick infers it from svg_output/'
+            )
         if conflicts:
             print(
                 "Error: --quick-generate cannot be combined with: "
@@ -1168,18 +2418,60 @@ Recorded narration:
             return 1
         if not args.with_notes:
             args.no_notes = True
+    elif (diagnostic_source or compatibility_export) and not args.roundtrip:
+        if args.pptx_structure not in {None, 'flat'}:
+            print(
+                "Error: a diagnostic or dangerous compatibility source "
+                "supports only --pptx-structure flat",
+                file=sys.stderr,
+            )
+            return 1
         args.pptx_structure = 'flat'
 
     project_path = Path(args.project_path)
     if not project_path.exists():
         print(f"Error: Path does not exist: {project_path}")
         return 1
+    page_plan_path = project_path / ROUNDTRIP_PAGE_PLAN_PATH
+    if page_plan_path.exists() and not args.roundtrip:
+        print(
+            "Error: page_plan.json is valid only for --roundtrip export from "
+            "a pptx_to_svg.py --roundtrip workspace",
+            file=sys.stderr,
+        )
+        return 1
+    if page_plan_path.exists() and args.roundtrip:
+        required_roundtrip_paths = (
+            ROUNDTRIP_MANIFEST_PATH,
+            native_structure_path(project_path).relative_to(project_path),
+            source_pptx_path(project_path).relative_to(project_path),
+        )
+        missing_roundtrip_paths = [
+            relative.as_posix()
+            for relative in required_roundtrip_paths
+            if not (project_path / relative).is_file()
+        ]
+        if missing_roundtrip_paths:
+            print(
+                "Error: page_plan.json requires a pptx_to_svg.py --roundtrip "
+                "workspace; missing: "
+                + ", ".join(missing_roundtrip_paths),
+                file=sys.stderr,
+            )
+            return 1
 
     structure_lock = None
     native_structure_contract = None
+    roundtrip_manifest: dict[str, object] | None = None
+    roundtrip_resources: tuple[WorkspaceResourceSpec, ...] = ()
     pptx_structure = args.pptx_structure
     lock_path = project_path / 'spec_lock.md'
-    if not args.quick_generate and not lock_path.is_file():
+    lockless_export = (
+        args.quick_generate
+        or diagnostic_source
+        or compatibility_export
+    )
+    if not lockless_export and not lock_path.is_file():
         print(
             "Error: spec_lock.md is required for release SVG export",
             file=sys.stderr,
@@ -1187,24 +2479,34 @@ Recorded narration:
         return 1
     declared_structure_mode = (
         None
-        if args.quick_generate
+        if lockless_export
         else _declared_pptx_structure_mode(project_path)
     )
     primary_language = None
-    if not args.quick_generate:
-        try:
-            primary_language = _declared_primary_language(project_path)
-        except LanguageTagError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 1
-        if primary_language is None:
-            print(
-                "Warning: spec_lock.md has no "
-                "communication.primary_language; using legacy per-run "
-                "language detection.",
-                file=sys.stderr,
+    try:
+        primary_language = (
+            normalize_language_tag(args.primary_language)
+            if args.primary_language
+            else _declared_primary_language(project_path)
+        )
+    except LanguageTagError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    if primary_language is None:
+        print(
+            "Warning: no deck language declared ("
+            + (
+                "root <svg lang=\"...\"> on the first page, or --primary-language"
+                if lockless_export
+                else "spec_lock.md communication.primary_language"
             )
-    if pptx_structure in _LEGACY_PPTX_STRUCTURE_MODES:
+            + "); using legacy per-run language detection.",
+            file=sys.stderr,
+        )
+    if (
+        pptx_structure in _LEGACY_PPTX_STRUCTURE_MODES
+        and not (args.roundtrip and pptx_structure == 'preserve')
+    ):
         _print_structure_contract_error(pptx_structure)
         return 1
     if (
@@ -1214,7 +2516,9 @@ Recorded narration:
         _print_structure_contract_error(declared_structure_mode)
         return 1
     if pptx_structure is None:
-        if declared_structure_mode is None:
+        if args.quick_generate:
+            pass
+        elif declared_structure_mode is None:
             pptx_structure = 'flat'
             print(
                 "Warning: spec_lock.md has no pptx_structure.mode; using flat "
@@ -1229,6 +2533,33 @@ Recorded narration:
             requested_mode='structured',
         )
         return 1
+
+    if args.roundtrip:
+        structure_lock = PptxStructureLock(
+            mode='preserve',
+            source_template=source_pptx_path(project_path),
+            native_structure=native_structure_path(project_path),
+        )
+        try:
+            native_structure_contract = load_native_structure_contract(
+                structure_lock,
+            )
+        except TemplateStructureError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        try:
+            roundtrip_manifest = load_roundtrip_manifest(project_path)
+            if roundtrip_manifest is None:
+                raise RuntimeError(
+                    "Round-trip export requires analysis/roundtrip_manifest.json"
+                )
+            roundtrip_resources = workspace_resource_specs(
+                project_path,
+                roundtrip_manifest,
+            )
+        except RuntimeError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
 
     if (
         pptx_structure in _RELEASE_PPTX_STRUCTURE_MODES
@@ -1250,9 +2581,15 @@ Recorded narration:
     theme_font_spec = None
     master_text_style_spec = None
     theme_color_spec = None
-    if pptx_structure in {'flat', 'structured'} and not args.quick_generate:
+    source_theme_xml = None
+    source_theme_xml_by_master = None
+    source_embedded_fonts = None
+    if (
+        pptx_structure in {'flat', 'structured'}
+        and not lockless_export
+    ):
         try:
-            theme_font_spec = load_theme_font_spec(project_path)
+            theme_font_spec = load_theme_font_spec(project_path, primary_language)
             master_text_style_spec = load_master_text_style_spec(project_path)
             theme_color_spec = load_theme_color_spec(project_path)
         except (ThemeFontError, ThemeColorError) as exc:
@@ -1273,6 +2610,45 @@ Recorded narration:
                 file=sys.stderr,
             )
             return 1
+    elif (
+        pptx_structure in {'flat', 'preserve'}
+        and (diagnostic_source or compatibility_export)
+    ):
+        try:
+            (
+                theme_color_spec,
+                theme_font_spec,
+                source_theme_xml,
+                source_embedded_fonts,
+            ) = _load_diagnostic_import_source(project_path)
+        except (EmbeddedFontError, ThemeFontError, ThemeColorError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+    source_themes_path = project_path / "templates" / SOURCE_THEMES_FILENAME
+    mirror_source_themes = (
+        structure_lock is not None
+        and structure_lock.mode == "structured"
+        and structure_lock.template_reuse_scope == "mirror"
+    )
+    if (
+        source_themes_path.exists()
+        and not mirror_source_themes
+        and not args.quick_generate
+    ):
+        print(
+            "Error: templates/source_themes.json is allowed only for a "
+            "structured mirror contract",
+            file=sys.stderr,
+        )
+        return 1
+    if mirror_source_themes:
+        try:
+            source_theme_xml_by_master = load_template_source_themes(
+                project_path / "templates"
+            )
+        except TemplateStructureError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
     if args.image_max_dimension < 1:
         print("Error: --image-max-dimension must be >= 1", file=sys.stderr)
         return 1
@@ -1283,38 +2659,52 @@ Recorded narration:
         print("Error: --image-quality must be between 1 and 100", file=sys.stderr)
         return 1
 
-    try:
-        project_info = get_project_info(str(project_path))
-        project_name = project_info.get('name', project_path.name)
-    except Exception:
-        project_name = project_path.name
+    if args.roundtrip:
+        project_name = project_path.resolve().name
+    else:
+        try:
+            project_info = get_project_info(str(project_path))
+            project_name = project_info.get('name', project_path.name)
+        except Exception:
+            project_name = project_path.name
 
     canvas_format = args.format
     expected_viewbox = (
         None
-        if args.quick_generate
+        if lockless_export
         else _declared_canvas_viewbox(project_path)
     )
-    if expected_viewbox is None and not args.quick_generate:
+    if expected_viewbox is None and not lockless_export:
         print(
             "Error: spec_lock.md must contain canvas.viewBox for release export",
             file=sys.stderr,
         )
         return 1
 
-    # Native DrawingML is the only PPTX product. A non-output ``-s`` remains a
-    # diagnostic source override; default and explicit output use release rules.
+    # Native DrawingML is the only PPTX product. ``svg_output/`` is the default;
+    # ``-s`` selects another project-relative SVG directory.
     native_source = args.source or 'output'
     native_files, native_source_dir = find_svg_files(
         project_path,
         native_source,
-        allow_fallback=args.source is None and not args.quick_generate,
+        allow_fallback=False,
     )
-    ref_files = native_files
+    if args.roundtrip:
+        native_files = [
+            path
+            for path in native_files
+            if re.fullmatch(r'slide_\d+\.svg', path.name)
+        ]
     if not native_files:
         if args.quick_generate:
             print(
                 "Error: No SVG files found for --quick-generate in: "
+                f"{project_path / 'svg_output'}",
+                file=sys.stderr,
+            )
+        elif compatibility_export and args.source is None:
+            print(
+                "Error: No SVG files found for dangerous compatibility export in: "
                 f"{project_path / 'svg_output'}",
                 file=sys.stderr,
             )
@@ -1329,7 +2719,398 @@ Recorded narration:
             print("Error: No SVG files found", file=sys.stderr)
         return 1
 
-    release_quality_gate = args.quick_generate or args.source in {None, 'output'}
+    quick_template_specs = None
+    if args.quick_generate:
+        try:
+            quick_template_specs = parse_optional_layout_slides(native_files)
+        except TemplateStructureError as exc:
+            print(
+                "Error: Quick Generate SVG structure inference failed: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+        pptx_structure = (
+            'structured' if quick_template_specs is not None else 'flat'
+        )
+        print(
+            "  Quick PPTX structure: "
+            f"{pptx_structure} (inferred from {len(native_files)} SVG page(s))"
+        )
+        if primary_language is not None and theme_font_spec is None:
+            # A lockless roster that declares its language still gets theme
+            # fonts (and their script slots) from the faces its pages use.
+            theme_font_spec = load_theme_font_spec_from_pages(project_path, primary_language)
+        if quick_template_specs is not None:
+            try:
+                (
+                    master_text_style_spec,
+                    quick_title_px,
+                    quick_body_px,
+                ) = infer_master_text_style_spec(native_files)
+            except ThemeFontError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            print(
+                "  Quick Master text defaults: "
+                f"title {quick_title_px:g}px, body {quick_body_px:g}px "
+                "(inferred from structured SVG pages)"
+            )
+        if source_themes_path.exists():
+            if quick_template_specs is None:
+                print(
+                    "Warning: templates/source_themes.json is ignored because "
+                    "Quick SVG pages declare no structured Master/Layout contract.",
+                    file=sys.stderr,
+                )
+            else:
+                try:
+                    available_source_themes = load_template_source_themes(
+                        project_path / "templates"
+                    ) or {}
+                except TemplateStructureError as exc:
+                    print(f"Error: {exc}", file=sys.stderr)
+                    return 1
+                used_master_keys = {
+                    spec.master_key for spec in quick_template_specs
+                }
+                missing_source_themes = sorted(
+                    used_master_keys - set(available_source_themes)
+                )
+                if missing_source_themes:
+                    print(
+                        "Error: Quick structured SVG pages reference Master(s) "
+                        "missing from templates/source_themes.json: "
+                        + ", ".join(missing_source_themes),
+                        file=sys.stderr,
+                    )
+                    return 1
+                source_theme_xml_by_master = {
+                    master_key: available_source_themes[master_key]
+                    for master_key in used_master_keys
+                }
+
+    ref_files = native_files
+    authoring_roundtrip_temporary: tempfile.TemporaryDirectory[str] | None = None
+    authoring_roundtrip_report: dict[str, object] | None = None
+    roundtrip_pages: tuple[RoundtripPage, ...] = ()
+    roundtrip_page_plan_present = False
+    roundtrip_page_sources: tuple[int, ...] | None = None
+    if args.roundtrip:
+        authoring_source_dir = project_path / native_source_dir
+        if not is_flat_authoring_bundle(authoring_source_dir):
+            print(
+                "Error: --roundtrip requires authoring-svg-flat/ with "
+                "authoring_manifest.json: "
+                f"{authoring_source_dir}",
+                file=sys.stderr,
+            )
+            return 1
+        authoring_roundtrip_temporary = tempfile.TemporaryDirectory(
+            prefix='.authoring-roundtrip-',
+            dir=project_path.resolve(),
+        )
+        try:
+            materialized = materialize_flat_authoring_roundtrip(
+                project_path.resolve(),
+                authoring_source_dir.resolve(),
+                Path(authoring_roundtrip_temporary.name),
+            )
+        except (AuthoringRoundtripError, OSError) as exc:
+            authoring_roundtrip_temporary.cleanup()
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        native_files = list(materialized.svg_files)
+        ref_files = list(materialized.authoring_files)
+        roundtrip_pages = materialized.pages
+        roundtrip_page_plan_present = materialized.page_plan_present
+        if roundtrip_page_plan_present:
+            roundtrip_page_sources = tuple(
+                page.source_slide
+                for page in roundtrip_pages
+            )
+        authoring_roundtrip_report = materialized.report
+        totals = materialized.report.get('totals')
+        if isinstance(totals, dict):
+            print(
+                "  Authoring round-trip materialized: "
+                f"{len(native_files)} slide(s), "
+                f"{totals.get('unchanged_refs', 0)} unchanged ref(s), "
+                f"{totals.get('edited_refs', 0)} edited ref(s), "
+                f"{totals.get('deleted_refs', 0)} deleted ref(s)"
+            )
+        if roundtrip_page_plan_present:
+            print(
+                "  Round-trip page plan: "
+                f"{len(roundtrip_pages)} output page(s) from "
+                f"{len(set(roundtrip_page_sources or ()))} source slide(s)"
+            )
+
+    changed_resources_by_page: dict[int, frozenset[str]] = {}
+    if args.roundtrip:
+        if roundtrip_manifest is None:
+            print("Error: Round-trip manifest is missing", file=sys.stderr)
+            return 1
+        try:
+            changed_resources_by_page = _changed_roundtrip_resource_pages(
+                roundtrip_resources,
+                roundtrip_manifest,
+                roundtrip_pages,
+            )
+        except RuntimeError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+    changed_resource_pages = frozenset(changed_resources_by_page)
+
+    roundtrip_passthrough_slides: set[int] = set()
+    roundtrip_slide_patches: dict[int, RoundtripSlidePatch] = {}
+    roundtrip_passthrough_overridden = any((
+        args.no_notes,
+        args.no_animations,
+        args.transition is not None,
+        args.transition_duration is not None,
+        args.auto_advance is not None,
+        args.animation is not None,
+        args.animation_duration is not None,
+        args.animation_stagger is not None,
+        args.animation_trigger is not None,
+        args.animation_config is not None,
+        args.recorded_narration is not None,
+        args.narration_audio_dir is not None,
+        args.use_narration_timings,
+        args.inherit_motion_from is not None,
+        args.image_sizing == 'display',
+        args.text_flow != TEXT_FLOW_PRESERVE,
+    ))
+    if args.roundtrip and not roundtrip_passthrough_overridden:
+        try:
+            roundtrip_passthrough_slides = _roundtrip_passthrough_candidates(
+                project_path.resolve(),
+                native_files,
+                roundtrip_pages,
+                source_dir=args.source or native_source_dir,
+                authoring_report=authoring_roundtrip_report,
+                changed_resource_pages=changed_resource_pages,
+            )
+        except RuntimeError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        if roundtrip_passthrough_slides:
+            print(
+                "  Source slide passthrough: "
+                f"{len(roundtrip_passthrough_slides)}/{len(native_files)} "
+                "slide(s) retain original XML and relationships"
+            )
+        if authoring_roundtrip_report is not None:
+            authoring_roundtrip_report['source_slide_passthrough'] = {
+                'count': len(roundtrip_passthrough_slides),
+                'slides': sorted(roundtrip_passthrough_slides),
+            }
+    if args.roundtrip:
+        roundtrip_external_animation_config = False
+        if args.animation_config is not None:
+            requested_animation_config = Path(args.animation_config)
+            if not requested_animation_config.is_absolute():
+                requested_animation_config = (
+                    project_path / requested_animation_config
+                )
+            roundtrip_external_animation_config = (
+                requested_animation_config.resolve()
+                != (project_path / 'animations.json').resolve()
+            )
+        roundtrip_motion_overridden = any((
+            args.no_animations,
+            args.transition is not None,
+            args.transition_duration is not None,
+            args.auto_advance is not None,
+            args.animation is not None,
+            args.animation_duration is not None,
+            args.animation_stagger is not None,
+            args.animation_trigger is not None,
+            args.animation_config is not None,
+            args.recorded_narration is not None,
+            args.narration_audio_dir is not None,
+            args.use_narration_timings,
+            args.inherit_motion_from is not None,
+        ))
+        roundtrip_transition_overridden = any((
+            args.no_animations,
+            args.transition is not None,
+            args.transition_duration is not None,
+            args.auto_advance is not None,
+            args.recorded_narration is not None,
+            args.narration_audio_dir is not None,
+            args.use_narration_timings,
+            args.inherit_motion_from is not None,
+        ))
+        roundtrip_transition_replaced = any((
+            args.no_animations,
+            args.transition is not None,
+            args.transition_duration is not None,
+            args.inherit_motion_from is not None,
+        ))
+        roundtrip_animation_overridden = any((
+            args.no_animations,
+            args.animation is not None,
+            args.animation_duration is not None,
+            args.animation_stagger is not None,
+            args.animation_trigger is not None,
+            roundtrip_external_animation_config,
+            args.inherit_motion_from is not None,
+        ))
+        try:
+            roundtrip_slide_patches = _roundtrip_slide_patches(
+                project_path.resolve(),
+                authoring_roundtrip_report,
+                roundtrip_passthrough_slides,
+                roundtrip_pages,
+                changed_resource_pages=changed_resource_pages,
+                force_visual_changed=(
+                    args.image_sizing == 'display'
+                    or args.text_flow != TEXT_FLOW_PRESERVE
+                ),
+                force_motion_changed=roundtrip_motion_overridden,
+                force_transition_changed=roundtrip_transition_overridden,
+                force_transition_replaced=roundtrip_transition_replaced,
+                force_animation_changed=roundtrip_animation_overridden,
+                force_notes_changed=args.no_notes,
+                force_advance_changed=any((
+                    args.auto_advance is not None,
+                    args.recorded_narration is not None,
+                    args.use_narration_timings,
+                    args.inherit_motion_from is not None,
+                )),
+            )
+        except RuntimeError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        try:
+            if roundtrip_page_plan_present:
+                _report_roundtrip_omitted_opaque_payloads(
+                    project_path.resolve(),
+                    roundtrip_pages,
+                )
+            opaque_dependencies = _opaque_roundtrip_slide_dependencies(
+                project_path.resolve()
+            )
+            opaque_dependency_refs = (
+                _opaque_roundtrip_dependency_owner_refs(
+                    project_path.resolve(),
+                    opaque_dependencies,
+                )
+            )
+        except RuntimeError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        blocked_dependencies: dict[int, tuple[int, list[str]]] = {}
+        for page in roundtrip_pages:
+            dependencies = opaque_dependencies.get(page.source_slide)
+            if (
+                not dependencies
+                or page.output_index in roundtrip_passthrough_slides
+            ):
+                continue
+            patch = roundtrip_slide_patches.get(page.output_index)
+            if patch is None:
+                blocked_dependencies[page.output_index] = (
+                    page.source_slide,
+                    dependencies,
+                )
+                continue
+            owner_refs = opaque_dependency_refs.get(page.source_slide, {})
+            affected_refs = patch.edited_ref_ids | patch.deleted_ref_ids
+            affected_paths = {
+                path
+                for source_ref in affected_refs
+                for path in owner_refs.get(source_ref, ())
+            }
+            mapped_paths = {
+                path
+                for paths in owner_refs.values()
+                for path in paths
+            }
+            if patch.authoring_visual_changed:
+                affected_paths.update(set(dependencies) - mapped_paths)
+            if affected_paths:
+                blocked_dependencies[page.output_index] = (
+                    page.source_slide,
+                    sorted(affected_paths),
+                )
+        if blocked_dependencies:
+            print(
+                "Error: round-trip page export would drop source video, audio, "
+                "or opaque native payload relationships:",
+                file=sys.stderr,
+            )
+            for index, (source_slide, paths) in sorted(
+                blocked_dependencies.items()
+            ):
+                print(
+                    f"  output page {index} (source slide {source_slide}): "
+                    + ", ".join(paths),
+                    file=sys.stderr,
+                )
+            print(
+                "Keep each listed source slide in page_plan.json, or remove the "
+                "opaque relationship from the source deck before importing.",
+                file=sys.stderr,
+            )
+            return 1
+
+        direct_passthrough_count = (
+            0
+            if roundtrip_page_plan_present
+            else len(roundtrip_passthrough_slides)
+        )
+        cloned_passthrough_count = (
+            len(roundtrip_passthrough_slides)
+            if roundtrip_page_plan_present
+            else 0
+        )
+        patched_count = sum(
+            not patch.visual_changed
+            for patch in roundtrip_slide_patches.values()
+        )
+        rebuilt_count = sum(
+            patch.visual_changed
+            for patch in roundtrip_slide_patches.values()
+        )
+        classified_pages = (
+            direct_passthrough_count
+            + cloned_passthrough_count
+            + patched_count
+            + rebuilt_count
+        )
+        if classified_pages != len(roundtrip_pages):
+            print(
+                "Error: round-trip export summary could not classify every "
+                "output page",
+                file=sys.stderr,
+            )
+            return 1
+        # Printed only after the package is written: a failed export must not
+        # leave a receipt that reads like a delivery.
+        roundtrip_summary_line = (
+            "  Round-trip export summary: "
+            f"output_pages={len(roundtrip_pages)} "
+            f"passthrough={direct_passthrough_count} "
+            f"cloned_passthrough={cloned_passthrough_count} "
+            f"patched={patched_count} "
+            f"rebuilt={rebuilt_count}"
+        )
+        if authoring_roundtrip_report is not None:
+            authoring_roundtrip_report["export_summary"] = {
+                "output_pages": len(roundtrip_pages),
+                "passthrough": direct_passthrough_count,
+                "cloned_passthrough": cloned_passthrough_count,
+                "patched": patched_count,
+                "rebuilt": rebuilt_count,
+            }
+
+    release_quality_gate = (
+        args.quick_generate
+        or args.source in {None, 'output'}
+    ) and not compatibility_export
     if release_quality_gate:
         source_fingerprint = _svg_source_fingerprint(native_files)
         quality = _quality_report_context(project_path, source_fingerprint)
@@ -1349,7 +3130,7 @@ Recorded narration:
             quick_flag = ' --quick-generate' if args.quick_generate else ''
             print(
                 "Run: python3 skills/ppt-master/scripts/svg_quality_checker.py "
-                f'"{project_path}"{quick_flag} --stage final --json',
+                f'"{project_path}"{quick_flag} --canonical-authoring --stage final --json',
                 file=sys.stderr,
             )
             return 1
@@ -1359,12 +3140,16 @@ Recorded narration:
     structured_baseline = False
     baseline_layout_specs = None
     layout_definition_files: list[Path] = []
+    if pptx_structure == 'structured':
+        if quick_template_specs is not None:
+            template_specs = quick_template_specs
+        else:
+            try:
+                template_specs = parse_template_slides(native_files)
+            except TemplateStructureError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
     if pptx_structure == 'structured' and structure_lock is not None:
-        try:
-            template_specs = parse_template_slides(native_files)
-        except TemplateStructureError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 1
         lock_errors = template_lock_errors(template_specs, structure_lock)
         if lock_errors:
             print("Error: PPTX structure does not match spec_lock.md:", file=sys.stderr)
@@ -1431,6 +3216,25 @@ Recorded narration:
             )
 
     if args.native_objects:
+        projection_findings = _native_object_projection_findings(native_files)
+        if projection_findings:
+            print(
+                "Error: --native-charts-and-tables stopped because visible "
+                "SVG-first fallback details are not projected by marker metadata:",
+                file=sys.stderr,
+            )
+            for filename, marker_id, finding in projection_findings:
+                print(
+                    f"  {filename}: {marker_id}: {finding}",
+                    file=sys.stderr,
+                )
+            print(
+                "Project every listed detail into the closed native payload, or "
+                "remove the active replacement marker and keep the object "
+                "Native-ready=no.",
+                file=sys.stderr,
+            )
+            return 1
         print(
             "Warning: --native-charts-and-tables replaces shape-based SVG fallbacks "
             "with PowerPoint Chart/Table objects. The native objects may normalize "
@@ -1467,9 +3271,13 @@ Recorded narration:
         # is predictable; an explicit -o keeps the caller's exact name untouched.
         native_tag = "_native_charts_tables" if args.native_objects else ""
         narrated_tag = "_narrated" if (args.recorded_narration or args.narration_audio_dir) else ""
-        native_path = exports_dir / f"{project_name}_{timestamp}{native_tag}{narrated_tag}.pptx"
-        # Preserve the authored svg_output/ beside every default-path export.
-        backup_dir = project_path / "backup" / timestamp
+        kiosk_tag = "_kiosk" if args.kiosk else ""
+        native_path = exports_dir / f"{project_name}_{timestamp}{native_tag}{narrated_tag}{kiosk_tag}.pptx"
+        # Preserve svg_output/ only when it is the actual source. A custom -s
+        # directory remains the caller-owned source and is not copied under a
+        # misleading svg_output backup name.
+        if not diagnostic_source:
+            backup_dir = project_path / "backup" / timestamp
 
     native_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1569,6 +3377,7 @@ Recorded narration:
         args.animation_config,
         recorded_narration=bool(args.recorded_narration),
         no_animations=args.no_animations,
+        roundtrip=args.roundtrip,
     )
 
     if effective_animation_config:
@@ -1605,6 +3414,15 @@ Recorded narration:
     except Exception as exc:
         print(f"Error: Failed to load animation config: {exc}", file=sys.stderr)
         return 1
+    if animation_config and roundtrip_page_plan_present:
+        try:
+            animation_config = _roundtrip_animation_config_for_pages(
+                animation_config,
+                roundtrip_pages,
+            )
+        except RuntimeError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
     config_errors: list[str] = []
     if animation_config:
         config_errors.extend(validate_transition_config(animation_config))
@@ -1696,6 +3514,12 @@ Recorded narration:
                 ),
             )
         )
+        explicit_transition_uses_default_duration = (
+            args.roundtrip
+            and args.transition is not None
+            and args.transition_duration is None
+            and transition is not None
+        )
         transition_duration = validate_seconds(
             (
                 args.transition_duration
@@ -1707,8 +3531,13 @@ Recorded narration:
                 )
             ),
             "transition duration",
-            allow_zero=transition is None,
+            allow_zero=(
+                transition is None
+                or explicit_transition_uses_default_duration
+            ),
         )
+        if explicit_transition_uses_default_duration and transition_duration == 0:
+            transition_duration = DEFAULT_TRANSITION_DURATION
         auto_advance = (
             args.auto_advance
             if args.auto_advance is not None
@@ -1826,6 +3655,7 @@ Recorded narration:
         ),
         'transition_duration': (
             args.transition_duration is not None
+            or explicit_transition_uses_default_duration
             or inherited_overrides.get('transition_duration') is True
         ),
         'auto_advance': (
@@ -1877,11 +3707,15 @@ Recorded narration:
             animation,
             animation_trigger,
             animation_cli_overrides,
+            roundtrip_source=source_pptx_path(project_path) if args.roundtrip else None,
+            roundtrip_pages=roundtrip_pages,
+            roundtrip_patches=roundtrip_slide_patches,
         )
         if on_click_slides:
             print(
                 "Error: --recorded-narration cannot be used with on-click object animations. "
-                "Use --animation-trigger after-previous or --animation-trigger with-previous.",
+                "Explicitly replace or clear the reported source animations, or use "
+                "after-previous / with-previous for authored animation rows.",
                 file=sys.stderr,
             )
             for slide in on_click_slides[:20]:
@@ -1924,6 +3758,7 @@ Recorded narration:
         transition_sound=transition_sound,
         transition_duration=transition_duration,
         auto_advance=auto_advance,
+        kiosk=args.kiosk,
         notes=notes,
         enable_notes=enable_notes,
         animation=animation,
@@ -1949,10 +3784,21 @@ Recorded narration:
         baseline_layout_specs=baseline_layout_specs,
         layout_definition_files=layout_definition_files,
         native_structure_contract=native_structure_contract,
+        roundtrip_passthrough_slides=roundtrip_passthrough_slides,
+        roundtrip_slide_patches=roundtrip_slide_patches,
+        roundtrip_resources=roundtrip_resources,
+        roundtrip_page_sources=roundtrip_page_sources,
         theme_font_spec=theme_font_spec,
         master_text_style_spec=master_text_style_spec,
         theme_color_spec=theme_color_spec,
+        source_theme_xml=source_theme_xml,
+        source_theme_xml_by_master=source_theme_xml_by_master,
+        source_embedded_fonts=source_embedded_fonts,
         primary_language=primary_language,
+        dangerous_nonconforming_export=(
+            compatibility_export
+        ),
+        resource_root=project_path.resolve(),
     )
 
     if verbose:
@@ -1976,6 +3822,10 @@ Recorded narration:
             conversion_trace_path = (
                 project_path / 'validation' / f'{native_path.stem}.trace.json'
             )
+    elif compatibility_export:
+        conversion_trace_path = (
+            project_path / 'validation' / f'{native_path.stem}.trace.json'
+        )
     try:
         success = create_pptx_with_native_svg(
             output_path=native_path,
@@ -1987,6 +3837,8 @@ Recorded narration:
     except (TemplateStructureError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+    if success and roundtrip_summary_line is not None:
+        print(roundtrip_summary_line)
 
     # Archive svg_output/ once per default-flow export. This preserves the
     # authored SVG sources under backup/<ts>/svg_output/ for inspection and
@@ -2031,6 +3883,10 @@ Recorded narration:
                 backup_path=backup_path,
                 conversion_trace_path=conversion_trace_path,
                 deck_motion=deck_motion,
+                dangerous_nonconforming_export=(
+                    compatibility_export
+                ),
+                authoring_roundtrip=authoring_roundtrip_report,
             )
         except PptxPostflightValidationError as exc:
             print(
