@@ -1,5 +1,25 @@
 # double6-ppt-cli 变更记录
 
+## 0.3.0
+
+上游更新 + 全新 Linux 环境（portable 档）端到端实测修复。
+
+- **OfficeCLI pin 1.0.144 → 1.0.157**（commit `b65272a`）。最低兼容版本仍为 1.0.144（非 pin 版本只报 warn）。LICENSE/NOTICE 不变。
+- **PPT Master 维持 v4.8.0**。v6.7.0 已删除 Template Fill Native，迁移需单独立项。另记录上游历史重写（标签现指向 `5da13a0`，内容一致）。
+- 修复：
+  - doctor/bootstrap 不再因缺少 Pillow 崩溃。
+  - `d6ppt.py` 缺依赖时自动 re-exec 到运行时 venv。
+  - 全局 `--runtime-dir` 不再被子命令覆盖为 None；bootstrap 可省略 `--runtime-dir`。
+  - 单行 tspan 的 shape id 丢失问题由 adapter 修复。
+  - `wrap="none"` 文本框加宽，修复 LibreOffice 下 CJK 文字误折行。
+  - 尚无 PPTX 时 verify 给出明确错误 `current_pptx_missing`，不再 traceback。
+  - visual-policy 的 `perform` 决策给出准确的 next_steps。
+  - scaffold 错误列出 `remaining_fields`。
+  - PPT Master 转换警告（如图例被省略）写入 `evidence/compiler_warnings.json`，并在 inspect 中报出。
+  - 模板中的无文字装饰形状默认归类为 `keep_design`。
+  - postflight 按 descr 中的 role 判定字号阈值，并检测 run 级小字号。
+- 新增 `test_e2e_regressions.py`；authoring-contract 增加实测要点。
+
 ## 0.2.13
 
 - **P0 bootstrap 自举**：`cli.py` 改为子命令延迟导入；全新环境无需 lxml 即可 `bootstrap`/`doctor`。

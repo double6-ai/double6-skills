@@ -99,3 +99,14 @@ PowerPoint COM 等外部渲染完成后，登记到 run 再走 visual 闭环：
 python scripts/d6ppt.py render-import --run <run>   --pdf export.pdf --pages slide-1.png slide-2.png   --contact-sheet contact.png   --tier portable --renderer powerpoint-com   --fact-source "PowerPoint desktop export"
 ```
 
+
+## 端到端实测要点（0.3.0）
+
+- **单行文字**：`<text data-pptx-shape-id>` 内只有一个 `<tspan x=同值>` 时，adapter 会在 build 副本中自动展开，避免 vendor 丢失 shape id。多行仍按「多行文本与居中」规则写 `tspan x/dy`。
+- **不换行文本框**：compile 会把 `wrap="none"` 文本框按对齐方式加宽（CJK 12%、拉丁 4%），防止 LibreOffice 按框宽重新折行（例如「第 7 天全量运行」被折成两行）。可用语义清单 `defaults.nowrap_text_padding: false` 关闭，或传入 `{"cjk":0.1,"latin":0.03}` 自定义；对象图记录在 `nowrap_text_frames_padded`。
+- **原生图表**：
+  - 要生成图例，SVG fallback 里必须有可见的系列名文字。否则 PPT Master 会省略 legend，并写入 `evidence/compiler_warnings.json`，inspect 报 `native_object` 警告。
+  - doughnut/pie 的数据标签不会转换。需要数值时请另放文字对象。
+- **字体**：使用 `doctor` 能解析到的字体。Linux portable 档请用 `Noto Sans CJK SC` 等已安装字体；写 `Microsoft YaHei` 会被回退，导致度量偏差。
+- **visual 闭环顺序**：`visual-policy` → `verify`（产出渲染）→ 查看渲染并写 `visual-review` → 再次 `verify` → `finalize`。
+- **compile 前**：`authoring_scaffold_incomplete` 的 `details.remaining_fields` 会列出仍是模板占位的字段。
