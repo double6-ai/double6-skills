@@ -195,6 +195,9 @@ portable 成功交付时：
 ## 6. 维护者检查清单（下次发版前）
 
 - [x] `python -m unittest discover -s scripts/tests` 全绿（58 项，含 `test_verify_tier.py` / `test_inspector_bindings.py` / `test_portable_render_reuse.py`）
+
+> 本地运行测试：在 skill 根目录先 `pip install -r requirements-core.lock pytest`，再直接运行 `pytest`（`scripts/tests/conftest.py` 会自动把 `scripts/` 加入导入路径）。如需用 unittest：`PYTHONPATH=scripts python -m unittest discover -s scripts/tests`。
+
 - [x] 无 PowerPoint / 辅助访问环境下的 portable 路径可 `finalize`，并保留 warning
 - [x] auto/native 选择、强制 portable 优先级和 native fail-closed 有回归测试
 - [x] generate 初始化会创建骨架，未确认草稿的错误信息可直接照做
