@@ -67,6 +67,21 @@ Authoring 结构约束（quality gate + semantic contract）：
 
 并在 semantic manifest 使用 `preferred_structure: native_chart` + `match.drawingml_id: 1002`。普通示意图 group **不会**变成原生 chart；缺 JSON metadata 会在 vendor 阶段 fail closed。
 
+### PPT Master v6.7.0 补充（0.4.0-exp）
+
+- **JSON 为准（默认）**：编译时 adapter 会在 build 副本上给没有 authority/基线的 marker 加 `data-pptx-native-authority="json"`，并把 `data-pptx-bounds` 写入 metadata 的 x/y/width/height。SVG 子元素只作预览。缺 bounds 时报 `native_marker_invalid`。如要使用上游的 SVG-first 校验（fallback 哈希 + 完全对齐），在 semantic `defaults.native_marker_authority` 中设为 `"author"`，并自行运行上游 `stamp_native_fallbacks.py`。
+- **表格 schema v2**：未写 `schema` 的表格会自动升级为 `ppt-master.semantic-table.v2`，并补上 v4.8 默认配色（深蓝表头、白底、斑马纹、18px）。在 v2 中未设置颜色表示无填充；自行写 v2 时请显式给出颜色。
+- **条形图顺序**：v6 的水平 bar 按 payload 顺序**自上而下**排列（v4.8 为自下而上）。需要旧顺序时写 `"axes":{"category":{"reverse":false}}`。
+- **空值**：line 系列允许 `null` 表示断点（v4.8 会报 "value is not numeric"）。
+- **waterfall 等 chartEx 类型**：以 `cx:chart` 输出，PowerPoint 2016+ 可显示；LibreOffice 预览为空白，视觉复核需在 PowerPoint 中进行。
+- **组合图次坐标轴**：`plots[].secondary` 不受支持，两组数据共用同一数值轴。
+- 图片（`p:pic`）可在 semantic manifest 中用 role `image` 追踪。
+- v6 检查器会对缺少根 `data-pptx-page-role` 和未分组的顶层元素给出 **warning**（不阻断）。
+
+## design_spec §IX Relationships（v6 硬性要求）
+
+每个 `### Slide NN` 块必须有一行 `- Relationships: …`，写明本页内容单元之间的关系，没有则写 `none`。缺失时 v6 质量门会阻断编译。0.3.x 的旧项目需补上这一行。
+
 ## 多行文本与居中
 
 - 同一段落的多行文案：所有 `<tspan>` 的 `x` 必须**等于**父 `<text>` 的 `x`；居中用 `text-anchor="middle"`，不要给每行不同 x。
