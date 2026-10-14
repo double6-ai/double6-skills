@@ -15,10 +15,13 @@
 ## IX. Content Outline
 
 <!-- PPT Master quality gate requires this exact section title and one block per slide.
-     Each Slide block must contain an Audience move line. Replace NN with the real page count. -->
+     Each Slide block must contain an Audience move line and a Relationships line
+     (PPT Master v6: the logical relation between the page's content units, e.g. order / contrast / part-whole, or "none"). Replace NN with the real page count. -->
 
 ### Slide 01
 - Audience move: [本页希望听众产生什么理解或情绪变化]
+- Relationships: [本页内容单元之间的关系，如 顺序/对比/总分/因果；没有则写 none]
 
 ### Slide NN
 - Audience move: [本页希望听众产生什么理解或情绪变化]
+- Relationships: [本页内容单元之间的关系，如 顺序/对比/总分/因果；没有则写 none]

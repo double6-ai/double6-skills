@@ -3,11 +3,11 @@
 ## PPT Master
 
 Source: `https://github.com/hugohe3/ppt-master`
-Version: `v4.8.0`
-Commit: `53c9c2a5e9f1a49096324fba4f95833649c6a0f4`
+Version: `v6.7.0`
+Commit: `b4efe3ddf237a97a42880164759162f8e2412f2f`
 License: MIT
 
-The vendored 137-file lean core is stored in `vendor/ppt-master-core/`. The complete Template Fill Native package was restored byte-for-byte from the official v4.8.0 release asset whose SHA-256 is `29dc7d303147f34d5308f140bce189c4676c77c32756b793e353f968a70e0f4c`. Its original MIT license is retained at that root and in `licenses/PPT_MASTER_LICENSE`. The exact source paths, hashes and rationale are in `vendor/ppt-master-core/BOM.json`.
+The vendored 172-file lean core (generate path only) is stored in `vendor/ppt-master-core/`. Every file is byte-identical to the official v6.7.0 release asset `ppt-master-skill-v6.7.0.zip` (SHA-256 `40424d9784fa25f771da8b312258c3c67a168925122aa6bb7faf6848e77ceee9`). Upstream removed Template Fill Native in v5.0.0, so it is not included. The original MIT license is retained at that root and in `licenses/PPT_MASTER_LICENSE` (unchanged SHA-256 `80cefc…`). The exact source paths, hashes and rationale are in `vendor/ppt-master-core/BOM.json`.
 
 ## OfficeCLI
 
