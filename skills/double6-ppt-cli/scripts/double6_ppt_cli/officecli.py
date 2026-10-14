@@ -32,7 +32,7 @@ class OfficeCLI:
         self.binary = find_officecli(runtime_dir)
         if not self.binary:
             raise D6PPTError(
-                "OfficeCLI is not installed in the runtime; run bootstrap to install the pinned 1.0.144 build",
+                "OfficeCLI is not installed in the runtime; run bootstrap to install the pinned 1.0.157 build",
                 "officecli_missing",
             )
         self.argv = officecli_argv(self.binary)

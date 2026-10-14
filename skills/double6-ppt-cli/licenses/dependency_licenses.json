@@ -11,7 +11,7 @@
     {"name": "XlsxWriter", "version": "3.2.5", "license": "BSD-2-Clause"}
   ],
   "node": [
-    {"name": "@officecli/officecli", "version": "1.0.144", "license": "Apache-2.0", "notice_required": true}
+    {"name": "@officecli/officecli", "version": "1.0.157", "license": "Apache-2.0", "notice_required": true}
   ],
   "vendored_data": [
     {"name": "Apache POI presetShapeDefinitions.xml", "version": "5.4.1 / commit 4554f204cbbf00ecbcaed134fe57e43a1779a612", "license": "Apache-2.0", "notice_required": true},
