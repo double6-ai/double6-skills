@@ -42,6 +42,37 @@ def _flatten_safe_group(group: etree._Element, *, label: str) -> int:
     return len(children)
 
 
+def _unwrap_single_line_tspans(root: etree._Element) -> list[str]:
+    """Unwrap ``<text data-pptx-shape-id><tspan x=same>line</tspan></text>``.
+
+    The vendored PPT Master v4.8.0 tspan lowering rebuilds a single positional
+    tspan as a fresh ``<text>`` and drops ``data-pptx-shape-id`` on the way, so
+    the stable DrawingML identity silently disappears (multi-line paragraphs
+    keep it). Collapsing the redundant wrapper in the build copy is lossless
+    and keeps the identity contract without patching vendor code.
+    """
+    unwrapped: list[str] = []
+    for text in root.iter(f"{{{SVG_NS}}}text"):
+        shape_id = text.get("data-pptx-shape-id")
+        if shape_id is None or (text.text or "").strip():
+            continue
+        children = list(text)
+        if len(children) != 1:
+            continue
+        tspan = children[0]
+        if etree.QName(tspan).localname != "tspan" or len(tspan) or (tspan.tail or "").strip():
+            continue
+        extra = set(tspan.attrib) - {"x"}
+        if extra:
+            continue
+        if tspan.get("x") is not None and tspan.get("x") != text.get("x"):
+            continue
+        text.text = tspan.text or ""
+        text.remove(tspan)
+        unwrapped.append(shape_id)
+    return unwrapped
+
+
 def prepare_ppt_master_project(
     source_project: Path,
     semantic_manifest_path: Path,
@@ -104,6 +135,16 @@ def prepare_ppt_master_project(
             "action": "flatten_group" if flattened_children else "already_top_level",
             "flattened_children": flattened_children,
         })
+
+    svg_dir = build_project / "svg_output"
+    for svg_file in sorted(svg_dir.glob("*.svg")) if svg_dir.is_dir() else []:
+        relative = svg_file.relative_to(build_project).as_posix()
+        if relative not in parsed:
+            parser = etree.XMLParser(remove_blank_text=False, resolve_entities=False, no_network=True)
+            parsed[relative] = (svg_file, etree.parse(str(svg_file), parser))
+        unwrapped = _unwrap_single_line_tspans(parsed[relative][1].getroot())
+        if unwrapped:
+            changes.append({"file": relative, "action": "unwrap_single_line_tspan", "shape_ids": unwrapped})
 
     for _, (target_file, tree) in parsed.items():
         tree.write(str(target_file), encoding="UTF-8", xml_declaration=False, pretty_print=False)

@@ -231,8 +231,12 @@ def _geometry(element: etree._Element) -> dict[str, int | None]:
     }
 
 
-def _classify(text: str, object_type: str, placeholder: str | None) -> str:
+def _classify(text: str, object_type: str, placeholder: str | None, *, decorative_shape: bool = False) -> str:
     compact = re.sub(r"\s+", " ", text).strip()
+    if not placeholder and decorative_shape and not compact:
+        # A filled/outlined auto-shape with no text (background band, rule,
+        # accent bar) is template design, not an empty slot to fill.
+        return "design_system"
     if placeholder or (object_type in {"shape", "textbox"} and not compact):
         return "content_slot"
     if object_type in {"picture", "chart", "table", "equation", "ole"}:
@@ -323,7 +327,15 @@ def build_pptx_profile(pptx: Path) -> dict[str, Any]:
                     }.get(object_type, "shape")
                     office_path = f"{path_prefix}/{office_element}[@id={shape_id}]"
                     object_id = f"{identity_prefix}:{object_type}:{shape_id}"
-                    role = "navigation" if jump_source_slides else _classify(text, object_type, placeholder)
+                    decorative_shape = (
+                        object_type == "shape"
+                        and not placeholder
+                        and not element.xpath("./p:nvSpPr/p:cNvSpPr[@txBox='1']", namespaces=NS)
+                        and bool(element.xpath("./p:spPr/a:prstGeom | ./p:spPr/a:custGeom", namespaces=NS))
+                    )
+                    role = "navigation" if jump_source_slides else _classify(
+                        text, object_type, placeholder, decorative_shape=decorative_shape
+                    )
                     objects.append({
                         "source_object_id": object_id,
                         "source_template_slide": slide_number,

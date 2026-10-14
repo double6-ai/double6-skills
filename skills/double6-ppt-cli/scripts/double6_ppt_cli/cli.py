@@ -18,25 +18,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="d6ppt", description="Double6 native editable PPTX authoring and postflight CLI")
     parser.add_argument("--runtime-dir", type=Path, default=None, help=argparse.SUPPRESS)
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("doctor"); p.add_argument("--json", action="store_true"); p.add_argument("--runtime-dir", type=Path); p.add_argument("--verify-tier", choices=("auto", "native", "portable"), default="auto"); p.add_argument("--mode", choices=("generate", "postflight", "template-fill"))
-    p = sub.add_parser("bootstrap"); p.add_argument("--runtime-dir", type=Path, required=True); p.add_argument("--yes", action="store_true")
+    p = sub.add_parser("doctor"); p.add_argument("--json", action="store_true"); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS); p.add_argument("--verify-tier", choices=("auto", "native", "portable"), default="auto"); p.add_argument("--mode", choices=("generate", "postflight", "template-fill"))
+    p = sub.add_parser("bootstrap"); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS); p.add_argument("--yes", action="store_true")
     p = sub.add_parser("init"); p.add_argument("--mode", choices=("generate", "postflight", "template-fill"), required=True); p.add_argument("--source", type=Path, required=True); p.add_argument("--template", type=Path); p.add_argument("--contract", type=Path); p.add_argument("--out", type=Path, required=True); p.add_argument("--verify-tier", choices=("auto", "native", "portable"), default="auto"); p.add_argument("--design-profile", "--design", dest="design_profile", choices=("neutral", "academic", "business", "training"), default="neutral")
     p = sub.add_parser("compile"); p.add_argument("--run", type=Path, required=True); p.add_argument("--no-native-charts-and-tables", action="store_true")
     p = sub.add_parser("template-analyze"); p.add_argument("--run", type=Path, required=True)
     p = sub.add_parser("template-asset-import"); p.add_argument("--run", type=Path, required=True); p.add_argument("--asset", type=Path, required=True); p.add_argument("--name", required=True)
     p = sub.add_parser("template-check-plan"); p.add_argument("--run", type=Path, required=True); p.add_argument("--plan", type=Path, required=True)
-    p = sub.add_parser("template-apply"); p.add_argument("--run", type=Path, required=True); p.add_argument("--plan", type=Path, required=True); p.add_argument("--runtime-dir", type=Path)
+    p = sub.add_parser("template-apply"); p.add_argument("--run", type=Path, required=True); p.add_argument("--plan", type=Path, required=True); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS)
     p = sub.add_parser("package-clean"); p.add_argument("--run", type=Path, required=True)
     p = sub.add_parser("visual-policy"); p.add_argument("--run", type=Path, required=True); p.add_argument("--capability", choices=("available", "unavailable", "unknown"), required=True); p.add_argument("--decision", choices=("perform", "waive"), required=True); p.add_argument("--reason", choices=("user_declined_switch", "no_visual_model", "user_requested_skip")); p.add_argument("--user-ack", action="store_true")
     p = sub.add_parser("visual-review"); p.add_argument("--run", type=Path, required=True); p.add_argument("--status", choices=("accepted", "accepted_with_warnings", "rejected"), required=True); p.add_argument("--reviewer", required=True); p.add_argument("--notes", required=True)
     p = sub.add_parser("render-import"); p.add_argument("--run", type=Path, required=True); p.add_argument("--pdf", type=Path, required=True); p.add_argument("--pages", type=Path, required=True, nargs="+"); p.add_argument("--contact-sheet", type=Path, required=True); p.add_argument("--tier", choices=("portable", "native"), default="portable"); p.add_argument("--renderer", required=True); p.add_argument("--fact-source", required=True)
-    p = sub.add_parser("inspect"); p.add_argument("--run", type=Path, required=True); p.add_argument("--runtime-dir", type=Path)
+    p = sub.add_parser("inspect"); p.add_argument("--run", type=Path, required=True); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS)
     p = sub.add_parser("route"); p.add_argument("--run", type=Path, required=True); p.add_argument("--finding", required=True)
-    p = sub.add_parser("patch"); p.add_argument("--run", type=Path, required=True); p.add_argument("--spec", type=Path, required=True); p.add_argument("--runtime-dir", type=Path)
+    p = sub.add_parser("patch"); p.add_argument("--run", type=Path, required=True); p.add_argument("--spec", type=Path, required=True); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS)
     p = sub.add_parser("patch-plan"); p.add_argument("--run", type=Path, required=True); p.add_argument("--out", type=Path, required=True); p.add_argument("--confirm-finding", action="append", default=[])
-    p = sub.add_parser("verify"); p.add_argument("--run", type=Path, required=True); p.add_argument("--runtime-dir", type=Path); p.add_argument("--compatibility", choices=("none", "libreoffice"), default="none"); p.add_argument("--verify-tier", dest="verify_tier", choices=("auto", "native", "portable"), default="auto", help="auto: native when PowerPoint is usable, else portable OfficeCLI tier")
+    p = sub.add_parser("verify"); p.add_argument("--run", type=Path, required=True); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS); p.add_argument("--compatibility", choices=("none", "libreoffice"), default="none"); p.add_argument("--verify-tier", dest="verify_tier", choices=("auto", "native", "portable"), default="auto", help="auto: native when PowerPoint is usable, else portable OfficeCLI tier")
     p = sub.add_parser("finalize"); p.add_argument("--run", type=Path, required=True)
-    p = sub.add_parser("self-test"); p.add_argument("--runtime-dir", type=Path); p.add_argument("--integration", action="store_true")
+    p = sub.add_parser("self-test"); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS); p.add_argument("--integration", action="store_true")
     return parser
 
 
@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
             from .doctor import doctor
             result = doctor(args.runtime_dir, verify_tier=args.verify_tier, mode=args.mode)
         elif args.command == "bootstrap":
-            result = bootstrap(args.runtime_dir, confirmed=args.yes)
+            result = bootstrap(args.runtime_dir or default_runtime_dir(), confirmed=args.yes)
         elif args.command == "init":
             from .runs import init_run
             result = init_run(
