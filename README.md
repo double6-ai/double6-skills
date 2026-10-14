@@ -8,7 +8,7 @@ Double6 AI 维护的开源 agent skills。仓库目前包含四个可以独立�
 |---|---|---|---|
 | [`double6-deep-research`](skills/double6-deep-research/) | 研究开放性问题、比较多个对象、形成有证据的决策建议，并交付可核验的完整报告 | 宿主 agent 已提供并允许使用搜索、网页或材料读取能力；Python 3.10+ 仅用于可选的交付校验 | 可公开使用 |
 | [`double6-pdf-translation`](skills/double6-pdf-translation/) | 将非扫描版英文 PDF 翻译为简体中文，尽量保留原始版式，并生成中文单语与中英双语 PDF | Python 3.11、`pdf2zh_next`、用户自行配置的 OpenAI-compatible 模型服务 | 可公开使用，但需要先配置运行环境 |
-| [`double6-ppt-cli`](skills/double6-ppt-cli/) | 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX，覆盖 Markdown/结构化材料创作、模板对象级填充，以及已有 PPTX 的质检与受限修复 | Python 3、OfficeCLI 1.x（bootstrap 固定安装 pin `1.0.144`，运行时接受 ≥ pin 的 1.x）；**portable 档不需要 macOS**；native 档需要 macOS + Microsoft PowerPoint + `osascript` | 可公开使用；完整 native 闭环建议本机 PowerPoint，portable 档交付为 `pass_with_warnings` |
+| [`double6-ppt-cli`](skills/double6-ppt-cli/) | 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX，覆盖 Markdown/结构化材料创作、模板对象级填充，以及已有 PPTX 的质检与受限修复 | Python 3、OfficeCLI 1.x（bootstrap 固定安装 pin `1.0.157`，运行时接受 ≥ 1.0.144 的 1.x）；**portable 档不需要 macOS**；native 档需要 macOS + Microsoft PowerPoint + `osascript` | 可公开使用；完整 native 闭环建议本机 PowerPoint，portable 档交付为 `pass_with_warnings` |
 | [`double6-workbench-builder`](skills/double6-workbench-builder/) | 把反复要做的真实事情（学习台、备考台、任务面板、记录与复盘等）构建为离线优先、严格单文件的本地个人工作台，个人数据只留在当前设备 | Python 3（仅标准库）；浏览器验收可选 Playwright + Chromium | 可公开使用（实验性） |
 
 这些 skill 都不会随仓库分发模型、API key、搜索服务、OfficeCLI 二进制或第三方 PDF 后端。请根据任务选择安装，不必复制整个仓库。
@@ -105,7 +105,7 @@ bash run_translate.sh <input-file.pdf> --output-dir <output-dir> \
 适用边界：
 
 - 本机有 Microsoft PowerPoint 与 `osascript` 时走 native 验证；没有或系统拒绝辅助访问时，`verify --verify-tier auto` 自动降级 portable 档（OfficeCLI 校验/改字探针 + 可选 LibreOffice 渲染），交付状态为 `pass_with_warnings`。**非 macOS / 无 PowerPoint 可直接使用 portable 档。**
-- OfficeCLI 由 `bootstrap` 固定安装 pin `1.0.144`；运行时也接受更新的 1.x，非 pin 版本由 doctor 报 `warn` 并可继续使用，major ≠ 1 或低于最低兼容版本才 fail。`--verify-tier native` 可强制要求 PowerPoint。
+- OfficeCLI 由 `bootstrap` 固定安装 pin `1.0.157`（最低兼容 1.0.144）；运行时也接受更新的 1.x，非 pin 版本由 doctor 报 `warn` 并可继续使用，major ≠ 1 或低于最低兼容版本才 fail。`--verify-tier native` 可强制要求 PowerPoint。
 - `init --mode generate --design academic|business|training|neutral` 会创建 spec/design 与语义身份草稿；PowerPoint 始终是可选 native 验证能力，显式 portable 会完整跳过它。
 - 不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
 - 视觉检查默认要求；用户明确跳过时结果只能是 `pass_with_warnings`，不会伪装成完整视觉通过。

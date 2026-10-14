@@ -166,7 +166,7 @@ portable 成功交付时：
 
 - **GitHub / skills.sh**：完整 vendored PPT Master，适合原生 generate 与 portable/native 验证。
 - **ClawHub**：为网关体积限制省略最大 vendor 数据文件；**完整原生生成请勿依赖 Cl­awHub 包**。
-- OfficeCLI 固定 `1.0.144`，仍为外部依赖；本 skill 不随包分发二进制。
+- OfficeCLI 固定 `1.0.157`（0.3.0 起；最低兼容 1.0.144），仍为外部依赖；本 skill 不随包分发二进制。
 - PowerPoint「可选」不等于「推荐跳过」：有条件时应优先 native，portable 是诚实降级。
 
 ## 4.1 0.2.3 落地结果
@@ -317,7 +317,7 @@ portable 成功交付时：
 
 | 依赖 | 安装策略 | 运行时策略 |
 |---|---|---|
-| OfficeCLI | bootstrap 固定安装 pin `1.0.144` | 接受 pin 与更新 1.x；`warn` 可继续；major/过旧 fail |
+| OfficeCLI | bootstrap 固定安装 pin `1.0.157`（0.3.0 起） | 接受 pin 与更新 1.x；`warn` 可继续；major/过旧 fail |
 | ppt-master | vendored 完整包 + BOM SHA | 不自动跟随上游；损坏/Omission 按 doctor 判定 |
 
 用户可选自动适配：`python scripts/d6ppt.py bootstrap --runtime-dir <path> --yes` 始终只装 pin，不跟随 latest。
