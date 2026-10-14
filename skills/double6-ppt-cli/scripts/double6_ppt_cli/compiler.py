@@ -45,6 +45,42 @@ def _check_authoring_scaffold(project: Path, semantic: Path) -> None:
                 "next_step": "Fill every [fill] field and change '- status: draft' to '- status: confirmed'.",
             },
         )
+    design = project / "design_spec.md"
+    if design.is_file():
+        design_text = design.read_text(encoding="utf-8")
+        remaining = [
+            f"line {number}: {line.strip()}"
+            for number, line in enumerate(design_text.splitlines(), start=1)
+            if "[本页" in line or "[fill" in line
+        ]
+        if remaining:
+            raise D6PPTError(
+                "design_spec.md still contains scaffold placeholders",
+                "authoring_scaffold_incomplete",
+                {
+                    "path": str(design),
+                    "remaining_fields": remaining,
+                    "next_step": "Give every §IX Slide block a real '- Audience move:' and '- Relationships:' line (write 'none' when the page has no relation).",
+                },
+            )
+
+
+def _quality_report_errors(report: dict) -> list[str]:
+    """Flatten error-severity findings from a PPT Master v6 svg_quality_report.json."""
+    errors: list[str] = []
+    issues = report.get("project_issues")
+    if isinstance(issues, dict):
+        for category, items in issues.items():
+            for item in items or []:
+                if isinstance(item, dict) and item.get("severity") == "error":
+                    errors.append(f"[{category}] {item.get('message')}")
+    for entry in report.get("files") or []:
+        if not isinstance(entry, dict):
+            continue
+        for item in entry.get("errors") or []:
+            message = item.get("message") if isinstance(item, dict) else item
+            errors.append(f"{entry.get('file') or entry.get('path')}: {message}")
+    return errors[:50]
 
 
 GENERIC_VENDOR_BANNERS = ("--native-charts-and-tables replaces shape-based SVG fallbacks",)
@@ -102,6 +138,7 @@ def compile_run(run: Path, *, native_charts_and_tables: bool = True) -> dict:
                 import json as _json
                 report = _json.loads(report_path.read_text(encoding="utf-8"))
                 details["project_issues"] = report.get("project_issues") or report.get("issues") or []
+                details["errors"] = _quality_report_errors(report)
             except Exception:
                 pass
         set_status(run, manifest, "blocked", "svg_quality_failed", quality.stdout[-4000:] + quality.stderr[-4000:])
@@ -116,7 +153,13 @@ def compile_run(run: Path, *, native_charts_and_tables: bool = True) -> dict:
     })
     if proc.returncode != 0 or not raw.is_file():
         set_status(run, manifest, "blocked", "compile_failed", proc.stderr[-4000:])
-        raise D6PPTError("PPT Master compiler failed", "compile_failed")
+        errors = [line.strip() for line in (proc.stdout + "\n" + proc.stderr).splitlines()
+                  if line.strip().startswith(("Error", "ERROR", "[ERROR]", "RuntimeError", "ValueError"))]
+        raise D6PPTError("PPT Master compiler failed", "compile_failed", {
+            "errors": errors[-20:],
+            "stderr_tail": proc.stderr[-3000:],
+            "log": "logs/compiler.json",
+        })
     try:
         mapping = apply_semantic_contract(raw, semantic, final, object_map, project)
     except Exception as exc:
