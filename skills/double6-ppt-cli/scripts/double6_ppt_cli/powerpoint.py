@@ -13,8 +13,6 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from PIL import Image, ImageDraw
-
 from .common import D6PPTError, SCHEMA_VERSION, sha256_file, utc_now, write_json, rel_posix
 from .render_evidence import record_render_manifest
 if TYPE_CHECKING:
@@ -195,6 +193,8 @@ def _candidate(rows: list[dict[str, Any]]) -> tuple[int, str, str, str] | None:
 
 
 def _contact_sheet(pages: list[Path], output: Path) -> None:
+    from PIL import Image, ImageDraw  # deferred: doctor/bootstrap must work without Pillow
+
     opened = [Image.open(path).convert("RGB") for path in pages]
     try:
         thumb_w = 400
