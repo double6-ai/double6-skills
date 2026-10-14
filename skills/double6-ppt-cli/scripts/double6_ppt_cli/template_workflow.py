@@ -160,7 +160,35 @@ def import_template_asset(run: Path, asset: Path, name: str) -> dict[str, Any]:
     return {"schema_version": SCHEMA_VERSION, "status": "pass", **record}
 
 
+def template_backend() -> str:
+    """Experimental switch (exp/pm6-template): ``D6PPT_TEMPLATE_BACKEND=pm6`` uses the PPT Master v6.7
+    roundtrip backend in ``pm6_template``; default stays on the vendored v4.8 Fill Native package."""
+    import os
+
+    value = os.environ.get("D6PPT_TEMPLATE_BACKEND", "v48").strip().lower()
+    if value not in {"v48", "pm6"}:
+        raise D6PPTError(f"Unknown template backend: {value}", "template_backend_invalid")
+    return value
+
+
+def _pm6_modules():
+    from . import pm6_template
+
+    def guard(fn):
+        def wrapped(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except pm6_template.PM6Error as exc:
+                raise D6PPTError(str(exc), exc.code, exc.details) from exc
+        return wrapped
+
+    return (guard(pm6_template.analyze_pptx), guard(pm6_template.apply_plan),
+            guard(pm6_template.check_plan), guard(pm6_template.scaffold_plan))
+
+
 def _vendor_modules():
+    if template_backend() == "pm6":
+        return _pm6_modules()
     scripts = skill_root() / "vendor" / "ppt-master-core" / "skills" / "ppt-master" / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
