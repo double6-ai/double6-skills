@@ -181,6 +181,6 @@ skills/
 
 ## 许可
 
-本仓库源码使用 [MIT License](LICENSE) 发布。`skills/double6-ppt-cli` 中的 Double6 原创 glue、policy、CLI、schema 与测试按该 skill 根目录的 Apache License 2.0 发布；`vendor/ppt-master-core` 继续适用 PPT Master 的 MIT 许可证。外部模型服务、Python 包、OfficeCLI、PDF 工具和其它第三方组件不随本仓库分发，并适用各自的许可证与服务条款。
+除 `skills/double6-ppt-cli` 外，本仓库源码使用 [MIT License](LICENSE) 发布。`skills/double6-ppt-cli` 是例外：其中 Double6 原创的 glue、policy、CLI、schema 与测试按该 skill 根目录的 Apache License 2.0 发布，`vendor/ppt-master-core` 继续适用 PPT Master 的 MIT 许可证，详见该目录的 [`LICENSE`](skills/double6-ppt-cli/LICENSE)、[`NOTICE`](skills/double6-ppt-cli/NOTICE) 与 [`THIRD_PARTY_NOTICES.md`](skills/double6-ppt-cli/THIRD_PARTY_NOTICES.md)。子目录中的 LICENSE 文件优先于根目录 LICENSE。外部模型服务、Python 包、OfficeCLI、PDF 工具和其它第三方组件不随本仓库分发，并适用各自的许可证与服务条款。
 
-发布到 ClawHub 的 skill 版本按该平台规则另行使用 MIT-0：允许使用、修改和再分发（包括商业使用），且不要求署名。GitHub 与 skills.sh 上的仓库源码仍适用根目录的 MIT License。
+发布到 ClawHub 的 skill 版本按该平台规则另行使用 MIT-0：允许使用、修改和再分发（包括商业使用），且不要求署名。该 MIT-0 说明不适用于 `double6-ppt-cli`：其 Apache-2.0 原创部分与 vendored MIT 组件仍须按各自许可证保留版权声明与 NOTICE。GitHub 与 skills.sh 上的仓库源码适用上述根目录及子目录许可证。
