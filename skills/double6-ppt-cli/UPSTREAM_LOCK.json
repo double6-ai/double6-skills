@@ -1,7 +1,10 @@
 {
   "schema_version": 1,
   "observed_at": "2026-08-22T00:17:08+08:00",
-  "status": "frozen_for_double6_ppt_cli_v0.2.1_local",
+  "status": "frozen",
+  "frozen_since_double6_ppt_cli": "0.2.1-local",
+  "verified_for_double6_ppt_cli": "0.2.13",
+  "verification_note": "vendor/ 与本文件自 0.2.1-local（commit babc903）起未改动；0.2.13 由 attribution_guard.py 复核 BOM 通过",
   "upstreams": [
     {
       "name": "ppt-master",
