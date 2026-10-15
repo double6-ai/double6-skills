@@ -40,7 +40,12 @@ generate 模式交付前必须通过本门：**确定性检查无 error** 且 **
 | `no_non_text_element` | 每页至少一个非文字元素（色块卡片、色带、图标、线条、图表、表格、图片） | error |
 | `too_many_font_sizes` | 全 deck 显式字号 > 7 种 | error |
 | `office_default_chart_colors` | 存在 spec_lock 调色时，图表系列仍用 Office 默认色（4472C4/ED7D31/A5A5A5/FFC000/5B9BD5/70AD47） | error |
-| `cjk_orphan` | 中文段落折行后末行只剩一个字（可带标点） | error |
+| `orphan_line` | 折行后末行过短：中文段末行只剩 ≤1 个汉字或 ≤6 个字符的拉丁/数字片段（如“4%”）；英文段末行只剩一个 ≤6 字符的单词 | error |
+| `cjk_latin_space` | 中文与数字/拉丁字母之间手动加了空格（如“11 月 11 日”） | error |
+| `chart_series_indistinct` | 同一图表相邻系列色 CIE76 ΔE < 25 | error |
+| `image_credit_missing` | `images/` 中的图片在 credits.json 缺少许可/作者/来源（compile 阶段报错） | error |
+
+注：LibreOffice 渲染时会在中文与拉丁字符之间自动加间距（即使源文本没有空格），PowerPoint 不会。这是渲染器的行为，不算 `cjk_latin_space`。
 
 ## 4. 参考 brief 与回归
 

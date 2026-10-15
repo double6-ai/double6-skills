@@ -86,7 +86,7 @@ def _is_cjk(ch: str) -> bool:
 
 
 CJK_LATIN_SPACE = re.compile(r"[\u3400-\u9fff\uff00-\uffef] +[0-9A-Za-z%$¥€]|[0-9A-Za-z%] +[\u3400-\u9fff]")
-_TOKEN = re.compile(r"[\x21-\x7E]+\s*|\s+|.")
+_TOKEN = re.compile(r"[\x21-\x7E\u2013\u2014\u2103\u00B7]+\s*|\s+|.")
 
 
 def _last_line(text: str, font, avail: float) -> str | None:

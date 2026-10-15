@@ -16,17 +16,19 @@
 
 ## 2. 风格预设（`--design`）
 
-| 预设 | 上游 style | visual style | 底色 | 主色 | 强调色 | 适用 |
-|---|---|---|---|---|---|---|
-| `consulting`（别名 `business`） | consulting-decision | swiss-minimal | #FFFFFF | #1F3A5F | #3C7A78 | 结论先行的分析、建议、决策材料 |
-| `investor-pitch` | investor-pitch | swiss-minimal | #F7F6F3 | #22344F | #3C7A78 | 融资路演、商业计划 |
-| `product-launch` | product-launch | editorial | #F8F7F4 | #16181C | #B08D57 | 新品发布、产品介绍（深浅节奏） |
-| `operating-review` | operating-review | data-journalism | #FFFFFF | #1F3A5F | #2F6E9E | 经营复盘、数据报告、季度回顾 |
-| `academic` | academic-research | swiss-minimal | #FAFAF7 | #263B4F | #8A5A44 | 学术报告、答辩 |
-| `training` | workshop-teaching | soft-rounded | #FFFDF8 | #3D4A3F | #B08A50 | 培训、课程、工作坊 |
-| `neutral` | — | — | 待填 | 待填 | 待填 | 有品牌规范时自行填写 |
+预设从大胆到雅致都有，没有“克制配色”这类硬规则。配色行为按所选上游 style 走。
 
-所有预设的起始值共用：正文 #1E2733、次要文字 #5B6573、分隔线 #D9DDE2；字号阶梯（px）display 64 / title 34 / subtitle 24 / body 18 / label 14 / caption 12。用户给了品牌色时以品牌为准。
+| 预设 | 上游 style | 主题 | 底色 | 主色 | 强调色 | 第二强调 | 图片取向 |
+|---|---|---|---|---|---|---|---|
+| `consulting`（别名 `business`） | consulting-decision | 浅 | #FFFFFF | #051C2C | #2251FF | #00A9F4 | 建筑/城市/工作场景，深蓝 duotone |
+| `investor-pitch` | investor-pitch | 浅 | #FFFFFF | #2B1C8F | #FF5A3C | #8B7CF6 | 产品使用场景，满版 + 靛蓝 scrim |
+| `product-launch` | product-launch | 深 | #0A0A0D | — | #F2B544 | #FF6A3D | 深底产品大图、大裁切、出血 |
+| `operating-review` | operating-review | 浅 | #FFFFFF | #0F2A4A | #F26B38 | #3D7DCA | 运营/团队照片，冷色 duotone |
+| `academic` | academic-research | 浅 | #FBFAF6 | #1F3B4D | #C0582B | #6E8F72 | 实地/风景/航拍，自然色 |
+| `training` | workshop-teaching | 浅 | #FFFBF3 | #124E5C | #FF8A3D | #5BB5C8 | 协作人物、暖光、圆角裁切 |
+| `neutral` | — | — | 待填 | 待填 | 待填 | 待填 | 有品牌规范时自行填写 |
+
+spec_lock 还会写入 `gradient_from/to`、`on_accent`、`on_primary`（自动算出的高对比文字色）、`chart_series`（相邻系列 ΔE ≥ 25）和 `imagery`。字号阶梯（px）：hero 112 / display 60 / title 36 / subtitle 24 / body 18 / label 14 / caption 12。用户给了品牌色时以品牌为准。
 
 ## 3. 配色与样式（以上游 style 为准）
 
@@ -52,6 +54,27 @@
 
 每页至少有一个非文字视觉元素（色块、卡片、图标、图表、线条节点等）；数据页之后安排一张更“透气”的页面。
 
+## 4b. 让 deck 好看：版式配方与图片
+
+“能交付”不等于“好看”。参照上游最佳示例和 Keynote、McKinsey/BCG、Pitch/Gamma 一类专业 deck，用下面的手段建立视觉节奏。可直接套用的配方见 [layout-recipes.md](layout-recipes.md)：
+
+- **大胆的字号对比**：每页一个主角。hero（112px）大数字或 display 标题，配 label 级说明，不要所有文字一样大。
+- **大数字 hero**：关键指标做成渐变色块里的巨型数字，其余指标放在旁边一栏（不对称）。
+- **满版照片**：封面、章节页、结束页用满版照片加渐变 scrim（底部 0.6–0.85 黑），文字压在 scrim 上。
+- **分屏**：照片占半屏，另一半放论点；照片上可压一个大数字。
+- **标注式数据图**：高亮一个数据点（point_colors），其余用浅色，加 callout 气泡和旁边的结论大数字。
+- **高亮表格**：推荐列加强调色描边框和“推荐”徽章。
+- **渐变、纹理与叠层**：渐变时间轴、色块上的半透明圆、渐变首字母头像。
+- **节奏**：深浅页、照片页与数据页交替；连续两张数据页之间插一张透气的 statement/照片页；结束页呼应封面。
+
+### 图片（royalty-free，必须带署名元数据）
+
+1. 搜图：`image-search --query "<关键词>"`（Openverse，仅 cc0 / pdm / by / by-sa 且允许商用与修改）。
+2. 入库：`image-add --run <run> --name <safe> --openverse-id <id>`，或用 `--url/--file` 加 `--license unsplash|pexels|cc0|… --creator --source-url --license-url`。实在找不到合适图片时用 `--placeholder`，会生成明确标注的占位图，finalize 时产生警告。
+3. 处理：`--treat "cover=1920x1080,focus=0.5x0.4,duotone=#051C2C,#2251FF,fade=0.2"`。可用 crop/cover、focus、duotone、tint、blur、grayscale、brightness、contrast、round、circle、fade。
+4. SVG 里用 `<image href="../images/<name>.jpg" .../>` 引用。署名用小号深色药丸标签放在角落，例如 “Photo: 作者 · 许可”。
+5. compile 会检查 `images/credits.json`，缺署名直接报 `image_credit_missing`。finalize 会写 `delivery/IMAGE_CREDITS.md`。
+
 ## 5. 反模式（出现即返工）
 
 1. 整页 bullet 列表、白底黑字、无任何视觉元素（“Word 文档式”页面）。
@@ -60,12 +83,14 @@
 4. 原生图表沿用 Office 默认蓝橙，或系列色与 deck 调色无关。
 5. 对称卡片网格泛滥：每页都是 3 张一样的卡片。
 6. 字号超过 7 档，或同一角色在不同页字号不同。
-7. 中文孤字换行（如“算/法”）、文字压线、文字溢出卡片。
-8. 装饰性图标墙、混用多个图标库、图标与含义无关。
-9. 超出 executor-base 用量的重阴影、发光（Office 2007 风格）。
+7. 孤行换行：中文末行只剩 1 个字，或只剩一个短拉丁/数字片段（如“4%”）；文字压线、溢出卡片。中文与数字/英文之间不要手动加空格（“11月11日”，不是“11 月 11 日”）。
+8. 稀疏卡片：卡片很大、内容很少，下半截空着。
+9. 图表系列色太接近（ΔE < 25），分不清。
+10. 装饰性图标墙、混用多个图标库、图标与含义无关。
+11. 超出 executor-base 用量的重阴影、发光（Office 2007 风格）。
 
 ## 6. 质量门与视觉复核
 
 - compile 会自动嵌入 `data-icon` 图标、把调色写进原生图表和表格（见 SKILL.md）。
-- `inspect` 的视觉指标（`visual_metrics`）检查对比度、留白平衡、非文字元素、字号档数、Office 默认图表色、中文孤字等，详见 [visual-quality.md](visual-quality.md)。
+- `inspect` 的视觉指标（`visual_metrics`）检查对比度、留白平衡、非文字元素、字号档数、Office 默认图表色、孤行、中文与数字间的空格、图表系列可分辨度、图片署名等，详见 [visual-quality.md](visual-quality.md)。
 - 模型视觉复核用 8 维评分表；未达到通过线（均值 ≥3.5，且每一维 ≥3）时不得 finalize 为 `pass`。
