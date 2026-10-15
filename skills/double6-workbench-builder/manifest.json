@@ -2,9 +2,9 @@
   "skill_id": "double6-workbench-builder",
   "name": "double6-workbench-builder",
   "display_name": "Double6 工作台制作器",
-  "version": "0.41.0",
+  "version": "0.42.0",
   "owner": "double6-ai",
-  "updated_at": "2026-08-09",
+  "updated_at": "2026-10-15",
   "status": "active",
   "maturity_tier": "production",
   "lifecycle_stage": "production",
@@ -40,7 +40,8 @@
   "runtime": {
     "builder": "python_standard_library_only",
     "browser_evaluation": "playwright_chromium_discovered_at_runtime",
-    "publication": "separate_host_workflow_with_real_receipt"
+    "publication": "separate_host_workflow_with_real_receipt",
+    "python": ">=3.10"
   },
   "schemas": {
     "run": 3,
@@ -74,12 +75,32 @@
     "page_icon": "references/page-icon.svg",
     "education_rules": "references/education-rules.md",
     "personal_life_content_sources": "references/personal-life-content-sources.md",
-    "host_integration_playbook": "references/host-integration-playbook.md"
+    "host_integration_playbook": "references/host-integration-playbook.md",
+    "runtime_contract": "references/runtime-contract.md"
   },
   "release_validation": {
-    "active_test": "workflows/double6-workbench-governance/tests/test_v0300_core.py",
+    "active_test": "tests/",
+    "command": "python -m pytest -q -p no:cacheprovider tests",
+    "browser_test": "tests/test_end_to_end.py::EndToEndAllDomainsTest::test_browser_evaluation_delivers",
+    "governance_gate": "maintainer-only workflows/double6-workbench-governance (not distributed)",
     "time_budget_seconds": 60,
     "comparison_tests": false,
     "historical_full_regression": false
+  },
+  "packaging": {
+    "clawhub_ignore": ".clawhubignore",
+    "distributed": [
+      "SKILL.md",
+      "CHANGELOG.md",
+      "manifest.json",
+      "agents/",
+      "security/",
+      "references/",
+      "scripts/"
+    ],
+    "repository_only": [
+      "tests/",
+      "evals/"
+    ]
   }
 }

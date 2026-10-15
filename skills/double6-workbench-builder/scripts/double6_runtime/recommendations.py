@@ -256,9 +256,9 @@ def recommendation_snapshot(text: str, route: dict[str, Any]) -> dict[str, Any]:
 
 def validate_surface(value: Any, expected: dict[str, Any]) -> None:
     if not isinstance(value, dict) or value.get("registry_version") != 1 or value.get("type") != expected.get("type"):
-        raise ContractError("台内能力必须绑定当前表面注册表")
+        raise ContractError("台内能力必须绑定当前表面注册表：capability.surface 请原样复制 recommendation_snapshot 中对应模块的 surface（registry_version=1）")
     if value.get("fields") != expected.get("fields") or value.get("operations") != expected.get("operations"):
-        raise ContractError("台内能力表面字段或操作与推荐包不一致")
+        raise ContractError("台内能力表面字段或操作与推荐包不一致：surface.fields / operations 不得改动，请原样复制推荐快照")
     for field in value["fields"]:
         if field.get("type") not in ALLOWED_FIELD_TYPES:
             raise ContractError(f"不支持的字段类型：{field.get('type')}")

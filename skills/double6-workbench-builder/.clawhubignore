@@ -1,8 +1,8 @@
+# ClawHub 包边界：随包分发 SKILL.md、manifest.json、agents/（接口元数据）、security/（权限与网络策略）、
+# references/、scripts/；维护者用的测试、评测与本地产物不进入公开包。
 reports/
 dist/
-agents/
 evals/
-security/
 tests/
 .clawhub/
 __pycache__/

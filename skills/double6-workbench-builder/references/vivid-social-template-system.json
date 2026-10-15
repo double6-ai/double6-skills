@@ -12,7 +12,7 @@
   "selection_policy": {
     "automatic_non_default_selection": true,
     "rule": "仅当场景命中已登记的场景模板时，自动选择其默认模板；用户明确的模板选择或颜色反馈始终覆盖。未登记场景继续使用珊瑚小芽，不把旧候选配色按职业或身份自动套用。",
-    "pilot_scope": ["child_learning_quest", "creator_production_room", "teacher_lesson_studio", "freelance_delivery_studio", "travel_departure_atlas", "finance_month_close", "household_week_coordination", "fitness_week_sprint"]
+    "pilot_scope": ["child_learning_quest", "creator_production_room", "teacher_lesson_studio", "freelance_delivery_studio", "travel_departure_atlas", "finance_month_close", "household_week_coordination", "fitness_week_sprint", "research_reading_desk"]
   },
   "common_kernel": {
     "product_shape": {
@@ -318,7 +318,7 @@
       "scene_template_id": "creator_production_room",
       "name": "内容选题制作台",
       "domain_ids": ["content-operations"],
-      "match": {"request_any": ["选题", "内容制作", "脚本制作", "发布排期"]},
+      "match": {"request_any": ["选题", "内容制作", "脚本制作", "发布排期", "社媒", "自媒体", "小红书", "公众号", "视频号", "内容运营", "多平台"]},
       "template_id": "studio_sunset",
       "token_id": "editorial-story",
       "renderer_id": "creator_production_dashboard",
@@ -386,6 +386,21 @@
       "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
       "detail_mode": "single_active_view",
       "quality_reference": "04_iterations/2026-08-04_scene-capability-social-ui-reconstruction/scene_reports/scene-01-life-management-social-ui.md",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+    },
+    {
+      "scene_template_id": "research_reading_desk",
+      "name": "研究阅读书桌",
+      "domain_ids": ["research-knowledge"],
+      "match": {},
+      "template_id": "lesson_bloom",
+      "token_id": "professional-trust",
+      "renderer_id": "research_reading_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "detail_mode": "single_active_view",
+      "quality_reference": "child_learning_quest",
       "visual_status": "candidate_needs_user_review",
       "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
     }
