@@ -103,6 +103,10 @@ def resolve_visual_gate(run: Path, pptx_sha256: str) -> tuple[str, dict[str, Any
                 )
             except D6PPTError:
                 valid = False
+        if valid and visual.get("visual_quality", {}).get("rubric") is not None:
+            valid = bool(visual["visual_quality"]["rubric"].get("pass")) and (
+                visual["visual_quality"].get("metrics", {"status": "pass"}).get("status") == "pass"
+            )
         if valid:
             return "pass", visual
     waiver_path = run / "review" / "visual_review_waiver.json"

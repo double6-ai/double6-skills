@@ -31,7 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("template-apply"); p.add_argument("--run", type=Path, required=True); p.add_argument("--plan", type=Path, required=True); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS)
     p = sub.add_parser("package-clean"); p.add_argument("--run", type=Path, required=True)
     p = sub.add_parser("visual-policy"); p.add_argument("--run", type=Path, required=True); p.add_argument("--capability", choices=("available", "unavailable", "unknown"), required=True); p.add_argument("--decision", choices=("perform", "waive"), required=True); p.add_argument("--reason", choices=("user_declined_switch", "no_visual_model", "user_requested_skip")); p.add_argument("--user-ack", action="store_true")
-    p = sub.add_parser("visual-review"); p.add_argument("--run", type=Path, required=True); p.add_argument("--status", choices=("accepted", "accepted_with_warnings", "rejected"), required=True); p.add_argument("--reviewer", required=True); p.add_argument("--notes", required=True)
+    p = sub.add_parser("visual-review"); p.add_argument("--run", type=Path, required=True); p.add_argument("--status", choices=("accepted", "accepted_with_warnings", "rejected"), required=True); p.add_argument("--reviewer", required=True); p.add_argument("--notes", required=True); p.add_argument("--rubric", type=Path, help="JSON file with 8 rubric scores (1-5)")
+    p = sub.add_parser("visual-metrics"); p.add_argument("--run", type=Path, required=True)
     p = sub.add_parser("render-import"); p.add_argument("--run", type=Path, required=True); p.add_argument("--pdf", type=Path, required=True); p.add_argument("--pages", type=Path, required=True, nargs="+"); p.add_argument("--contact-sheet", type=Path, required=True); p.add_argument("--tier", choices=("portable", "native"), default="portable"); p.add_argument("--renderer", required=True); p.add_argument("--fact-source", required=True)
     p = sub.add_parser("inspect"); p.add_argument("--run", type=Path, required=True); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS)
     p = sub.add_parser("route"); p.add_argument("--run", type=Path, required=True); p.add_argument("--finding", required=True)
@@ -91,7 +92,14 @@ def main(argv: list[str] | None = None) -> int:
             result = set_visual_policy(args.run, args.capability, args.decision, args.reason, args.user_ack)
         elif args.command == "visual-review":
             from .visual_review import record_visual_review
-            result = record_visual_review(args.run, args.status, args.reviewer, args.notes)
+            import json as _json
+            rubric = _json.loads(args.rubric.read_text(encoding="utf-8")) if args.rubric else None
+            if isinstance(rubric, dict) and "scores" in rubric:
+                rubric = rubric["scores"]
+            result = record_visual_review(args.run, args.status, args.reviewer, args.notes, rubric=rubric)
+        elif args.command == "visual-metrics":
+            from .visual_review import visual_metrics_for_run
+            result = visual_metrics_for_run(args.run)
         elif args.command == "render-import":
             record_render_manifest, load_run, resolve_run_path, sha256_file = _import_render_importer()
             run = args.run.resolve()

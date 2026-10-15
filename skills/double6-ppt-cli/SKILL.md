@@ -70,7 +70,7 @@ metadata:
 3. 在 design_spec §IX 为每页写 `- Composition: page job → 版式结构 → 设备`。每页至少一个非文字视觉元素，例如色块、卡片、KPI 大数字、图标、图表、节点连线。
 4. 配色行为以所选 style 的 Color Behavior 为准；字号不超过 7 档；图表系列色取自 `chart_series`，compile 会写进原生图表；图标用 `<use data-icon="tabler-outline/<name>" .../>`，compile 自动嵌入。
 5. 禁止的反模式：整页 bullet 白底黑字、上重下空、颜色没有角色、Office 默认图表色、千篇一律的卡片网格、中文孤字换行等，详见 visual-design.md §5。
-6. 视觉复核按 [visual-quality.md](references/visual-quality.md) 的 8 维评分表打分，结果写入 `visual-review --rubric`；未达通过线不能以 `pass` 交付。
+6. 先跑 `visual-metrics --run <run>` 修掉确定性检查 error（对比度、上重下空、每页非文字元素、≤7 种字号、图表不用 Office 默认色、中文孤字）；再按 [visual-quality.md](references/visual-quality.md) 的 8 维评分表打分，用 `visual-review --rubric rubric.json` 记录。generate 模式缺 rubric、均分 <3.5 或任一维 <3 都会被拒，不能以 `pass` 交付。
 
 ## 三种模式
 
