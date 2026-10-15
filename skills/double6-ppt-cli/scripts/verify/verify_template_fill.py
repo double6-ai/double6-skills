@@ -85,11 +85,18 @@ def run_cases(out: Path) -> list[dict]:
             report = check_plan(lib, plan)
             row["check_summary"] = report["summary"]
             row["check_findings"] = [r for r in report["results"] if r.get("status") != "OK"]
+            row["expected"] = getattr(cases, "EXPECT", {}).get(name, "applied")
+            if report["summary"].get("error"):
+                row["status"] = "blocked_by_check"
+                row["as_expected"] = row["expected"] == "blocked_by_check"
+                results.append(row)
+                continue
             dest = out / "filled" / f"{name}.pptx"
             dest.parent.mkdir(parents=True, exist_ok=True)
             receipt = apply_plan(tpl, plan, dest)
             row.update({"status": "applied", "export_summary": receipt.get("export_summary"), "text": receipt.get("text"),
-                        "notes": receipt.get("notes"), "transitions": receipt.get("transitions"), "pm6_root": str(pm6_root())})
+                        "notes": receipt.get("notes"), "transitions": receipt.get("transitions"), "pm6_root": str(pm6_root()),
+                        "as_expected": row["expected"] == "applied"})
         except Exception as exc:  # report, keep going
             row.update({"status": "error", "error": f"{type(exc).__name__}: {exc}", "trace": traceback.format_exc()[-3000:]})
         results.append(row)
@@ -134,37 +141,88 @@ def powerpoint_stage(out: Path) -> dict:
             for deck in sorted(filled.glob("*.pptx")):
                 proc = subprocess.run(["osascript", "-", str(deck), str(meas), deck.stem], input=script, capture_output=True, text=True, timeout=900)
                 info.setdefault("runs", []).append({"deck": deck.stem, "returncode": proc.returncode, "stderr": proc.stderr[-1500:]})
+                def num(x):
+                    try:
+                        return float(x.replace(",", "."))
+                    except ValueError:
+                        return None
                 for line in proc.stdout.splitlines():
                     parts = line.split("\t")
-                    if len(parts) >= 8:
-                        def num(x):
-                            try:
-                                return float(x.replace(",", "."))
-                            except ValueError:
-                                return None
+                    if parts and parts[0] == "F" and len(parts) >= 7:
+                        info.setdefault("frames", []).append({"deck": deck.stem, "slide": int(parts[1]), "name": parts[2], "left": num(parts[3]),
+                                                              "top": num(parts[4]), "width": num(parts[5]), "height": num(parts[6])})
+                    elif len(parts) >= 8:
                         h, bh, mt, mb = num(parts[2]), num(parts[3]), num(parts[6]), num(parts[7])
                         info["shapes"].append({"deck": deck.stem, "slide": int(parts[0]), "name": parts[1], "height": h, "bound_height_after": bh,
                                                "autosize": parts[4], "font_size_after": num(parts[5]), "margin_top": mt, "margin_bottom": mb,
-                                               "overflow_pt": round(bh - (h - (mt or 0) - (mb or 0)), 2) if None not in (h, bh) else None})
+                                               "overflow_pt": round(bh - (h - (mt or 0) - (mb or 0)), 2) if None not in (h, bh) else None,
+                                               "left": num(parts[8]) if len(parts) > 10 else None, "top": num(parts[9]) if len(parts) > 10 else None,
+                                               "width": num(parts[10]) if len(parts) > 10 else None})
         info["status"] = "measured" if info.get("shapes") else "failed"
     except Exception as exc:
         info.update({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
     return info
 
 
+def _frames(out: Path, ppt: dict) -> list[dict]:
+    f = out / "powerpoint" / "powerpoint_frames.json"
+    if f.exists():
+        raw = json.loads(f.read_text(encoding="utf-8-sig") or "[]")
+        return raw if isinstance(raw, list) else [raw]
+    return ppt.get("frames") or []
+
+
+def _overlaps(m: dict, frames: list[dict], slide_w: float = 0.0) -> list[str]:
+    """Shapes hit by the rendered text itself (PowerPoint's text bounds, not the frame).
+
+    Frames often overlap by design (a body placeholder behind cards); only text that actually reaches
+    another shape counts.
+    """
+    if m.get("top") is None or m.get("bound_height_after") is None:
+        return []
+    top = m.get("bound_top_open")
+    if top is None:
+        top = m["top"] + (m.get("margin_top") or 0)
+    left = m.get("bound_left_open", m.get("left")) or 0.0
+    width = m.get("bound_width_open", m.get("width")) or 0.0
+    text = (left, top, left + width, top + m["bound_height_after"])
+    hits = []
+    for f in frames:
+        if f.get("deck") != m.get("deck") or f.get("slide") != m.get("slide"):
+            continue
+        if (f.get("id") is not None and f.get("id") == m.get("id")) or (f.get("id") is None and f.get("name") == m.get("name")):
+            continue
+        if slide_w and f.get("width", 0) >= 0.9 * slide_w:
+            continue  # full-slide background
+        r = (f["left"], f["top"], f["left"] + f["width"], f["top"] + f["height"])
+        if r[0] < text[2] - 1 and text[0] < r[2] - 1 and r[1] < text[3] - 1 and text[1] < r[3] - 1:
+            hits.append(f.get("name") or str(f.get("id")))
+    return hits
+
+
 def compare(out: Path, cases_rows: list[dict], ppt: dict) -> dict:
-    """Join our fit decisions with PowerPoint's measurement and PowerPoint's own saved fontScale."""
+    """Join our fit decisions with PowerPoint's measurement.
+
+    A slot FAILS when PowerPoint shows overflow (as opened or after forcing its own autofit recompute),
+    when PowerPoint's recompute wants a different size than ours (font size changes or a saved fontScale
+    != 1.0: we bake explicit sizes, so PowerPoint must not need to shrink further), or when the spilled
+    text overlaps another shape.
+    """
     from lxml import etree
     ns = {"p": "http://schemas.openxmlformats.org/presentationml/2006/main", "a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
     rows = []
     shapes = ppt.get("shapes") or []
+    frames = _frames(out, ppt)
     for case in cases_rows:
         if case.get("status") != "applied":
             continue
         resaved = out / "powerpoint" / f"{case['case']}.powerpoint.pptx"
-        saved_scale = {}
+        saved_scale, slide_w = {}, 0.0
         if resaved.exists():
             with zipfile.ZipFile(resaved) as z:
+                pres = etree.fromstring(z.read("ppt/presentation.xml"))
+                sz = pres.find("p:sldSz", ns)
+                slide_w = int(sz.get("cx")) / 12700 if sz is not None else 0.0
                 for n in z.namelist():
                     if n.startswith("ppt/slides/slide") and n.endswith(".xml"):
                         slide_no = int(n[len("ppt/slides/slide"):-4])
@@ -177,14 +235,38 @@ def compare(out: Path, cases_rows: list[dict], ppt: dict) -> dict:
         for t in case.get("text") or []:
             sid, slide = t.get("drawingml_id"), t.get("plan_slide")
             m = next((s for s in shapes if s.get("deck") == case["case"] and s.get("slide") == slide and s.get("id") == sid), None)
-            rows.append({"case": case["case"], "plan_slide": slide, "drawingml_id": sid, "our_fit": t.get("fit"), "our_font_scale": t.get("font_scale"),
-                         "powerpoint_font_scale_saved": saved_scale.get((slide, sid)), "powerpoint_overflow_pt": (m or {}).get("overflow_pt"),
-                         "powerpoint_font_size_after": (m or {}).get("font_size_after")})
-    overflow = [r for r in rows if (r["powerpoint_overflow_pt"] or 0) > 2.0]
+            row = {"case": case["case"], "plan_slide": slide, "drawingml_id": sid, "our_fit": t.get("fit"), "our_font_scale": t.get("font_scale"),
+                   "our_need_h_pt": t.get("need_h_pt"), "avail_h_pt": t.get("avail_h_pt"),
+                   "powerpoint_font_scale_saved": saved_scale.get((slide, sid))}
+            failures = []
+            if m:
+                row.update({"powerpoint_overflow_open_pt": m.get("overflow_open_pt"), "powerpoint_overflow_pt": m.get("overflow_pt"),
+                            "powerpoint_font_size_open": m.get("font_size_first_run"), "powerpoint_font_size_after": m.get("font_size_after"),
+                            "powerpoint_bound_h_pt": m.get("bound_height_after")})
+                if max(m.get("overflow_open_pt") or -1, m.get("overflow_pt") or -1) > 2.0:
+                    failures.append("overflow")
+                fo, fa = m.get("font_size_first_run"), m.get("font_size_after")
+                if isinstance(fo, (int, float)) and isinstance(fa, (int, float)) and abs(fo - fa) > 0.5:
+                    failures.append("powerpoint_recompute_changed_size")
+                hits = _overlaps(m, frames, slide_w)
+                if hits:
+                    row["overlaps"] = hits
+                    failures.append("overlap")
+            ss = row["powerpoint_font_scale_saved"]
+            if ss is not None and abs(ss - 1.0) > 0.01:
+                failures.append("font_scale_mismatch")
+            row["failures"] = failures
+            row["verdict"] = "FAIL" if failures else ("PASS" if m else "UNMEASURED")
+            rows.append(row)
+    overflow = [r for r in rows if "overflow" in r["failures"]]
+    failed = [r for r in rows if r["failures"]]
     scale_pairs = [(r["our_font_scale"], r["powerpoint_font_scale_saved"]) for r in rows if r["our_font_scale"] and r["powerpoint_font_scale_saved"]]
-    return {"slots": rows, "slots_measured": sum(1 for r in rows if r["powerpoint_overflow_pt"] is not None),
+    return {"slots": rows, "slots_measured": sum(1 for r in rows if r["verdict"] != "UNMEASURED"),
             "slots_overflowing_in_powerpoint": len(overflow), "overflow_detail": overflow,
-            "font_scale_max_abs_diff": round(max((abs(a - b) for a, b in scale_pairs), default=0.0), 3)}
+            "slots_overlapping": sum(1 for r in rows if "overlap" in r["failures"]),
+            "slots_font_scale_mismatch": sum(1 for r in rows if {"font_scale_mismatch", "powerpoint_recompute_changed_size"} & set(r["failures"])),
+            "font_scale_max_abs_diff": round(max((abs(1.0 - b) for _a, b in scale_pairs), default=0.0), 3),
+            "slots_failed": len(failed), "status": "failed" if failed else ("passed" if rows else "no_data")}
 
 
 def write_markdown(out: Path, report: dict) -> None:
@@ -192,7 +274,7 @@ def write_markdown(out: Path, report: dict) -> None:
          f"- 时间：{report['created_at']}", f"- 系统：{report['host']['platform']} / Python {report['host']['python']}",
          f"- PowerPoint：{report['powerpoint'].get('powerpoint')}（状态：{report['powerpoint'].get('status')}）", ""]
     for c in report["cases"]:
-        L.append(f"## 用例 {c['case']}：{c.get('status')}")
+        L.append(f"## 用例 {c['case']}：{c.get('status')}（预期 {c.get('expected')}，{'符合' if c.get('as_expected') else '不符合'}）")
         if c.get("error"):
             L.append(f"错误：`{c['error']}`")
         if c.get("check_summary"):
@@ -203,7 +285,16 @@ def write_markdown(out: Path, report: dict) -> None:
     cmp_ = report.get("comparison") or {}
     L += ["## PowerPoint 测量", f"- 已测量文本框：{cmp_.get('slots_measured')}",
           f"- PowerPoint 中溢出（>2pt）的文本框：{cmp_.get('slots_overflowing_in_powerpoint')}",
-          f"- 我方 fontScale 与 PowerPoint 重算后保存值的最大差：{cmp_.get('font_scale_max_abs_diff')}", "",
+          f"- 溢出文字压到其他形状上的文本框：{cmp_.get('slots_overlapping')}",
+          f"- PowerPoint 重算后字号/fontScale 与我方不一致的文本框：{cmp_.get('slots_font_scale_mismatch')}",
+          f"- **总判定：{cmp_.get('status')}**（失败文本框 {cmp_.get('slots_failed')} 个）", ""]
+    for r in cmp_.get("slots") or []:
+        L.append(f"  - {r['case']} 第{r['plan_slide']}页 id={r['drawingml_id']}：{r['verdict']} "
+                 f"我方={r.get('our_fit')}/{r.get('our_font_scale')} 预计高 {r.get('our_need_h_pt')}pt / 可用 {r.get('avail_h_pt')}pt；"
+                 f"PowerPoint 字号 {r.get('powerpoint_font_size_open')}→{r.get('powerpoint_font_size_after')} 文本高 {r.get('powerpoint_bound_h_pt')}pt "
+                 f"溢出 {r.get('powerpoint_overflow_pt')}pt {('失败原因 ' + ','.join(r['failures'])) if r['failures'] else ''} "
+                 f"{('压到 ' + ','.join(r.get('overlaps') or [])) if r.get('overlaps') else ''}")
+    L += ["",
           "请把同目录下的 ZIP 文件发回。"]
     (out / "REPORT.md").write_text("\n".join(L), encoding="utf-8")
 
@@ -228,7 +319,7 @@ def main() -> int:
             if p.is_file():
                 z.write(p, p.relative_to(out.parent))
     print(f"[4/4] 完成。请把这个文件发回：{archive}")
-    ok = all(c.get("status") == "applied" for c in cases_rows)
+    ok = all(c.get("as_expected") for c in cases_rows) and report["comparison"].get("status") != "failed"
     return 0 if ok else 1
 
 

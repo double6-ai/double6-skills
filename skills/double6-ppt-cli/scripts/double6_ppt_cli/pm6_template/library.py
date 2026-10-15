@@ -236,8 +236,8 @@ def _pm6_check(library: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
                  "avail_h_pt": report["avail_h_pt"], "line_count": report["line_count"], "engine": report["engine"],
                  "old_text": slot["text"], "new_text": text,
                  "message": {"fits": "fits the native frame", "grow": "frame grows (spAutoFit) within slide",
-                             "autofit": "fits with native normAutofit shrink", "shrunk": "fits only with explicit size reduction",
-                             "overflow": "does not fit even at minimum scale: shorten, split, or pick a larger layout",
+                             "autofit": "fits with native normAutofit shrink", "shrunk": "fits only with explicit size reduction (baked into run sz; PowerPoint does not reliably apply normAutofit fontScale)",
+                             "overflow": "does not fit even at the minimum font size for this role: shorten, split, or pick a larger layout",
                              "overflow_like_template": "overflows, but no more than the template's own sample text"}[report["status"]]})
         tables = {t["table_id"]: t for t in lib["tables"]}
         for edit in item.get("table_edits", []) or []:

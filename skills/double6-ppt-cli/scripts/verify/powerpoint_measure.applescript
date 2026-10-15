@@ -18,6 +18,9 @@ on run argv
 			repeat with shi from 1 to count of shapes of sl
 				set sh to shape shi of sl
 				try
+					set report to report & "F" & tab & si & tab & (name of sh) & tab & (left position of sh) & tab & (top of sh) & tab & (width of sh) & tab & (height of sh) & linefeed
+				end try
+				try
 					if has text frame of sh then
 						set tf to text frame of sh
 						set bh to "?"
@@ -32,7 +35,7 @@ on run argv
 						try
 							set fs to (font size of font of text range of tf) as text
 						end try
-						set report to report & si & tab & (name of sh) & tab & (height of sh) & tab & bh & tab & au & tab & fs & tab & (margin top of tf) & tab & (margin bottom of tf) & linefeed
+						set report to report & si & tab & (name of sh) & tab & (height of sh) & tab & bh & tab & au & tab & fs & tab & (margin top of tf) & tab & (margin bottom of tf) & tab & (left position of sh) & tab & (top of sh) & tab & (width of sh) & linefeed
 					end if
 				end try
 			end repeat

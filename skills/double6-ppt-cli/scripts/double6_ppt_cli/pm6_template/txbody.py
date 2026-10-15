@@ -215,12 +215,9 @@ def apply_fit(element: etree._Element, report: dict[str, Any]) -> None:
         for child in list(body):
             if child.tag in AUTOFIT_TAGS:
                 body.remove(child)
-        norm = etree.Element(q("a", "normAutofit"))
-        if report.get("font_scale", 1.0) < 0.999:
-            norm.set("fontScale", str(int(round(report["font_scale"] * 100000))))
-        if report.get("ln_spc_reduction", 0.0) > 0:
-            norm.set("lnSpcReduction", str(int(round(report["ln_spc_reduction"] * 100000))))
-        _insert_autofit(body, norm)
+        # Sizes are already baked into the runs; a bare normAutofit keeps PowerPoint's own shrink as a
+        # last resort without double-scaling (fontScale would multiply the explicit sz).
+        _insert_autofit(body, etree.Element(q("a", "normAutofit")))
     elif status == "grow" and report.get("new_h_pt"):
         ext = element.find("./p:spPr/a:xfrm/a:ext", NS)
         if ext is not None:

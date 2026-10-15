@@ -164,7 +164,7 @@ def _fill_text(pkg: Package, slide_part: str, element, text: str, receipts: list
     body = element.find(q("p", "txBody"))
     sizes = None
     scale = None
-    if report["status"] in ("shrunk",) or (report["status"] == "overflow" and report.get("autofit_mode") != "norm"):
+    if report["status"] in ("shrunk", "overflow") and report.get("font_scale", 1.0) < 0.999:
         scale = report["font_scale"]
         sizes = {int(k): v["sz"] for k, v in ctx["levels"].items()}
     set_text(body, text, ctx["template_paragraph_levels"] if ctx else None, size_scale=scale, resolved_sizes=sizes, levels=levels)
