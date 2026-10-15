@@ -1,0 +1,147 @@
+{
+  "T1-en-velis.pptx": {
+    "origin": "https://github.com/lrkrol/powerpoint/raw/master/lrk-slides-velis.potx (Laurens R. Krol), potx->pptx content-type switch; sample slides added from its layouts via python-pptx",
+    "license": "CC0-1.0 (stated in repo README)",
+    "source_sha256": "54f58da18846a40976c2b2aa13950343d4b24d112b5a0b64f1f8efbe251dcbcd",
+    "features": [
+      "real PowerPoint-authored masters/layouts (2 masters)",
+      "all text in inherited placeholders",
+      "multi-level bullets"
+    ],
+    "sha256": "ab04242db9b35e61bc1505c85615a57e00a1a099efd7cd4bf98151d6c8e5a735"
+  },
+  "T2-zh-lo-grey.pptx": {
+    "origin": "LibreOffice bundled Impress template Grey_Elegant.otp (/usr/lib/libreoffice/share/template/common/presnt), converted to PPTX by soffice 24.x; Chinese sample text written into its own placeholders via python-pptx; one table added",
+    "license": "MPL-2.0 (LibreOffice core extras/source/templates)",
+    "source_sha256": "ca003cfb2c0d99a7a54a58d89740cbb8c0c1055ccbb693c05c1c94ccd965a442",
+    "features": [
+      "LO-exported master/layout XML (non-PowerPoint dialect)",
+      "9 layouts with placeholders",
+      "decorative LO shapes (numbered circles)",
+      "CJK in placeholders",
+      "multi-paragraph placeholder",
+      "table"
+    ],
+    "sha256": "e0aee613ee83dcb60f222218960f696989caaa16bbee7ad2d240383cd0dfd087"
+  },
+  "T3-zh-corp-nav.pptx": {
+    "origin": "built with python-pptx (tools/build_templates.py) on python-pptx default master widened to 16:9",
+    "license": "CC0-1.0 (authored for this eval); python-pptx default template MIT",
+    "features": [
+      "layout placeholders (title/subtitle inherited)",
+      "master footer bar",
+      "nav tabs with slide-jump hyperlinks + active state",
+      "multi-level bullets w/ normAutofit",
+      "pictures",
+      "native table",
+      "native chart",
+      "CJK (Microsoft YaHei, absent -> fallback)"
+    ],
+    "sha256": "aeeccad7e35f97b3c4f667476aded51918dd4a9f804411f0c4c8acc78ba3d8f3"
+  },
+  "T4-en-qbr.pptx": {
+    "origin": "built with python-pptx (tools/build_templates.py)",
+    "license": "CC0-1.0 (authored for this eval); python-pptx default template MIT",
+    "features": [
+      "body placeholder with inherited list levels (no local rPr)",
+      "KPI cards",
+      "line chart",
+      "5x5 table",
+      "picture",
+      "Calibri (Carlito metric-compatible)"
+    ],
+    "sha256": "9afd8f4c4028d44f8976626f919b16de7e0c689f329db4c6bba0a7461ad985b7"
+  },
+  "T5-en-case3-tech.pptx": {
+    "origin": "existing double6 eval case3 template (/workspace/ppt-test/cases/c3/template.pptx), python-pptx built",
+    "license": "CC0-1.0 (authored in-house for eval)",
+    "source_sha256": "db7924e641306b0440dbbf1e7f52a411727e338863fa1234ac697199527d737d",
+    "features": [
+      "multi-paragraph columns",
+      "agenda list",
+      "free-floating text boxes"
+    ],
+    "sha256": "db7924e641306b0440dbbf1e7f52a411727e338863fa1234ac697199527d737d"
+  },
+  "T6-en-lo-vivid.pptx": {
+    "origin": "LibreOffice bundled Impress template Vivid.otp (/usr/lib/libreoffice/share/template/common/presnt), converted to PPTX by soffice; sample en text written into its placeholders, one extra content slide from its own layout, mixed-run callout, speaker notes and transitions added via python-pptx",
+    "license": "MPL-2.0 (LibreOffice core extras/source/templates)",
+    "source_sha256": "a3f51a522bfd0046018ca99157a36bc5e215abc4bb9e8d488741d0b8f4148c57",
+    "features": [
+      "LO-exported master/layout",
+      "placeholders",
+      "speaker notes",
+      "transitions",
+      "mixed-format runs",
+      "en"
+    ],
+    "sha256": "dd53eb65438586b95ad65fc911f33ce8c3149ab09314b230a6395c447f625d70"
+  },
+  "T7-zh-lo-focus.pptx": {
+    "origin": "LibreOffice bundled Impress template Focus.otp (/usr/lib/libreoffice/share/template/common/presnt), converted to PPTX by soffice; sample zh text written into its placeholders, one extra content slide from its own layout, mixed-run callout, speaker notes and transitions added via python-pptx",
+    "license": "MPL-2.0 (LibreOffice core extras/source/templates)",
+    "source_sha256": "cbb02ff3e8179ead34a750e03562ff9c396e52ca7c518b113d253d1558bc51c8",
+    "features": [
+      "LO-exported master/layout",
+      "placeholders",
+      "speaker notes",
+      "transitions",
+      "mixed-format runs",
+      "zh"
+    ],
+    "sha256": "e4410816da5f5ae9b9bb700a220559807f821789c1bb692060850dc48415649f"
+  },
+  "T8-zh-lo-piano.pptx": {
+    "origin": "LibreOffice bundled Impress template Piano.otp (/usr/lib/libreoffice/share/template/common/presnt), converted to PPTX by soffice; sample zh text written into its placeholders, one extra content slide from its own layout, mixed-run callout, speaker notes and transitions added via python-pptx",
+    "license": "MPL-2.0 (LibreOffice core extras/source/templates)",
+    "source_sha256": "5e8c5e00984238bfde4808ca1011d725b0cbac969871ea5dd898c1e484e9748f",
+    "features": [
+      "LO-exported master/layout",
+      "placeholders",
+      "speaker notes",
+      "transitions",
+      "mixed-format runs",
+      "zh"
+    ],
+    "sha256": "93c59fbb2a6fcc124c4d448d434761f009f5eaca1a38db03fd23c88642a89835"
+  },
+  "T9-en-lo-inspiration.pptx": {
+    "origin": "LibreOffice bundled Impress template Inspiration.otp (/usr/lib/libreoffice/share/template/common/presnt), converted to PPTX by soffice; sample en text written into its placeholders, one extra content slide from its own layout, mixed-run callout, speaker notes and transitions added via python-pptx",
+    "license": "MPL-2.0 (LibreOffice core extras/source/templates)",
+    "source_sha256": "3aba78049b64843935ff0de36e127d744ed90b2d5e8894d6bff1a65032ed037b",
+    "features": [
+      "LO-exported master/layout",
+      "placeholders",
+      "speaker notes",
+      "transitions",
+      "mixed-format runs",
+      "en"
+    ],
+    "sha256": "077ab1e39bd0499cac9c6904cc1a6120534c5dfecffe708ca6a3901b1f56b5fb"
+  },
+  "T10-en-poi-layouts.pptx": {
+    "origin": "https://github.com/apache/poi/raw/trunk/test-data/slideshow/layouts.pptx (PowerPoint-authored, 10 slides on the 11 Office layouts); English sample text, notes, transition and a mixed-run callout added via python-pptx",
+    "license": "Apache-2.0 (Apache POI test-data)",
+    "source_sha256": "9c3d53afa3115de2ba72ec77637a616aeed505a6ff3b30a46db871c4edd32be5",
+    "features": [
+      "PowerPoint-authored Office theme",
+      "all built-in layouts",
+      "two-content/comparison",
+      "notes",
+      "mixed-format runs"
+    ],
+    "sha256": "007309235278459ebc5f16f43833457b55f26dda161bdc18a5d085813517c798"
+  },
+  "T11-zh-poi-smartart.pptx": {
+    "origin": "https://github.com/apache/poi/raw/trunk/test-data/slideshow/SmartArt.pptx (PowerPoint-authored SmartArt diagram); title and bullet slides from its own layouts with Chinese text added via python-pptx",
+    "license": "Apache-2.0 (Apache POI test-data)",
+    "source_sha256": "b97e4c6d2ee1dd4094f50f9043820610268dd452d7717c537f5456636adcc353",
+    "features": [
+      "SmartArt (dgm parts) left untouched",
+      "non_text_content_unedited warning",
+      "CJK",
+      "transition"
+    ],
+    "sha256": "5aa66611685e20e78254115702425a62bc71902729f92fcc6c057fdbf4c70e47"
+  }
+}

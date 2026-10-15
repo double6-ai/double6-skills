@@ -52,7 +52,7 @@ def _proto_text(p: etree._Element) -> str:
     return "".join(out)
 
 
-MIN_KEEP = 2
+MIN_KEEP = 2  # shortest common prefix/suffix worth keeping with its own run style
 # rPr attributes that do not change the look (proofing/editing state); ignored when deciding whether
 # a paragraph really mixes formats.
 NOISE_ATTRS = {"lang", "altLang", "dirty", "err", "noProof", "smtClean", "smtId", "bmk"}
@@ -64,7 +64,7 @@ def style_key(rpr: etree._Element | None) -> bytes:
     c = deepcopy(rpr)
     for a in NOISE_ATTRS:
         c.attrib.pop(a, None)
-    return etree.tostring(c, method="c14n")  # shortest common prefix/suffix worth keeping with its own run style
+    return etree.tostring(c, method="c14n")
 
 
 def styled_runs(proto: etree._Element, line: str) -> list[tuple[etree._Element | None, str]] | None:
@@ -153,8 +153,6 @@ def set_text(txbody: etree._Element, text: str, ctx_levels: list[int] | None = N
                     ppr.set("lvl", str(lvl))
                 elif "lvl" in ppr.attrib:
                     del ppr.attrib["lvl"]
-                if not len(ppr) and not ppr.attrib:
-                    p.remove(ppr)
         end = p.find(q("a", "endParaRPr"))
         mixed = styled_runs(proto, line) if line != _proto_text(proto) else None
         if line == _proto_text(proto) and line:

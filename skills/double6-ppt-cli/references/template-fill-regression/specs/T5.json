@@ -1,0 +1,49 @@
+{
+ "template": "T5-en-case3-tech.pptx",
+ "title": "Edge Inference Platform: Architecture Update",
+ "slides": [
+  {
+   "source": 1,
+   "text": {
+    "Cover Title": "Edge Inference Platform",
+    "Cover Subtitle": "Architecture update for the platform review board",
+    "Cover Meta": "Platform Engineering · October 2026"
+   }
+  },
+  {
+   "source": 2,
+   "text": {
+    "Agenda Title": "Agenda",
+    "Agenda List": "01  Why we re-architected\n02  New runtime design\n03  Latency results\n04  Rollout plan"
+   }
+  },
+  {
+   "source": 3,
+   "text": {
+    "Content Title": "The new runtime has three layers",
+    "Column Heading 1": "Model gateway",
+    "Column Body 1": "Routes requests by model version and device class.\nAdds canary and shadow traffic.",
+    "Column Heading 2": "Compiled kernels",
+    "Column Body 2": "TensorRT and ONNX Runtime kernels built per SKU.\nCached in a content-addressed store.",
+    "Column Heading 3": "Telemetry loop",
+    "Column Body 3": "p50/p99 latency and accuracy drift per device.\nFeeds automatic rollback."
+   }
+  },
+  {
+   "source": 4,
+   "text": {
+    "Metric Title": "p99 latency dropped by 42%",
+    "Big Number": "42%",
+    "Big Number Caption": "p99 latency reduction across 1,200 devices",
+    "Metric Points": "p50: 38 ms to 24 ms\np99: 210 ms to 122 ms\nNo accuracy regression (Δ < 0.1 pt)"
+   }
+  },
+  {
+   "source": 5,
+   "text": {
+    "Closing Title": "Questions?",
+    "Closing Contact": "platform-eng@acme.example"
+   }
+  }
+ ]
+}
