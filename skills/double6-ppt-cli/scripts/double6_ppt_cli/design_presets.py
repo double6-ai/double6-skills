@@ -35,7 +35,7 @@ PRESETS: dict[str, dict] = {
     },
     "training": {
         "style_id": "workshop-teaching", "visual_style": "soft-rounded",
-        "bg": "#FFFDF8", "surface": "#F5F1E8", "primary": "#3D4A3F", "accent": "#B9853F",
+        "bg": "#FFFDF8", "surface": "#F5F1E8", "primary": "#3D4A3F", "accent": "#B08A50",
     },
 }
 # Backward-compatible aliases (0.4.x names).
