@@ -44,7 +44,7 @@ def _get(url: str, timeout: int = 30) -> bytes:
 
 
 def search_openverse(query: str, count: int = 12, min_width: int = 1200, orientation: str | None = "wide") -> list[dict[str, Any]]:
-    params = {"q": query, "license_type": "commercial,modification", "page_size": str(max(1, min(count * 2, 40))),
+    params = {"q": query, "license_type": "commercial,modification", "page_size": str(max(1, min(count * 2, 20))),
               "mature": "false"}
     if orientation:
         params["aspect_ratio"] = orientation
