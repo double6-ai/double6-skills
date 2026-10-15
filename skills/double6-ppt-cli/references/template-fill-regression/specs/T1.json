@@ -1,0 +1,62 @@
+{
+ "template": "T1-en-velis.pptx",
+ "title": "Measuring Reading Fluency in Early Grades",
+ "slides": [
+  {
+   "source": 1,
+   "text": {
+    "Title 1": "Measuring Reading Fluency in Early Grades",
+    "Subtitle 2": "Krol Lab · Annual Research Symposium 2026"
+   }
+  },
+  {
+   "source": 2,
+   "text": {
+    "Title 1": "Study design",
+    "Text Placeholder 2": "A three-year longitudinal cohort",
+    "Content Placeholder 3": "Longitudinal cohort of 1,240 pupils across 38 primary schools followed from grade 1 to grade 3\nSchools sampled to balance urban, suburban and rural catchments\nFluency measured three times per year with a validated one-minute oral reading task\nAssessors blinded to intervention status and trained to a common standard\nPrimary outcome: words correct per minute at the end of grade 3"
+   }
+  },
+  {
+   "source": 3,
+   "text": {
+    "Title 1": "Two interventions compared",
+    "Text Placeholder 2": "Small-group tutoring versus whole-class paired reading",
+    "Content Placeholder 3": "Small-group tutoring\nThree 30-minute sessions per week led by trained teaching assistants",
+    "Content Placeholder 4": "Paired reading\nDaily 15-minute sessions with peers matched by reading level"
+   }
+  },
+  {
+   "source": 4,
+   "text": {
+    "Title 1": "Results",
+    "Text Placeholder 2": "Grade 3 outcomes",
+    "Text Placeholder 3": "Both interventions improved fluency; tutoring helped struggling readers most"
+   }
+  },
+  {
+   "source": 5,
+   "text": {
+    "Title 1": "Key findings",
+    "Text Placeholder 2": "Effect sizes versus control",
+    "Content Placeholder 3": "Tutoring: +14 words correct per minute versus control\nPaired reading: +9 words correct per minute versus control\nEffects largest for pupils in the bottom quartile at baseline\nNo difference between urban and rural schools"
+   }
+  },
+  {
+   "source": 2,
+   "text": {
+    "Title 1": "Limitations and next steps",
+    "Text Placeholder 2": "What we would do differently",
+    "Content Placeholder 3": "Attrition of 11% by grade 3, higher in rural schools\nSensitivity analyses with multiple imputation gave consistent results\nNext: a cost-effectiveness study with the regional education authority\nPlanned for the 2027–2028 school year"
+   }
+  },
+  {
+   "source": 6,
+   "text": {
+    "Title 1": "Thank you",
+    "Text Placeholder 2": "Dr. Laurens Krol",
+    "Text Placeholder 3": "reading-study@example.org"
+   }
+  }
+ ]
+}

@@ -1,0 +1,49 @@
+{
+ "template": "T5-en-case3-tech.pptx",
+ "title": "Edge Inference Platform: Architecture Update",
+ "slides": [
+  {
+   "source": 1,
+   "text": {
+    "Cover Title": "Edge Inference Platform",
+    "Cover Subtitle": "Architecture update for the platform review board",
+    "Cover Meta": "Platform Engineering · October 2026"
+   }
+  },
+  {
+   "source": 2,
+   "text": {
+    "Agenda Title": "Agenda",
+    "Agenda List": "01  Why we re-architected the inference stack after the 2025 outages\n02  New runtime design: gateway, compiled kernels and the device scheduler\n03  Latency and cost results from the six-week production pilot\n04  Rollout plan, risks and what we need from the review board"
+   }
+  },
+  {
+   "source": 3,
+   "text": {
+    "Content Title": "The new runtime has three layers",
+    "Column Heading 1": "Model gateway",
+    "Column Body 1": "Routes every request by model version, device class and tenant, and applies per-tenant quotas before work reaches the fleet.\nAdds canary and shadow traffic so new models can be validated against live requests without user impact.",
+    "Column Heading 2": "Compiled kernels",
+    "Column Body 2": "Ahead-of-time compiled kernels for the eight most common operator patterns remove the JIT warm-up that dominated cold-start latency.\nKernels are cached per device family.",
+    "Column Heading 3": "Telemetry loop",
+    "Column Body 3": "A device-aware scheduler packs requests onto accelerators using measured, not nominal, throughput.\nIt drains nodes gracefully during upgrades."
+   }
+  },
+  {
+   "source": 4,
+   "text": {
+    "Metric Title": "p99 latency dropped by 42%",
+    "Big Number": "42%",
+    "Big Number Caption": "p99 latency reduction across 1,200 devices",
+    "Metric Points": "p99 latency fell from 410 ms to 190 ms across all regions during the pilot\nCold starts are now under 2 seconds for 95% of model loads\nCost per thousand requests dropped by 38% at the same traffic volume"
+   }
+  },
+  {
+   "source": 5,
+   "text": {
+    "Closing Title": "Questions?",
+    "Closing Contact": "platform-eng@acme.example"
+   }
+  }
+ ]
+}

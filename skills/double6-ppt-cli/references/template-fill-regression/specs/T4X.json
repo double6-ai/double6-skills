@@ -1,0 +1,156 @@
+{
+ "template": "T4-en-qbr.pptx",
+ "title": "Q3 FY2026 Quarterly Business Review",
+ "slides": [
+  {
+   "source": 1,
+   "text": {
+    "Title 1": "Q3 FY2026 Quarterly Business Review",
+    "Subtitle 2": "EMEA Enterprise Sales · Prepared for the executive leadership team"
+   }
+  },
+  {
+   "source": 2,
+   "text": {
+    "Title 1": "Executive summary",
+    "Content Placeholder 2": "Revenue reached $48.2M, up 18% year over year and 6% above plan\nGrowth driven by three new strategic accounts in DACH and the Nordics\nGross margin improved to 64.5% as discounting discipline took hold\nAverage discount on new business fell from 21% to 16%\nQ4 pipeline coverage stands at 3.4x, the highest level in six quarters\n\tPublic sector deals remain dependent on budget approvals"
+   }
+  },
+  {
+   "source": 3,
+   "text": {
+    "Title 1": "Key metrics at a glance",
+    "KPI Value 1": "$48.2M revenue (+18% YoY, +6% vs plan)",
+    "KPI Label 1": "Quarterly revenue\n+18% year over year",
+    "KPI Value 2": "64.5%",
+    "KPI Label 2": "Gross margin\n+2.1 pts vs. Q2",
+    "KPI Value 3": "3.4x",
+    "KPI Label 3": "Q4 pipeline coverage\nvs. 2.8x last quarter",
+    "KPI Value 4": "92%",
+    "KPI Label 4": "Gross revenue retention\nflat vs. Q2"
+   }
+  },
+  {
+   "source": 4,
+   "text": {
+    "Title 1": "North continues to lead; West is the fastest-growing region",
+    "Chart Commentary": "What happened\nNorth grew 12% QoQ on two large renewals, while West added 9 new logos.\nWhy it matters\nWest now contributes 24% of new pipeline and needs two more account executives to sustain growth."
+   },
+   "charts": {
+    "Revenue Chart": {
+     "categories": [
+      "Q4 FY25",
+      "Q1 FY26",
+      "Q2 FY26",
+      "Q3 FY26"
+     ],
+     "series": [
+      {
+       "name": "North",
+       "values": [
+        14.1,
+        15.0,
+        16.2,
+        18.1
+       ]
+      },
+      {
+       "name": "South",
+       "values": [
+        11.8,
+        12.0,
+        12.6,
+        13.4
+       ]
+      },
+      {
+       "name": "West",
+       "values": [
+        9.2,
+        10.9,
+        13.5,
+        16.7
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "source": 5,
+   "text": {
+    "Title 1": "Pipeline by stage"
+   },
+   "tables": {
+    "Pipeline Table": [
+     [
+      "Stage",
+      "Deals",
+      "Value",
+      "Win rate",
+      "Owner"
+     ],
+     [
+      "Qualify",
+      "64",
+      "$38.0M",
+      "12%",
+      "M. Rossi"
+     ],
+     [
+      "Solution",
+      "41",
+      "$29.5M",
+      "27%",
+      "A. Novak"
+     ],
+     [
+      "Proposal",
+      "22",
+      "$18.2M",
+      "46%",
+      "J. Berg"
+     ],
+     [
+      "Negotiation",
+      "9",
+      "$9.7M",
+      "71%",
+      "S. Laurent"
+     ]
+    ]
+   }
+  },
+  {
+   "source": 6,
+   "text": {
+    "Title 1": "Product spotlight: Atlas Analytics",
+    "Spotlight Body": "Atlas Analytics\nSelf-service analytics for finance teams, closing the month two days faster on average across our pilot customers.\n\"We replaced four spreadsheets with one governed model.\" — CFO, Nordic retail group"
+   },
+   "images": {
+    "Spotlight Image": "assets/product.png"
+   }
+  },
+  {
+   "source": 2,
+   "text": {
+    "Title 1": "Priorities for Q4",
+    "Content Placeholder 2": {
+     "text": "Close the three public sector deals in negotiation before budget freeze\nHire two account executives for the West region\nLaunch the Atlas Analytics partner program with five resellers",
+     "levels": [
+      0,
+      0,
+      0
+     ]
+    }
+   }
+  },
+  {
+   "source": 7,
+   "text": {
+    "Title 1": "Thank you",
+    "Subtitle 2": "Questions & discussion"
+   }
+  }
+ ]
+}
