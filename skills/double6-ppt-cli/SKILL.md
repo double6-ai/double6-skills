@@ -65,11 +65,11 @@ metadata:
 
 完整指引见 [visual-design.md](references/visual-design.md)。Skill 已经 vendored PPT Master v6.7.0 的设计子集，包括设计规范、15 个 style、`presentation_core` / `report_core` 版式库、图表与表格模板、约 430 个线性图标和形状脚本。
 
-1. 按场景选择 `--design` 预设。预设决定一套**全 deck 统一**的低饱和调色：一个主色 + 一个强调色 + 中性灰阶，以及字号阶梯。
+1. 按场景选择 `--design` 预设：它映射到一个上游 style，并写入起始调色（spec_lock `## colors` 为全 deck 颜色锚点）、字号阶梯与图标库。
 2. 作稿前读：预设对应的 `templates/styles/<style>/templates/design_spec.md`、`references/executor-base.md` 的 Page Expression Core；需要构图参考时看 `templates/layouts/`。
 3. 在 design_spec §IX 为每页写 `- Composition: page job → 版式结构 → 设备`。每页至少一个非文字视觉元素，例如色块、卡片、KPI 大数字、图标、图表、节点连线。
-4. 默认约束：不逐页换色；强调色只给焦点，面积不超过约 10%；字号不超过 7 档；图表系列色取自 `chart_series`，compile 会写进原生图表；图标用 `<use data-icon="tabler-outline/<name>" .../>`，compile 自动嵌入。
-5. 禁止的反模式：整页 bullet 白底黑字、上重下空、彩虹或高饱和配色、Office 默认图表色、千篇一律的卡片网格、中文孤字换行等，详见 visual-design.md §5。
+4. 配色行为以所选 style 的 Color Behavior 为准；字号不超过 7 档；图表系列色取自 `chart_series`，compile 会写进原生图表；图标用 `<use data-icon="tabler-outline/<name>" .../>`，compile 自动嵌入。
+5. 禁止的反模式：整页 bullet 白底黑字、上重下空、颜色没有角色、Office 默认图表色、千篇一律的卡片网格、中文孤字换行等，详见 visual-design.md §5。
 6. 视觉复核按 [visual-quality.md](references/visual-quality.md) 的 8 维评分表打分，结果写入 `visual-review --rubric`；未达通过线不能以 `pass` 交付。
 
 ## 三种模式

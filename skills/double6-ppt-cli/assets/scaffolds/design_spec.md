@@ -7,7 +7,7 @@
 - 核心结论：
 - 页数与叙事顺序：
 - 风格：{{VISUAL_STYLE}}（方法与视觉默认值见 {{STYLE_REF}}）
-- 调色：全 deck 统一使用 spec_lock `## colors`；主色 {{PRIMARY}}，强调色 {{ACCENT}}，不逐页换色
+- 调色：以 spec_lock `## colors` 为锚点（主色 {{PRIMARY}}，强调色 {{ACCENT}}），配色行为按 style 的 Color Behavior
 - 字体与替代字体：{{FONT_FAMILY}}
 - 跨页 motif（一种贯穿全 deck 的元素，如标题上方强调短线 / 封面几何）：
 - 图标库：{{ICON_LIBRARY}}（`<use data-icon="tabler-outline/<name>" .../>`，compile 自动嵌入）
