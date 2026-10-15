@@ -1,5 +1,10 @@
 # Modifications to PPT Master (v6.7.0, double6-ppt-cli 0.4.0; history from v4.8.0 below)
 
+## 0.5.0: visual-design subset
+
+- Added the PPT Master v6.7.0 visual-design subset to `vendor/ppt-master-core/` (BOM category `design_subset`, reproducible via `scripts/maintenance/vendor_design_subset.py`), byte-identical to the SHA-verified release asset. No vendor file is patched.
+- Double6-side: restrained deck-wide `--design` presets (`design_presets.py`), compile-time icon embedding and palette propagation into native charts/tables, role-based label/page_mark font floors, multi-line/rich-text identity resolution, image-only template detection, and the visual-quality metrics/rubric gate.
+
 ## 0.4.0-exp.2: template-fill on the PPT Master v6.7.0 roundtrip
 
 - Added upstream `skills/ppt-master/scripts/pptx_to_svg.py` (byte-identical to the SHA-verified v6.7.0 asset; its `pptx_to_svg/` package was already vendored) so the roundtrip import runs from the vendor tree. BOM now lists 173 files; still no vendor file is patched.

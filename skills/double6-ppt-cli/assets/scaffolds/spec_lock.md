@@ -20,25 +20,34 @@
 
 ## visual_style
 - visual_style: {{VISUAL_STYLE}}
+- style_reference: {{STYLE_REF}}
 
 ## colors
+<!-- One deck-wide palette. Do not change primary/accent per slide. Accent covers <=10% of a page. -->
 - bg: {{BG}}
+- surface: {{SURFACE}}
 - primary: {{PRIMARY}}
 - accent: {{ACCENT}}
 - text: {{TEXT}}
+- muted: {{MUTED}}
+- line: {{LINE}}
+- tint: {{TINT}}
+- chart_series: {{CHART_SERIES}}
 
 ## typography
 - font_family: {{FONT_FAMILY}}
 - title_family: {{FONT_FAMILY}}
 - body_family: {{FONT_FAMILY}}
+- display: {{DISPLAY_SIZE}}
 - title: {{TITLE_SIZE}}
+- subtitle: {{SUBTITLE_SIZE}}
 - body: {{BODY_SIZE}}
-- footnote: {{FOOTNOTE_SIZE}}
-- page_mark: {{PAGE_MARK_SIZE}}
+- label: {{LABEL_SIZE}}
+- caption: {{CAPTION_SIZE}}
 
 ## icons
-- library: [fill or none]
-- inventory: [fill or none]
+- library: {{ICON_LIBRARY}}
+- inventory: [fill: names used, e.g. chart-line, users-group]
 
 ## page_rhythm
 - P01: [fill after authoring the first page]

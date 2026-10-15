@@ -7,7 +7,13 @@ Version: `v6.7.0`
 Commit: `b4efe3ddf237a97a42880164759162f8e2412f2f`
 License: MIT
 
-The vendored 173-file lean core (generate path + roundtrip import entry `pptx_to_svg.py` for template-fill) is stored in `vendor/ppt-master-core/`. Every file is byte-identical to the official v6.7.0 release asset `ppt-master-skill-v6.7.0.zip` (SHA-256 `40424d9784fa25f771da8b312258c3c67a168925122aa6bb7faf6848e77ceee9`). Upstream removed Template Fill Native in v5.0.0, so it is not included. The original MIT license is retained at that root and in `licenses/PPT_MASTER_LICENSE` (unchanged SHA-256 `80cefc…`). The exact source paths, hashes and rationale are in `vendor/ppt-master-core/BOM.json`.
+The vendored lean core (generate path + roundtrip import entry `pptx_to_svg.py` for template-fill) is stored in `vendor/ppt-master-core/`. Every file is byte-identical to the official v6.7.0 release asset `ppt-master-skill-v6.7.0.zip` (SHA-256 `40424d9784fa25f771da8b312258c3c67a168925122aa6bb7faf6848e77ceee9`). Upstream removed Template Fill Native in v5.0.0, so it is not included. The original MIT license is retained at that root and in `licenses/PPT_MASTER_LICENSE` (unchanged SHA-256 `80cefc…`). The exact source paths, hashes and rationale are in `vendor/ppt-master-core/BOM.json`.
+
+Since double6-ppt-cli 0.5.0 the vendor tree also carries a **visual-design subset** (BOM category `design_subset`): design references, 15 styles, visual-styles/modes, the `presentation_core` and `report_core` layout libraries, chart/table templates, 435 curated `tabler-outline` icons and the `preset_shape_svg.py` / `shape_boolean_svg.py` / `icon_sync.py` / `svg_position_calculator.py` authoring scripts, byte-identical to the same release asset.
+
+## Tabler Icons (via PPT Master)
+
+Source: `https://github.com/tabler/tabler-icons` v3.46.0 (commit `8ac7d81b72ece11072ef25ea9fd92e80c6f3c9fc`), MIT, Copyright (c) 2020-2026 Paweł Kuna. A curated 435-icon subset of PPT Master's `templates/icons/tabler-outline/` is vendored (list: `scripts/maintenance/design_icons_tabler_outline.txt`). License text: `licenses/TABLER_ICONS_LICENSE`; upstream notice: `vendor/ppt-master-core/skills/ppt-master/templates/icons/THIRD_PARTY_NOTICES.md`.
 
 ## OfficeCLI
 
