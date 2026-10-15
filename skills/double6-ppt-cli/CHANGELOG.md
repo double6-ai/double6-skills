@@ -1,5 +1,18 @@
 # double6-ppt-cli 变更记录
 
+## 0.4.0-exp.2（实验，未发布）
+
+- **template-fill 迁移到 PPT Master v6.7.0 roundtrip**（`scripts/double6_ppt_cli/pm6_template/`）：
+  - 导入 → 对象原生回传（cloned_passthrough）→ 导出后按 cNvPr id 原生改写 txBody；形状 ID、占位符继承、段落属性、项目符号都保持原生。
+  - 用真实字体度量做中英文换行（Linux 用 fontconfig；Windows/macOS 扫描系统字体目录），结果映射到原生 normAutofit/spAutoFit/缩字；估算会溢出时 check 阶段报 ERROR。
+  - 分析/计划草稿/检查沿用 v4.8 契约：Double6 维护的 v4.8 只读模块移植（`pm6_template/fillnative/`，MIT），包括 SmartArt 读取、图表编辑能力、合并单元格拓扑、选择器（slot_id/shape_id/shape_name）、`paragraphs`、复用集中度告警。
+  - 讲者备注（`notes`：替换 / `"keep"` / 省略时删除模板示例备注）和切换效果（`transition`：保留 / 替换 / `none`）。
+  - 同一段落内混合格式：未改动的段落原样保留全部 run、换行和字段；改动段落保留公共前后缀所在 run 的样式。
+- vendor 新增上游 `pptx_to_svg.py`（173 文件，逐字节一致，BOM 已更新），版本由 BOM 锁定；不再需要 `D6PPT_PM6_ROOT`（仅作开发覆盖）。
+- 修复：`_normalize_txbody_paragraph_order` 把交错的 `a:r`/`a:br` 排序打乱，并且会改写母版/版式（T1 版式 26/32 字节漂移的根因）。现在只调整 pPr/endParaRPr 的位置，也只处理幻灯片部件。
+- doctor：template-fill 能力改为检查 roundtrip 入口和 `pm6_template` 包。
+- 新增 PowerPoint 实机一键验证脚本 `scripts/verify/`（Windows COM / macOS AppleScript）。
+
 ## 0.4.0-exp.1（实验，未发布）
 
 - **PPT Master v4.8.0 → v6.7.0**（commit `b4efe3d`，官方 asset SHA `40424d97…`），172 文件精简内核，BOM 已重建。仅适用于 generate。

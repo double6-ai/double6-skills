@@ -15,7 +15,7 @@ metadata:
 
 # Double6 PPT CLI 0.4.0-exp.1（实验版）
 
-> **实验版**：内核已换成 PPT Master v6.7.0，目前只验证了 generate。`template-fill`（`template-analyze`/`template-check-plan`/`template-apply` 等）会返回 `template_fill_not_migrated`；需要模板填充请用 0.3.x。
+> **实验版**：内核已换成 PPT Master v6.7.0。generate 走 v6.7.0；template-fill 改为 v6.7.0 roundtrip 后端（`pm6_template`：对象原生回传 + 按形状 ID 原生改写文本框 + 真实字体度量换行/自动调整），保留 v4.8 的分析/检查/计划契约，详见 [template-fill-pm6.md](references/template-fill-pm6.md)。PowerPoint 实机验证脚本见 [powerpoint-verification.md](references/powerpoint-verification.md)。
 
 > 安装说明：从 [GitHub / skills.sh](https://github.com/double6-ai/double6-skills/tree/main/skills/double6-ppt-cli) 安装可获得完整 vendored PPT Master。ClawHub 包因网关体积限制省略了 `pptx_animation_presets.json` 与 `presetShapeDefinitions.xml`；需要原生 SVG 生成完整能力时，请改用 GitHub 安装。
 
