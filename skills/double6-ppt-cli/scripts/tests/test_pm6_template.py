@@ -225,7 +225,7 @@ class LibraryAndCheckTest(unittest.TestCase):
         plan["slides"][0]["chart_edits"] = [{"chart_id": lib2["charts"][0]["chart_id"], "categories": ["A", "B"], "series": [{"name": "S", "values": [1]}]}]
         codes = self.codes(check_plan(self.lib, plan))
         self.assertIn("table_cell_is_merge_slave", codes)
-        self.assertIn("chart_edit", codes)
+        self.assertIn("chart_series_length_mismatch", codes)
 
 
 @unittest.skipUnless(HAVE_PPTX, "python-pptx needed for fixtures")

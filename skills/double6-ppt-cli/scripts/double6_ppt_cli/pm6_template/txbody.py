@@ -41,6 +41,74 @@ def _run_rpr(proto: etree._Element) -> etree._Element | None:
     return None
 
 
+def _proto_text(p: etree._Element) -> str:
+    out = []
+    for node in p:
+        if node.tag in (q("a", "r"), q("a", "fld")):
+            t = node.find(q("a", "t"))
+            out.append((t.text or "") if t is not None else "")
+        elif node.tag == q("a", "br"):
+            out.append("\v")
+    return "".join(out)
+
+
+MIN_KEEP = 2  # shortest common prefix/suffix worth keeping with its own run style
+
+
+def styled_runs(proto: etree._Element, line: str) -> list[tuple[etree._Element | None, str]] | None:
+    """Mixed-format preservation: map ``line`` onto the prototype's runs.
+
+    Unchanged text keeps the run it came from (bold lead-ins, coloured numbers, links); the edited
+    middle inherits the style of the run where the edit starts. Returns None when the prototype has
+    a single style (plain rewrite is equivalent) or contains breaks/fields.
+    """
+    runs = [n for n in proto if n.tag in RUN_TAGS]
+    if not runs or any(n.tag != q("a", "r") for n in runs):
+        return None
+    pieces = []
+    for r in runs:
+        t = r.find(q("a", "t"))
+        pieces.append((r.find(q("a", "rPr")), (t.text or "") if t is not None else ""))
+    keys = {etree.tostring(rp) if rp is not None else b"" for rp, _t in pieces}
+    if len(keys) < 2:
+        return None
+    old = "".join(t for _rp, t in pieces)
+    if "\v" in line:
+        return None
+    pre = 0
+    while pre < min(len(old), len(line)) and old[pre] == line[pre]:
+        pre += 1
+    suf = 0
+    while suf < min(len(old), len(line)) - pre and old[len(old) - 1 - suf] == line[len(line) - 1 - suf]:
+        suf += 1
+    if pre < MIN_KEEP and pre != len(old):
+        pre = 0
+    if suf < MIN_KEEP and suf != len(old):
+        suf = 0
+    owner = []  # run index per old char
+    for i, (_rp, t) in enumerate(pieces):
+        owner += [i] * len(t)
+    out: list[tuple[int, str]] = []
+
+    def push(idx: int, text: str) -> None:
+        if not text:
+            return
+        if out and out[-1][0] == idx:
+            out[-1] = (idx, out[-1][1] + text)
+        else:
+            out.append((idx, text))
+
+    for c in range(pre):
+        push(owner[c], old[c])
+    middle = line[pre:len(line) - suf if suf else len(line)]
+    if middle:
+        anchor = pre if pre < len(old) - suf else max(pre - 1, 0)
+        push(owner[anchor] if owner else 0, middle)
+    for c in range(len(old) - suf, len(old)):
+        push(owner[c], old[c])
+    return [(deepcopy(pieces[i][0]) if pieces[i][0] is not None else None, text) for i, text in out]
+
+
 def set_text(txbody: etree._Element, text: str, ctx_levels: list[int] | None = None, *, size_scale: float | None = None,
              resolved_sizes: dict[int, float] | None = None, levels: list[int] | None = None) -> int:
     """Replace paragraphs of ``txbody`` with ``text`` (``\\n`` = paragraph, leading ``\\t`` = list level).
@@ -73,7 +141,26 @@ def set_text(txbody: etree._Element, text: str, ctx_levels: list[int] | None = N
             elif "lvl" in ppr.attrib:
                 del ppr.attrib["lvl"]
         end = p.find(q("a", "endParaRPr"))
-        segments = line.split("\v")
+        mixed = styled_runs(proto, line) if line != _proto_text(proto) else None
+        if line == _proto_text(proto) and line:
+            # unchanged paragraph: keep every run, break and field verbatim
+            insert_at = list(p).index(end) if end is not None else len(p)
+            for node in [n for n in proto if n.tag in RUN_TAGS]:
+                p.insert(insert_at, deepcopy(node))
+                insert_at += 1
+            segments = []
+        elif mixed:
+            insert_at = list(p).index(end) if end is not None else len(p)
+            for rp, seg in mixed:
+                r = etree.Element(q("a", "r"))
+                if rp is not None:
+                    r.append(rp)
+                etree.SubElement(r, q("a", "t")).text = seg
+                p.insert(insert_at, r)
+                insert_at += 1
+            segments = []
+        else:
+            segments = line.split("\v")
         insert_at = list(p).index(end) if end is not None else len(p)
         for s_index, seg in enumerate(segments):
             if s_index:
