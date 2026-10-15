@@ -23,7 +23,7 @@
 | `product-launch` | product-launch | editorial | #F8F7F4 | #16181C | #B08D57 | 新品发布、产品介绍（深浅节奏） |
 | `operating-review` | operating-review | data-journalism | #FFFFFF | #1F3A5F | #2F6E9E | 经营复盘、数据报告、季度回顾 |
 | `academic` | academic-research | swiss-minimal | #FAFAF7 | #263B4F | #8A5A44 | 学术报告、答辩 |
-| `training` | workshop-teaching | soft-rounded | #FFFDF8 | #3D4A3F | #B9853F | 培训、课程、工作坊 |
+| `training` | workshop-teaching | soft-rounded | #FFFDF8 | #3D4A3F | #B08A50 | 培训、课程、工作坊 |
 | `neutral` | — | — | 待填 | 待填 | 待填 | 有品牌规范时自行填写 |
 
 所有预设共用：正文 #1E2733、次要文字 #5B6573、分隔线 #D9DDE2；字号阶梯（px）display 64 / title 34 / subtitle 24 / body 18 / label 14 / caption 12。用户给了品牌色时，只替换 primary/accent，其余规则不变。
