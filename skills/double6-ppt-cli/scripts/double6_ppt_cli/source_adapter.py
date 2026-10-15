@@ -150,6 +150,10 @@ def prepare_ppt_master_project(
         selectors.setdefault((str(relative), str(selected_id)), []).append(obj["source_id"])
 
     changes: list[dict[str, Any]] = []
+    from .images import check_image_credits
+    image_report = check_image_credits(source_project)
+    if image_report["used"]:
+        changes.append({"action": "check_image_credits", **image_report})
     staged_icons = _stage_icons(source_project, build_project)
     if staged_icons:
         changes.append({"action": "stage_icons", "icons": staged_icons})

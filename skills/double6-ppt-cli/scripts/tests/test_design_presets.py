@@ -28,8 +28,8 @@ class DesignPresetTests(unittest.TestCase):
             run = Path(tmp) / "run"
             init_run("generate", src, run, verify_tier="portable", design_profile="investor-pitch")
             lock = (run / "authoring" / "project" / "spec_lock.md").read_text(encoding="utf-8")
-            self.assertIn("- primary: #22344F", lock)
-            self.assertIn("- chart_series: #3C7A78", lock)
+            self.assertIn("- primary: #2B1C8F", lock)
+            self.assertIn("- chart_series: #FF5A3C", lock)
             self.assertIn("- library: tabler-outline", lock)
             self.assertNotIn("{{", lock)
             spec = (run / "authoring" / "project" / "design_spec.md").read_text(encoding="utf-8")

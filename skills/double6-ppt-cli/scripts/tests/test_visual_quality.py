@@ -133,9 +133,9 @@ class MetricTests(unittest.TestCase):
         box.text_frame.word_wrap = True
         r = box.text_frame.paragraphs[0].add_run(); r.text = text; r.font.size = Pt(18); r.font.name = "Noto Sans CJK SC"
         prs.save(deck)
-        self.assertIn("cjk_orphan", self.codes(compute_visual_metrics(deck, [page])))
+        self.assertIn("orphan_line", self.codes(compute_visual_metrics(deck, [page])))
         box.width = Emu(int((font.getlength(text) / 4 + 20) * 12700)); prs.save(deck)
-        self.assertNotIn("cjk_orphan", self.codes(compute_visual_metrics(deck, [page])))
+        self.assertNotIn("orphan_line", self.codes(compute_visual_metrics(deck, [page])))
 
 
 class BriefFixturesTests(unittest.TestCase):
@@ -211,3 +211,84 @@ class TemplateFillFidelityRegression(unittest.TestCase):
             nr = b["Headline"].text_frame.paragraphs[0].runs[0]
             self.assertEqual((nr.font.size, nr.font.bold, str(nr.font.color.rgb), nr.font.name), (Pt(32), True, "16181C", "Georgia"))
             self.assertTrue(NS)
+
+
+class Phase4ChecksTests(unittest.TestCase):
+    def test_orphan_rules(self):
+        from double6_ppt_cli.visual_quality import _is_orphan, _last_line, _font_for
+        self.assertTrue(_is_orphan("增速远高于门店渠道的 4%", "4%"))
+        self.assertTrue(_is_orphan("增速远高于门店渠道的好", "好"))
+        self.assertFalse(_is_orphan("增速远高于门店渠道", "门店渠道"))
+        self.assertTrue(_is_orphan("Revenue grew across every region in", "in"))
+        self.assertFalse(_is_orphan("Revenue grew across every region", "every region"))
+        font = _font_for("Noto Sans CJK SC", False, 18)
+        if font is not None:
+            text = "即时零售增速远高于门店渠道的4%"
+            avail = font.getlength("即时零售增速远高于门店渠道的") + 2
+            self.assertEqual(_last_line(text, font, avail), "4%")  # digit runs never split
+
+    def test_cjk_latin_space(self):
+        from double6_ppt_cli.visual_quality import CJK_LATIN_SPACE
+        self.assertTrue(CJK_LATIN_SPACE.search("11 月 11 日"))
+        self.assertTrue(CJK_LATIN_SPACE.search("前 20% 门店"))
+        self.assertFalse(CJK_LATIN_SPACE.search("11月11日开售"))
+        self.assertFalse(CJK_LATIN_SPACE.search("Q3 2026 review"))
+
+    def test_chart_series_distinct(self):
+        from double6_ppt_cli.visual_quality import delta_e, MIN_SERIES_DELTA_E
+        self.assertLess(delta_e("#1F3A5F", "#2F6E9E"), 25)
+        self.assertGreater(delta_e("#F26B38", "#0F2A4A"), MIN_SERIES_DELTA_E)
+        import itertools
+        from double6_ppt_cli.design_presets import PRESETS, resolve
+        for name in PRESETS:
+            cs = resolve(name)["chart_series"]
+            self.assertGreaterEqual(min(delta_e(a, b) for a, b in itertools.combinations(cs, 2)), 25, name)
+
+    def test_indistinct_series_flagged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            deck = Path(tmp) / "c.pptx"; page = Path(tmp) / "c.png"
+            prs = Presentation(); prs.slide_width, prs.slide_height = W, H
+            s = prs.slides.add_slide(prs.slide_layouts[6])
+            card = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Emu(600000), Emu(4200000), Emu(10000000), Emu(1800000))
+            cd = CategoryChartData(); cd.categories = ["A", "B"]; cd.add_series("S1", (1, 2)); cd.add_series("S2", (2, 3))
+            ch = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Emu(600000), Emu(600000), Emu(5000000), Emu(3000000), cd).chart
+            for ser, col in zip(ch.plots[0].series, ("1F3A5F", "2F6E9E")):
+                ser.format.fill.solid(); ser.format.fill.fore_color.rgb = RGBColor.from_string(col)
+            prs.save(deck); _page(page)
+            codes = {f["code"] for f in compute_visual_metrics(deck, [page])["findings"]}
+            self.assertIn("chart_series_indistinct", codes)
+
+
+class ImageSupportTests(unittest.TestCase):
+    def test_treatments(self):
+        from double6_ppt_cli.images import apply_treatments, parse_treatments, placeholder_image
+        src = placeholder_image((800, 600), ["#102030", "#E0A040"])
+        out = apply_treatments(src, parse_treatments("cover=640x360;focus=0.5,0.3;duotone=#16181C,#B08D57;tint=#000000@0.2"))
+        self.assertEqual(out.size, (640, 360)); self.assertEqual(out.mode, "RGB")
+        rounded = apply_treatments(src, parse_treatments("cover=200x200;circle"))
+        self.assertEqual(rounded.mode, "RGBA"); self.assertEqual(rounded.getpixel((0, 0))[3], 0)
+        with self.assertRaises(Exception):
+            parse_treatments("sepia=1")
+
+    def test_credits_gate_and_placeholder(self):
+        from double6_ppt_cli.common import D6PPTError
+        from double6_ppt_cli.images import add_image, check_image_credits, credits_markdown
+        from double6_ppt_cli.runs import init_run
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "b.md"; src.write_text("# x\n", encoding="utf-8")
+            run = Path(tmp) / "run"
+            init_run("generate", src, run, design_profile="investor-pitch", verify_tier="portable")
+            project = run / "authoring" / "project"
+            (project / "svg_output" / "01.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"><image href="../images/hero.jpg" x="0" y="0" width="10" height="10"/></svg>', encoding="utf-8")
+            with self.assertRaises(D6PPTError) as cm:
+                check_image_credits(project)
+            self.assertEqual(cm.exception.code, "image_credit_missing")
+            rec = add_image(run, "hero", placeholder="gradient", colours=["#2B1C8F", "#FF5A3C"], size="640x360",
+                            treatments="cover=640x360")
+            self.assertTrue(rec["placeholder"])
+            (project / "svg_output" / "01.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"><image href="../images/hero.jpg" x="0" y="0" width="10" height="10"/></svg>', encoding="utf-8")
+            report = check_image_credits(project)
+            self.assertEqual(report["placeholders"], ["hero.jpg"])
+            self.assertIn("placeholder", credits_markdown(project))
+            with self.assertRaises(D6PPTError):
+                add_image(run, "x", url="https://example.com/a.jpg")  # no license metadata

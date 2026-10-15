@@ -32,6 +32,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("package-clean"); p.add_argument("--run", type=Path, required=True)
     p = sub.add_parser("visual-policy"); p.add_argument("--run", type=Path, required=True); p.add_argument("--capability", choices=("available", "unavailable", "unknown"), required=True); p.add_argument("--decision", choices=("perform", "waive"), required=True); p.add_argument("--reason", choices=("user_declined_switch", "no_visual_model", "user_requested_skip")); p.add_argument("--user-ack", action="store_true")
     p = sub.add_parser("visual-review"); p.add_argument("--run", type=Path, required=True); p.add_argument("--status", choices=("accepted", "accepted_with_warnings", "rejected"), required=True); p.add_argument("--reviewer", required=True); p.add_argument("--notes", required=True); p.add_argument("--rubric", type=Path, help="JSON file with 8 rubric scores (1-5)")
+    p = sub.add_parser("image-search"); p.add_argument("--query", required=True); p.add_argument("--count", type=int, default=12); p.add_argument("--min-width", type=int, default=1200); p.add_argument("--orientation", choices=("wide", "tall", "square", "any"), default="wide")
+    p = sub.add_parser("image-add"); p.add_argument("--run", type=Path, required=True); p.add_argument("--name", required=True); p.add_argument("--openverse-id"); p.add_argument("--url"); p.add_argument("--file", type=Path); p.add_argument("--placeholder", choices=("gradient", "orbs", "grain")); p.add_argument("--colors"); p.add_argument("--size", default="1600x900"); p.add_argument("--license"); p.add_argument("--creator"); p.add_argument("--source-url"); p.add_argument("--license-url"); p.add_argument("--treat", help="e.g. cover=1280x720;focus=0.5,0.4;duotone=#16181C,#B08D57;tint=#000000@0.3;round=24")
     p = sub.add_parser("visual-metrics"); p.add_argument("--run", type=Path, required=True)
     p = sub.add_parser("render-import"); p.add_argument("--run", type=Path, required=True); p.add_argument("--pdf", type=Path, required=True); p.add_argument("--pages", type=Path, required=True, nargs="+"); p.add_argument("--contact-sheet", type=Path, required=True); p.add_argument("--tier", choices=("portable", "native"), default="portable"); p.add_argument("--renderer", required=True); p.add_argument("--fact-source", required=True)
     p = sub.add_parser("inspect"); p.add_argument("--run", type=Path, required=True); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS)
@@ -97,6 +99,14 @@ def main(argv: list[str] | None = None) -> int:
             if isinstance(rubric, dict) and "scores" in rubric:
                 rubric = rubric["scores"]
             result = record_visual_review(args.run, args.status, args.reviewer, args.notes, rubric=rubric)
+        elif args.command == "image-search":
+            from .images import search_openverse
+            result = {"provider": "openverse", "license_filter": "commercial,modification", "results": search_openverse(args.query, args.count, args.min_width, None if args.orientation == "any" else args.orientation)}
+        elif args.command == "image-add":
+            from .images import add_image
+            result = add_image(args.run, args.name, openverse_id=args.openverse_id, url=args.url, file=args.file, placeholder=args.placeholder,
+                               colours=args.colors.split(",") if args.colors else None, size=args.size, license=args.license, creator=args.creator,
+                               source_url=args.source_url, license_url=args.license_url, treatments=args.treat)
         elif args.command == "visual-metrics":
             from .visual_review import visual_metrics_for_run
             result = visual_metrics_for_run(args.run)

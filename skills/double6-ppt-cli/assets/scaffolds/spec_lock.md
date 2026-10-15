@@ -20,6 +20,8 @@
 
 ## visual_style
 - visual_style: {{VISUAL_STYLE}}
+- theme: {{THEME}}
+- imagery: {{IMAGERY}}
 - style_reference: {{STYLE_REF}}
 
 ## colors
@@ -28,6 +30,11 @@
 - surface: {{SURFACE}}
 - primary: {{PRIMARY}}
 - accent: {{ACCENT}}
+- accent2: {{ACCENT2}}
+- on_accent: {{ON_ACCENT}}
+- on_primary: {{ON_PRIMARY}}
+- gradient_from: {{GRADIENT_FROM}}
+- gradient_to: {{GRADIENT_TO}}
 - text: {{TEXT}}
 - muted: {{MUTED}}
 - line: {{LINE}}
@@ -38,6 +45,7 @@
 - font_family: {{FONT_FAMILY}}
 - title_family: {{FONT_FAMILY}}
 - body_family: {{FONT_FAMILY}}
+- hero: {{HERO_SIZE}}
 - display: {{DISPLAY_SIZE}}
 - title: {{TITLE_SIZE}}
 - subtitle: {{SUBTITLE_SIZE}}

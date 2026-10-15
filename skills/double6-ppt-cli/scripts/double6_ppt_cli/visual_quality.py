@@ -85,6 +85,59 @@ def _is_cjk(ch: str) -> bool:
     return 0x2E80 <= o <= 0x9FFF or 0xF900 <= o <= 0xFAFF or 0xFF00 <= o <= 0xFFEF or 0x3000 <= o <= 0x303F
 
 
+CJK_LATIN_SPACE = re.compile(r"[\u3400-\u9fff\uff00-\uffef] +[0-9A-Za-z%$¥€]|[0-9A-Za-z%] +[\u3400-\u9fff]")
+_TOKEN = re.compile(r"[\x21-\x7E]+\s*|\s+|.")
+
+
+def _last_line(text: str, font, avail: float) -> str | None:
+    """Greedy line-break simulation (Latin words and digit runs never split); None if one line."""
+    lines, cur = [], ""
+    for tok in _TOKEN.findall(text):
+        if cur and font.getlength((cur + tok).rstrip()) > avail:
+            lines.append(cur)
+            cur = tok.lstrip()
+        else:
+            cur += tok
+    lines.append(cur)
+    return lines[-1].strip() if len(lines) > 1 else None
+
+
+def _is_orphan(text: str, tail: str) -> bool:
+    if not tail:
+        return False
+    cjk_text = any(_is_cjk(c) for c in text)
+    punct = "，。、；：！？）》」”’,.;:!?)"
+    core = tail.strip(punct)
+    if cjk_text:
+        if core and all(_is_cjk(c) for c in core) and len(core) <= 1:
+            return True
+        if core and all(ord(c) < 0x2E80 for c in core) and len(core) <= 6:
+            return True  # e.g. "4%", "Q4", "AI"
+        return False
+    words = tail.split()
+    return len(words) == 1 and len(core) <= 6
+
+
+def _lab(rgb: tuple[int, int, int]) -> tuple[float, float, float]:
+    def f(c: float) -> float:
+        c = c / 255
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = (f(c) for c in rgb[:3])
+    x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
+    y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+    g_ = lambda t: t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116  # noqa: E731
+    return 116 * g_(y) - 16, 500 * (g_(x) - g_(y)), 200 * (g_(y) - g_(z))
+
+
+def delta_e(a: str, b: str) -> float:
+    la, lb = _lab(_hex_to_rgb(a)), _lab(_hex_to_rgb(b))
+    return sum((p - q) ** 2 for p, q in zip(la, lb)) ** 0.5
+
+
+MIN_SERIES_DELTA_E = 25.0
+
+
 def _theme_colors(z: zipfile.ZipFile) -> dict[str, str]:
     out: dict[str, str] = {}
     names = [n for n in z.namelist() if re.match(r"ppt/theme/theme\d+\.xml$", n)]
@@ -186,10 +239,22 @@ def compute_visual_metrics(pptx: Path, pages: list[Path], palette: dict[str, Any
                     except (AttributeError, ValueError):
                         color = None
                     if color and box and box[2] > box[0] and box[3] > box[1]:
-                        crop = img.crop(box).resize((max(1, (box[2] - box[0]) // 2), max(1, (box[3] - box[1]) // 2)))
-                        colors = crop.getcolors(crop.width * crop.height) or []
+                        samples = []
+                        bw = box[2] - box[0]
+                        for seg in range(3):  # left / middle / right: catches gradients and photos behind text
+                            sb = (box[0] + seg * bw // 3, box[1], box[0] + (seg + 1) * bw // 3, box[3])
+                            if sb[2] - sb[0] < 2:
+                                continue
+                            crop = img.crop(sb).resize((max(1, (sb[2] - sb[0]) // 2), max(1, (sb[3] - sb[1]) // 2)))
+                            cols = crop.getcolors(crop.width * crop.height) or []
+                            # ignore pixels close to the text colour itself (glyph ink)
+                            tr = _hex_to_rgb(color)
+                            cols = [c for c in cols if sum(abs(c[1][k] - tr[k]) for k in range(3)) > 60] or cols
+                            if cols:
+                                samples.append(max(cols, key=lambda c: c[0])[1])
+                        colors = samples
                         if colors:
-                            bg = max(colors, key=lambda c: c[0])[1]
+                            bg = min(colors, key=lambda c: contrast_ratio(_hex_to_rgb(color), c))
                             ratio = contrast_ratio(_hex_to_rgb(color), bg)
                             large = (size or 0) >= 18 or ((size or 0) >= 14 and bool(run.font.bold))
                             need = 3.0 if large else 4.5
@@ -197,8 +262,9 @@ def compute_visual_metrics(pptx: Path, pages: list[Path], palette: dict[str, Any
                                 add("low_contrast", index, f"Text '{run.text[:20]}' contrast {ratio:.2f}:1 < {need}:1",
                                     shape=shape.name, color=color, background="#%02X%02X%02X" % bg[:3], ratio=round(ratio, 2))
                         break  # one sample per paragraph is enough
-                # CJK orphan: a wrapped paragraph whose last line is a single CJK character.
-                if text and any(_is_cjk(c) for c in text) and frame.word_wrap is not False and shape.width:
+                # Orphans: a wrapped paragraph whose last line is a lone CJK char, a short Latin/digit
+                # fragment after CJK text ("4%"), or a single short word in Latin text.
+                if text and frame.word_wrap is not False and shape.width:
                     run0 = next((r for r in para.runs if r.text.strip()), None)
                     size = (run0.font.size.pt if run0 is not None and run0.font.size is not None else None)
                     if size:
@@ -207,17 +273,13 @@ def compute_visual_metrics(pptx: Path, pages: list[Path], palette: dict[str, Any
                             body = frame._txBody.find(f"{{{NS['a']}}}bodyPr")
                             ins = sum(int(body.get(k)) if body is not None and body.get(k) else 91440 for k in ("lIns", "rIns"))
                             avail = (int(shape.width) - ins) / EMU_PER_PT * 4
-                            lines, cur = [], ""
-                            for ch in text:
-                                if font.getlength(cur + ch) > avail and cur:
-                                    lines.append(cur); cur = ch
-                                else:
-                                    cur += ch
-                            lines.append(cur)
-                            tail = lines[-1].strip()
-                            if len(lines) > 1 and 1 <= len(tail) <= 1 + sum(1 for c in tail if c in "，。、；：！？）》」") and _is_cjk(tail[0]):
-                                add("cjk_orphan", index, f"Paragraph '{text[:16]}…' leaves '{tail}' alone on its last line",
-                                    shape=shape.name)
+                            tail = _last_line(text, font, avail)
+                            if tail is not None and _is_orphan(text, tail):
+                                add("orphan_line", index, f"Paragraph '{text[:16]}…' leaves '{tail}' alone on its last line",
+                                    shape=shape.name, tail=tail)
+                # CJK typography: no inserted spaces between CJK and Latin/digits.
+                if text and CJK_LATIN_SPACE.search(text):
+                    add("cjk_latin_space", index, f"Space between CJK and Latin/digits in '{text[:24]}'", shape=shape.name)
         page_metrics: dict[str, Any] = {"slide": index, "non_text_elements": non_text}
         if non_text < 1:
             add("no_non_text_element", index, "Page has no non-text visual element (card, band, icon, chart, image, rule…)")
@@ -268,6 +330,12 @@ def compute_visual_metrics(pptx: Path, pages: list[Path], palette: dict[str, Any
                     series_colors.append(None)
             resolved = [c if c else theme.get(f"accent{i + 1}", "") for i, c in enumerate(series_colors)]
             office = [c for c in resolved if c in OFFICE_DEFAULT_SERIES and c not in deck_palette]
+            present = [c for c in resolved if c]
+            close = [(x, y) for i, x in enumerate(present) for y in present[i + 1:] if x != y and delta_e(x, y) < MIN_SERIES_DELTA_E]
+            same = len(present) != len(set(present)) and len(present) > 1
+            if close or same:
+                add("chart_series_indistinct", None, f"{name} series colours are too similar to tell apart {close or present}",
+                    chart=name, colors=resolved)
             if palette and office:
                 add("office_default_chart_colors", None, f"{name} uses Office default series colours {office} instead of the deck palette",
                     chart=name, colors=resolved)
@@ -281,5 +349,5 @@ def compute_visual_metrics(pptx: Path, pages: list[Path], palette: dict[str, Any
         "slides": per_slide,
         "findings": findings,
         "checks": ["low_contrast", "top_heavy", "near_empty_page", "no_non_text_element", "too_many_font_sizes",
-                   "office_default_chart_colors", "cjk_orphan"],
+                   "office_default_chart_colors", "orphan_line", "cjk_latin_space", "chart_series_indistinct"],
     }
