@@ -61,7 +61,7 @@ clawhub install double6-workbench-builder
 请使用 $double6-deep-research 调研这个问题，明确给出证据、冲突、覆盖缺口、结论和限制。
 ```
 
-这个 skill 提供研究方法、逐问题覆盖与饱和停止规范和交付校验器，不按固定来源数判定深度，也不自带搜索引擎或网页抓取服务。宿主没有获准的检索能力，或关键来源无法核验时，它会将结果标记为 `partial` 或 `blocked`，而不是把推断包装成事实。当前 validator 版本为 `2.2.1`，`research_record.json` 使用 schema v2。
+这个 skill 提供研究方法、逐问题覆盖与饱和停止规范和交付校验器，不按固定来源数判定深度，也不自带搜索引擎或网页抓取服务。宿主没有获准的检索能力，或关键来源无法核验时，它会将结果标记为 `partial` 或 `blocked`，而不是把推断包装成事实。当前 validator 版本为 `2.3.0`，`research_record.json` 使用 schema v2。
 
 详细说明见 [`skills/double6-deep-research/SKILL.md`](skills/double6-deep-research/SKILL.md)。
 

@@ -14,7 +14,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
-SKILL_VERSION = "2.2.1"
+SKILL_VERSION = "2.3.0"
 SCHEMA_VERSION = 2
 REQUIRED_FILES = (
     "request_snapshot.md",
@@ -92,6 +92,8 @@ RESEARCH_STRATEGY_TYPES = {
     "freshness",
     "omission_scan",
     "user_material",
+    "citation_snowball",
+    "query_diversification",
 }
 CONCLUSION_IMPACTS = {"changed", "strengthened", "narrowed", "none"}
 CLAIM_TYPE_ALIASES = {
@@ -131,6 +133,36 @@ PLAN_HEADING_GROUPS = (
     ("unknowns", ("会标成未知的内容", "marked unknown", "will be unknown", "unknowns")),
 )
 DECISION_ALIASES = ("假设", "assumptions")
+TASK_TYPES = {"open_landscape", "fixed_comparison", "bounded_decision"}
+QUERY_FACETS = {
+    "core_terms",
+    "synonym_or_language",
+    "source_type",
+    "region_or_market",
+    "time_window",
+    "entity_specific",
+    "adversarial",
+    "citation_snowball",
+}
+# 开放全景的最低底线（不是充分性证明，只用来拦住明显过浅的 complete）。
+LANDSCAPE_MIN_QUESTION_SOURCES = 2
+LANDSCAPE_MIN_QUERY_FACETS = 4
+LANDSCAPE_MIN_SATURATION_NEW_SOURCES = 2
+LANDSCAPE_MIN_SATURATION_FACETS = 2
+LANDSCAPE_CUES = (
+    "全景",
+    "格局",
+    "综述",
+    "进展",
+    "版图",
+    "图谱",
+    "开放调研",
+    "landscape",
+    "state of",
+    "overview",
+    "survey of",
+    "review of",
+)
 DECISION_CUES = (
     "预算",
     "该买",
@@ -2327,6 +2359,291 @@ def warn_unmarked_decision(
         warnings.append("decision_assumptions_not_recorded")
 
 
+def _round_queries(
+    round_item: dict[str, Any],
+    round_id: str,
+    errors: list[str],
+) -> list[tuple[str, str]]:
+    raw = round_item.get("queries")
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        errors.append(f"round_queries_invalid:{round_id}")
+        return []
+    result: list[tuple[str, str]] = []
+    for index, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            errors.append(f"round_query_not_object:{round_id}:{index}")
+            continue
+        query = str(entry.get("query", "")).strip()
+        facet = str(entry.get("facet", "")).strip()
+        if not query:
+            errors.append(f"round_query_text_missing:{round_id}:{index}")
+            continue
+        if facet not in QUERY_FACETS:
+            errors.append(
+                f"round_query_facet_invalid:{round_id}:{index}:{facet or 'missing'}:"
+                f"allowed={join_allowed(QUERY_FACETS)}"
+            )
+            continue
+        result.append((query, facet))
+    return result
+
+
+def validate_depth_and_landscape(
+    report: str,
+    request: str,
+    record: dict[str, Any],
+    research_status: str,
+    questions: list[dict[str, Any]],
+    question_ids: set[str],
+    sources: list[Any],
+    rounds: list[dict[str, Any]],
+    errors: list[str],
+    warnings: list[str],
+) -> dict[str, Any]:
+    """检查开放全景的广度/深度底线、检索多样性、饱和新信息率与灌水迹象。"""
+    task_type = record.get("task_type")
+    if task_type is not None and task_type not in TASK_TYPES:
+        errors.append(
+            f"task_type_invalid:{task_type}:allowed={join_allowed(TASK_TYPES)}"
+        )
+        task_type = None
+    if task_type is None:
+        folded = request.casefold()
+        if any(cue.casefold() in folded for cue in LANDSCAPE_CUES):
+            warnings.append("task_type_not_recorded:looks_like_open_landscape")
+    enforce = task_type == "open_landscape" and research_status == "complete"
+
+    opened: dict[str, dict[str, Any]] = {}
+    for source in sources:
+        if (
+            isinstance(source, dict)
+            and source.get("access_status") in KEY_CLAIM_SOURCE_STATUSES
+        ):
+            source_id = str(source.get("source_id", "")).strip()
+            if source_id:
+                opened[source_id] = source
+    all_source_ids = {
+        str(source.get("source_id", "")).strip()
+        for source in sources
+        if isinstance(source, dict)
+    } - {""}
+
+    # 灌水检查：只在书目里出现、正文没有用到的来源不算深度。
+    report_sections = record.get("report_sections")
+    sources_heading = (
+        str(report_sections.get("sources", "")).strip()
+        if isinstance(report_sections, dict)
+        else ""
+    )
+    body = report
+    if sources_heading and exact_heading_exists(report, sources_heading):
+        body = report.replace(section_text(report, sources_heading), "")
+    body_cited = set(BRACKET_REFERENCE_PATTERN.findall(body)) & all_source_ids
+    not_used = sorted(all_source_ids - body_cited)
+    if not_used:
+        warnings.append(
+            "sources_not_used_in_report_body:" + ",".join(not_used)
+        )
+    publisher_counts: dict[str, int] = {}
+    for source_id in body_cited:
+        for source in sources:
+            if (
+                isinstance(source, dict)
+                and str(source.get("source_id", "")).strip() == source_id
+            ):
+                publisher = str(source.get("publisher", "")).strip().casefold()
+                if publisher:
+                    publisher_counts[publisher] = (
+                        publisher_counts.get(publisher, 0) + 1
+                    )
+    if body_cited and len(body_cited) >= 6:
+        top_publisher, top_count = max(
+            publisher_counts.items(), key=lambda item: item[1], default=("", 0)
+        )
+        if top_count * 10 > len(body_cited) * 4:
+            warnings.append(f"source_publisher_concentration:{top_publisher}")
+
+    # 每个问题实际在回答章节里使用的已打开来源。
+    general_headings = (
+        {
+            heading.strip()
+            for heading in report_sections.values()
+            if isinstance(heading, str) and heading.strip()
+        }
+        if isinstance(report_sections, dict)
+        else set()
+    )
+    per_question: dict[str, dict[str, Any]] = {}
+    for question in questions:
+        question_id = str(question.get("question_id", "")).strip()
+        answer_section = str(question.get("answer_section", "")).strip()
+        cited = (
+            set(BRACKET_REFERENCE_PATTERN.findall(section_text(report, answer_section)))
+            if valid_answer_section(report, answer_section, general_headings)
+            else set()
+        )
+        used = sorted(
+            source_id
+            for source_id in cited
+            if source_id in opened
+            and question_id in string_items(opened[source_id].get("question_ids"))
+        )
+        non_first_party = sorted(
+            source_id
+            for source_id in used
+            if opened[source_id].get("stakeholder_relation")
+            in {"independent", "interested_third_party"}
+        )
+        per_question[question_id] = {
+            "opened_sources_used": len(used),
+            "non_first_party_sources_used": len(non_first_party),
+        }
+        if enforce and question.get("status") == "answered":
+            if len(used) < LANDSCAPE_MIN_QUESTION_SOURCES or not non_first_party:
+                errors.append(f"landscape_question_depth_floor:{question_id}")
+
+    # 检索台账：每轮的查询和面向。
+    facets_used: set[str] = set()
+    query_total = 0
+    novelty: list[dict[str, Any]] = []
+    for index, round_item in enumerate(rounds):
+        round_id = str(round_item.get("round_id", index))
+        queries = _round_queries(round_item, round_id, errors)
+        query_total += len(queries)
+        facets_used.update(facet for _, facet in queries)
+        new_ids = round_item.get("new_source_ids")
+        new_count = round_item.get("new_material_findings_count")
+        if new_ids is not None and not isinstance(new_ids, list):
+            errors.append(f"round_new_source_ids_invalid:{round_id}")
+            new_ids = []
+        for source_id in new_ids or []:
+            if source_id not in all_source_ids:
+                errors.append(
+                    f"round_new_source_unknown:{round_id}:{source_id}"
+                )
+        if new_count is not None and (
+            not isinstance(new_count, int) or isinstance(new_count, bool)
+            or new_count < 0
+        ):
+            errors.append(f"round_new_material_findings_count_invalid:{round_id}")
+            new_count = None
+        novelty.append(
+            {
+                "round_id": round_id,
+                "round_type": round_item.get("round_type"),
+                "queries": len(queries),
+                "facets": sorted({facet for _, facet in queries}),
+                "new_opened_sources": len(
+                    [item for item in (new_ids or []) if item in opened]
+                ),
+                "new_material_findings_count": new_count,
+            }
+        )
+
+    landscape_metrics: dict[str, Any] = {}
+    if enforce:
+        if query_total == 0:
+            errors.append("landscape_query_ledger_missing")
+        elif len(facets_used) < LANDSCAPE_MIN_QUERY_FACETS:
+            errors.append(
+                "landscape_query_facets_too_narrow:"
+                + ",".join(sorted(facets_used))
+            )
+        if "citation_snowball" not in facets_used:
+            errors.append("landscape_citation_snowball_missing")
+        saturation = [
+            item for item in novelty
+            if item["round_type"] == "adversarial_saturation_check"
+        ]
+        if saturation:
+            last = saturation[-1]
+            if last["new_opened_sources"] < LANDSCAPE_MIN_SATURATION_NEW_SOURCES:
+                errors.append("landscape_saturation_without_new_reading")
+            if len(last["facets"]) < LANDSCAPE_MIN_SATURATION_FACETS:
+                errors.append("landscape_saturation_queries_not_diversified")
+            if last["new_material_findings_count"] is None:
+                errors.append("landscape_saturation_novelty_missing")
+            elif last["new_material_findings_count"] > 0:
+                errors.append("landscape_saturation_found_new_material")
+
+        landscape = record.get("landscape")
+        if not isinstance(landscape, dict):
+            errors.append("landscape_missing")
+            landscape = {}
+        segments_raw = landscape.get("segments")
+        entities_raw = landscape.get("entities")
+        segment_names: set[str] = set()
+        if not isinstance(segments_raw, list) or not segments_raw:
+            errors.append("landscape_segments_missing")
+            segments_raw = []
+        for index, segment in enumerate(segments_raw):
+            if not isinstance(segment, dict) or not str(
+                segment.get("segment", "")
+            ).strip():
+                errors.append(f"landscape_segment_invalid:{index}")
+                continue
+            name = str(segment["segment"]).strip()
+            segment_names.add(name)
+            mapped = string_items(segment.get("question_ids"))
+            if not mapped or any(item not in question_ids for item in mapped):
+                errors.append(f"landscape_segment_question_invalid:{name}")
+        if not isinstance(entities_raw, list) or not entities_raw:
+            errors.append("landscape_entities_missing")
+            entities_raw = []
+        segments_with_entities: set[str] = set()
+        for index, entity in enumerate(entities_raw):
+            if not isinstance(entity, dict) or not str(
+                entity.get("name", "")
+            ).strip():
+                errors.append(f"landscape_entity_invalid:{index}")
+                continue
+            name = str(entity["name"]).strip()
+            segment = str(entity.get("segment", "")).strip()
+            if segment not in segment_names:
+                errors.append(f"landscape_entity_segment_unknown:{name}")
+            else:
+                segments_with_entities.add(segment)
+            if not any(
+                item in opened for item in string_items(entity.get("source_ids"))
+            ):
+                errors.append(f"landscape_entity_unsourced:{name}")
+            if not loose_contains(body, name):
+                errors.append(f"landscape_entity_not_in_report:{name}")
+        for name in sorted(segment_names - segments_with_entities):
+            errors.append(f"landscape_segment_without_entities:{name}")
+        table_heading = str(landscape.get("coverage_table_section", "")).strip()
+        if not table_heading or not exact_heading_exists(report, table_heading):
+            errors.append("landscape_coverage_table_missing")
+        else:
+            table_text = section_text(report, table_heading)
+            if not markdown_table_rows(table_text):
+                errors.append("landscape_coverage_table_missing")
+            else:
+                for name in sorted(segment_names):
+                    if not loose_contains(table_text, name):
+                        errors.append(
+                            f"landscape_segment_not_in_coverage_table:{name}"
+                        )
+        landscape_metrics = {
+            "segment_count": len(segment_names),
+            "entity_count": len(
+                [item for item in entities_raw if isinstance(item, dict)]
+            ),
+        }
+    return {
+        "task_type": task_type,
+        "query_count": query_total,
+        "query_facets": sorted(facets_used),
+        "body_cited_source_count": len(body_cited),
+        "sources_not_used_in_body": len(not_used),
+        "per_question": per_question,
+        "round_novelty": novelty,
+        **landscape_metrics,
+    }
+
+
 def validate_bundle(bundle: Path) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
@@ -2519,6 +2836,18 @@ def validate_bundle(bundle: Path) -> dict[str, Any]:
     validate_continuation(report, record, questions, errors)
     validate_decision_assumptions(request, report, record, errors)
     warn_unmarked_decision(request, record, warnings)
+    depth_metrics = validate_depth_and_landscape(
+        report,
+        request,
+        record,
+        research_status,
+        questions,
+        question_ids,
+        sources_value,
+        rounds,
+        errors,
+        warnings,
+    )
 
     hashes = candidate_hashes(bundle, errors)
     review_status = validate_independent_review(
@@ -2553,6 +2882,7 @@ def validate_bundle(bundle: Path) -> dict[str, Any]:
             "key_claim_count": len(claim_ids),
             "research_round_count": len(rounds),
             "question_coverage": coverage_diagnostics,
+            "depth_metrics": depth_metrics,
             "normalizations": normalizations,
             "candidate_file_sha256": hashes,
         }
@@ -2567,6 +2897,7 @@ def validate_bundle(bundle: Path) -> dict[str, Any]:
         "checks": checks,
         "scope_note": (
             "本 validator 检查结构化状态、逐问题来源与检查覆盖、饱和停止、关键引用、"
+            "开放全景的广度/深度底线与饱和新信息率、"
             "表格里的数字、已保存页面中的数字、读者稿里的未完成项、候选文件完整性与"
             "独立审阅合同。它不联网重抓网页；页面里没有保存下来的数字仍算未核到。"
             "覆盖要求是否合理及报告质量仍由独立 reviewer 裁决。"
