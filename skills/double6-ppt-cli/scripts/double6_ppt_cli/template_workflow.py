@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import math
 import posixpath
 import re
@@ -42,12 +41,13 @@ NS = {"p": PML, "a": AML, "r": RML, "pr": PKG_REL}
 SLIDE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
 SLIDE_JUMP_ACTION = "ppaction://hlinksldjump"
 
-# ECMA-376 CT_TextParagraph child order used to repair Fill Native output.
+# ECMA-376 CT_TextParagraph: pPr?, (r | br | fld)*, endParaRPr?  -- runs, breaks and fields form ONE
+# interleaved choice group, so their relative order is content and must never be sorted.
 _PARAGRAPH_CHILD_ORDER = {
     f"{{{AML}}}pPr": 0,
     f"{{{AML}}}r": 10,
-    f"{{{AML}}}br": 20,
-    f"{{{AML}}}fld": 30,
+    f"{{{AML}}}br": 10,
+    f"{{{AML}}}fld": 10,
     f"{{{AML}}}endParaRPr": 40,
 }
 
@@ -61,7 +61,8 @@ def _normalize_txbody_paragraph_order(pptx: Path) -> int:
     except zipfile.BadZipFile:
         return 0
     for name, data in list(entries.items()):
-        if not (name.startswith("ppt/slides/") or name.startswith("ppt/slideLayouts/") or name.startswith("ppt/slideMasters/")):
+        # Only slides are written by template fill; layouts/masters stay byte-identical.
+        if not name.startswith("ppt/slides/"):
             continue
         if not name.endswith(".xml"):
             continue
@@ -160,32 +161,42 @@ def import_template_asset(run: Path, asset: Path, name: str) -> dict[str, Any]:
     return {"schema_version": SCHEMA_VERSION, "status": "pass", **record}
 
 
-def _vendor_modules():
-    scripts = skill_root() / "vendor" / "ppt-master-core" / "skills" / "ppt-master" / "scripts"
-    if str(scripts) not in sys.path:
-        sys.path.insert(0, str(scripts))
-    package_dir = scripts / "template_fill_pptx"
-    if not (package_dir / "__init__.py").is_file():
+def template_backend() -> str:
+    """Template-fill backend. PPT Master removed Template Fill Native in v5.0.0, so on the v6.7.0
+    vendor tree the only backend is ``pm6`` (roundtrip + native txBody rewrite in ``pm6_template``).
+    ``D6PPT_TEMPLATE_BACKEND=v48`` is refused with a pointer to the 0.3.x release."""
+    import os
+
+    value = os.environ.get("D6PPT_TEMPLATE_BACKEND", "pm6").strip().lower()
+    if value == "v48":
         raise D6PPTError(
-            "template-fill is not yet migrated to PPT Master v6.7.0 (upstream removed Template Fill Native in v5.0.0); "
-            "use the 0.3.x release for template-fill",
+            "The v4.8 Template Fill Native backend is not vendored with PPT Master v6.7.0; use the 0.3.x release",
             "template_fill_not_migrated",
-            {"ppt_master_version": "6.7.0", "tracking": "experimental roundtrip migration in progress"},
+            {"ppt_master_version": "6.7.0", "available_backends": ["pm6"]},
         )
-    module_name = "double6_vendor_template_fill_pptx"
-    module = sys.modules.get(module_name)
-    if module is None:
-        spec = importlib.util.spec_from_file_location(
-            module_name,
-            package_dir / "__init__.py",
-            submodule_search_locations=[str(package_dir)],
-        )
-        if spec is None or spec.loader is None:
-            raise D6PPTError("Vendored PPT Master Fill Native package is unavailable", "vendor_template_fill_missing")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-    return module.analyze_pptx, module.apply_plan, module.check_plan, module.scaffold_plan
+    if value != "pm6":
+        raise D6PPTError(f"Unknown template backend: {value}", "template_backend_invalid")
+    return value
+
+
+def _pm6_modules():
+    from . import pm6_template
+
+    def guard(fn):
+        def wrapped(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except pm6_template.PM6Error as exc:
+                raise D6PPTError(str(exc), exc.code, exc.details) from exc
+        return wrapped
+
+    return (guard(pm6_template.analyze_pptx), guard(pm6_template.apply_plan),
+            guard(pm6_template.check_plan), guard(pm6_template.scaffold_plan))
+
+
+def _vendor_modules():
+    template_backend()
+    return _pm6_modules()
 
 
 def _template_path(run: Path, manifest: dict[str, Any]) -> Path:

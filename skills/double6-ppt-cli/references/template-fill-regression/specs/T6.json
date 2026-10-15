@@ -1,0 +1,66 @@
+{
+ "template": "T6-en-lo-vivid.pptx",
+ "title": "auto",
+ "slides": [
+  {
+   "source": 1,
+   "text": {
+    "PlaceHolder 1": "Continue to deliver the priority",
+    "PlaceHolder 2": "To deliver the priority programs while"
+   },
+   "notes": "New speaker notes for page 1"
+  },
+  {
+   "source": 2,
+   "text": {
+    "PlaceHolder 1": "Deliver the priority programs",
+    "PlaceHolder 2": {
+     "text": "The priority programs while improving operating efficiency and customer experience\nPriority programs while improving operating efficiency\nPrograms while improving operating efficiency and customer\nWhile improving operating efficiency and customer\nImproving operating efficiency and customer experience",
+     "levels": [
+      0,
+      1,
+      0,
+      1,
+      0
+     ]
+    }
+   },
+   "notes": "New speaker notes for page 2",
+   "transition": {
+    "effect": "wipe",
+    "duration": 0.6
+   }
+  },
+  {
+   "source": 3,
+   "text": {
+    "PlaceHolder 1": "Operating efficiency and customer experience"
+   },
+   "notes": "New speaker notes for page 3"
+  },
+  {
+   "source": 4,
+   "text": {
+    "Title 1": "Efficiency and customer experience",
+    "Text Placeholder 2": {
+     "text": "We continue to deliver the priority programs while improving operating efficiency\nContinue to deliver the priority programs while improving\nTo deliver the priority programs while improving operating",
+     "levels": [
+      0,
+      1,
+      0
+     ]
+    },
+    "KPI Callout": "Revenue: 14.1M USD"
+   },
+   "notes": "New speaker notes for page 4"
+  },
+  {
+   "source": 1,
+   "text": {
+    "PlaceHolder 1": "Continue to deliver the priority",
+    "PlaceHolder 2": "To deliver the priority programs while"
+   },
+   "notes": "New speaker notes for page 1"
+  }
+ ]
+}

@@ -67,7 +67,7 @@ Authoring 结构约束（quality gate + semantic contract）：
 
 并在 semantic manifest 使用 `preferred_structure: native_chart` + `match.drawingml_id: 1002`。普通示意图 group **不会**变成原生 chart；缺 JSON metadata 会在 vendor 阶段 fail closed。
 
-### PPT Master v6.7.0 补充（0.4.0-exp）
+### PPT Master v6.7.0 补充（0.4.0）
 
 - **JSON 为准（默认）**：编译时 adapter 会在 build 副本上给没有 authority/基线的 marker 加 `data-pptx-native-authority="json"`，并把 `data-pptx-bounds` 写入 metadata 的 x/y/width/height。SVG 子元素只作预览。缺 bounds 时报 `native_marker_invalid`。如要使用上游的 SVG-first 校验（fallback 哈希 + 完全对齐），在 semantic `defaults.native_marker_authority` 中设为 `"author"`，并自行运行上游 `stamp_native_fallbacks.py`。
 - **表格 schema v2**：未写 `schema` 的表格会自动升级为 `ppt-master.semantic-table.v2`，并补上 v4.8 默认配色（深蓝表头、白底、斑马纹、18px）。在 v2 中未设置颜色表示无填充；自行写 v2 时请显式给出颜色。
