@@ -1,4 +1,4 @@
-# Modifications to PPT Master (v6.7.0 experimental; history from v4.8.0 below)
+# Modifications to PPT Master (v6.7.0, double6-ppt-cli 0.4.0; history from v4.8.0 below)
 
 ## 0.4.0-exp.2: template-fill on the PPT Master v6.7.0 roundtrip
 

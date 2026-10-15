@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "experimental_for_double6_ppt_cli_generate_and_template_fill",
+  "status": "vendored_for_double6_ppt_cli_0.4.0_generate_and_template_fill",
   "upstream": "https://github.com/hugohe3/ppt-master",
   "tag": "v6.7.0",
   "commit": "b4efe3ddf237a97a42880164759162f8e2412f2f",

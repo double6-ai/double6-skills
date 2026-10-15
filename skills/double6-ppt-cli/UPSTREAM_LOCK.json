@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "observed_at": "2026-10-15T18:00:00+08:00",
-  "status": "experimental",
-  "verified_for_double6_ppt_cli": "0.4.0-exp.2",
-  "verification_note": "实验分支 exp/pm6-template（基于 exp/pm6-generate）：vendor/ 取自 PPT Master v6.7.0 官方 release asset（173 文件逐字节一致，BOM 由 attribution_guard.py 复核）。覆盖 generate 与 template-fill（roundtrip 导入/导出；v4.8 只读分析模块由 Double6 移植在 vendor 之外）。",
+  "status": "released",
+  "verified_for_double6_ppt_cli": "0.4.0",
+  "verification_note": "0.4.0：vendor/ 取自 PPT Master v6.7.0 官方 release asset（173 文件逐字节一致，BOM 由 attribution_guard.py 复核）。覆盖 generate 与 template-fill（roundtrip 导入/导出；v4.8 只读分析模块由 Double6 移植在 vendor 之外）。",
   "upstreams": [
     {
       "name": "ppt-master",
