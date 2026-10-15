@@ -17,6 +17,7 @@ from double6_ppt_cli.powerpoint import (
     validate_powerpoint_path,
     verify_with_powerpoint,
 )
+from double6_ppt_cli import powerpoint as powerpoint_module
 from double6_ppt_cli.runs import init_run
 from double6_ppt_cli.render_evidence import record_render_manifest
 from double6_ppt_cli.template_workflow import (
@@ -218,6 +219,7 @@ class TemplateAndVisualTests(unittest.TestCase):
         self.assertIn("repeat 240 times", PDF_SCRIPT)
         self.assertIn("close openedPresentation saving no", PDF_SCRIPT)
 
+    @unittest.skipIf(powerpoint_module.pwd is None, "POSIX account database (pwd) is unavailable on Windows")
     def test_isolated_home_does_not_change_real_powerpoint_staging_root(self):
         with patch.dict(os.environ, {"HOME": "/isolated/home"}, clear=False), \
              patch("double6_ppt_cli.powerpoint.pwd.getpwuid", return_value=SimpleNamespace(pw_dir="/Users/real-user")), \

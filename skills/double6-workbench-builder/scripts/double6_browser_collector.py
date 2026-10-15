@@ -664,7 +664,19 @@ def collect(run_dir: Path, output_dir: Path, chromium: Path) -> dict[str, Any]:
     }
 
 
+def _ensure_utf8_stdio() -> None:
+    """Emit UTF-8 regardless of the console/pipe code page (e.g. cp1252 on Windows)."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
+
+
 def main() -> int:
+    _ensure_utf8_stdio()
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
