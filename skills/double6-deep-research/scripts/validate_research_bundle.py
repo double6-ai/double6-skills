@@ -595,6 +595,63 @@ def find_heading(text: str, aliases: tuple[str, ...]) -> str:
     return ""
 
 
+def find_headings(text: str, aliases: tuple[str, ...]) -> list[str]:
+    """Return every Markdown heading whose title contains one of the aliases."""
+    found: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not re.fullmatch(r"#{1,6}\s+.+", stripped):
+            continue
+        title = re.sub(r"^#{1,6}\s+", "", stripped).casefold()
+        if any(alias.casefold() in title for alias in aliases):
+            found.append(stripped)
+    return found
+
+
+def heading_title(heading: str) -> str:
+    return re.sub(r"^#{1,6}\s+", "", heading.strip()).strip()
+
+
+def find_question_list_heading(
+    plan: str,
+    aliases: tuple[str, ...],
+    questions: list[dict[str, Any]],
+) -> str:
+    """Pick the plan heading that really lists the recorded questions.
+
+    Loose alias matching alone misfires on headings that merely mention the
+    word (for example "Discovery (before freezing questions)").  Among all
+    candidate headings, prefer the one whose section contains the most
+    recorded question IDs/texts; break ties by an exact alias title, then by
+    document order.  Falls back to the first candidate for old bundles.
+    """
+    candidates = find_headings(plan, aliases)
+    if not candidates:
+        return ""
+    folded_aliases = {loose(alias) for alias in aliases}
+
+    def score(heading: str) -> tuple[int, int]:
+        body = section_text(plan, heading)
+        hits = 0
+        for question in questions:
+            text = str(question.get("question", "")).strip()
+            qid = str(question.get("question_id", "")).strip()
+            if (text and loose_contains(body, text)) or (
+                qid and re.search(rf"(?<![A-Za-z0-9]){re.escape(qid)}(?![0-9])", body)
+            ):
+                hits += 1
+        exact = 1 if loose(heading_title(heading)) in folded_aliases else 0
+        return hits, exact
+
+    best = candidates[0]
+    best_score = score(best)
+    for heading in candidates[1:]:
+        current = score(heading)
+        if current > best_score:
+            best, best_score = heading, current
+    return best
+
+
 def canonical_day(value: str) -> str | None:
     value = value.strip()
     iso = re.match(r"(\d{4})-(\d{2})-(\d{2})", value)
@@ -2251,7 +2308,10 @@ def validate_research_plan(
         errors.append("research_plan_too_short")
     found: dict[str, str] = {}
     for key, aliases in PLAN_HEADING_GROUPS:
-        heading = find_heading(plan, aliases)
+        if key == "questions":
+            heading = find_question_list_heading(plan, aliases, questions)
+        else:
+            heading = find_heading(plan, aliases)
         if not heading:
             errors.append(f"research_plan_section_missing:{key}")
             continue
