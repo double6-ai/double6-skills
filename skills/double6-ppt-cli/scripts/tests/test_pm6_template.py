@@ -205,7 +205,7 @@ class LibraryAndCheckTest(unittest.TestCase):
         report = check_plan(self.lib, self._plan([{"slot_id": small["slot_id"], "text": "far too long for this tiny label " * 4}]))
         self.assertIn("text_fit", self.codes(report))
         body = self.slot(1, "Body")
-        report = check_plan(self.lib, self._plan([{"slot_id": body["slot_id"], "text": "\n".join(["A fairly long bullet line that wraps"] * 9)}]))
+        report = check_plan(self.lib, self._plan([{"slot_id": body["slot_id"], "text": "\n".join(["A fairly long bullet line that wraps"] * 16)}]))
         fit = next(r for r in report["results"] if r["code"] == "text_fit")
         self.assertIn(fit["status"], {"WARN", "ERROR"})
         self.assertIn(fit["fit"], {"autofit", "overflow"})
