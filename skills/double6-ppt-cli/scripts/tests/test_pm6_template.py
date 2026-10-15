@@ -1,4 +1,4 @@
-"""Regression tests for the experimental PPT Master v6.7 template-fill backend (exp/pm6-template).
+"""Regression tests for the PPT Master v6.7 template-fill backend (pm6_template).
 
 Unit tests run everywhere (lxml; python-pptx for fixtures). Roundtrip integration tests need a
 the vendored PPT Master v6.7.0 core (vendor/ppt-master-core); skipped only if python-pptx is missing.

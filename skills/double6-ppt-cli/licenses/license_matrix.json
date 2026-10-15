@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "experimental_for_0.4.0-exp.1",
+  "status": "released_0.4.0",
   "components": [
     {
       "component": "lean_ppt_master_core_candidate",

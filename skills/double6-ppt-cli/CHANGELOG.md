@@ -1,6 +1,24 @@
 # double6-ppt-cli 变更记录
 
-## 0.4.0-exp.3（实验，未发布）
+## 0.4.0（2026-10-15）
+
+正式版，合并了下面 0.4.0-exp.1 至 exp.3 的全部开发内容：
+
+- **PPT Master v4.8.0 → v6.7.0**（commit `b4efe3d`，官方 asset SHA `40424d97…`）：随 Skill 提供 173 个文件的精简内核，版本由 BOM 和 UPSTREAM_LOCK 锁定，不再需要设置 `D6PPT_PM6_ROOT`。
+- **generate** 改走 PPT Master v6.7.0 的原生生成路径。
+- **template-fill** 改用 v6.7.0 roundtrip 后端（`pm6_template`）：
+  - 形状 ID、占位符继承、段落属性和项目符号都保持原生；
+  - 沿用 v4.8 的分析/检查/计划契约；
+  - 支持讲者备注、切换效果，以及段落内的混合格式。
+- **文本适配按 PowerPoint 实测校准**：
+  - 缩字直接写进 run 的字号，不依赖 normAutofit fontScale；
+  - 按角色设缩字下限；
+  - 内容明显超出可用高度，或会压到下方卡片、指标框时，计划检查报 ERROR；
+  - 估算与 Win11 + PowerPoint 16 的实测误差在 0.1pt 以内。
+- 新增 Windows/macOS 一键 PowerPoint 验证脚本（`scripts/verify/`），以及 11 个真实模板、共 14 组的回归测试。
+- OfficeCLI 固定版本仍为 `1.0.157`。
+
+### 0.4.0-exp.3（开发过程记录）
 
 - 根据 Win11 + PowerPoint 16 实测修正文本适配：
   - 缩字一律显式写入 run 的 `sz`，`normAutofit` 不再写 fontScale/lnSpcReduction（实测 PowerPoint 重算时会把 fontScale 重置为 100%）；
@@ -11,7 +29,7 @@
 - 验证脚本：增加「文字压到其他形状」检测；PowerPoint 重算后字号或 fontScale 与我方不一致即判失败；用例增至 5 个并写明预期结果；有失败时退出码为 1。
 - 新增回归测试 `test_powerpoint_calibration.py`，使用 PowerPoint 实测数据（`tests/fixtures/powerpoint_win11/`）。
 
-## 0.4.0-exp.2（实验，未发布）
+### 0.4.0-exp.2（开发过程记录）
 
 - **template-fill 迁移到 PPT Master v6.7.0 roundtrip**（`scripts/double6_ppt_cli/pm6_template/`）：
   - 导入 → 对象原生回传（cloned_passthrough）→ 导出后按 cNvPr id 原生改写 txBody；形状 ID、占位符继承、段落属性、项目符号都保持原生。
@@ -24,7 +42,7 @@
 - doctor：template-fill 能力改为检查 roundtrip 入口和 `pm6_template` 包。
 - 新增 PowerPoint 实机一键验证脚本 `scripts/verify/`（Windows COM / macOS AppleScript）。
 
-## 0.4.0-exp.1（实验，未发布）
+### 0.4.0-exp.1（开发过程记录）
 
 - **PPT Master v4.8.0 → v6.7.0**（commit `b4efe3d`，官方 asset SHA `40424d97…`），172 文件精简内核，BOM 已重建。仅适用于 generate。
 - template-fill 暂未迁移：调用时报 `template_fill_not_migrated`；`doctor --mode template-fill` 结果为 fail。
