@@ -67,10 +67,21 @@ class VerifyTierTests(unittest.TestCase):
 
     def test_detect_powerpoint_capability_reports_missing_app(self):
         with patch("double6_ppt_cli.powerpoint.find_powerpoint", return_value=None), \
-             patch("double6_ppt_cli.powerpoint.shutil.which", return_value="/usr/bin/osascript"):
+             patch("double6_ppt_cli.powerpoint.shutil.which", return_value="/usr/bin/osascript"), \
+             patch("double6_ppt_cli.powerpoint.sys.platform", "darwin"):
             capability = detect_powerpoint_capability()
         self.assertFalse(capability["available"])
         self.assertIn("PowerPoint.app", capability["reason"])
+
+    def test_detect_powerpoint_capability_windows_points_to_portable(self):
+        with patch("double6_ppt_cli.powerpoint.find_powerpoint", return_value=None), \
+             patch("double6_ppt_cli.powerpoint.shutil.which", return_value=None), \
+             patch("double6_ppt_cli.powerpoint.sys.platform", "win32"):
+            capability = detect_powerpoint_capability()
+        self.assertFalse(capability["available"])
+        self.assertIn("POWERPNT.EXE", capability["reason"])
+        self.assertIn("--verify-tier portable", capability["reason"])
+        self.assertEqual(capability["platform_note"], "windows_native_automation_unsupported")
 
     def test_portable_verify_and_finalize_do_not_require_powerpoint(self):
         with tempfile.TemporaryDirectory() as temp:
