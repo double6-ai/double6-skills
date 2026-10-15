@@ -19,7 +19,8 @@ DESIGN_PROFILES = ("neutral",) + design_presets.names()
 def _profile_replacements(profile_name: str) -> dict[str, str]:
     if profile_name == "neutral":
         fill = "[fill]"
-        keys = ("VISUAL_STYLE", "STYLE_REF", "BG", "SURFACE", "PRIMARY", "ACCENT", "TEXT", "MUTED", "LINE", "TINT", "CHART_SERIES")
+        keys = ("VISUAL_STYLE", "STYLE_REF", "BG", "SURFACE", "PRIMARY", "ACCENT", "TEXT", "MUTED", "LINE", "TINT", "CHART_SERIES",
+                "THEME", "IMAGERY", "ACCENT2", "ON_ACCENT", "ON_PRIMARY", "GRADIENT_FROM", "GRADIENT_TO")
         rep = {f"{{{{{k}}}}}": fill for k in keys}
         rep["{{FONT_FAMILY}}"] = "[fill after doctor confirms availability]"
         rep["{{ICON_LIBRARY}}"] = "tabler-outline"
@@ -33,6 +34,9 @@ def _profile_replacements(profile_name: str) -> dict[str, str]:
         "{{BG}}": p["bg"], "{{SURFACE}}": p["surface"], "{{PRIMARY}}": p["primary"], "{{ACCENT}}": p["accent"],
         "{{TEXT}}": p["text"], "{{MUTED}}": p["muted"], "{{LINE}}": p["line"], "{{TINT}}": p["tint"],
         "{{CHART_SERIES}}": ", ".join(p["chart_series"]),
+        "{{THEME}}": p.get("theme", "light"), "{{IMAGERY}}": p.get("imagery", "[fill]"),
+        "{{ACCENT2}}": p["accent2"], "{{ON_ACCENT}}": p["on_accent"], "{{ON_PRIMARY}}": p["on_primary"],
+        "{{GRADIENT_FROM}}": p["gradient"][0], "{{GRADIENT_TO}}": p["gradient"][1],
         "{{FONT_FAMILY}}": "[fill after doctor confirms availability]",
         "{{ICON_LIBRARY}}": "tabler-outline",
     }

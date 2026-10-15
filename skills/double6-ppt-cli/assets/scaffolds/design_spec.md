@@ -10,6 +10,8 @@
 - 调色：以 spec_lock `## colors` 为锚点（主色 {{PRIMARY}}，强调色 {{ACCENT}}），配色行为按 style 的 Color Behavior
 - 字体与替代字体：{{FONT_FAMILY}}
 - 跨页 motif（一种贯穿全 deck 的元素，如标题上方强调短线 / 封面几何）：
+- 图像方向：{{IMAGERY}}（`image-search` / `image-add` 取得带署名的免版税图片；没有合适图片时用标明 placeholder 的生成图）
+- 节奏：封面 → 章节页/全幅图 → 内容页（每 2–3 页换一次版式密度，至少 1 页 hero 大数字或全幅图）→ 结尾
 - 图标库：{{ICON_LIBRARY}}（`<use data-icon="tabler-outline/<name>" .../>`，compile 自动嵌入）
 - 需要原生编辑的对象：
 - 图表、表格、公式和图片来源：

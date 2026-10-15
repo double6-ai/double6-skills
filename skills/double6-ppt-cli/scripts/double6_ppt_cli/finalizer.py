@@ -39,6 +39,20 @@ def finalize_run(run: Path) -> dict[str, Any]:
     warning_gates = [name for name, value in verification.get("gates", {}).items() if value == "warn"]
     if warning_gates:
         warnings.append(f"Warning gates remain: {', '.join(sorted(warning_gates))}.")
+    image_credits = None
+    project = run / "authoring" / "project"
+    if (project / "images" / "credits.json").is_file():
+        from .images import check_image_credits, credits_markdown
+        try:
+            used = check_image_credits(project)
+        except D6PPTError as exc:
+            failed.append("image_credits")
+            used = {"used": [], "placeholders": [], "error": exc.code}
+        (run / "delivery").mkdir(parents=True, exist_ok=True)
+        (run / "delivery" / "IMAGE_CREDITS.md").write_text(credits_markdown(project, used["used"]), encoding="utf-8")
+        image_credits = {"file": "delivery/IMAGE_CREDITS.md", **used}
+        if used.get("placeholders"):
+            warnings.append("交付含生成的占位图（" + ", ".join(used["placeholders"]) + "），对外使用前需替换为真实图片。")
     if failed:
         delivery_status = "blocked"
     elif warnings:
@@ -85,6 +99,7 @@ def finalize_run(run: Path) -> dict[str, Any]:
         "compatibility_statement": compatibility_statement,
         "tier_result": verification.get("tier_result"),
         "public_release_authorized": False,
+        "image_credits": image_credits,
     }
     write_json(run / "delivery" / "delivery_manifest.json", delivery)
     manifest["artifacts"]["delivery_manifest"] = "delivery/delivery_manifest.json"

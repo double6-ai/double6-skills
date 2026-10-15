@@ -24,10 +24,12 @@ REFERENCES = [
     "preset-shape-vocabulary.md", "image-layout-patterns.md", "image-layout-spec.md", "executor-chart.md",
     "executor-table.md", "executor-visualization.md", "visual-review.md", "native-data-interface.md",
     "semantic-svg.md", "topology-assembly.md", "executor-structure.md", "canvas-formats.md",
+    "executor-image.md", "svg-image-embedding.md",
 ]
 TREES = [
     "references/visual-styles", "references/modes", "templates/styles",
     "templates/layouts/presentation_core", "templates/layouts/report_core",
+    "templates/layouts/editorial_bleed",
     "templates/charts", "templates/tables",
 ]
 SINGLE = [
@@ -39,7 +41,7 @@ SINGLE = [
 ]
 WHY = {
     "references/": "Upstream visual-design guidance (page expression, styles, effects, charts) that the Double6 SKILL.md visual section routes to.",
-    "templates/styles/": "Upstream style presets (communication method + restrained visual defaults).",
+    "templates/styles/": "Upstream style presets (communication method + visual defaults).",
     "templates/layouts/": "Upstream layout library used as composition references for generate.",
     "templates/charts/": "Upstream chart composition templates.",
     "templates/tables/": "Upstream table composition templates.",
@@ -88,7 +90,7 @@ def main(src_root: str) -> int:
     bom["status"] = "vendored_for_double6_ppt_cli_0.5.0_generate_template_fill_and_design_subset"
     bom["design_subset"] = {
         "added_in": "double6-ppt-cli 0.5.0",
-        "selection": "visual-design references, 15 styles, visual-styles/modes, presentation_core + report_core layouts, chart/table templates, curated tabler-outline icons (scripts/maintenance/design_icons_tabler_outline.txt), shape/icon authoring scripts",
+        "selection": "visual-design references, 15 styles, visual-styles/modes, presentation_core + report_core + editorial_bleed layouts, chart/table templates, curated tabler-outline icons (scripts/maintenance/design_icons_tabler_outline.txt), shape/icon authoring scripts",
         "not_included": "image generation/search, brands, decks, sounds, other icon libraries, workflows/",
     }
     bom_path.write_text(json.dumps(bom, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

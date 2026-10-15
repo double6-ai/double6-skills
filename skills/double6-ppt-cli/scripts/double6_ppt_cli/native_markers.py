@@ -103,6 +103,10 @@ def apply_chart_palette(payload: dict[str, Any], palette: dict[str, Any]) -> lis
         if key not in style and palette.get(role):
             style[key] = palette[role]
             actions.append(f"deck_palette_{key}")
+    for key in ("chart_area_fill", "plot_area_fill"):
+        if key not in style and "deck_palette_series_colors" in actions:
+            style[key] = "none"  # sit on the slide field so light and dark themes both read
+            actions.append(f"deck_palette_{key}")
     payload["style"] = style
     return actions
 

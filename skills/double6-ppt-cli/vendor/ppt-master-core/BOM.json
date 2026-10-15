@@ -5,8 +5,8 @@
   "tag": "v6.7.0",
   "commit": "b4efe3ddf237a97a42880164759162f8e2412f2f",
   "license": "MIT",
-  "file_count": 756,
-  "total_bytes": 7466143,
+  "file_count": 769,
+  "total_bytes": 7508420,
   "official_release_asset": {
     "name": "ppt-master-skill-v6.7.0.zip",
     "bytes": 22549906,
@@ -92,6 +92,15 @@
       "bytes": 8360,
       "sha256": "060bbbd7d3d05f04b9cc77be4c3d79b93a9152ccd67a0f5bb6c1790c253d8214",
       "origin_path": "skills/ppt-master/references/executor-chart.md",
+      "license": "MIT",
+      "category": "design_subset",
+      "why_needed": "Upstream visual-design guidance (page expression, styles, effects, charts) that the Double6 SKILL.md visual section routes to."
+    },
+    {
+      "path": "skills/ppt-master/references/executor-image.md",
+      "bytes": 7249,
+      "sha256": "cbaf98d2e92a23e1d81bed3871c249f897fbe1d6b2c7cc688a27eb003f8200b3",
+      "origin_path": "skills/ppt-master/references/executor-image.md",
       "license": "MIT",
       "category": "design_subset",
       "why_needed": "Upstream visual-design guidance (page expression, styles, effects, charts) that the Double6 SKILL.md visual section routes to."
@@ -245,6 +254,15 @@
       "bytes": 36609,
       "sha256": "7336d8c1335757dcedd4957ff6b06d73ab4993ada9d566b8e8958e6d950ba489",
       "origin_path": "skills/ppt-master/references/svg-effects.md",
+      "license": "MIT",
+      "category": "design_subset",
+      "why_needed": "Upstream visual-design guidance (page expression, styles, effects, charts) that the Double6 SKILL.md visual section routes to."
+    },
+    {
+      "path": "skills/ppt-master/references/svg-image-embedding.md",
+      "bytes": 6485,
+      "sha256": "3a45467f05308717c8d87225d93cf90bd2c7cc30cb54259f45c98648faef7b71",
+      "origin_path": "skills/ppt-master/references/svg-image-embedding.md",
       "license": "MIT",
       "category": "design_subset",
       "why_needed": "Upstream visual-design guidance (page expression, styles, effects, charts) that the Double6 SKILL.md visual section routes to."
@@ -6226,6 +6244,105 @@
       "why_needed": "Upstream layout library used as composition references for generate."
     },
     {
+      "path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/01_hero_full.svg",
+      "bytes": 1910,
+      "sha256": "5f9d0518011c2880f61d57ad8bd38993dcf0df758fbf1ede6bc32e7a9511db72",
+      "origin_path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/01_hero_full.svg",
+      "license": "MIT",
+      "category": "design_subset",
+      "why_needed": "Upstream layout library used as composition references for generate."
+    },
+    {
+      "path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/02_hero_side_scrim.svg",
+      "bytes": 1921,
+      "sha256": "d07f4c9320ae78f2361005d84f3d54d2571f12852321ecbc73b95d5609fc1a41",
+      "origin_path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/02_hero_side_scrim.svg",
+      "license": "MIT",
+      "category": "design_subset",
+      "why_needed": "Upstream layout library used as composition references for generate."
+    },
+    {
+      "path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/03_split_bleed.svg",
+      "bytes": 1622,
+      "sha256": "190d6508173d63f86bbffa2dff2754767a9ea0aeda1759b7492642c2eb211c81",
+      "origin_path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/03_split_bleed.svg",
+      "license": "MIT",
+      "category": "design_subset",
+      "why_needed": "Upstream layout library used as composition references for generate."
+    },
+    {
+      "path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/04_split_bleed_reverse.svg",
+      "bytes": 1693,
+      "sha256": "bff8c51b6e3e32ebfef1be5ed056e3371b4658d555b37e102bc567a380fe6578",
+      "origin_path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/04_split_bleed_reverse.svg",
+      "license": "MIT",
+      "category": "design_subset",
+      "why_needed": "Upstream layout library used as composition references for generate."
+    },
+    {
+      "path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/05_chapter_full.svg",
+      "bytes": 2214,
+      "sha256": "9660f45f3793462104aa28b725975fd69dfb4908eb84547fb62714053ab63f9a",
+      "origin_path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/05_chapter_full.svg",
+      "license": "MIT",
+      "category": "design_subset",
+      "why_needed": "Upstream layout library used as composition references for generate."
+    },
+    {
+      "path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/06_quote_over_image.svg",
+      "bytes": 1881,
+      "sha256": "1d91e4fdd91898c4047c8d266fa6687062097cf706fd8fccd742996b6b02aab0",
+      "origin_path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/06_quote_over_image.svg",
+      "license": "MIT",
+      "category": "design_subset",
+      "why_needed": "Upstream layout library used as composition references for generate."
+    },
+    {
+      "path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/07_triptych.svg",
+      "bytes": 3825,
+      "sha256": "b977b4af9bcc0daa8ecbcc454523e3cd10aa0cf3ca49479734b8fc54f5e5a53d",
+      "origin_path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/07_triptych.svg",
+      "license": "MIT",
+      "category": "design_subset",
+      "why_needed": "Upstream layout library used as composition references for generate."
+    },
+    {
+      "path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/08_image_grid_four.svg",
+      "bytes": 4148,
+      "sha256": "9e0cbc6b6e58e1e7ac13cf0d23288772d7b121ce625713a95958246fcaa3c81c",
+      "origin_path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/08_image_grid_four.svg",
+      "license": "MIT",
+      "category": "design_subset",
+      "why_needed": "Upstream layout library used as composition references for generate."
+    },
+    {
+      "path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/09_full_statement.svg",
+      "bytes": 1253,
+      "sha256": "390f0ff61d61f64c2ca4343362e86f3dcd54f5089cf0d7aac9ad2decf40dc194",
+      "origin_path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/09_full_statement.svg",
+      "license": "MIT",
+      "category": "design_subset",
+      "why_needed": "Upstream layout library used as composition references for generate."
+    },
+    {
+      "path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/10_closing_full.svg",
+      "bytes": 1955,
+      "sha256": "35ee439ad8ba6686d182abb378aa253032e7d6802fb91e87896933e5810dee6d",
+      "origin_path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/10_closing_full.svg",
+      "license": "MIT",
+      "category": "design_subset",
+      "why_needed": "Upstream layout library used as composition references for generate."
+    },
+    {
+      "path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/design_spec.md",
+      "bytes": 6121,
+      "sha256": "e229df45ca0f0fde7cb5ecf826fa92611887246f6e6795c97c16ac8c7ae4edd8",
+      "origin_path": "skills/ppt-master/templates/layouts/editorial_bleed/templates/design_spec.md",
+      "license": "MIT",
+      "category": "design_subset",
+      "why_needed": "Upstream layout library used as composition references for generate."
+    },
+    {
       "path": "skills/ppt-master/templates/layouts/layouts_index.json",
       "bytes": 3669,
       "sha256": "af1b9826e0bc07db538542be4c28cc949592fc3f1d51af4c180b0408cb8057e2",
@@ -6823,7 +6940,7 @@
   "boundary": "Generate-path lean core of PPT Master v6.7.0. Template Fill Native (removed upstream in v5.0.0) is not present; template-fill is gated as not yet migrated on this branch.",
   "design_subset": {
     "added_in": "double6-ppt-cli 0.5.0",
-    "selection": "visual-design references, 15 styles, visual-styles/modes, presentation_core + report_core layouts, chart/table templates, curated tabler-outline icons (scripts/maintenance/design_icons_tabler_outline.txt), shape/icon authoring scripts",
+    "selection": "visual-design references, 15 styles, visual-styles/modes, presentation_core + report_core + editorial_bleed layouts, chart/table templates, curated tabler-outline icons (scripts/maintenance/design_icons_tabler_outline.txt), shape/icon authoring scripts",
     "not_included": "image generation/search, brands, decks, sounds, other icon libraries, workflows/"
   }
 }
