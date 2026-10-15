@@ -91,17 +91,32 @@ def _lookup_by_name(family: str, ea: bool, bold: bool) -> tuple[str, int] | None
     return None
 
 
+@functools.lru_cache(maxsize=1)
+def _fc_has_cjk() -> bool:
+    try:
+        out = subprocess.run(["fc-list", ":charset=4e2d", "file"], capture_output=True, text=True, timeout=20).stdout
+    except Exception:
+        return False
+    return bool(out.strip())
+
+
 @functools.lru_cache(maxsize=256)
 def font_file(family: str, ea: bool, bold: bool) -> tuple[str, int] | None:
     """Resolve a font file: fontconfig (Linux, matches LibreOffice) else a name index of the OS font
     folders (Windows/macOS, approximates PowerPoint's substitution with common fallbacks)."""
-    if not shutil.which("fc-match"):
+    import os
+    forced = os.environ.get("D6PPT_FONT_RESOLVER", "").lower()  # "index" | "none" (diagnostics/tests)
+    if forced == "none":
+        return None
+    if forced == "index" or not shutil.which("fc-match"):
         return _lookup_by_name(family, ea, bold)
+    if ea and not _fc_has_cjk():
+        return None  # no CJK-capable font installed: measuring tofu glyphs would be wrong -> heuristic
     pattern = (family or (DEFAULT_EA if ea else DEFAULT_LATIN))
     if bold:
         pattern += ":bold"
     if ea:
-        pattern += ":lang=zh-cn"
+        pattern += ":lang=zh-cn:charset=4e2d"
     try:
         out = subprocess.run(["fc-match", "-f", "%{file}|%{index}", pattern], capture_output=True, text=True, timeout=10).stdout
     except Exception:
@@ -133,7 +148,8 @@ class Metrics:
         self.ea = props.get("ea") or ""
         self.f_lat = _font(self.latin, False, self.bold, round(self.size, 2))
         self.f_ea = _font(self.ea, True, self.bold, round(self.size, 2))
-        self.engine = ("fontconfig" if shutil.which("fc-match") else "font-index") if (self.f_lat and self.f_ea) else "heuristic"
+        self.engine = ("fontconfig" if shutil.which("fc-match") else "font-index") if (self.f_lat and self.f_ea) else (
+            "partial" if (self.f_lat or self.f_ea) else "heuristic")
 
     def width(self, text: str) -> float:
         total = 0.0
