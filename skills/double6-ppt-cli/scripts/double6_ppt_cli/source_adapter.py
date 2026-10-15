@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import re
+
 import shutil
 from pathlib import Path
 from typing import Any
 
 from lxml import etree
 
-from .common import D6PPTError, SCHEMA_VERSION, read_json, sha256_tree, utc_now, write_json
-from .native_markers import normalize_native_markers
+from .common import D6PPTError, SCHEMA_VERSION, read_json, sha256_tree, skill_root, utc_now, write_json
+from .native_markers import normalize_native_markers, parse_spec_lock_palette
 from .schemas import validate_semantic_manifest
 
 
@@ -63,8 +65,12 @@ def _unwrap_single_line_tspans(root: etree._Element) -> list[str]:
         tspan = children[0]
         if etree.QName(tspan).localname != "tspan" or len(tspan) or (tspan.tail or "").strip():
             continue
-        extra = set(tspan.attrib) - {"x"}
+        extra = set(tspan.attrib) - {"x", "dy", "y"}
         if extra:
+            continue
+        if tspan.get("dy") not in (None, "0", "0px", "0em"):
+            continue
+        if tspan.get("y") is not None and tspan.get("y") != text.get("y"):
             continue
         if tspan.get("x") is not None and tspan.get("x") != text.get("x"):
             continue
@@ -72,6 +78,41 @@ def _unwrap_single_line_tspans(root: etree._Element) -> list[str]:
         text.remove(tspan)
         unwrapped.append(shape_id)
     return unwrapped
+
+
+ICON_REF = re.compile(r'data-icon="([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)"')
+
+
+def _stage_icons(source_project: Path, build_project: Path) -> list[str]:
+    """Copy every referenced ``data-icon`` into ``build/icons/<lib>/`` so the vendored checker
+    and converter embed them natively. Project-local icons win over the vendored library."""
+    vendored = skill_root() / "vendor" / "ppt-master-core" / "skills" / "ppt-master" / "templates" / "icons"
+    staged: list[str] = []
+    missing: list[str] = []
+    svg_dir = build_project / "svg_output"
+    refs = set()
+    for svg in sorted(svg_dir.glob("*.svg")) if svg_dir.is_dir() else []:
+        refs |= set(ICON_REF.findall(svg.read_text(encoding="utf-8")))
+    for lib, name in sorted(refs):
+        target = build_project / "icons" / lib / f"{name}.svg"
+        if target.is_file():
+            continue
+        for candidate in (source_project / "icons" / lib / f"{name}.svg", vendored / lib / f"{name}.svg"):
+            if candidate.is_file():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(candidate, target)
+                staged.append(f"{lib}/{name}")
+                break
+        else:
+            missing.append(f"{lib}/{name}")
+    if missing:
+        raise D6PPTError(
+            "Icons are not available in the vendored library or authoring/project/icons: " + ", ".join(missing),
+            "icon_missing",
+            {"missing": missing, "vendored_library": "vendor/ppt-master-core/skills/ppt-master/templates/icons/tabler-outline",
+             "next_step": "Pick an existing name (see scripts/maintenance/design_icons_tabler_outline.txt) or add the SVG under authoring/project/icons/<lib>/."},
+        )
+    return staged
 
 
 def prepare_ppt_master_project(
@@ -109,6 +150,9 @@ def prepare_ppt_master_project(
         selectors.setdefault((str(relative), str(selected_id)), []).append(obj["source_id"])
 
     changes: list[dict[str, Any]] = []
+    staged_icons = _stage_icons(source_project, build_project)
+    if staged_icons:
+        changes.append({"action": "stage_icons", "icons": staged_icons})
     parsed: dict[str, tuple[Path, etree._ElementTree]] = {}
     for (relative, selected_id), source_ids in sorted(selectors.items()):
         target_file = (build_project / relative).resolve()
@@ -138,6 +182,10 @@ def prepare_ppt_master_project(
             "flattened_children": flattened_children,
         })
 
+    spec_lock = build_project / "spec_lock.md"
+    palette = parse_spec_lock_palette(spec_lock.read_text(encoding="utf-8")) if spec_lock.is_file() else {}
+    if (semantic.get("defaults") or {}).get("native_palette") is False:
+        palette = {}
     svg_dir = build_project / "svg_output"
     for svg_file in sorted(svg_dir.glob("*.svg")) if svg_dir.is_dir() else []:
         relative = svg_file.relative_to(build_project).as_posix()
@@ -147,7 +195,7 @@ def prepare_ppt_master_project(
         unwrapped = _unwrap_single_line_tspans(parsed[relative][1].getroot())
         if unwrapped:
             changes.append({"file": relative, "action": "unwrap_single_line_tspan", "shape_ids": unwrapped})
-        markers = normalize_native_markers(parsed[relative][1].getroot(), authority_policy=authority_policy)
+        markers = normalize_native_markers(parsed[relative][1].getroot(), authority_policy=authority_policy, palette=palette)
         if markers:
             changes.append({"file": relative, "action": "normalize_native_markers", "markers": markers})
 

@@ -30,6 +30,9 @@ EXPLICIT_SHRINK_FLOOR = 0.85
 PPT_LINE_FACTOR = 1.2
 SAFETY_H = 1.06   # conservative: need_h * SAFETY_H must fit
 SAFETY_W = 0.97   # conservative: wrap at 97% of the inner width
+# A single-line slot (titles, kickers, labels) that measures close to the frame width tends to wrap
+# in renderers whose metrics differ (observed in LibreOffice with CJK). Require extra headroom.
+SINGLE_LINE_SAFETY_W = 0.90
 # Multi-paragraph text needing more than this much height at full size (safety included) is a rewrite,
 # not a shrink -> check ERROR (~ a 0.8 font scale). Single paragraphs are left to the floor test, since
 # line-break quantisation makes a 2-line title in a 1-line box look "2x full".
@@ -155,6 +158,7 @@ class Metrics:
     def __init__(self, props: dict[str, Any], scale: float = 1.0):
         self.size = props["sz"] * scale
         self.bold = bool(props.get("bold"))
+        self.spc = float(props.get("spc") or 0.0) * scale
         self.latin = props.get("latin") or ""
         self.ea = props.get("ea") or ""
         self.f_lat = _font(self.latin, False, self.bold, round(self.size, 2))
@@ -173,6 +177,8 @@ class Metrics:
             if ch != "\0":
                 buf += ch
                 buf_wide = wide
+        if self.spc and text:
+            total += self.spc * len(text)  # a:rPr spc adds tracking after every character
         return total
 
     def _seg(self, seg: str, wide: bool) -> float:
@@ -342,7 +348,18 @@ def fit(ctx: dict[str, Any], text: str, *, policy: str = "auto", levels: list[in
     report = {"paragraphs": len(paragraphs), "avail_h_pt": round(avail_h, 2), "need_h_pt": round(base["need_h_pt"], 2),
               "line_count": base["line_count"], "lines": base["lines"], "font_scale": 1.0, "ln_spc_reduction": 0.0,
               "autofit_mode": body["autofit"], "wrap": body["wrap"], "engine": base["engine"]}
-    width_ok = body["wrap"] != "none" or base["max_line_w_pt"] <= base["inner_w_pt"] + 0.5
+    single_line = len(paragraphs) == 1 and base["line_count"] == 1 and body["wrap"] != "none"
+
+    def _width_ok(result: dict[str, Any]) -> bool:
+        if body["wrap"] == "none":
+            return result["max_line_w_pt"] <= result["inner_w_pt"] + 0.5
+        if single_line and result["line_count"] == 1:
+            return result["max_line_w_pt"] <= result["inner_w_pt"] * SINGLE_LINE_SAFETY_W + 0.5
+        return True
+
+    width_ok = _width_ok(base)
+    if single_line and not width_ok:
+        report["single_line_headroom"] = "below_safety_margin"
     if base["need_h_pt"] <= avail_h + 0.5 and width_ok:
         report["status"] = "fits"
         report["ratio"] = round(base["need_h_pt"] / max(avail_h, 1), 3)
@@ -370,7 +387,7 @@ def fit(ctx: dict[str, Any], text: str, *, policy: str = "auto", levels: list[in
     while scale >= floor - 1e-6 and best is None:
         for red in (0.0,):
             trial = layout(ctx, paragraphs, scale, red)
-            w_ok = body["wrap"] != "none" or trial["max_line_w_pt"] <= trial["inner_w_pt"] + 0.5
+            w_ok = _width_ok(trial)
             if trial["need_h_pt"] <= avail_h + 0.5 and w_ok:
                 best = (scale, red, trial)
                 break

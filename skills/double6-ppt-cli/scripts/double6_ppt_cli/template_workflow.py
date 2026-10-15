@@ -452,6 +452,26 @@ def _apply_template_profile_rules(profile: dict[str, Any], rules: list[dict[str,
             obj["profile_rule_id"] = str(rule.get("rule_id") or f"rule-{index:03d}")
 
 
+def detect_image_only_slides(profile: dict[str, Any], *, coverage: float = 0.85) -> dict[str, Any]:
+    """Slides whose only content is (near) full-slide pictures, i.e. flattened screenshots."""
+    canvas = profile.get("canvas") or {}
+    slide_w = float(canvas.get("width_emu") or canvas.get("cx") or 12192000)
+    slide_h = float(canvas.get("height_emu") or canvas.get("cy") or 6858000)
+    by_slide: dict[int, list[dict[str, Any]]] = {}
+    for obj in profile.get("objects", []):
+        by_slide.setdefault(int(obj["source_template_slide"]), []).append(obj)
+    image_only = []
+    for slide, objects in sorted(by_slide.items()):
+        texty = [o for o in objects if (o.get("normalized_text") or "").strip() or o.get("object_type") in {"table", "chart", "graphicFrame"}]
+        pictures = [o for o in objects if o.get("object_type") == "picture"]
+        big = [o for o in pictures if (o.get("geometry") or {}).get("width_emu", 0) * (o.get("geometry") or {}).get("height_emu", 0) >= coverage * slide_w * slide_h]
+        if not texty and big:
+            image_only.append(slide)
+    total = len(by_slide)
+    return {"image_only_slides": image_only, "slide_count": total,
+            "all_image_only": bool(total) and len(image_only) == total}
+
+
 def analyze_template(run: Path) -> dict[str, Any]:
     run = run.resolve()
     manifest = load_run(run)
@@ -505,9 +525,27 @@ def analyze_template(run: Path) -> dict[str, Any]:
         "template_profile": rel_posix(profile_path, run),
         "template_plan_scaffold": rel_posix(scaffold_path, run),
     })
+    image_only = detect_image_only_slides(profile)
+    if image_only["all_image_only"]:
+        set_status(run, manifest, "blocked", "image_only_template", image_only)
+        raise D6PPTError(
+            "This template is image-only: every slide is a full-slide picture with no editable text, so there is nothing to fill. "
+            "Use a template with real text boxes/placeholders, or use generate with a --design preset.",
+            "image_only_template",
+            image_only,
+        )
     set_status(run, manifest, "authored", "template_analyze", {"object_count": len(profile["objects"])})
+    warnings = []
+    if image_only["image_only_slides"]:
+        warnings.append({
+            "code": "image_only_slides",
+            "message": "These template slides are full-slide pictures without editable text and cannot be filled: "
+                       + ", ".join(str(n) for n in image_only["image_only_slides"]),
+            "slides": image_only["image_only_slides"],
+        })
     return {
-        "status": "pass",
+        "status": "pass" if not warnings else "pass_with_warnings",
+        "warnings": warnings,
         "template_profile": str(profile_path),
         "template_library": str(library_path),
         "plan_scaffold": str(scaffold_path),

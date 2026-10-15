@@ -52,7 +52,7 @@ Authoring 结构约束（quality gate + semantic contract）：
 }
 ```
 
-对应 SVG 元素示例：`<text id="title" data-pptx-shape-id="1001" ...>标题</text>`。角色可使用 `footnote` 与 `page_mark`；inspect 默认允许二者低至 9pt，项目也可在 content contract 的 `inspection_rules.font_min_pt_by_role` 覆盖阈值。
+对应 SVG 元素示例：`<text id="title" data-pptx-shape-id="1001" ...>标题</text>`。角色可使用 `kicker`、`label`、`caption`、`footnote` 与 `page_mark`；inspect 默认允许它们低至 9pt，项目也可在 content contract 的 `inspection_rules.font_min_pt_by_role` 覆盖阈值。
 
 ## 原生 chart / table
 
@@ -101,8 +101,8 @@ Authoring 结构约束（quality gate + semantic contract）：
 | title | 20 | 27 |
 | subtitle | 16 | 22 |
 | body | 12 | 16 |
-| caption / label / data | 10 | 14 |
-| footnote / page_mark | 9 | 12 |
+| data | 10 | 14 |
+| caption / label / kicker / footnote / page_mark | 9 | 12 |
 
 `## typography` **必须保留 `body` 键**（其它角色名可扩展）。出现次数 > 2 的每个字号都要声明。
 
@@ -125,3 +125,11 @@ python scripts/d6ppt.py render-import --run <run>   --pdf export.pdf --pages sli
 - **字体**：使用 `doctor` 能解析到的字体。Linux portable 档请用 `Noto Sans CJK SC` 等已安装字体；写 `Microsoft YaHei` 会被回退，导致度量偏差。
 - **visual 闭环顺序**：`visual-policy` → `verify`（产出渲染）→ 查看渲染并写 `visual-review` → 再次 `verify` → `finalize`。
 - **compile 前**：`authoring_scaffold_incomplete` 的 `details.remaining_fields` 会列出仍是模板占位的字段。
+
+
+## 0.5.0 视觉相关编译行为
+
+- **图标**：SVG 中的 `<use data-icon="<lib>/<name>" x y width height fill/>` 会在 build 副本中从 `authoring/project/icons/<lib>/` 或 vendored `templates/icons/` 取图，交给上游 checker 与 converter 原生嵌入；找不到时报 `icon_missing` 并列出缺失名称。vendored 清单见 `scripts/maintenance/design_icons_tabler_outline.txt`。
+- **原生图表与表格调色**：compile 从 spec_lock `## colors` 读取调色。图表未写 `style.colors` 时，使用 `chart_series`（没有该字段时依次用 accent、primary、muted、line），并补 `text_color` / `axis_color` / `grid_color`；未写 schema 的表格用 primary 表头、text 正文、surface 斑马纹、line 边框。作者写了的颜色一律保留。semantic `defaults.native_palette: false` 可关闭此行为。
+- **单行 `<tspan>`**：`<text data-pptx-shape-id><tspan x=同值 dy="0">…</tspan></text>` 也会被展开，避免稳定身份丢失（`ambiguous_object_mapping`）。多行段落与内联强调 run 的身份本来就能保留。
+- **小字角色**：`kicker`、`label`、`caption`、`footnote`、`page_mark` 的下限为 9pt（12px）。

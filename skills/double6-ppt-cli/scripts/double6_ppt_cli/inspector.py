@@ -127,8 +127,11 @@ DEFAULT_FONT_MIN_PT = {
     "title": 20.0,
     "subtitle": 16.0,
     "body": 12.0,
-    "caption": 10.0,
-    "label": 10.0,
+    # Small typographic roles (kicker, label, caption, page_mark, footnote) may go down to 9pt
+    # (12px on the 1280-wide canvas) so authored hierarchy is not flattened to pass the gate.
+    "caption": 9.0,
+    "label": 9.0,
+    "kicker": 9.0,
     "data": 10.0,
     "footnote": 9.0,
     "page_mark": 9.0,

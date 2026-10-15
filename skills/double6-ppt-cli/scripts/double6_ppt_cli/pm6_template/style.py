@@ -163,7 +163,7 @@ def level_props(layers: dict[str, Any], level: int, p: etree._Element | None = N
         nodes.append(p.find(q("a", "pPr")))
     nodes += [_lvl(lst, level) for lst in layers["lists"]]
     props: dict[str, Any] = {"sz": None, "marL": None, "indent": None, "lnSpc": None, "spcBef": None, "spcAft": None,
-                             "latin": None, "ea": None, "bold": None, "bullet": None, "algn": None}
+                             "latin": None, "ea": None, "bold": None, "bullet": None, "algn": None, "spc": None}
     rprs = ([run_rpr] if run_rpr is not None else []) + [n.find(q("a", "defRPr")) if n is not None else None for n in nodes]
     for r in rprs:
         if r is None:
@@ -172,6 +172,11 @@ def level_props(layers: dict[str, Any], level: int, p: etree._Element | None = N
             props["sz"] = int(r.get("sz")) / 100.0
         if props["bold"] is None and r.get("b") is not None:
             props["bold"] = r.get("b") in ("1", "true")
+        if props["spc"] is None and r.get("spc"):
+            try:
+                props["spc"] = int(r.get("spc")) / 100.0  # character spacing, hundredths of a point
+            except ValueError:
+                pass
         for key in ("latin", "ea"):
             node = r.find(q("a", key))
             if props[key] is None and node is not None and node.get("typeface"):
@@ -201,6 +206,7 @@ def level_props(layers: dict[str, Any], level: int, p: etree._Element | None = N
     props["indent"] = props["indent"] or 0.0
     props["bullet"] = bool(props["bullet"])
     props["bold"] = bool(props["bold"])
+    props["spc"] = props["spc"] or 0.0
     return props
 
 
