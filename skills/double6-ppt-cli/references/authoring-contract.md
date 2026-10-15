@@ -19,7 +19,7 @@ Authoring 结构约束（quality gate + semantic contract）：
 
 ## PPT Master adapter
 
-- 源目录默认是 `authoring/project/svg_output/`，使用 vendored PPT Master `v4.8.0` 精简内核编译。
+- 源目录默认是 `authoring/project/svg_output/`，使用 vendored PPT Master `v6.7.0` 内核编译。
 - `compile` 默认启用 `--native-charts-and-tables`。需要原生 chart/table 时，按 PPT Master 上游 marker 合同在 SVG 中提供数据；不满足 marker 合同则 fail closed，不把普通形状冒充原生对象。
 - title、subtitle、body 和 postflight-sensitive text 必须在源阶段顶层化。深度适配器可依据 `source_selector.file + id` 对 SVG 根节点下、没有 transform/style/clip 等继承语义的安全 group 做选择性去分组；任何不安全属性、嵌套 group 或歧义 selector 都 fail closed。适配只发生在 `build/ppt-master-project/`，不会改写 authoring source。编译后的语义层若发现敏感对象仍嵌套在 group 内，会拒绝生成 object map。
 - 可整体拖动的 motif 保留 group；decorative 对象不进入文本修复主路径。
@@ -88,9 +88,9 @@ Authoring 结构约束（quality gate + semantic contract）：
 - 未在 `spec_lock.md` `## typography` 声明、且出现次数 > 2 的字号会被质量门阻断；请声明干净阶梯（避免 20/22 这类无感差值）。
 - `data-pptx-bounds` 必须覆盖真实墨迹宽度；中文混排请按质量门同宽算法估宽，或预留足够留白。
 
-## generate 模式能力边界
+## generate 模式的视觉设计
 
-`init --design <profile>` 只给颜色/字号/工作结构，**不自动套版式**。要好看请：1) 自己设计完整 SVG 版式；或 2) 改用 template-fill 复用现成模板。vendored ppt-master 精简核不包含上游 `workflows/` 版式库。
+`init --design <preset>` 写入统一调色、字号阶梯和图标库，但不会替 Agent 画版式。版式由 Agent 按 [visual-design.md](visual-design.md) 设计：vendored 设计子集包含 style、版式库（presentation_core / report_core）、图表与表格模板、线性图标和形状脚本。上游 `workflows/` 不在 vendor 内，以本 Skill 的流程为准。
 
 ## 字号：px 与 pt
 

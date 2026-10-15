@@ -19,7 +19,7 @@
         "bytes": 22549906,
         "sha256": "40424d9784fa25f771da8b312258c3c67a168925122aa6bb7faf6848e77ceee9"
       },
-      "integration_boundary": "vendored_173_file_lean_core (generate closure + pptx_to_svg.py roundtrip import entry); Template Fill Native absent upstream since v5.0.0 (read-only v4.8 modules ported outside vendor tree in pm6_template/fillnative); Double6 integration lives outside vendor tree",
+      "integration_boundary": "vendored lean core (generate closure + pptx_to_svg.py roundtrip import entry) + design_subset (references, styles, layouts, chart/table templates, 435 tabler-outline icons, authoring scripts; see BOM.json); Template Fill Native absent upstream since v5.0.0 (read-only v4.8 modules ported outside vendor tree in pm6_template/fillnative); Double6 integration lives outside vendor tree",
       "previous_lock": {
         "tag": "v4.8.0",
         "commit": "53c9c2a5e9f1a49096324fba4f95833649c6a0f4"

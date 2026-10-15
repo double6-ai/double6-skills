@@ -61,11 +61,22 @@ metadata:
 8. 交给 PowerPoint 打开的所有副本必须先进入真实系统账户的 `/Users/<account>/Library/Containers/com.microsoft.Powerpoint/Data/tmp/d6ppt/`。真实 home 由系统账户数据库解析，禁止依赖隔离 `$HOME` / `Path.home()`；run 与证据只通过普通文件复制读写。
 9. roundtrip、另存、重开、改字、移动、保存、持久化核验与 PDF 导出合并为一次 PowerPoint 批处理会话。禁止让 PowerPoint 打开 `process/tmp/opencode/diag` 或其它诊断文件，也不得代用户点击文件访问授权。
 
+## 视觉设计（generate 必读，视觉质量是交付要求）
+
+完整指引见 [visual-design.md](references/visual-design.md)。Skill 已经 vendored PPT Master v6.7.0 的设计子集，包括设计规范、15 个 style、`presentation_core` / `report_core` 版式库、图表与表格模板、约 430 个线性图标和形状脚本。
+
+1. 按场景选择 `--design` 预设。预设决定一套**全 deck 统一**的低饱和调色：一个主色 + 一个强调色 + 中性灰阶，以及字号阶梯。
+2. 作稿前读：预设对应的 `templates/styles/<style>/templates/design_spec.md`、`references/executor-base.md` 的 Page Expression Core；需要构图参考时看 `templates/layouts/`。
+3. 在 design_spec §IX 为每页写 `- Composition: page job → 版式结构 → 设备`。每页至少一个非文字视觉元素，例如色块、卡片、KPI 大数字、图标、图表、节点连线。
+4. 默认约束：不逐页换色；强调色只给焦点，面积不超过约 10%；字号不超过 7 档；图表系列色取自 `chart_series`，compile 会写进原生图表；图标用 `<use data-icon="tabler-outline/<name>" .../>`，compile 自动嵌入。
+5. 禁止的反模式：整页 bullet 白底黑字、上重下空、彩虹或高饱和配色、Office 默认图表色、千篇一律的卡片网格、中文孤字换行等，详见 visual-design.md §5。
+6. 视觉复核按 [visual-quality.md](references/visual-quality.md) 的 8 维评分表打分，结果写入 `visual-review --rubric`；未达通过线不能以 `pass` 交付。
+
 ## 三种模式
 
 ### 原生生成
 
-`init --mode generate --source <content> --design <neutral|academic|business|training> --verify-tier <auto|native|portable> --out <run>` 会生成 `spec_lock.md`、`design_spec.md`、`svg_output/` 与语义清单示例。填完草稿并按 [authoring-contract.md](references/authoring-contract.md) 准备稳定对象身份，再依次 `compile → inspect → repair → verify → finalize`。设计包提供颜色、字号与工作结构，不会替 Agent 自动完成版式；需要复用现成版式时使用 template-fill。
+`init --mode generate --source <content> --design <consulting|investor-pitch|product-launch|operating-review|academic|training|neutral> --verify-tier <auto|native|portable> --out <run>` 会生成 `spec_lock.md`（统一调色、字号阶梯、图标库）、`design_spec.md`、`svg_output/` 与语义清单示例。**先按下方“视觉设计”完成设计决策**，再按 [authoring-contract.md](references/authoring-contract.md) 准备稳定对象身份，然后依次 `compile → inspect → repair → verify → finalize`。
 
 ### 模板填充
 

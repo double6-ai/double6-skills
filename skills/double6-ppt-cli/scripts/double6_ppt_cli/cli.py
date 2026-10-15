@@ -10,6 +10,9 @@ from .bootstrap import bootstrap
 from .common import D6PPTError, default_runtime_dir
 
 
+from .runs import DESIGN_PROFILES as DESIGN_CHOICES
+
+
 def _emit(value) -> None:
     print(json.dumps(value, ensure_ascii=False, indent=2))
 
@@ -20,7 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("doctor"); p.add_argument("--json", action="store_true"); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS); p.add_argument("--verify-tier", choices=("auto", "native", "portable"), default="auto"); p.add_argument("--mode", choices=("generate", "postflight", "template-fill"))
     p = sub.add_parser("bootstrap"); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS); p.add_argument("--yes", action="store_true")
-    p = sub.add_parser("init"); p.add_argument("--mode", choices=("generate", "postflight", "template-fill"), required=True); p.add_argument("--source", type=Path, required=True); p.add_argument("--template", type=Path); p.add_argument("--contract", type=Path); p.add_argument("--out", type=Path, required=True); p.add_argument("--verify-tier", choices=("auto", "native", "portable"), default="auto"); p.add_argument("--design-profile", "--design", dest="design_profile", choices=("neutral", "academic", "business", "training"), default="neutral")
+    p = sub.add_parser("init"); p.add_argument("--mode", choices=("generate", "postflight", "template-fill"), required=True); p.add_argument("--source", type=Path, required=True); p.add_argument("--template", type=Path); p.add_argument("--contract", type=Path); p.add_argument("--out", type=Path, required=True); p.add_argument("--verify-tier", choices=("auto", "native", "portable"), default="auto"); p.add_argument("--design-profile", "--design", dest="design_profile", choices=DESIGN_CHOICES, default="neutral")
     p = sub.add_parser("compile"); p.add_argument("--run", type=Path, required=True); p.add_argument("--no-native-charts-and-tables", action="store_true")
     p = sub.add_parser("template-analyze"); p.add_argument("--run", type=Path, required=True)
     p = sub.add_parser("template-asset-import"); p.add_argument("--run", type=Path, required=True); p.add_argument("--asset", type=Path, required=True); p.add_argument("--name", required=True)

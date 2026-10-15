@@ -11,54 +11,41 @@ from .common import (
 
 RUN_DIRS = ("input", "authoring", "artifacts", "evidence", "logs", "review", "delivery", "patches", "plans")
 VERIFY_TIERS = {"auto", "native", "portable"}
-DESIGN_PROFILES = {
-    "neutral": {
-        "visual_style": "[fill]",
-        "bg": "[fill]",
-        "primary": "[fill]",
-        "accent": "[fill]",
-        "text": "[fill]",
-        "font_family": "[fill after doctor confirms availability]",
-        "title_size": "40",
-        "body_size": "24",
-        "footnote_size": "12",
-        "page_mark_size": "12",
-    },
-    "academic": {
-        "visual_style": "academic editorial",
-        "bg": "#F7F8FA", "primary": "#173A5E", "accent": "#2F6B9A", "text": "#17212B",
-        "font_family": "Arial", "title_size": "38", "body_size": "23", "footnote_size": "12", "page_mark_size": "12",
-    },
-    "business": {
-        "visual_style": "business report",
-        "bg": "#F8FAFC", "primary": "#16324F", "accent": "#0F766E", "text": "#17212B",
-        "font_family": "Arial", "title_size": "40", "body_size": "24", "footnote_size": "12", "page_mark_size": "12",
-    },
-    "training": {
-        "visual_style": "training workshop",
-        "bg": "#FFFDF8", "primary": "#4A3428", "accent": "#D97706", "text": "#292524",
-        "font_family": "Arial", "title_size": "40", "body_size": "25", "footnote_size": "12", "page_mark_size": "12",
-    },
-}
+from . import design_presets
+
+DESIGN_PROFILES = ("neutral",) + design_presets.names()
+
+
+def _profile_replacements(profile_name: str) -> dict[str, str]:
+    if profile_name == "neutral":
+        fill = "[fill]"
+        keys = ("VISUAL_STYLE", "STYLE_REF", "BG", "SURFACE", "PRIMARY", "ACCENT", "TEXT", "MUTED", "LINE", "TINT", "CHART_SERIES")
+        rep = {f"{{{{{k}}}}}": fill for k in keys}
+        rep["{{FONT_FAMILY}}"] = "[fill after doctor confirms availability]"
+        rep["{{ICON_LIBRARY}}"] = "tabler-outline"
+        for role, size in design_presets.TYPE_LADDER.items():
+            rep[f"{{{{{role.upper()}_SIZE}}}}"] = str(size)
+        return rep
+    p = design_presets.resolve(profile_name)
+    rep = {
+        "{{VISUAL_STYLE}}": p["visual_style"],
+        "{{STYLE_REF}}": f"vendor/ppt-master-core/skills/ppt-master/templates/styles/{p['style_id']}/templates/design_spec.md",
+        "{{BG}}": p["bg"], "{{SURFACE}}": p["surface"], "{{PRIMARY}}": p["primary"], "{{ACCENT}}": p["accent"],
+        "{{TEXT}}": p["text"], "{{MUTED}}": p["muted"], "{{LINE}}": p["line"], "{{TINT}}": p["tint"],
+        "{{CHART_SERIES}}": ", ".join(p["chart_series"]),
+        "{{FONT_FAMILY}}": "[fill after doctor confirms availability]",
+        "{{ICON_LIBRARY}}": "tabler-outline",
+    }
+    for role, size in p["type"].items():
+        rep[f"{{{{{role.upper()}_SIZE}}}}"] = str(size)
+    return rep
 
 
 def _write_generate_scaffold(run: Path, profile_name: str) -> None:
-    profile = DESIGN_PROFILES[profile_name]
+    replacements = _profile_replacements(profile_name)
     source_dir = skill_root() / "assets" / "scaffolds"
     project = run / "authoring" / "project"
     (project / "svg_output").mkdir(parents=True, exist_ok=True)
-    replacements = {
-        "{{VISUAL_STYLE}}": profile["visual_style"],
-        "{{BG}}": profile["bg"],
-        "{{PRIMARY}}": profile["primary"],
-        "{{ACCENT}}": profile["accent"],
-        "{{TEXT}}": profile["text"],
-        "{{FONT_FAMILY}}": profile["font_family"],
-        "{{TITLE_SIZE}}": profile["title_size"],
-        "{{BODY_SIZE}}": profile["body_size"],
-        "{{FOOTNOTE_SIZE}}": profile["footnote_size"],
-        "{{PAGE_MARK_SIZE}}": profile["page_mark_size"],
-    }
     for name in ("spec_lock.md", "design_spec.md"):
         target = project / name
         if target.exists():
@@ -71,7 +58,7 @@ def _write_generate_scaffold(run: Path, profile_name: str) -> None:
     if not example.exists():
         write_json(example, {
             "schema_version": SCHEMA_VERSION,
-            "defaults": {"roundtrip_font_family": profile["font_family"]},
+            "defaults": {"roundtrip_font_family": "[fill after doctor confirms availability]"},
             "objects": [{
                 "source_id": "slide-001-title",
                 "slide": 1,
