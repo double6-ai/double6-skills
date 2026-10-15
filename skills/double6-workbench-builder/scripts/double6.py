@@ -68,7 +68,19 @@ def parser() -> argparse.ArgumentParser:
     return root
 
 
+def _ensure_utf8_stdio() -> None:
+    """Emit UTF-8 regardless of the console/pipe code page (e.g. cp1252 on Windows)."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _ensure_utf8_stdio()
     args = parser().parse_args(argv)
     try:
         if args.command == "start":
