@@ -62,9 +62,78 @@ def _bounds(group: etree._Element) -> list[float] | None:
     return None
 
 
-def upgrade_table_payload(payload: dict[str, Any]) -> list[str]:
+HEX = re.compile(r"#[0-9A-Fa-f]{6}\b")
+OFFICE_DEFAULT_SERIES = ("#4472C4", "#ED7D31", "#A5A5A5", "#FFC000", "#5B9BD5", "#70AD47")
+
+
+def parse_spec_lock_palette(text: str) -> dict[str, Any]:
+    """Read ``## colors`` from spec_lock.md: ``- role: #RRGGBB`` and ``- chart_series: #.., #..``."""
+    palette: dict[str, Any] = {}
+    in_colors = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            in_colors = stripped[3:].strip().lower() == "colors"
+            continue
+        if not in_colors or not stripped.startswith("- ") or ":" not in stripped:
+            continue
+        key, value = stripped[2:].split(":", 1)
+        colors = [c.upper() for c in HEX.findall(value)]
+        if not colors:
+            continue
+        palette[key.strip()] = colors if key.strip() == "chart_series" else colors[0]
+    if "chart_series" not in palette:
+        series = [palette[k] for k in ("accent", "primary") if k in palette]
+        if series:
+            palette["chart_series"] = series + [c for c in (palette.get("muted"), palette.get("line")) if c]
+    return palette
+
+
+def apply_chart_palette(payload: dict[str, Any], palette: dict[str, Any]) -> list[str]:
+    """Give a chart the deck palette when the author left colours unset."""
+    series_colors = palette.get("chart_series") or []
+    if not series_colors:
+        return []
+    actions: list[str] = []
+    style = payload.get("style") if isinstance(payload.get("style"), dict) else {}
+    if not style.get("colors") and not payload.get("colors"):
+        style["colors"] = list(series_colors)
+        actions.append("deck_palette_series_colors")
+    for key, role in (("text_color", "text"), ("axis_color", "line"), ("grid_color", "line")):
+        if key not in style and palette.get(role):
+            style[key] = palette[role]
+            actions.append(f"deck_palette_{key}")
+    for key in ("chart_area_fill", "plot_area_fill"):
+        if key not in style and "deck_palette_series_colors" in actions:
+            style[key] = "none"  # sit on the slide field so light and dark themes both read
+            actions.append(f"deck_palette_{key}")
+    payload["style"] = style
+    return actions
+
+
+def apply_table_palette(payload: dict[str, Any], palette: dict[str, Any]) -> list[str]:
+    if not palette.get("primary"):
+        return []
+    style = payload.get("style") if isinstance(payload.get("style"), dict) else {}
+    defaults = {
+        "header_fill": palette.get("primary"), "header_text": "#FFFFFF",
+        "body_text": palette.get("text"), "body_fill": palette.get("bg") or "#FFFFFF",
+        "band_fill": palette.get("surface") or palette.get("tint"), "border_color": palette.get("line"),
+    }
+    added = []
+    for key, value in defaults.items():
+        if value and key not in style:
+            style[key] = value
+            added.append(key)
+    payload["style"] = style
+    return ["deck_palette_table:" + ",".join(added)] if added else []
+
+
+def upgrade_table_payload(payload: dict[str, Any], palette: dict[str, Any] | None = None) -> list[str]:
     """Upgrade a legacy (v4.8, schema-less) table payload in place."""
     actions: list[str] = []
+    if palette:
+        actions += apply_table_palette(payload, palette)
     if "schema" in payload:
         return actions
     payload["schema"] = TABLE_SCHEMA_V2
@@ -88,7 +157,7 @@ def upgrade_table_payload(payload: dict[str, Any]) -> list[str]:
     return actions
 
 
-def normalize_native_markers(root: etree._Element, *, authority_policy: str = "json") -> list[dict[str, Any]]:
+def normalize_native_markers(root: etree._Element, *, authority_policy: str = "json", palette: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """Return one record per marker changed. ``authority_policy``: ``json`` | ``author``."""
     if authority_policy not in {"json", "author"}:
         raise D6PPTError(f"Unknown native marker authority policy: {authority_policy}", "invalid_semantic_manifest")
@@ -110,7 +179,9 @@ def normalize_native_markers(root: etree._Element, *, authority_policy: str = "j
             raise D6PPTError(f"Native {kind} marker #{label} metadata must be a JSON object", "native_marker_invalid")
         actions: list[str] = []
         if kind == "table":
-            actions += upgrade_table_payload(payload)
+            actions += upgrade_table_payload(payload, palette)
+        elif palette:
+            actions += apply_chart_palette(payload, palette)
         if authority_policy == "json" and group.get(AUTHORITY_ATTR) is None and group.get(BASELINE_ATTR) is None:
             group.set(AUTHORITY_ATTR, "json")
             actions.append("json_first_authority")

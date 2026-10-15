@@ -19,7 +19,7 @@ Authoring 结构约束（quality gate + semantic contract）：
 
 ## PPT Master adapter
 
-- 源目录默认是 `authoring/project/svg_output/`，使用 vendored PPT Master `v4.8.0` 精简内核编译。
+- 源目录默认是 `authoring/project/svg_output/`，使用 vendored PPT Master `v6.7.0` 内核编译。
 - `compile` 默认启用 `--native-charts-and-tables`。需要原生 chart/table 时，按 PPT Master 上游 marker 合同在 SVG 中提供数据；不满足 marker 合同则 fail closed，不把普通形状冒充原生对象。
 - title、subtitle、body 和 postflight-sensitive text 必须在源阶段顶层化。深度适配器可依据 `source_selector.file + id` 对 SVG 根节点下、没有 transform/style/clip 等继承语义的安全 group 做选择性去分组；任何不安全属性、嵌套 group 或歧义 selector 都 fail closed。适配只发生在 `build/ppt-master-project/`，不会改写 authoring source。编译后的语义层若发现敏感对象仍嵌套在 group 内，会拒绝生成 object map。
 - 可整体拖动的 motif 保留 group；decorative 对象不进入文本修复主路径。
@@ -52,7 +52,7 @@ Authoring 结构约束（quality gate + semantic contract）：
 }
 ```
 
-对应 SVG 元素示例：`<text id="title" data-pptx-shape-id="1001" ...>标题</text>`。角色可使用 `footnote` 与 `page_mark`；inspect 默认允许二者低至 9pt，项目也可在 content contract 的 `inspection_rules.font_min_pt_by_role` 覆盖阈值。
+对应 SVG 元素示例：`<text id="title" data-pptx-shape-id="1001" ...>标题</text>`。角色可使用 `kicker`、`label`、`caption`、`footnote` 与 `page_mark`；inspect 默认允许它们低至 9pt，项目也可在 content contract 的 `inspection_rules.font_min_pt_by_role` 覆盖阈值。
 
 ## 原生 chart / table
 
@@ -88,9 +88,9 @@ Authoring 结构约束（quality gate + semantic contract）：
 - 未在 `spec_lock.md` `## typography` 声明、且出现次数 > 2 的字号会被质量门阻断；请声明干净阶梯（避免 20/22 这类无感差值）。
 - `data-pptx-bounds` 必须覆盖真实墨迹宽度；中文混排请按质量门同宽算法估宽，或预留足够留白。
 
-## generate 模式能力边界
+## generate 模式的视觉设计
 
-`init --design <profile>` 只给颜色/字号/工作结构，**不自动套版式**。要好看请：1) 自己设计完整 SVG 版式；或 2) 改用 template-fill 复用现成模板。vendored ppt-master 精简核不包含上游 `workflows/` 版式库。
+`init --design <preset>` 写入统一调色、字号阶梯和图标库，但不会替 Agent 画版式。版式由 Agent 按 [visual-design.md](visual-design.md) 设计：vendored 设计子集包含 style、版式库（presentation_core / report_core）、图表与表格模板、线性图标和形状脚本。上游 `workflows/` 不在 vendor 内，以本 Skill 的流程为准。
 
 ## 字号：px 与 pt
 
@@ -101,8 +101,8 @@ Authoring 结构约束（quality gate + semantic contract）：
 | title | 20 | 27 |
 | subtitle | 16 | 22 |
 | body | 12 | 16 |
-| caption / label / data | 10 | 14 |
-| footnote / page_mark | 9 | 12 |
+| data | 10 | 14 |
+| caption / label / kicker / footnote / page_mark | 9 | 12 |
 
 `## typography` **必须保留 `body` 键**（其它角色名可扩展）。出现次数 > 2 的每个字号都要声明。
 
@@ -125,3 +125,11 @@ python scripts/d6ppt.py render-import --run <run>   --pdf export.pdf --pages sli
 - **字体**：使用 `doctor` 能解析到的字体。Linux portable 档请用 `Noto Sans CJK SC` 等已安装字体；写 `Microsoft YaHei` 会被回退，导致度量偏差。
 - **visual 闭环顺序**：`visual-policy` → `verify`（产出渲染）→ 查看渲染并写 `visual-review` → 再次 `verify` → `finalize`。
 - **compile 前**：`authoring_scaffold_incomplete` 的 `details.remaining_fields` 会列出仍是模板占位的字段。
+
+
+## 0.5.0 视觉相关编译行为
+
+- **图标**：SVG 中的 `<use data-icon="<lib>/<name>" x y width height fill/>` 会在 build 副本中从 `authoring/project/icons/<lib>/` 或 vendored `templates/icons/` 取图，交给上游 checker 与 converter 原生嵌入；找不到时报 `icon_missing` 并列出缺失名称。vendored 清单见 `scripts/maintenance/design_icons_tabler_outline.txt`。
+- **原生图表与表格调色**：compile 从 spec_lock `## colors` 读取调色。图表未写 `style.colors` 时，使用 `chart_series`（没有该字段时依次用 accent、primary、muted、line），并补 `text_color` / `axis_color` / `grid_color`；未写 schema 的表格用 primary 表头、text 正文、surface 斑马纹、line 边框。作者写了的颜色一律保留。semantic `defaults.native_palette: false` 可关闭此行为。
+- **单行 `<tspan>`**：`<text data-pptx-shape-id><tspan x=同值 dy="0">…</tspan></text>` 也会被展开，避免稳定身份丢失（`ambiguous_object_mapping`）。多行段落与内联强调 run 的身份本来就能保留。
+- **小字角色**：`kicker`、`label`、`caption`、`footnote`、`page_mark` 的下限为 9pt（12px）。

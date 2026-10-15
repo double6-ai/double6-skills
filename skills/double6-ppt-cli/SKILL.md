@@ -1,6 +1,6 @@
 ---
 name: double6-ppt-cli
-version: 0.4.0
+version: 0.5.0
 description: 基于 ppt-master 与 iOfficeAI/OfficeCLI 两个开源项目，生成、套用模板、读取、检查和闭环修复原生 PPTX；“可编辑”重点指保留原生对象与稳定身份，方便 Agent 多轮定位、修改和复查。适用于从 Markdown、文本、结构化材料与本地授权图片制作演示文稿，复用常规 PPTX 模板，或质检和受限修复已有 PPTX；不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
 metadata:
   openclaw:
@@ -13,7 +13,7 @@ metadata:
         - py
 ---
 
-# Double6 PPT CLI 0.4.0
+# Double6 PPT CLI 0.5.0
 
 > 内核为 PPT Master v6.7.0。generate 走 v6.7.0；template-fill 改为 v6.7.0 roundtrip 后端（`pm6_template`：对象原生回传 + 按形状 ID 原生改写文本框 + 真实字体度量换行/自动调整），保留 v4.8 的分析/检查/计划契约，详见 [template-fill-pm6.md](references/template-fill-pm6.md)。PowerPoint 实机验证脚本见 [powerpoint-verification.md](references/powerpoint-verification.md)。
 
@@ -61,11 +61,23 @@ metadata:
 8. 交给 PowerPoint 打开的所有副本必须先进入真实系统账户的 `/Users/<account>/Library/Containers/com.microsoft.Powerpoint/Data/tmp/d6ppt/`。真实 home 由系统账户数据库解析，禁止依赖隔离 `$HOME` / `Path.home()`；run 与证据只通过普通文件复制读写。
 9. roundtrip、另存、重开、改字、移动、保存、持久化核验与 PDF 导出合并为一次 PowerPoint 批处理会话。禁止让 PowerPoint 打开 `process/tmp/opencode/diag` 或其它诊断文件，也不得代用户点击文件访问授权。
 
+## 视觉设计（generate 必读，视觉质量是交付要求）
+
+完整指引见 [visual-design.md](references/visual-design.md)。Skill 已经 vendored PPT Master v6.7.0 的设计子集，包括设计规范、15 个 style、`presentation_core` / `report_core` 版式库、图表与表格模板、约 430 个线性图标和形状脚本。
+
+1. 按场景选择 `--design` 预设：它映射到一个上游 style，并写入起始调色（spec_lock `## colors` 为全 deck 颜色锚点）、字号阶梯与图标库。
+2. **默认用配方出页**：先 `image-search` / `image-add` 准备照片（royalty-free 并带署名，或明确标注的 `--placeholder`；`--treat` 可裁切、duotone、tint），再写 `plan.json`，运行 `recipe deck --run <run> --plan plan.json`。单页可以用 `recipe apply <name> --run <run> --page N --data '<json>'`。`recipe list` 列出全部配方。配方会写好 SVG、semantic_manifest、图标清单和 page_rhythm，并按 spec_lock 的调色与字号出页。用法和推荐序列见 [layout-recipes.md](references/layout-recipes.md)。
+3. 按配方的节奏组合页面：正文页以非卡片构图为主（`split_photo`、`big_number`、`timeline`、`features`、`chart_annotated`、`table_highlight`、`quote`、`kpi_photo`），卡片式配方不超过正文页的一半；每 2–3 张数据页插一张 breathing 页。`recipe` 输出的 warnings（连续同配方、卡片过多、照片重复）要处理掉。
+4. 配方覆盖不了的页面再手写 SVG：先读预设对应的 `templates/styles/<style>/templates/design_spec.md` 和 `references/executor-base.md` 的 Page Expression Core。字号只用 spec_lock 阶梯（标题 40px、正文 22px 起），配色以所选 style 的 Color Behavior 为准；图表系列色取自 `chart_series`，图标用 `<use data-icon="tabler-outline/<name>" .../>`。无论哪种方式，design_spec §IX 都要为每页写 `- Composition:`。
+5. 目标是好看，不只是合格：用大数字 hero、满版照片加 scrim、分屏、标注式图表和超大引语制造视觉节奏；没有“低饱和、克制配色”的规则。
+6. 禁止的反模式：整页 bullet 白底黑字、上重下空、颜色没有角色、Office 默认图表色、稀疏卡片、系列色太接近、孤行换行等，详见 visual-design.md §5。
+7. 先跑 `visual-metrics --run <run>` 修掉确定性检查 error（对比度、上重下空、每页非文字元素、≤7 种字号、Office 默认图表色、孤行、中文与数字间的空格、图表系列可分辨度、正文 ≥14pt）；再按 [visual-quality.md](references/visual-quality.md) 的 8 维评分表打分，用 `visual-review --rubric rubric.json` 记录。generate 模式缺 rubric、均分 <3.5 或任一维 <3 都会被拒，不能以 `pass` 交付。
+
 ## 三种模式
 
 ### 原生生成
 
-`init --mode generate --source <content> --design <neutral|academic|business|training> --verify-tier <auto|native|portable> --out <run>` 会生成 `spec_lock.md`、`design_spec.md`、`svg_output/` 与语义清单示例。填完草稿并按 [authoring-contract.md](references/authoring-contract.md) 准备稳定对象身份，再依次 `compile → inspect → repair → verify → finalize`。设计包提供颜色、字号与工作结构，不会替 Agent 自动完成版式；需要复用现成版式时使用 template-fill。
+`init --mode generate --source <content> --design <consulting|investor-pitch|product-launch|operating-review|academic|training|neutral> --verify-tier <auto|native|portable> --out <run>` 会生成 `spec_lock.md`（统一调色、字号阶梯、图标库）、`design_spec.md`、`svg_output/` 与语义清单示例。**先按下方“视觉设计”完成设计决策**，再按 [authoring-contract.md](references/authoring-contract.md) 准备稳定对象身份，然后依次 `compile → inspect → repair → verify → finalize`。
 
 ### 模板填充
 
