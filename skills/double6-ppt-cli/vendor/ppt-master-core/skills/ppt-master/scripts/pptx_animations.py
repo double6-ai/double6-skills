@@ -3243,6 +3243,25 @@ def validate_slide_animation_structure(
     return errors
 
 
+def read_slide_click_dependencies(slide_xml: str | bytes) -> tuple[int, ...]:
+    """Read native click/interactive targets without requiring supported effects."""
+    root = ET.fromstring(slide_xml)
+    targets: set[int] = set()
+    for timing in root.iter(_qn(PML_NS, 'timing')):
+        for node in timing.iter(_qn(PML_NS, 'cTn')):
+            conditions = node.findall(f"{_qn(PML_NS, 'stCondLst')}/{_qn(PML_NS, 'cond')}")
+            interactive = node.get('nodeType') in {'clickEffect', 'interactiveSeq'} or any(
+                condition.get('evt') in {'onClick', 'onDblClick', 'onMouseOver', 'onMouseOut', 'onNext', 'onPrev'}
+                for condition in conditions
+            )
+            if interactive:
+                targets.update(
+                    int(value) for target in node.iter(_qn(PML_NS, 'spTgt'))
+                    if (value := target.get('spid', '')).isdigit()
+                )
+    return tuple(sorted(targets))
+
+
 def read_slide_animation_sequence(
     slide_xml: str | bytes,
     *,
@@ -3569,9 +3588,11 @@ def validate_pptx_animation_package(
     pptx_path: str | Path,
     *,
     require_supported_effects: bool = False,
+    skip_slide_numbers: set[int] | None = None,
 ) -> None:
-    """Validate timing placement and shape references for every slide part."""
+    """Validate generated timing, excluding byte-preserved source slides."""
     path = Path(pptx_path)
+    skipped = skip_slide_numbers or set()
     errors: list[str] = []
     try:
         with zipfile.ZipFile(path) as package:
@@ -3581,6 +3602,9 @@ def validate_pptx_animation_package(
                 if re.fullmatch(r'ppt/slides/slide\d+\.xml', name)
             )
             for name in names:
+                match = re.search(r'slide(\d+)\.xml$', name)
+                if match is not None and int(match.group(1)) in skipped:
+                    continue
                 slide_data = package.read(name)
                 try:
                     root = ET.fromstring(slide_data)
@@ -3808,6 +3832,12 @@ def describe_animation_effect(effect: object) -> dict[str, Any]:
         }
         if raw_spec.get('type') == 'enum':
             spec['values'] = list(raw_spec['values'])
+        if name == 'direction':
+            spec['note'] = (
+                'the direction the motion travels; PowerPoint names the origin '
+                'edge, so right = "From Left", left = "From Right", down = '
+                '"From Top", up = "From Bottom"'
+            )
         option_contract[name] = spec
     return {
         'input': effect,

@@ -10,7 +10,7 @@ from .common import D6PPTError, LEGACY_SCHEMA_VERSIONS, SCHEMA_VERSION, sha256_f
 
 ROLES = {
     "title", "subtitle", "body", "caption", "label", "data", "chart",
-    "table", "connector", "group_motif", "decorative", "notes", "footnote", "page_mark",
+    "table", "connector", "group_motif", "decorative", "notes", "footnote", "page_mark", "image",
 }
 PREFERRED_STRUCTURES = {"top_level", "group", "connector", "placeholder", "native_chart", "native_table"}
 PATCH_PROPERTIES = {"text", "color", "fill", "font", "size", "x", "y", "width", "height"}
