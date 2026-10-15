@@ -106,8 +106,8 @@ bash run_translate.sh <input-file.pdf> --output-dir <output-dir> \
 
 - 本机有 Microsoft PowerPoint 与 `osascript` 时走 native 验证；没有或系统拒绝辅助访问时，`verify --verify-tier auto` 自动降级 portable 档（OfficeCLI 校验/改字探针 + 可选 LibreOffice 渲染），交付状态为 `pass_with_warnings`。**非 macOS / 无 PowerPoint 可直接使用 portable 档。**
 - OfficeCLI 由 `bootstrap` 固定安装 pin `1.0.157`（最低兼容 1.0.144）；运行时也接受更新的 1.x，非 pin 版本由 doctor 报 `warn` 并可继续使用，major ≠ 1 或低于最低兼容版本才 fail。`--verify-tier native` 可强制要求 PowerPoint。
-- `init --mode generate --design academic|business|training|neutral` 会创建 spec/design 与语义身份草稿；PowerPoint 始终是可选 native 验证能力，显式 portable 会完整跳过它。
-- 不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
+- `init --mode generate --design consulting|investor-pitch|product-launch|operating-review|academic|training|neutral` 会创建 spec/design 与语义身份草稿；`recipe deck --plan plan.json` 用 18 个版式配方直接出页，包括满版照片封面、超大数字、引语、开放式时间轴、标注式原生图表、高亮原生表格等；`image-search` / `image-add` 获取 royalty-free 图片并记录署名；PowerPoint 始终是可选 native 验证能力，显式 portable 会完整跳过它。
+- 不负责 PDF/DOCX 内容解析、图片式 PPT、HTML slides、TTS 或视频。
 - 视觉检查默认要求；用户明确跳过时结果只能是 `pass_with_warnings`，不会伪装成完整视觉通过。
 - vendored `ppt-master-core` 来自 PPT Master v6.7.0（实验分支 exp/pm6-generate，仅 generate；template-fill 暂未迁移），适用其 MIT 许可证；OfficeCLI 作为外部固定依赖由用户自行安装。
 

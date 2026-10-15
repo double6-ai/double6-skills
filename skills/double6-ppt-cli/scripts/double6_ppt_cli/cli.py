@@ -34,6 +34,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("visual-review"); p.add_argument("--run", type=Path, required=True); p.add_argument("--status", choices=("accepted", "accepted_with_warnings", "rejected"), required=True); p.add_argument("--reviewer", required=True); p.add_argument("--notes", required=True); p.add_argument("--rubric", type=Path, help="JSON file with 8 rubric scores (1-5)")
     p = sub.add_parser("image-search"); p.add_argument("--query", required=True); p.add_argument("--count", type=int, default=12); p.add_argument("--min-width", type=int, default=1200); p.add_argument("--orientation", choices=("wide", "tall", "square", "any"), default="wide")
     p = sub.add_parser("image-add"); p.add_argument("--run", type=Path, required=True); p.add_argument("--name", required=True); p.add_argument("--openverse-id"); p.add_argument("--url"); p.add_argument("--file", type=Path); p.add_argument("--placeholder", choices=("gradient", "orbs", "grain")); p.add_argument("--colors"); p.add_argument("--size", default="1600x900"); p.add_argument("--license"); p.add_argument("--creator"); p.add_argument("--source-url"); p.add_argument("--license-url"); p.add_argument("--treat", help="e.g. cover=1280x720;focus=0.5,0.4;duotone=#16181C,#B08D57;tint=#000000@0.3;round=24")
+    p = sub.add_parser("recipe", help="layout recipes: list | show | apply | deck")
+    rs = p.add_subparsers(dest="recipe_command", required=True)
+    rs.add_parser("list")
+    q = rs.add_parser("show"); q.add_argument("name")
+    q = rs.add_parser("apply"); q.add_argument("name"); q.add_argument("--run", type=Path, required=True); q.add_argument("--page", type=int, required=True); q.add_argument("--data", required=True, help="JSON object or path to a JSON file")
+    q = rs.add_parser("deck"); q.add_argument("--run", type=Path, required=True); q.add_argument("--plan", type=Path, required=True)
     p = sub.add_parser("visual-metrics"); p.add_argument("--run", type=Path, required=True)
     p = sub.add_parser("render-import"); p.add_argument("--run", type=Path, required=True); p.add_argument("--pdf", type=Path, required=True); p.add_argument("--pages", type=Path, required=True, nargs="+"); p.add_argument("--contact-sheet", type=Path, required=True); p.add_argument("--tier", choices=("portable", "native"), default="portable"); p.add_argument("--renderer", required=True); p.add_argument("--fact-source", required=True)
     p = sub.add_parser("inspect"); p.add_argument("--run", type=Path, required=True); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS)
@@ -107,6 +113,22 @@ def main(argv: list[str] | None = None) -> int:
             result = add_image(args.run, args.name, openverse_id=args.openverse_id, url=args.url, file=args.file, placeholder=args.placeholder,
                                colours=args.colors.split(",") if args.colors else None, size=args.size, license=args.license, creator=args.creator,
                                source_url=args.source_url, license_url=args.license_url, treatments=args.treat)
+        elif args.command == "recipe":
+            from . import recipes
+            if args.recipe_command == "list":
+                result = {"recipes": recipes.list_recipes()}
+            elif args.recipe_command == "show":
+                item = next((r for r in recipes.list_recipes() if r["name"] == args.name), None)
+                if item is None:
+                    raise D6PPTError(f"Unknown recipe '{args.name}'", "recipe_unknown", {"known": sorted(recipes.RECIPES)})
+                result = item
+            elif args.recipe_command == "apply":
+                raw = args.data
+                data = json.loads(Path(raw).read_text(encoding="utf-8")) if not raw.lstrip().startswith("{") else json.loads(raw)
+                data["recipe"] = args.name
+                result = recipes.apply(args.run, [data], [args.page], {k: data.pop(k) for k in ("footer", "audience", "lang", "design") if k in data})
+            else:
+                result = recipes.apply_deck(args.run, args.plan)
         elif args.command == "visual-metrics":
             from .visual_review import visual_metrics_for_run
             result = visual_metrics_for_run(args.run)

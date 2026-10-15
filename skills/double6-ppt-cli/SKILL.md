@@ -66,12 +66,12 @@ metadata:
 完整指引见 [visual-design.md](references/visual-design.md)。Skill 已经 vendored PPT Master v6.7.0 的设计子集，包括设计规范、15 个 style、`presentation_core` / `report_core` 版式库、图表与表格模板、约 430 个线性图标和形状脚本。
 
 1. 按场景选择 `--design` 预设：它映射到一个上游 style，并写入起始调色（spec_lock `## colors` 为全 deck 颜色锚点）、字号阶梯与图标库。
-2. 作稿前读：预设对应的 `templates/styles/<style>/templates/design_spec.md`、`references/executor-base.md` 的 Page Expression Core；需要构图参考时看 `templates/layouts/`。
-3. 在 design_spec §IX 为每页写 `- Composition: page job → 版式结构 → 设备`。每页至少一个非文字视觉元素，例如色块、卡片、KPI 大数字、图标、图表、节点连线。
-4. 配色行为以所选 style 的 Color Behavior 为准；字号不超过 7 档；图表系列色取自 `chart_series`，compile 会写进原生图表；图标用 `<use data-icon="tabler-outline/<name>" .../>`，compile 自动嵌入。
-5. 目标是好看，不只是合格。按 [layout-recipes.md](references/layout-recipes.md) 组合大数字 hero、满版照片 + scrim、分屏、标注式图表、高亮表格、渐变时间轴等配方，并安排深浅与图文的节奏。图片用 `image-search` / `image-add`（Openverse/Unsplash/Pexels 等 royalty-free 来源，或明确标注的 `--placeholder`），`--treat` 可做裁切、duotone、tint 等处理；缺署名时 compile 会拒绝。
+2. **默认用配方出页**：先 `image-search` / `image-add` 准备照片（royalty-free 并带署名，或明确标注的 `--placeholder`；`--treat` 可裁切、duotone、tint），再写 `plan.json`，运行 `recipe deck --run <run> --plan plan.json`。单页可以用 `recipe apply <name> --run <run> --page N --data '<json>'`。`recipe list` 列出全部配方。配方会写好 SVG、semantic_manifest、图标清单和 page_rhythm，并按 spec_lock 的调色与字号出页。用法和推荐序列见 [layout-recipes.md](references/layout-recipes.md)。
+3. 按配方的节奏组合页面：正文页以非卡片构图为主（`split_photo`、`big_number`、`timeline`、`features`、`chart_annotated`、`table_highlight`、`quote`、`kpi_photo`），卡片式配方不超过正文页的一半；每 2–3 张数据页插一张 breathing 页。`recipe` 输出的 warnings（连续同配方、卡片过多、照片重复）要处理掉。
+4. 配方覆盖不了的页面再手写 SVG：先读预设对应的 `templates/styles/<style>/templates/design_spec.md` 和 `references/executor-base.md` 的 Page Expression Core。字号只用 spec_lock 阶梯（标题 40px、正文 22px 起），配色以所选 style 的 Color Behavior 为准；图表系列色取自 `chart_series`，图标用 `<use data-icon="tabler-outline/<name>" .../>`。无论哪种方式，design_spec §IX 都要为每页写 `- Composition:`。
+5. 目标是好看，不只是合格：用大数字 hero、满版照片加 scrim、分屏、标注式图表和超大引语制造视觉节奏；没有“低饱和、克制配色”的规则。
 6. 禁止的反模式：整页 bullet 白底黑字、上重下空、颜色没有角色、Office 默认图表色、稀疏卡片、系列色太接近、孤行换行等，详见 visual-design.md §5。
-7. 先跑 `visual-metrics --run <run>` 修掉确定性检查 error（对比度、上重下空、每页非文字元素、≤7 种字号、Office 默认图表色、孤行、中文与数字间的空格、图表系列可分辨度）；再按 [visual-quality.md](references/visual-quality.md) 的 8 维评分表打分，用 `visual-review --rubric rubric.json` 记录。generate 模式缺 rubric、均分 <3.5 或任一维 <3 都会被拒，不能以 `pass` 交付。
+7. 先跑 `visual-metrics --run <run>` 修掉确定性检查 error（对比度、上重下空、每页非文字元素、≤7 种字号、Office 默认图表色、孤行、中文与数字间的空格、图表系列可分辨度、正文 ≥14pt）；再按 [visual-quality.md](references/visual-quality.md) 的 8 维评分表打分，用 `visual-review --rubric rubric.json` 记录。generate 模式缺 rubric、均分 <3.5 或任一维 <3 都会被拒，不能以 `pass` 交付。
 
 ## 三种模式
 

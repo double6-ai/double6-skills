@@ -183,6 +183,11 @@ def _font_for(family: str | None, bold: bool, size_pt: float):
 
 # --------------------------------------------------------------------------- checks
 
+MIN_BODY_PT = 14.0  # 18.7 px on the 1280x720 canvas
+SMALL_TEXT_MIN_UNITS = 50  # width units (CJK = 2): footers, kickers and labels stay exempt
+SMALL_TEXT_EXEMPT = re.compile(r"^(Photo|Source|Sources|Note|Notes|来源|图片|注)[:：\s]", re.I)
+
+
 def compute_visual_metrics(pptx: Path, pages: list[Path], palette: dict[str, Any] | None = None) -> dict[str, Any]:
     from pptx import Presentation
     from pptx.util import Emu
@@ -277,6 +282,14 @@ def compute_visual_metrics(pptx: Path, pages: list[Path], palette: dict[str, Any
                             if tail is not None and _is_orphan(text, tail):
                                 add("orphan_line", index, f"Paragraph '{text[:16]}…' leaves '{tail}' alone on its last line",
                                     shape=shape.name, tail=tail)
+                # Body copy must stay readable from the back of a room: long text below MIN_BODY_PT.
+                if text and not SMALL_TEXT_EXEMPT.match(text.strip()):
+                    run0 = next((r for r in para.runs if r.text.strip()), None)
+                    psize = run0.font.size.pt if run0 is not None and run0.font.size is not None else None
+                    units = sum(2 if _is_cjk(c) else 1 for c in text)
+                    if psize and psize + 1e-6 < MIN_BODY_PT and units >= SMALL_TEXT_MIN_UNITS:
+                        add("small_body_text", index, f"Body text '{text[:20]}…' is {psize:g}pt (< {MIN_BODY_PT:g}pt)",
+                            shape=shape.name, size_pt=psize)
                 # CJK typography: no inserted spaces between CJK and Latin/digits.
                 if text and CJK_LATIN_SPACE.search(text):
                     add("cjk_latin_space", index, f"Space between CJK and Latin/digits in '{text[:24]}'", shape=shape.name)
@@ -349,5 +362,5 @@ def compute_visual_metrics(pptx: Path, pages: list[Path], palette: dict[str, Any
         "slides": per_slide,
         "findings": findings,
         "checks": ["low_contrast", "top_heavy", "near_empty_page", "no_non_text_element", "too_many_font_sizes",
-                   "office_default_chart_colors", "orphan_line", "cjk_latin_space", "chart_series_indistinct"],
+                   "office_default_chart_colors", "orphan_line", "cjk_latin_space", "chart_series_indistinct", "small_body_text"],
     }

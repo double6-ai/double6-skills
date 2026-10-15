@@ -4,6 +4,9 @@
 
 视觉质量版本：generate 模式恢复上游 PPT Master 的设计能力，并新增视觉质量门。
 
+- **配方 CLI**：`d6ppt recipe list|show|apply|deck`，共 18 个版式配方，其中 15 个不用卡片：cover_split、quote、big_number、kpi_photo、开放式 timeline 和 features、无卡片 team 等。配方按 spec_lock 调色与字号直接输出 SVG，同时更新 semantic_manifest、图标清单和 page_rhythm；连续使用同一配方、卡片页过多、照片重复时给出警告；图标缺失、字段缺失、图片缺失会直接报错。
+- **字号上调**：阶梯改为 mega 200 / hero 120 / display 64 / title 40 / subtitle 28 / body 22 / label 15（px）；新增检查 `small_body_text`（正文 <14pt 报错）。
+
 - **好看而非合格**：新增 [版式配方](references/layout-recipes.md)（满版照片封面、大数字 hero、标注式图表、高亮表格、渐变时间轴、分屏、团队头像等）和节奏指引；预设改为从大胆到雅致的调色，增加 accent2、渐变、on_accent / on_primary 和图片取向，字号阶梯加入 hero 112px。
 - **图片支持**：`image-search`（Openverse，仅可商用、可修改的许可）、`image-add`（Openverse / URL / 本地文件 / 明确标注的占位图）和 `--treat` 处理（cover、focus、duotone、tint、blur、round、circle、grayscale、fade 等）；`images/credits.json` 署名元数据，缺署名时 compile 拒绝，finalize 输出 `IMAGE_CREDITS.md`。vendor 上游 `editorial_bleed` 版式与图片执行文档。
 - **新增检查**：`orphan_line`（中文单字或短拉丁/数字孤行）、`cjk_latin_space`、`chart_series_indistinct`（ΔE<25）、`image_credit_missing`；对比度改为取三段中最差值。
