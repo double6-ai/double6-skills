@@ -12,15 +12,17 @@ from typing import Any
 
 SCHEMA_VERSION = "2.0"
 LEGACY_SCHEMA_VERSIONS = {"1.0"}
-SKILL_VERSION = "0.3.0"
+SKILL_VERSION = "0.4.0-exp.1"
 # Bootstrap always installs this exact OfficeCLI version.
 OFFICECLI_PIN_VERSION = "1.0.157"
 # Runtime accepts later 1.x builds; the previous pin (1.0.144) stays the minimum
 # so existing runtimes keep working with a warning instead of failing.
 OFFICECLI_MIN_VERSION = "1.0.144"
 OFFICECLI_VERSION = OFFICECLI_PIN_VERSION
-PPT_MASTER_VERSION = "4.8.0"
-PPT_MASTER_COMMIT = "53c9c2a5e9f1a49096324fba4f95833649c6a0f4"
+PPT_MASTER_VERSION = "6.7.0"
+PPT_MASTER_COMMIT = "b4efe3ddf237a97a42880164759162f8e2412f2f"
+# PPT Master v5.0.0 removed Template Fill Native; template-fill is not migrated on this branch.
+TEMPLATE_FILL_AVAILABLE = False
 RUNTIME_LOCK_INPUT = f"officecli:{OFFICECLI_PIN_VERSION}|ppt-master:{PPT_MASTER_COMMIT}"
 RUNTIME_LOCK_SHA = hashlib.sha256(RUNTIME_LOCK_INPUT.encode()).hexdigest()[:16]
 STATUSES = {

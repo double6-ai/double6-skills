@@ -109,7 +109,7 @@ bash run_translate.sh <input-file.pdf> --output-dir <output-dir> \
 - `init --mode generate --design academic|business|training|neutral` 会创建 spec/design 与语义身份草稿；PowerPoint 始终是可选 native 验证能力，显式 portable 会完整跳过它。
 - 不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
 - 视觉检查默认要求；用户明确跳过时结果只能是 `pass_with_warnings`，不会伪装成完整视觉通过。
-- vendored `ppt-master-core` 来自 PPT Master v4.8.0，适用其 MIT 许可证；OfficeCLI 作为外部固定依赖由用户自行安装。
+- vendored `ppt-master-core` 来自 PPT Master v6.7.0（实验分支 exp/pm6-generate，仅 generate；template-fill 暂未迁移），适用其 MIT 许可证；OfficeCLI 作为外部固定依赖由用户自行安装。
 
 入口说明见 [`skills/double6-ppt-cli/SKILL.md`](skills/double6-ppt-cli/SKILL.md)，交付门禁与上游许可证见 [`delivery-gates.md`](skills/double6-ppt-cli/references/delivery-gates.md) 与 [`licenses-and-upstreams.md`](skills/double6-ppt-cli/references/licenses-and-upstreams.md)；PowerPoint 可选双档与完整测试报告见 [`test-report-and-verification-tiers.md`](skills/double6-ppt-cli/references/test-report-and-verification-tiers.md)。
 

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
 from typing import Any
 from xml.etree import ElementTree as ET
 
@@ -14,11 +17,13 @@ from ..drawingml.utils import (
 from .chart_data import (
     _DEFAULT_CHART_COLORS,
     _category_axis_is_date,
+    _category_axis_reversed,
     _chart_list,
     _chart_plot_area_layout,
     _data_label_position,
     _data_label_point_items,
     _data_labels_config,
+    data_labels_show_unlisted,
 )
 from .chart_style import (
     _alpha_xml,
@@ -26,17 +31,21 @@ from .chart_style import (
     _axis_titles,
     _chart_area_sp_pr_xml,
     _chart_line_sp_pr_xml,
+    _chart_text_entry,
     _chart_text_entry_color,
     _chart_text_entry_font_face,
     _chart_text_entry_font_size,
-    _chart_text_entry,
     _chart_text_sizes,
     _chart_title_is_bounded,
     _chart_tx_pr_xml,
     _classic_chart_style,
     _font_face_xml,
+    _inferred_bar_gap_width,
+    _inferred_bar_overlap,
+    _inferred_cross_between,
     _major_gridlines_xml,
 )
+from .marker_attributes import native_json_is_authoritative
 from .marker_common import (
     PACKAGE_REL_TYPE,
     _bool_attr,
@@ -66,6 +75,7 @@ def _number_cache(
     points = "".join(
         f'<c:pt idx="{idx}"><c:v>{value}</c:v></c:pt>'
         for idx, value in enumerate(values)
+        if value is not None
     )
     return (
         f'<c:numCache><c:formatCode>{_xml_escape(number_format)}</c:formatCode>'
@@ -150,6 +160,88 @@ def _data_label_flags_xml(config: dict[str, Any]) -> str:
     )
 
 
+def _source_data_labels_xml(config: dict[str, Any]) -> str | None:
+    source = config.get("source_ooxml")
+    if source is None:
+        return None
+    if not isinstance(source, dict) or source.get("encoding") != "base64":
+        raise RuntimeError(
+            "Native PPTX chart data_labels.source_ooxml must be base64 metadata"
+        )
+    encoded = source.get("payload")
+    expected_sha = source.get("sha256")
+    if not isinstance(encoded, str) or not isinstance(expected_sha, str):
+        raise RuntimeError(
+            "Native PPTX chart data_labels.source_ooxml is incomplete"
+        )
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise RuntimeError(
+            "Native PPTX chart data_labels.source_ooxml payload is invalid base64"
+        ) from exc
+    if len(payload) > 2_000_000:
+        raise RuntimeError(
+            "Native PPTX chart data_labels.source_ooxml payload is too large"
+        )
+    if hashlib.sha256(payload).hexdigest() != expected_sha.lower():
+        raise RuntimeError(
+            "Native PPTX chart data_labels.source_ooxml checksum mismatch"
+        )
+    try:
+        root = ET.fromstring(payload)
+    except ET.ParseError as exc:
+        raise RuntimeError(
+            "Native PPTX chart data_labels.source_ooxml is malformed"
+        ) from exc
+    chart_ns = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+    rel_ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    if root.tag != f"{{{chart_ns}}}dLbls":
+        raise RuntimeError(
+            "Native PPTX chart data_labels.source_ooxml root must be c:dLbls"
+        )
+    if any(
+        isinstance(name, str) and name.startswith(f"{{{rel_ns}}}")
+        for node in root.iter()
+        for name in node.attrib
+    ):
+        raise RuntimeError(
+            "Native PPTX chart data_labels.source_ooxml cannot contain relationships"
+        )
+    return ET.tostring(root, encoding="unicode")
+
+
+def _data_label_custom_text_xml(
+    text: str,
+    *,
+    font_size: int,
+    color: str | None,
+    bold: bool,
+    font_face: str | None,
+    language: str | None,
+) -> str:
+    fill_xml = (
+        f'<a:solidFill><a:srgbClr val="{color}"/></a:solidFill>'
+        if color else ""
+    )
+    bold_attr = ' b="1"' if bold else ""
+    paragraphs: list[str] = []
+    for line in text.split("\n"):
+        lang = detect_text_lang(line, language)
+        rtl_attr = ' rtl="1"' if text_uses_rtl(line, language) else ""
+        run_rtl = '<a:rtl val="1"/>' if text_has_rtl_characters(line) else ""
+        paragraphs.append(
+            f'<a:p><a:pPr{rtl_attr}/><a:r><a:rPr lang="{lang}" '
+            f'sz="{font_size}"{bold_attr}>{fill_xml}{_font_face_xml(font_face, language)}'
+            f'{run_rtl}</a:rPr><a:t>{_xml_escape(line)}</a:t></a:r></a:p>'
+        )
+    return (
+        "<c:tx><c:rich><a:bodyPr/><a:lstStyle/>"
+        + "".join(paragraphs)
+        + "</c:rich></c:tx>"
+    )
+
+
 def _data_labels_xml(
     config: dict[str, Any] | None,
     *,
@@ -163,6 +255,9 @@ def _data_labels_xml(
 ) -> str:
     if config is None:
         return ""
+    source_xml = _source_data_labels_xml(config)
+    if source_xml is not None:
+        return source_xml
     show_leader_lines = _chart_bool(
         _first_present(
             config.get("show_leader_lines"),
@@ -202,10 +297,15 @@ def _data_labels_xml(
     )
     if point_items:
         selected_items = {int(item["idx"]): item for item in point_items}
+        show_unlisted = data_labels_show_unlisted(config)
         point_label_xml = ""
         for idx in range(point_count):
             item = selected_items.get(idx)
             if item is None:
+                if not show_unlisted:
+                    point_label_xml += f'<c:dLbl><c:idx val="{idx}"/><c:delete val="1"/></c:dLbl>'
+                continue
+            if item.get("delete") is True:
                 point_label_xml += f'<c:dLbl><c:idx val="{idx}"/><c:delete val="1"/></c:dLbl>'
                 continue
             item_font_size_raw = _first_present(item.get("font_size"), item.get("fontSize"))
@@ -239,15 +339,30 @@ def _data_labels_xml(
                 font_face=item_font_face,
                 language=language,
             )
+            custom_text_xml = ""
+            if item.get("text") is not None:
+                custom_text_xml = _data_label_custom_text_xml(
+                    str(item["text"]),
+                    font_size=item_font_size,
+                    color=item_color,
+                    bold=item_bold,
+                    font_face=item_font_face,
+                    language=language,
+                )
             point_label_xml += (
                 f'<c:dLbl><c:idx val="{idx}"/>'
+                f"{custom_text_xml}"
                 f"{item_num_fmt_xml}"
                 f"{item_text_properties_xml}"
                 f"{item_position_xml}"
                 f"{_data_label_flags_xml({**config, **item})}"
                 "</c:dLbl>"
             )
-        return f"<c:dLbls>{point_label_xml}{leader_lines_xml}</c:dLbls>"
+        series_label_xml = ""
+        if show_unlisted:
+            position_xml = f'<c:dLblPos val="{position}"/>' if position else ""
+            series_label_xml = f"{num_fmt_xml}{tx_pr_xml}{position_xml}{flags_xml}"
+        return f"<c:dLbls>{point_label_xml}{series_label_xml}{leader_lines_xml}</c:dLbls>"
 
     label_colors = [
         _clean_hex(item, "#404040")
@@ -311,12 +426,45 @@ def _data_point_colors_xml(
     )
 
 
-def _marker_xml(symbol: str | None) -> str:
+def _marker_xml(
+    symbol: str | None,
+    *,
+    size_pt: int | None = None,
+    color: str | None = None,
+) -> str:
     if not symbol:
         return ""
     if symbol == "none":
         return '<c:marker><c:symbol val="none"/></c:marker>'
-    return f'<c:marker><c:symbol val="{_xml_escape(symbol)}"/></c:marker>'
+    size_xml = f'<c:size val="{size_pt}"/>' if size_pt is not None else ""
+    sp_pr_xml = ""
+    if color:
+        clean = _clean_hex(color, "#4472C4")
+        sp_pr_xml = (
+            f'<c:spPr><a:solidFill><a:srgbClr val="{clean}"/></a:solidFill>'
+            f'<a:ln><a:solidFill><a:srgbClr val="{clean}"/></a:solidFill></a:ln></c:spPr>'
+        )
+    return f'<c:marker><c:symbol val="{_xml_escape(symbol)}"/>{size_xml}{sp_pr_xml}</c:marker>'
+
+
+def _marker_size_pt(size_px: Any) -> int | None:
+    if size_px is None:
+        return None
+    return max(2, min(72, int(round(float(size_px) * 0.75))))
+
+
+def _line_point_markers_xml(
+    point_colors: list[str | None],
+    *,
+    size_pt: int | None,
+) -> str:
+    """Per-point line markers: a colour marks the point, ``None`` leaves it bare."""
+    return "".join(
+        f'<c:dPt><c:idx val="{idx}"/>'
+        f'{_marker_xml("none" if color is None else "circle", size_pt=size_pt, color=color)}'
+        "</c:dPt>"
+        for idx, color in enumerate(point_colors)
+    )
 
 
 def _series_xml(
@@ -326,6 +474,7 @@ def _series_xml(
     chart_type: str,
     grouping: str | None = None,
     line_style: str = "line",
+    marker_size: Any = None,
     radar_marker_style: str | None = None,
     radar_style: str = "marker",
     colors: list[str],
@@ -363,8 +512,12 @@ def _series_xml(
         column_index = offset + start_column
         fill_opacity = item.get("fill_opacity") if chart_type == "area" else None
         line_width = item.get("line_width") if chart_type in {"area", "line"} else None
+        series_color = _chart_color(colors, color_index)
+        # An area is a filled region: it draws an outline only when the payload
+        # asks for one with line_width, otherwise the fill edge is the shape.
         color_xml = _series_color_xml(
-            _chart_color(colors, color_index),
+            series_color,
+            line=chart_type != "area" or line_width is not None,
             fill_opacity=fill_opacity,
             line_width=line_width,
         )
@@ -389,7 +542,19 @@ def _series_xml(
                 disable_negative_invert=True,
             )
         if chart_type == "line":
-            marker_xml = _marker_xml("circle" if line_style == "lineMarker" else "none")
+            size_pt = _marker_size_pt(
+                item.get("marker_size") if item.get("marker_size") is not None else marker_size
+            )
+            marker_xml = _marker_xml(
+                "circle" if line_style == "lineMarker" else "none",
+                size_pt=size_pt,
+                color=series_color if line_style == "lineMarker" else None,
+            )
+            if item.get("point_colors"):
+                point_colors_xml = _line_point_markers_xml(
+                    item["point_colors"],
+                    size_pt=size_pt,
+                )
             smooth_xml = '<c:smooth val="0"/>'
         if chart_type == "radar":
             if radar_style == "filled":
@@ -399,9 +564,13 @@ def _series_xml(
                 )
             marker_xml = _marker_xml(radar_marker_style)
         invert_xml = '<c:invertIfNegative val="0"/>' if chart_type in {"bar", "column"} else ""
+        item_data_labels = _data_labels_config(item)
+        effective_data_labels = (
+            item_data_labels if item_data_labels is not None else data_labels
+        )
         data_labels_xml = (
             _data_labels_xml(
-                data_labels,
+                effective_data_labels,
                 chart_type=chart_type,
                 grouping=grouping,
                 point_count=len(item["values"]),
@@ -410,7 +579,10 @@ def _series_xml(
                 default_font_face=data_label_font_face,
                 language=language,
             )
-            if _series_scoped_data_labels(data_labels)
+            if (
+                item_data_labels is not None
+                or _series_scoped_data_labels(data_labels)
+            )
             and chart_type in {"area", "bar", "column", "line"}
             else ""
         )
@@ -455,7 +627,7 @@ def _chart_title_paragraph_xml(
     run_rtl = '<a:rtl val="1"/>' if text_has_rtl_characters(text) else ''
     return (
         f'<a:p><a:pPr{rtl_attr}/><a:r><a:rPr lang="{lang}" '
-        f'sz="{font_size}">{fill_xml}{_font_face_xml(font_face)}'
+        f'sz="{font_size}">{fill_xml}{_font_face_xml(font_face, primary_language)}'
         f'{run_rtl}</a:rPr>'
         f"<a:t>{_xml_escape(text)}</a:t></a:r></a:p>"
     )
@@ -623,6 +795,17 @@ def _xy_series_xml(
     return "".join(parts)
 
 
+_DEFAULT_GAP_WIDTH = 150
+
+
+def _bar_overlap_xml(grouping: str | None, overlap: int | None) -> str:
+    if grouping in {"stacked", "percentStacked"}:
+        return '<c:overlap val="100"/>'
+    if overlap is None:
+        return ""
+    return f'<c:overlap val="{overlap}"/>'
+
+
 def _bar_chart_group_xml(
     chart_type: str,
     grouping: str,
@@ -632,21 +815,19 @@ def _bar_chart_group_xml(
     val_ax_id: str,
     vary_colors: bool = False,
     data_labels_xml: str = "",
+    gap_width: int | None = None,
+    overlap: int | None = None,
 ) -> str:
     bar_dir = "bar" if chart_type == "bar" else "col"
     vary_colors_xml = '<c:varyColors val="1"/>' if vary_colors else '<c:varyColors val="0"/>'
-    overlap_xml = (
-        '<c:overlap val="100"/>'
-        if grouping in {"stacked", "percentStacked"}
-        else ""
-    )
+    overlap_xml = _bar_overlap_xml(grouping, overlap)
     return (
         "<c:barChart>"
         f'<c:barDir val="{bar_dir}"/><c:grouping val="{grouping}"/>'
         f"{vary_colors_xml}"
         f"{ser_xml}"
         f"{data_labels_xml}"
-        '<c:gapWidth val="150"/>'
+        f'<c:gapWidth val="{_DEFAULT_GAP_WIDTH if gap_width is None else gap_width}"/>'
         f"{overlap_xml}"
         f'<c:axId val="{cat_ax_id}"/><c:axId val="{val_ax_id}"/>'
         "</c:barChart>"
@@ -674,8 +855,10 @@ def _line_area_chart_group_xml(
     )
 
 
-def _axis_scaling_xml(config: dict[str, Any]) -> str:
-    orientation = "maxMin" if config.get("reverse") else "minMax"
+def _axis_scaling_xml(config: dict[str, Any], *, reverse: bool | None = None) -> str:
+    if reverse is None:
+        reverse = bool(config.get("reverse"))
+    orientation = "maxMin" if reverse else "minMax"
     maximum = (
         f'<c:max val="{config["maximum"]}"/>'
         if config.get("maximum") is not None else ""
@@ -685,6 +868,11 @@ def _axis_scaling_xml(config: dict[str, Any]) -> str:
         if config.get("minimum") is not None else ""
     )
     return f'<c:scaling><c:orientation val="{orientation}"/>{maximum}{minimum}</c:scaling>'
+
+
+def _axis_tick_marks(config: dict[str, Any]) -> str:
+    """Axis tick marks default to none: generated fallbacks draw labels, not ticks."""
+    return str(config.get("tick_marks") or "none")
 
 
 def _axis_position(config: dict[str, Any], default: str) -> str:
@@ -762,12 +950,17 @@ def _axis_pair_xml(
     )
     val_number_format = _axis_number_format_xml(value, default_value_format)
     axis_sp_pr = _chart_line_sp_pr_xml(chart_style.get("axis_color"))
-    axis_tx_pr = _chart_tx_pr_xml(
-        axis_font_size,
-        chart_style.get("text_color"),
-        font_face=chart_style.get("font_face"),
-        language=primary_language,
-    )
+
+    def axis_tx_pr(config: dict[str, Any]) -> str:
+        # Tick-label text per axis: the payload's colour/font/size win over
+        # the chart-wide text style (category labels dark, value ticks grey).
+        return _chart_tx_pr_xml(
+            _font_size_hpt(config["font_size"]) if config.get("font_size") else axis_font_size,
+            config.get("color") or chart_style.get("text_color"),
+            font_face=config.get("font_family") or chart_style.get("font_face"),
+            language=primary_language,
+        )
+
     cat_title_xml = "" if secondary else _axis_title_xml(
         _first_present(axis_titles.get("category"), axis_titles.get("x")),
         font_size=axis_title_font_size,
@@ -803,34 +996,54 @@ def _axis_pair_xml(
             '<c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/>'
             '<c:noMultiLvlLbl val="0"/>'
         )
-    is_combo = chart_type == "combo"
-    cross_between = ""
-    if chart_type == "area" and category_kind == "date":
-        cross_between = '<c:crossBetween val="midCat"/>'
-    elif chart_type == "stock" or is_combo:
-        cross_between = '<c:crossBetween val="between"/>'
+    # Written explicitly: renderers disagree on the default (LibreOffice
+    # starts an unspecified area on the axis edge, PowerPoint between ticks).
+    default_cross_between = (
+        "midCat" if chart_type == "area" and category_kind == "date" else "between"
+    )
+    cross_between = (
+        f'<c:crossBetween val="{value.get("cross_between") or default_cross_between}"/>'
+    )
+    cat_tick_marks = _axis_tick_marks(category)
+    val_tick_marks = _axis_tick_marks(value)
     major_unit = (
         f'<c:majorUnit val="{value["major_unit"]}"/>'
         if value.get("major_unit") is not None else ""
     )
-    value_crosses = "max" if secondary else "autoZero"
+    # ``crosses`` places an axis at the first (autoZero) or last (max) point of
+    # the axis it crosses; a reversed axis swaps those ends, so the crossing
+    # follows the requested position XOR the crossing axis orientation. The
+    # hidden secondary pair keeps autoZero/max: its crossing sets the area
+    # fill baseline, not a visible axis position.
+    category_reversed = (
+        False if secondary else _category_axis_reversed(category, chart_type)
+    )
+    value_reversed = False if secondary else bool(value.get("reverse"))
+    far_val_pos = "t" if chart_type == "bar" else "r"
+    far_cat_pos = "r" if chart_type == "bar" else "t"
+    if secondary:
+        value_crosses = "max"
+        category_crosses = "autoZero"
+    else:
+        value_crosses = "max" if (val_pos == far_val_pos) != category_reversed else "autoZero"
+        category_crosses = "max" if (cat_pos == far_cat_pos) != value_reversed else "autoZero"
     return (
         f"<c:{category_tag}>"
-        f'<c:axId val="{cat_ax_id}"/>{_axis_scaling_xml(category)}'
+        f'<c:axId val="{cat_ax_id}"/>{_axis_scaling_xml(category, reverse=category_reversed)}'
         f'<c:delete val="{cat_delete}"/><c:axPos val="{cat_pos}"/>'
         f"{cat_gridlines}{cat_title_xml}{cat_number_format}"
-        '<c:majorTickMark val="out"/><c:minorTickMark val="none"/>'
+        f'<c:majorTickMark val="{cat_tick_marks}"/><c:minorTickMark val="none"/>'
         f'<c:tickLblPos val="{cat_tick_label_pos}"/>'
-        f"{axis_sp_pr}{axis_tx_pr}"
-        f'<c:crossAx val="{val_ax_id}"/><c:crosses val="autoZero"/>{category_tail}'
+        f"{axis_sp_pr}{axis_tx_pr(category)}"
+        f'<c:crossAx val="{val_ax_id}"/><c:crosses val="{category_crosses}"/>{category_tail}'
         f"</c:{category_tag}>"
         "<c:valAx>"
-        f'<c:axId val="{val_ax_id}"/>{_axis_scaling_xml(value)}'
+        f'<c:axId val="{val_ax_id}"/>{_axis_scaling_xml(value, reverse=value_reversed)}'
         f'<c:delete val="{val_delete}"/><c:axPos val="{val_pos}"/>'
         f"{val_gridlines}{val_title_xml}{val_number_format}"
-        '<c:majorTickMark val="out"/><c:minorTickMark val="none"/>'
+        f'<c:majorTickMark val="{val_tick_marks}"/><c:minorTickMark val="none"/>'
         f'<c:tickLblPos val="{val_tick_label_pos}"/>'
-        f"{axis_sp_pr}{axis_tx_pr}"
+        f"{axis_sp_pr}{axis_tx_pr(value)}"
         f'<c:crossAx val="{cat_ax_id}"/><c:crosses val="{value_crosses}"/>'
         f"{cross_between}{major_unit}"
         "</c:valAx>"
@@ -919,6 +1132,7 @@ def _combo_plot_xml(
             data_label_font_face=chart_style.get("font_face"),
             language=chart_style.get("primary_language"),
             line_style=plot.get("line_style", "line"),
+            marker_size=plot.get("marker_size"),
             category_column=int(plot.get("category_column", 1)),
             color_start_index=start_index,
             series_indices=plot.get("series_indices"),
@@ -949,6 +1163,8 @@ def _combo_plot_xml(
                 val_ax_id=val_ax_id,
                 vary_colors=any(item.get("point_colors") for item in plot["series"]),
                 data_labels_xml=data_labels_xml,
+                gap_width=plot.get("gap_width"),
+                overlap=plot.get("overlap"),
             ))
         elif chart_type in {"area", "line"}:
             parts.append(_line_area_chart_group_xml(
@@ -1100,6 +1316,7 @@ def _chart_plot_xml(
         chart_type=chart_type,
         grouping=series_grouping,
         line_style=chart_data.get("line_style", "line"),
+        marker_size=chart_data.get("marker_size"),
         radar_marker_style=chart_data.get("radar_marker_style"),
         radar_style=chart_data.get("radar_style", "marker"),
         colors=colors,
@@ -1139,6 +1356,9 @@ def _chart_plot_xml(
     if chart_type in {"bar", "column"}:
         bar_dir = "bar" if chart_type == "bar" else "col"
         grouping = series_grouping
+        gap_width = chart_data.get("gap_width")
+        if gap_width is None:
+            gap_width = _DEFAULT_GAP_WIDTH
         axes_xml = _axis_xml(
             cat_ax_id,
             val_ax_id,
@@ -1151,11 +1371,7 @@ def _chart_plot_xml(
             show_value_axis_labels=chart_data.get("show_value_axis_labels", True),
             axes=chart_data.get("axes") or {},
         )
-        overlap_xml = (
-            '<c:overlap val="100"/>'
-            if grouping in {"stacked", "percentStacked"}
-            else ""
-        )
+        overlap_xml = _bar_overlap_xml(grouping, chart_data.get("overlap"))
         vary_colors_xml = (
             '<c:varyColors val="1"/>'
             if any(item.get("point_colors") for item in series)
@@ -1167,7 +1383,7 @@ def _chart_plot_xml(
             f"{vary_colors_xml}"
             f"{ser_xml}"
             f"{data_labels_xml}"
-            '<c:gapWidth val="150"/>'
+            f'<c:gapWidth val="{gap_width}"/>'
             f"{overlap_xml}"
             f'<c:axId val="{cat_ax_id}"/><c:axId val="{val_ax_id}"/>'
             "</c:barChart>"
@@ -1415,6 +1631,34 @@ def _stock_axis_xml(
     )
 
 
+def _chart_data_with_fallback_geometry(
+    elem: ET.Element,
+    chart_data: dict[str, Any],
+) -> dict[str, Any]:
+    """SVG-first only: fill bar spacing and tick crossing from the fallback drawing."""
+    if chart_data.get("gap_width") is None:
+        inferred_gap_width = _inferred_bar_gap_width(elem, chart_data)
+        if inferred_gap_width is not None:
+            chart_data = {**chart_data, "gap_width": inferred_gap_width}
+    if chart_data.get("overlap") is None:
+        inferred_overlap = _inferred_bar_overlap(elem, chart_data)
+        if inferred_overlap is not None:
+            chart_data = {**chart_data, "overlap": inferred_overlap}
+    axes = chart_data.get("axes") or {}
+    value_axis = axes.get("value") or {}
+    if value_axis.get("cross_between") is None:
+        inferred_cross_between = _inferred_cross_between(elem, chart_data)
+        if inferred_cross_between is not None:
+            chart_data = {
+                **chart_data,
+                "axes": {
+                    **axes,
+                    "value": {**value_axis, "cross_between": inferred_cross_between},
+                },
+            }
+    return chart_data
+
+
 def _chart_xml(
     elem: ET.Element,
     payload: dict[str, Any],
@@ -1435,6 +1679,8 @@ def _chart_xml(
     axis_titles = _axis_titles(payload)
     chart_style = _classic_chart_style(payload, elem, inherited_styles)
     chart_style["primary_language"] = primary_language
+    if not native_json_is_authoritative(elem):
+        chart_data = _chart_data_with_fallback_geometry(elem, chart_data)
     plot_xml = _chart_plot_xml(
         chart_data,
         colors,

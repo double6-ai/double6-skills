@@ -7,6 +7,7 @@ from typing import Any
 from lxml import etree
 
 from .common import D6PPTError, SCHEMA_VERSION, read_json, sha256_tree, utc_now, write_json
+from .native_markers import normalize_native_markers
 from .schemas import validate_semantic_manifest
 
 
@@ -87,6 +88,7 @@ def prepare_ppt_master_project(
     """
     semantic = read_json(semantic_manifest_path)
     validate_semantic_manifest(semantic, source_project)
+    authority_policy = str((semantic.get("defaults") or {}).get("native_marker_authority") or "json")
     if build_project.exists():
         shutil.rmtree(build_project)
     build_project.parent.mkdir(parents=True, exist_ok=True)
@@ -145,6 +147,9 @@ def prepare_ppt_master_project(
         unwrapped = _unwrap_single_line_tspans(parsed[relative][1].getroot())
         if unwrapped:
             changes.append({"file": relative, "action": "unwrap_single_line_tspan", "shape_ids": unwrapped})
+        markers = normalize_native_markers(parsed[relative][1].getroot(), authority_policy=authority_policy)
+        if markers:
+            changes.append({"file": relative, "action": "normalize_native_markers", "markers": markers})
 
     for _, (target_file, tree) in parsed.items():
         tree.write(str(target_file), encoding="UTF-8", xml_declaration=False, pretty_print=False)
@@ -154,6 +159,7 @@ def prepare_ppt_master_project(
         "created_at": utc_now(),
         "adapter": "ppt-master-deep-adapter",
         "policy": "selective_safe_top_levelization",
+        "native_marker_authority": authority_policy,
         "source_project_sha256": sha256_tree(source_project),
         "build_project_sha256": sha256_tree(build_project),
         "changes": changes,

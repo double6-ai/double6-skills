@@ -8,7 +8,7 @@ PPT Master 始终免费开源。以下赞助方共同支持项目的持续维护
 
 ## 当前模型推荐
 
-追求最佳效果，语言模型选 **[Kimi K3](https://www.kimi.com/code/?aff=ppt-master)**（或 Claude）驱动流程，搭配 AI 生图模型 **`gpt-image-2`**（OpenAI）或 **`gemini-3.1-flash-image`**（Google）。如果模型能力正在拖累产出质量，应先升级驱动模型，而不是削弱工作流或质量要求。
+追求最佳效果，语言模型选 **[Kimi K3](https://www.kimi.com/code/?aff=ppt-master)**（或 Claude）驱动流程，搭配 AI 生图模型 **`gpt-image-2`**（OpenAI）或 **`gemini-nano-banana-2.1`**（Google）。如果模型能力正在拖累产出质量，应先升级驱动模型，而不是削弱工作流或质量要求。
 
 ## Kimi
 
@@ -18,7 +18,7 @@ PPT Master 始终免费开源。以下赞助方共同支持项目的持续维护
 
 感谢 [Kimi](https://www.kimi.com/code/?aff=ppt-master) 赞助 PPT Master。[Kimi K3](https://platform.kimi.com/docs/guide/kimi-k3-quickstart) 是全球首个开源 3T 级模型，拥有原生视觉能力与 100 万 Token 上下文。搭配 PPT Master，K3 可以理解 PDF、DOCX、网页等原始资料，梳理演示逻辑并生成原生可编辑的 PPTX。
 
-**立即体验 [Kimi Code](https://www.kimi.com/code/?aff=ppt-master)，或通过 Kimi 开放平台（[中文站](https://platform.kimi.com?aff=ppt-master)｜[Global](https://platform.kimi.ai?aff=ppt-master)）使用 API。**
+**立即体验 [Kimi Code](https://www.kimi.com/code/?aff=ppt-master)（[中文站](https://www.kimi.com/code/?aff=ppt-master)｜[Global](https://www.kimi.ai/code/?aff=ppt-master)），或通过 Kimi 开放平台（[中文站](https://platform.kimi.com?aff=ppt-master)｜[Global](https://platform.kimi.ai?aff=ppt-master)）使用 API。**
 
 ## 模型接入合作伙伴
 
@@ -28,11 +28,11 @@ PPT Master 始终免费开源。以下赞助方共同支持项目的持续维护
 
 [PackyCode](https://www.packyapi.ai/register?aff=ppt-master) 提供 Claude Code、Codex、Gemini 等服务的中转接入。通过专属链接注册，并在充值时填写优惠码 **`ppt-master`**，即可享受 9 折优惠。
 
-### APIKEY.FUN
+### APIKEY.FAN
 
-<a href="https://apikey.fun/register?aff=PPT-MASTER"><img src="https://raw.githubusercontent.com/hugohe3/ppt-master/main/docs/assets/sponsors/apikey-fun.png" alt="APIKEY.FUN" width="150"></a>
+<a href="https://apikey.fan/register?aff=PPT-MASTER"><img src="https://raw.githubusercontent.com/hugohe3/ppt-master/main/docs/assets/sponsors/apikey-fan.png" alt="APIKEY.FAN" width="150"></a>
 
-[APIKEY.FUN](https://apikey.fun/register?aff=PPT-MASTER) 提供 Claude、OpenAI、Gemini 等主流模型的企业级接入服务。通过专属链接注册，最高可享永久充值 95 折优惠。
+[APIKEY.FAN](https://apikey.fan/register?aff=PPT-MASTER) 提供 Claude、OpenAI、Gemini 等主流模型的企业级接入服务。通过专属链接注册，最高可享永久充值 95 折优惠。
 
 ### RunAPI
 
@@ -40,11 +40,11 @@ PPT Master 始终免费开源。以下赞助方共同支持项目的持续维护
 
 [RunAPI](https://runapi.host/register?aff=WMLJ) 通过一个 API Key 提供 OpenAI、Claude、Gemini、DeepSeek、Grok 等 150+ 主流模型。通过专属链接注册并联系管理员，即可领取 **¥7 免费额度**。
 
-### 优云智算
+### APIMart
 
-<a href="https://www.compshare.cn/coding-plan?ytag=GPU_YY-git_pptmaster0624"><img src="https://raw.githubusercontent.com/hugohe3/ppt-master/main/docs/assets/sponsors/youyun.png" alt="优云智算" width="150"></a>
+<a href="https://go.apimart.ai/gh-ppt-master1"><img src="https://raw.githubusercontent.com/hugohe3/ppt-master/main/docs/assets/sponsors/apimart.png" alt="APIMart" width="150"></a>
 
-[优云智算](https://www.compshare.cn/coding-plan?ytag=GPU_YY-git_pptmaster0624) 是 UCloud 旗下 AI 云平台，提供国内外模型 API、CodingPlan 套餐、企业级并发、技术支持和开票服务。通过专属链接注册，最高可获得 **¥10 免费体验金**。平台还提供无需本地部署的 PPT Master Agent。
+[APIMart](https://go.apimart.ai/gh-ppt-master1) 是专注 AI 图片/视频生成的低价 API 平台，GPT-Image-2 低至 **$0.006/张**。图片、视频共用一套异步 API：提交任务拿 ID，轮询或回调取结果。按量付费、无月费，通过专属链接注册即可开用。
 
 ## 基础设施支持
 
