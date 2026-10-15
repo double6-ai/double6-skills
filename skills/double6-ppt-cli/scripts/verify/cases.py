@@ -155,7 +155,7 @@ def plan_en_shrink(lib):
 CASES = [("en_qbr", build_case_en, plan_en), ("en_qbr_shrink", build_case_en, plan_en_shrink), ("zh_factory", build_case_zh, plan_zh), ("zh_factory_shrink", build_case_zh, plan_zh_shrink), ("en_overfull", build_case_en, plan_en_overfull)]
 # expected outcome per case (anything else is a verification failure)
 # en_qbr's 7-bullet body is ~1.8x its frame (PowerPoint measured 552pt text in a 349pt frame at 32pt):
-# since 0.4.0-exp.3 that is a rewrite, not a shrink, so the plan check blocks it.
+# 1.87x with the safety margin; since 0.4.0-exp.3 >1.6x is a rewrite, not a shrink, so the plan check blocks it.
 EXPECT = {"en_qbr": "blocked_by_check", "en_qbr_shrink": "applied", # zh_factory's 5-line body would run into the three cards (PowerPoint: 432pt text, cards start 268pt
 # below the body top), so it is blocked too; the *_shrink variants must apply and pass in PowerPoint.
 "zh_factory": "blocked_by_check", "zh_factory_shrink": "applied", "en_overfull": "blocked_by_check"}
