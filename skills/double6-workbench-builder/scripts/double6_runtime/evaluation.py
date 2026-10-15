@@ -39,7 +39,38 @@ INTERNAL_ID_PATTERNS = [
     re.compile(r"\bCAP-\d{2}-\d{2}\b"),
     re.compile(r"\b(?:baby-growth-explorer|generic-primary-transition|primary-transition-\d+-to-\d+)\b"),
 ]
+# snake_case 机器标记（如 synthetic_demo、manual_handoff）不得出现在用户可见文案或页面渲染的内置内容里。
+SNAKE_CASE_TOKEN = re.compile(r"(?<![A-Za-z0-9_])[a-z][a-z0-9]*(?:_[a-z0-9]+)+(?![A-Za-z0-9_])")
+STARTER_VISIBLE_KEYS = ("title", "body", "result", "prompt", "explanation", "answer", "hint", "story", "mission")
 LIFE_SCENE_MARKERS = ("life-finance", "life-food", "life-movement", "life-reading", "data-life-", "calories")
+
+
+def _starter_snake_tokens(product: dict[str, Any]) -> list[str]:
+    """内置内容由页面脚本渲染，静态 HTML 解析看不到，因此直接扫描产品里的 starter 文案。"""
+    hits: list[str] = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, str):
+            hits.extend(SNAKE_CASE_TOKEN.findall(value))
+        elif isinstance(value, list):
+            for row in value:
+                walk(row)
+        elif isinstance(value, dict):
+            for key in STARTER_VISIBLE_KEYS:
+                if key in value:
+                    walk(value[key])
+            for key in ("options", "lines", "items", "prompts", "groups", "poems"):
+                if key in value:
+                    walk(value[key])
+            if isinstance(value.get("reference"), dict):
+                walk(value["reference"])
+
+    for capability in product.get("capabilities", []):
+        starter = capability.get("starter") if isinstance(capability, dict) else None
+        if isinstance(starter, dict):
+            walk(starter.get("summary", ""))
+            walk(starter.get("starter_items", []))
+    return hits
 
 
 class CandidateParser(HTMLParser):
@@ -264,6 +295,14 @@ def static_scan(run_dir: Path) -> dict[str, Any]:
     visible_copy_raw = " ".join(parser.visible_text)
     if any(pattern.search(visible_copy_raw) for pattern in INTERNAL_ID_PATTERNS):
         errors.append("候选可见文案泄漏学段或能力内部标识符")
+    snake_hits = sorted(set(SNAKE_CASE_TOKEN.findall(visible_copy_raw)) | set(_starter_snake_tokens(product)))
+    if snake_hits:
+        errors.append(f"候选可见文案或内置内容泄漏机器标记：{snake_hits[:8]}")
+    nav_labels = re.findall(r"<span class='nav-label'>(.*?)</span>", text)
+    if nav_labels:
+        counts = {label: nav_labels.count(label) for label in nav_labels}
+        if len(set(counts.values())) > 1:
+            errors.append(f"导航标签重名：{sorted(label for label, count in counts.items() if count > min(counts.values()))}")
     leaked_module_ids = sorted(module_id for module_id in expected_modules if module_id.lower() in visible_copy)
     if leaked_module_ids:
         errors.append(f"候选可见文案泄漏模块内部 ID：{leaked_module_ids}")
@@ -332,6 +371,48 @@ def _playwright_python() -> Path | None:
     return None
 
 
+PLAYWRIGHT_BROWSER_GLOBS = (
+    # Linux：完整 Chromium（旧版 chrome-linux、Chrome for Testing 的 chrome-linux64）与 headless shell
+    "chromium-*/chrome-linux/chrome",
+    "chromium-*/chrome-linux64/chrome",
+    "chromium_headless_shell-*/chrome-linux/headless_shell",
+    "chromium_headless_shell-*/chrome-headless-shell-*/chrome-headless-shell",
+    # macOS：Intel 与 Apple Silicon、旧版 Chromium.app 与新版 Chrome for Testing
+    "chromium-*/chrome-mac/Chromium.app/Contents/MacOS/Chromium",
+    "chromium-*/chrome-mac*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    "chromium_headless_shell-*/chrome-mac*/headless_shell",
+    "chromium_headless_shell-*/chrome-headless-shell-mac*/chrome-headless-shell",
+    # Windows：旧版 chrome-win 与新版 chrome-win64
+    "chromium-*/chrome-win/chrome.exe",
+    "chromium-*/chrome-win64/chrome.exe",
+    "chromium_headless_shell-*/chrome-win*/headless_shell.exe",
+    "chromium_headless_shell-*/chrome-headless-shell-win*/chrome-headless-shell.exe",
+)
+
+
+def _playwright_cache_roots() -> list[Path]:
+    roots: list[Path] = []
+    custom = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if custom and custom != "0":
+        roots.append(Path(custom))
+    home = Path.home()
+    roots.extend([home / ".cache" / "ms-playwright", home / "Library" / "Caches" / "ms-playwright"])
+    if os.environ.get("LOCALAPPDATA"):
+        roots.append(Path(os.environ["LOCALAPPDATA"]) / "ms-playwright")
+    return roots
+
+
+def _playwright_cache_browsers() -> list[Path]:
+    """按 Playwright 官方缓存目录发现浏览器；完整 Chromium 优先于 headless shell，新版本优先。"""
+    found: list[Path] = []
+    for root in _playwright_cache_roots():
+        if not root.is_dir():
+            continue
+        for pattern in PLAYWRIGHT_BROWSER_GLOBS:
+            found.extend(sorted(root.glob(pattern), reverse=True))
+    return found
+
+
 def _chromium() -> Path | None:
     candidates = []
     if os.environ.get("DOUBLE6_CHROMIUM_EXECUTABLE"):
@@ -349,13 +430,8 @@ def _chromium() -> Path | None:
             root / "Google" / "Chrome" / "Application" / "chrome.exe",
             root / "Chromium" / "Application" / "chrome.exe",
         ])
-    cache = Path.home() / ".cache" / "ms-playwright"
-    if cache.is_dir():
-        candidates.extend(sorted(cache.glob("chromium_headless_shell-*/chrome-headless-shell-*/chrome-headless-shell"), reverse=True))
-    local_playwright = os.environ.get("LOCALAPPDATA")
-    if local_playwright:
-        candidates.extend(sorted((Path(local_playwright) / "ms-playwright").glob("chromium-*/chrome-win/chrome.exe"), reverse=True))
-    for name in ["google-chrome", "chromium", "chrome", "chrome.exe"]:
+    candidates.extend(_playwright_cache_browsers())
+    for name in ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "chrome", "chrome.exe"]:
         found = shutil.which(name)
         if found:
             candidates.append(Path(found))

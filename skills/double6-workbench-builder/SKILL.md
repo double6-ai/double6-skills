@@ -1,7 +1,7 @@
 ---
 name: double6-workbench-builder
-version: 0.41.0
-description: 把普通用户反复要做的真实事情构建成离线优先、严格单文件、个人数据留在当前设备的本地工作台。用户提到个人工作台、学习台、备考台、任务面板、记录与复盘工具，或想把重复流程做成可保存恢复的页面时应使用；联网、多人协作、账号、支付和发布属于独立外部流程。
+version: 0.42.0
+description: 把普通用户反复要做的真实事情构建成离线优先、严格单文件、个人数据留在当前设备的本地工作台（index.html）。用户提到个人工作台、学习台、备考台、任务面板、内容/社媒运营台、阅读或研究追踪、记录与复盘工具，或想把重复流程做成可保存恢复的页面时应使用。Use when the user asks for a personal workbench, dashboard, tracker, planner, habit/reading/research tracker, content or social-media ops board, study or exam desk, or wants a repeated workflow turned into an offline single-file local web app. 联网、多人协作、账号、支付和发布属于独立外部流程（network, multi-user, accounts, payments and publishing are out of scope）.
 metadata:
   openclaw:
     homepage: https://github.com/double6-ai/double6-skills/tree/main/skills/double6-workbench-builder
@@ -27,7 +27,7 @@ metadata:
 5. 让用户查看候选；视觉确认或拒绝必须绑定当前候选 SHA。需要改 renderer/CSS 时进入 `renderer_revision_required`，不得空跑重建。
 6. 用 `evaluate` 完成静态与浏览器验收；只有完整通过才交付。`--skip-browser` 只是预检，不能形成交付。
 
-在 skill 根目录运行 CLI：
+在 skill 根目录运行 CLI（需要 Python 3.10+，构建只用标准库；浏览器验收另需 Playwright + Chromium）：
 
 ```bash
 python scripts/double6.py start --run <run_dir> --request "<用户原话>" --route-file route.json
@@ -37,6 +37,8 @@ python scripts/double6.py build --run <run_dir>
 python scripts/double6.py evaluate --run <run_dir> --preflight
 python scripts/double6.py evaluate --run <run_dir>
 ```
+
+事件文件与产品文件的最小示例、SHA 字段名（`presented_content_sha256` / `presented_candidate_sha256`）见 `references/host-integration-playbook.md`。
 
 ## 必守边界
 

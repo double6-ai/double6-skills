@@ -30,6 +30,7 @@
 ### PWA 与首屏
 
 - 候选必须是"PWA 就绪"的单文件：浏览器标签页 favicon 与添加到主屏幕的图标默认和首页标题旁的品牌块一致——当前视觉模板的 motif emoji 置于模板主色圆角块上，九套模板各一套离线渲染 PNG（`references/app-icons.json`，64 favicon/180/192/512/maskable，由治理脚本 `render_app_icons.py` 渲染）。只有用户明确要求时，才经 `design_brief.icon_override` 换用另一套模板 motif 或 `double6_brand` 品牌图标（源自 `references/page-icon.svg`）；非法取值以 ContractError 拒绝。同时内嵌 data-URI manifest（名称、短名称、standalone 显示、主题色与背景色、三张 PNG 图标）和 Apple 主屏元数据（apple-touch-icon 必须用 PNG，SVG 在 iOS 无效）。
+- 候选 `<head>` 内置 Content-Security-Policy：只允许内联脚本/样式与 `data:` 资源，`connect-src`、`form-action` 等一律为 `none`，从机制上阻断任何外联请求。
 - 只声明元数据：不得注册 service worker，不得声称"已可安装"或"已上线"。真实安装提示只在独立发布流程提供 https 入口后出现；file:// 或局域网打开时浏览器忽略 manifest 属正常行为。内嵌 manifest 与主屏图标不代表已发布或可安装。
 - 每个首页都必须把"今天要处理"放在工作流最前：只汇总带日期、尚未完成且到期日为今天或更早的行动；过期项显示为"已顺延到今天"但保留原始日期，并能在卡片上直接完成。没有待办时只能引导用户从已确认的首要模块开始，不能伪造任务或逾期记录。
 - 首屏同时提供导出备份与导入恢复；本地记录达到 30 条时提示导出。含 `entry_type + amount` 的已确认财务流水可额外导出 CSV。
@@ -37,7 +38,7 @@
 ### 移动交互
 
 - 题目在手机上采用单题流：大触控选项或合适的数字/文本键盘、提交后即时反馈、解析与错题记录、下一题、刷新后续做；不得把桌面题表缩小后塞进手机。数字答案题必须使用页面内自绘数字键盘（0–9、删除、清空），不得用 `input[type=number]` 调起系统键盘顶掉页面；答对给予明确的庆祝动效（星星飘落），答错给予轻微抖动与正确答案提示，动效不得遮挡作答区。
-- 移动端输入字号不小于 16px；数字字段使用数值键盘。手机和平板统一使用可纵向滚动的左侧导航栏：每项必须是彩色 emoji 加可见的精简文字，竖屏采用上 emoji、下文字的纵向堆叠（电脑横屏保持左 emoji、右文字），文字可以在窄屏适度缩小和换行，但不得隐藏成只剩图标；导航必须列出首页、全部已确认模块和数据入口，不能截断前四项，也不能遮挡正文。
+- 移动端输入字号不小于 16px；数字字段使用数值键盘。手机和平板统一使用可纵向滚动的左侧导航栏：每项必须是彩色 emoji 加可见的精简文字，竖屏采用上 emoji、下文字的纵向堆叠（电脑横屏保持左 emoji、右文字），文字可以在窄屏适度缩小和换行，但不得隐藏成只剩图标；导航必须列出首页、全部已确认模块和数据入口，不能截断前四项，也不能遮挡正文。导航文字不得被截成半个词，也不得与其他入口重名（静态验收会检查）。
 - 可使用浏览器本机朗读辅助，但不得承诺未实现的语音或智能判定能力。
 
 ## 六步流程
@@ -45,8 +46,8 @@
 1. `start` 只保存用户原话和已选择的路由。未提供路由时只返回完整场景目录，不创建 run；新运行只接受当前版本，旧运行保留作历史记录而不混入新状态机。路由文件中的 `evidence_spans` 必须逐字摘自用户原话——校验器做逐字包含比对，概括、改写或编造的片段会以 ContractError 拒绝。
 2. 状态为 `clarifying` 时用 `respond` 逐次记录关键答案，最多询问三个会改变工作对象、核心动作、数据/来源边界或验收结果的问题。每个问题必须给出推荐值、推荐原因和"按推荐"的可用回答；宿主把"按推荐"标准化为该题的 `recommended_value`。儿童学习场景的澄清顺序与默认值见 `references/education-rules.md`。
 3. 状态为 `intake` 时，根据不可变的 `recommendation_snapshot` 提交产品合同并调用 `propose`。理解稿同时展示 4–15 个默认模块、每个模块的 starter 数量/类型与确认前可加入的可选模块；不得只在隐藏推理或内部产品 JSON 中列清单。
-4. 把返回的完整 `conversation_text` 展示给用户。`approve_product` 只能绑定当前理解稿 SHA：从当前 run 的 `product.json` 现读 `presentation.content_sha256`，复用旧值或拿错字段都会以 ContractError 拒绝。确认回执还会绑定不含回执自身的完整产品内容 SHA。确认后只要标题、主能力、模块、内容、扩展事项或边界发生变化，`build` 必须失败并要求重新提案、展示和确认。这仍不独立证明用户在任何宿主 UI 中看过它。
-5. 产品确认后调用 `build`，只生成一个推荐候选。建议紧接着调用 `evaluate --preflight` 或 `status --environment`；环境未就绪时先修好，不要让用户先做视觉确认。必须先让用户查看当前候选；只有绑定当前候选 SHA 的 `approve_visual` 才能进入验收，`reject_visual` 也必须绑定该 SHA。候选 SHA 取自当前 `build` 返回的 `candidate_sha256`，同样必须现读现用。
+4. 把返回的完整 `conversation_text` 展示给用户。`approve_product` 只能绑定当前理解稿 SHA：事件字段 `presented_content_sha256` 取自当前 run 的 `product.json` 现读的 `presentation.content_sha256`，复用旧值或拿错字段都会以 ContractError 拒绝。确认回执还会绑定不含回执自身的完整产品内容 SHA。确认后只要标题、主能力、模块、内容、扩展事项或边界发生变化，`build` 必须失败并要求重新提案、展示和确认。这仍不独立证明用户在任何宿主 UI 中看过它。
+5. 产品确认后调用 `build`，只生成一个推荐候选。建议紧接着调用 `evaluate --preflight` 或 `status --environment`；环境未就绪时先修好，不要让用户先做视觉确认。必须先让用户查看当前候选；只有绑定当前候选 SHA 的 `approve_visual` 才能进入验收，`reject_visual` 也必须绑定该 SHA。候选 SHA 取自当前 `build` 返回的 `candidate_sha256`，写入事件字段 `presented_candidate_sha256`，同样必须现读现用。
 6. 视觉确认后调用 `evaluate`。通过即为 `local_delivered`；静态或候选质量失败时保留产品确认并用新 build ID 修复。仅缺 Playwright/Chromium 等环境时状态为 `evaluation_blocked`——这是环境问题，不代表候选质量失败；环境就绪后直接重试同一个 `evaluate`，不得强制重建、再次视觉确认、新建 run 或改动已确认的产品合同。`evaluate --skip-browser` 只返回静态预检通过，绝不交付。若反馈需要 renderer/CSS 源码修订，维护者修订后以 `renderer_revised` 事件回到 `ready_to_build`，新 build 自动生成新候选 SHA。
 
 公开 CLI 为 `start`、`respond`、`propose`、`build`、`evaluate`、`cleanup`、`status`。`start --clone-from <已确认 run>` 只可复用同版本、内容未变且不含真实数据授权的产品确认；候选、视觉确认与评估证据不会复制。`cleanup --run` 恢复事务 journal，并报告受宿主限制而保留的 staging。
@@ -62,7 +63,7 @@
 
 - 自动重建只承诺真正生效且能映射到已登记模板的颜色反馈；它会保留 renderer 与内容结构并切换 palette。视觉模板通过不等于 palette 已通过；只有绑定当前候选 SHA 的用户反馈才能记录为接受。
 - 构图、密度、字体、资产、场景辨识或交互反馈如果需要改 renderer/CSS，状态必须变为 `renderer_revision_required`，由维护者修改源代码后以 `renderer_revised` 事件恢复到 `ready_to_build`；禁止只改 metadata、换 build ID 或空跑三轮。`renderer_revision_required` 是 run 的状态标记，不是第八个状态机节点。
-- 候选使用 `references/vivid-social-template-system.json` 中九套去重模板、九个特定场景 renderer 和一个通用回退 renderer（`generic_dashboard`，未精确命中时使用）。场景不由制作器按关键词自动决定：调用方必须先从路由目录选择主场景、可选子场景，并附用户原话证据；制作器只校验选择合法、生成对应推荐快照。辅助领域不得触发特定 renderer。已登记场景若缺 renderer、四个首屏槽位（hero、primary_surface、progress、supporting_panel）或候选锁漂移，构建必须失败。首屏不得再叠加与模块卡片重复的纯文本快捷入口清单。
+- 候选使用 `references/vivid-social-template-system.json` 中九套去重模板、十个特定场景 renderer 和一个通用回退 renderer（`generic_dashboard`，未精确命中时使用）。场景不由制作器按关键词自动决定：调用方必须先从路由目录选择主场景、可选子场景，并附用户原话证据；制作器只校验选择合法、生成对应推荐快照。辅助领域不得触发特定 renderer。已登记场景若缺 renderer、四个首屏槽位（hero、primary_surface、progress、supporting_panel）或候选锁漂移，构建必须失败。首屏不得再叠加与模块卡片重复的纯文本快捷入口清单。
 
 ## 事件与产品合同
 
@@ -77,13 +78,16 @@
 ## 候选数据安全
 
 - 导入前必须确认，导入后可立即撤销；清空与删除必须二次确认。
+- “今天”、周起点、连续天数等所有日期都按设备本地时区计算，不得用 UTC 日期（`toISOString().slice(0,10)`）冒充本地日期。
 - 导入文件最大 2 MB，每个模块最多 500 条记录。已知字段按类型归一化，未知字段保守保留在导出文件的 `legacyImport.unmapped` 中。
 - 外部记录 ID 不可信：不符合安全格式时重新生成；所有进入 HTML 属性或 script 的动态值必须转义，禁止把导入内容直接拼进 `innerHTML`。
 - 存储失败时不得丢失表单输入；验收必须先按真实表面填写全部必填字段，再触发保存故障并逐字段比较前后值，不能只填第一个文本框，也不能为了通过测试改变产品主模块。导出、恢复、旧简易 `{value, checked}` 数据兼容和未知字段保留都必须经过浏览器验收。
 
 ## 验证
 
-发布门由维护者的治理包执行，不随本 Skill 分发；在维护者项目中的调用方式为：
+随包测试 `tests/`（`python -m pytest -q tests`）覆盖 16 个领域及其细分档案的六步端到端流程与静态验收；检测到 Playwright + Chromium 时自动追加浏览器验收（CI 的 ubuntu browser job 固定执行）。
+
+完整发布门由维护者的治理包执行，不随本 Skill 分发；在维护者项目中的调用方式为：
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python -B workflows/double6-workbench-governance/scripts/validate_release.py

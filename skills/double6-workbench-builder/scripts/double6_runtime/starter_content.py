@@ -349,7 +349,7 @@ def starter_for_module(module: dict[str, Any], *, learning_stage_id: str | None 
         summary = f"这里有 {len(items)} 项可以直接开始的内容（含不限题量的口算天天练）"
     elif "reference" in kinds:
         labels = "、".join(kind_labels[kind] for kind in kinds)
-        summary = f"这里有 {len(items)} 项可以直接开始的内容（{labels}；参考内容点一点就能听）"
+        summary = f"这里有 {len(items)} 项可以直接开始的内容（{labels}）"
     else:
         summary = f"这里有 {len(items)} 项可以直接开始的内容（{'、'.join(kind_labels[kind] for kind in kinds)}）"
     return {

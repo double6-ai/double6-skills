@@ -290,7 +290,7 @@ def _require_current_candidate_binding(run_dir: Path, recorded: dict[str, Any]) 
     """视觉意见只能指向当前 run 中已展示的候选，杜绝旧文件串到新会话。"""
     lock = read_json(run_dir / "candidate-lock.json")
     if str(recorded.get("presented_candidate_sha256") or "") != str(lock.get("candidate_sha256") or ""):
-        raise ContractError("视觉确认或反馈必须绑定当前展示候选的 SHA")
+        raise ContractError("视觉确认或反馈必须绑定当前展示候选的 SHA：事件字段 presented_candidate_sha256 必须等于最近一次 build 返回的 candidate_sha256（也见 candidate-lock.json）")
     run = load_run(run_dir)
     binding = run.get("request_binding", {})
     for key in ["request_sha256", "request_event_id"]:
@@ -370,7 +370,7 @@ def respond(run_dir: Path, event: dict[str, Any], supplied_sources: dict[str, An
         product = read_json(run_dir / "product.json")
         presented_sha = str(recorded.get("presented_content_sha256") or "")
         if presented_sha != str(product.get("presentation", {}).get("content_sha256") or ""):
-            raise ContractError("产品确认必须绑定当前最新理解稿")
+            raise ContractError("产品确认必须绑定当前最新理解稿：事件字段 presented_content_sha256 必须等于当前 run 的 product.json → presentation.content_sha256")
         confirmed_product_sha256 = product_content_sha256(product)
         product["confirmation"] = {
             "status": "confirmed", "event_id": recorded["event_id"], "confirmed_at": now(),
@@ -526,7 +526,7 @@ def _validate_product(value: dict[str, Any], requirements: dict[str, Any], event
             "user_changes": [],
         }
     if not isinstance(supplied_plan, dict):
-        raise ContractError("recommendation_plan 必须是对象")
+        raise ContractError("recommendation_plan 必须是对象；可省略，省略时自动采用 requirements.json 中 recommendation_snapshot 的默认模块")
     for key in ["catalog_id", "pack_id", "recommendation_sha256"]:
         if supplied_plan.get(key) != recommendation.get(key):
             raise ContractError(f"recommendation_plan.{key} 与需求快照不一致")
@@ -551,8 +551,10 @@ def _validate_product(value: dict[str, Any], requirements: dict[str, Any], event
             in_page.append(capability)
             module_id = capability.get("recommendation_module_id")
             if module_id not in selected_module_ids or module_id in bound_module_ids:
-                raise ContractError("每个台内能力必须唯一绑定一个已选内容包模块")
+                raise ContractError("每个台内能力必须唯一绑定一个已选内容包模块：in_page 能力需填写 recommendation_module_id，取值来自 recommendation_plan.selected_core_module_ids，且不能重复")
             bound_module_ids.append(module_id)
+            if capability.get("surface") is None:
+                capability["surface"] = known_modules[module_id]["surface"]
             validate_surface(capability.get("surface"), known_modules[module_id]["surface"])
             expected_starter = known_modules[module_id]["starter"]
             if capability.get("starter") is not None and capability.get("starter") != expected_starter:
@@ -564,7 +566,7 @@ def _validate_product(value: dict[str, Any], requirements: dict[str, Any], event
             capability["reward_economy"] = expected_rewards
             capability["recommendation_module_name"] = known_modules[module_id]["name"]
             if not str(capability.get("oracle", {}).get("input_value", "")).strip():
-                raise ContractError(f"台内核心能力缺最小 oracle：{capability.get('capability_id')}")
+                raise ContractError(f"台内核心能力缺最小 oracle：{capability.get('capability_id')}；请填写 oracle.input_value（验收时写入的一条示例输入）")
         normalized_capabilities.append(capability)
     if set(bound_module_ids) != set(selected_module_ids):
         raise ContractError("所有已选核心模块都必须有真实台内交互表面")
@@ -613,12 +615,12 @@ def _validate_product(value: dict[str, Any], requirements: dict[str, Any], event
             raise ContractError("未指定教材、真题或考纲时必须使用自编通用内容并明确不声称版本对齐")
     brief = dict(value["design_brief"])
     if brief.get("primary_capability_id") not in capability_ids:
-        raise ContractError("design_brief 必须绑定真实主能力")
+        raise ContractError("design_brief 必须绑定真实主能力：design_brief.primary_capability_id 必须是 capabilities 中的 capability_id")
     shortcuts = brief.get("shortcut_capability_ids", [])
     if not isinstance(shortcuts, list) or len(shortcuts) > 3 or not set(shortcuts) <= capability_ids or brief["primary_capability_id"] in shortcuts:
         raise ContractError("捷径最多三个且不能与主能力重复")
     if brief.get("work_mode") not in {"orient", "execute", "review", "manage"}:
-        raise ContractError("design_brief.work_mode 无效")
+        raise ContractError("design_brief.work_mode 无效：只能是 orient / execute / review / manage")
     primary = next(row for row in value["capabilities"] if row["capability_id"] == brief["primary_capability_id"])
     experience = dict(brief.get("experience") or {})
     supplied_items = experience.get("representative_items")

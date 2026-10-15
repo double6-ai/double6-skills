@@ -189,8 +189,9 @@
       "manual_handoffs":["Offer 发送、薪资发放和正式人事操作由外部系统完成"],"prohibited":["默认不得使用真实员工、薪酬或受保护属性"],"source_rules":["劳动制度记录地区、当前版本和来源"],"profiles":[]
     },
     {
-      "domain_id":"research-knowledge","pack_id":"research-knowledge-base","label":"研究知识","default_work_mode":"review",
+      "domain_id":"research-knowledge","pack_id":"research-knowledge-base","label":"研究阅读","default_work_mode":"review",
       "modules":[
+        {"module_id":"research-reading","name":"阅读清单","description":"追踪在读的论文和书：想读、在读、读完、已做笔记。","reason":"让阅读有节奏、读完有沉淀。","surface_type":"stage_board","evidence_refs":["CAP-09-02"]},
         {"module_id":"research-questions","name":"研究问题","description":"维护问题、阶段和下一步。","reason":"让研究围绕问题推进。","surface_type":"stage_board","evidence_refs":["CAP-09-01"]},
         {"module_id":"research-evidence","name":"文献证据","description":"记录来源、结论和使用状态。","reason":"避免知识库只收藏不使用。","surface_type":"record_ledger","evidence_refs":["CAP-09-02"]},
         {"module_id":"research-log","name":"实验与工作日志","description":"记录过程、结果和异常。","reason":"保留可追踪过程。","surface_type":"record_ledger","evidence_refs":["CAP-09-01"]},
@@ -199,7 +200,7 @@
         {"module_id":"research-metrics","name":"数据指标","description":"记录人工确认的数据指标。","reason":"补充阶段性观察。","surface_type":"metric_log","evidence_refs":["CAP-09-04"]},
         {"module_id":"research-migration","name":"知识库迁移","description":"维护待迁移资料和状态。","reason":"支持外部知识库人工交接。","surface_type":"stage_board","evidence_refs":["CAP-09-05"]}
       ],
-      "core_module_ids":["research-questions","research-evidence","research-log","research-writing","research-review"],"optional_module_ids":["research-metrics","research-migration"],
+      "core_module_ids":["research-reading","research-evidence","research-questions","research-writing","research-review"],"optional_module_ids":["research-log","research-metrics","research-migration"],
       "manual_handoffs":["外部文献下载和知识库同步由用户完成"],"prohibited":["不得生成无来源研究结论"],"source_rules":["外部结论保留来源和适用时间"],"profiles":[]
     },
     {

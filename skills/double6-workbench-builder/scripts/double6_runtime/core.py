@@ -55,9 +55,20 @@ def product_content_sha256(product: dict[str, Any]) -> str:
     return digest_bytes(canonical(value))
 
 
+def read_user_text(path: Path) -> str:
+    """读取宿主或用户写入的文本：兼容 UTF-8 BOM 与 Windows PowerShell 常见的 UTF-16 输出。"""
+    raw = path.read_bytes()
+    try:
+        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+            return raw.decode("utf-16")
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ContractError(f"文件不是 UTF-8/UTF-16 文本：{path}；请用 UTF-8 保存（PowerShell 可用 Out-File -Encoding utf8）") from exc
+
+
 def read_json(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(read_user_text(path))
     except (OSError, json.JSONDecodeError) as exc:
         raise ContractError(f"无法读取 JSON：{path}: {exc}") from exc
     if not isinstance(value, dict):
@@ -261,7 +272,7 @@ def transition(
 
 
 def read_text_arg(path: str | None, value: str | None, name: str) -> str:
-    text = Path(path).read_text(encoding="utf-8") if path else value or ""
+    text = read_user_text(Path(path)) if path else value or ""
     if not text.strip():
         raise ContractError(f"{name} 不能为空")
     return text.strip()
