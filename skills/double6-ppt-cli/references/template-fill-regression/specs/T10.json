@@ -15,19 +15,14 @@
    "text": {
     "Title 1": "Deliver the priority programs",
     "Content Placeholder 2": {
-     "text": "The priority programs while improving operating efficiency and customer experience\nPriority\nPrograms\nWhile improving\nImproving\nOperating\nEfficiency\nWe continue\nContinue\nTo deliver the priority programs while improving operating\nDeliver the priority programs while improving operating efficiency",
+     "text": "The priority programs while improving operating efficiency and customer experience\nPriority\nPrograms\nWhile improving\nImproving\nOperating",
      "levels": [
       0,
       1,
       2,
       3,
       4,
-      5,
-      6,
-      7,
-      8,
-      1,
-      0
+      5
      ]
     },
     "KPI Callout": "Revenue: 14.1M USD"
@@ -88,14 +83,7 @@
    "source": 5,
    "text": {
     "Title 1": "To deliver the",
-    "Text Placeholder 2": {
-     "text": "Deliver the priority programs while improving operating efficiency and customer\nThe priority programs while improving operating efficiency\nPriority programs while improving operating efficiency and",
-     "levels": [
-      0,
-      1,
-      0
-     ]
-    },
+    "Text Placeholder 2": "Deliver the priority",
     "Content Placeholder 3": {
      "text": "Programs while improving operating efficiency and customer experience and we\nWhile improving\nImproving\nOperating efficiency and customer experience and we\nEfficiency and customer experience and we strengthen risk",
      "levels": [
@@ -106,24 +94,8 @@
       0
      ]
     },
-    "Text Placeholder 4": {
-     "text": "We continue to deliver the priority programs while improving operating efficiency\nContinue to deliver the priority programs while improving\nTo deliver the priority programs while improving operating",
-     "levels": [
-      0,
-      1,
-      0
-     ]
-    },
-    "Content Placeholder 5": {
-     "text": "Deliver the priority programs while improving operating efficiency and customer\nThe priority\nPriority\nPrograms while improving operating efficiency and customer\nWhile improving operating efficiency and customer experience",
-     "levels": [
-      0,
-      1,
-      2,
-      1,
-      0
-     ]
-    }
+    "Text Placeholder 4": "We continue to",
+    "Content Placeholder 5": "Deliver the priority"
    },
    "notes": "New speaker notes for page 5"
   },
