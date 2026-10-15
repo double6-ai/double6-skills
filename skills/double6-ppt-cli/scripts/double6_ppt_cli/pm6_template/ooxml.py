@@ -43,6 +43,16 @@ class Package:
             self._xml[part] = etree.fromstring(self.entries[part])
         return self._xml[part]
 
+    def set_bytes(self, part: str, data: bytes) -> None:
+        self.entries[part] = data
+        self._xml.pop(part, None)
+        self.dirty.discard(part)
+
+    def remove(self, part: str) -> None:
+        self.entries.pop(part, None)
+        self._xml.pop(part, None)
+        self.dirty.discard(part)
+
     def touch(self, part: str) -> None:
         self.dirty.add(part)
 
@@ -78,6 +88,11 @@ class Package:
         master = self.rel_target(layout, "slideMaster") if layout else None
         theme = self.rel_target(master, "theme") if master else None
         return layout, master, theme
+
+    def save_part(self, part: str) -> None:
+        self.entries[part] = etree.tostring(self._xml[part], xml_declaration=True, encoding="UTF-8", standalone=True)
+        self.dirty.discard(part)
+        self._xml.pop(part, None)
 
     def save(self, path: Path) -> None:
         for part in self.dirty:

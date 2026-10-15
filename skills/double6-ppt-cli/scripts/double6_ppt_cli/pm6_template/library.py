@@ -1,8 +1,16 @@
-"""analyze / scaffold / check for the PM6 template-fill backend (replaces v4.8 template_fill_pptx).
+"""analyze / scaffold / check for the PM6 template-fill backend.
 
-Signatures intentionally mirror the removed upstream package so ``template_workflow`` can swap
-backends: ``analyze_pptx(path)``, ``scaffold_plan(library, content, include_empty=...)``,
-``check_plan(library, plan)``.
+Public functions keep the v4.8 ``template_fill_pptx`` contract (same library/plan/check schemas and
+codes) by running the Double6-maintained v4.8 port in ``fillnative`` and layering the PM6-specific
+information on top:
+
+* library: every v4.8 slot additionally carries ``shape_id``/``shape_name``/``placeholder`` and the
+  native ``fit_context`` (resolved font sizes, insets, autofit, list levels); slides add
+  ``slide_part``/``pictures``/``links``/``notes_text``/``transition``.
+* check: all v4.8 results are kept except the width-ratio ``text_capacity`` estimate, which is
+  replaced by the metric ``text_fit`` result (keeping the legacy verdict as ``legacy_*`` fields);
+  PM6 adds provenance (``cross_slide_slot``), ``stale_old_text``, duplicate-target, list-level and
+  notes/transition validation.
 """
 from __future__ import annotations
 
@@ -53,7 +61,7 @@ def etree_local(node) -> str:
     return node.tag.split("}", 1)[-1]
 
 
-def analyze_pptx(pptx: Path | str) -> dict[str, Any]:
+def _pm6_analyze(pptx: Path | str) -> dict[str, Any]:
     pptx = Path(pptx)
     pkg = Package.open(pptx)
     cw, ch = pkg.slide_size()
@@ -136,7 +144,7 @@ def analyze_pptx(pptx: Path | str) -> dict[str, Any]:
     }
 
 
-def scaffold_plan(library: dict[str, Any], content: Any = None, include_empty: bool = True) -> dict[str, Any]:
+def _pm6_scaffold(library: dict[str, Any], content: Any = None, include_empty: bool = True) -> dict[str, Any]:
     slides = []
     for slide in library["slides"]:
         reps = [{"slot_id": s["slot_id"], "old_text": s["text"], "text": s["text"]}
@@ -153,7 +161,7 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", "", str(text or ""))
 
 
-def check_plan(library: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
+def _pm6_check(library: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     add = results.append
     if plan.get("schema") not in PLAN_SCHEMAS:
@@ -262,3 +270,193 @@ def check_plan(library: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
     summary = Counter(r["status"] for r in results)
     return {"schema": "double6_pm6_check_report.v1", "results": results,
             "summary": {"ok": summary.get("OK", 0), "warn": summary.get("WARN", 0), "error": summary.get("ERROR", 0)}}
+
+
+# ----------------------------------------------------------------------------- public (v4.8 parity)
+
+def _notes_text(pkg: Package, slide_part: str) -> str:
+    for _rid, (rtype, target, _mode) in pkg.rels(slide_part).items():
+        if rtype.endswith("/notesSlide") and target in pkg.entries:
+            root = pkg.xml(target)
+            for sp in root.iter(q("p", "sp")):
+                ph = sp.find("./p:nvSpPr/p:nvPr/p:ph", NS)
+                if ph is not None and ph.get("type") == "body":
+                    return "\n".join("".join(p.xpath(".//a:t/text()", namespaces=NS)) for p in sp.findall("./p:txBody/a:p", NS))
+    return ""
+
+
+def _transition(pkg: Package, slide_part: str) -> dict[str, Any] | None:
+    root = pkg.xml(slide_part)
+    tr = root.find("./p:transition", NS)
+    if tr is None:
+        alt = root.xpath("./mc:AlternateContent//p:transition", namespaces={**NS, "mc": "http://schemas.openxmlformats.org/markup-compatibility/2006"})
+        tr = alt[0] if alt else None
+    if tr is None:
+        return None
+    effect = next((etree_local(c) for c in tr if isinstance(c.tag, str)), None)
+    return {"effect": effect, "spd": tr.get("spd"), "dur": tr.get(q("p14", "dur")) if "p14" in NS else None,
+            "advance_after_ms": tr.get("advTm"), "advance_on_click": tr.get("advClick", "1") != "0"}
+
+
+def analyze_pptx(pptx: Path | str) -> dict[str, Any]:
+    from . import fillnative
+
+    library = fillnative.analyze_pptx(Path(pptx))
+    pm6 = _pm6_analyze(pptx)
+    pkg = Package.open(Path(pptx))
+    by_index = {s["slide_index"]: s for s in pm6["slides"]}
+    for slide in library["slides"]:
+        extra = by_index.get(slide["slide_index"])
+        if not extra:
+            continue
+        slots = {s["slot_id"]: s for s in extra["slots"]}
+        for slot in slide["slots"]:
+            x = slots.get(slot["slot_id"])
+            m = SLOT_RE.fullmatch(slot["slot_id"])
+            if m:
+                slot.setdefault("shape_id", m.group(2))
+            if x:
+                slot["shape_name"] = x["name"]
+                slot["name"] = x["name"]  # PM6-era alias
+                slot["drawingml_id"] = x["drawingml_id"]
+                slot["placeholder"] = x["placeholder"]
+                slot["fit_context"] = x["fit_context"]
+                if x["role"] == "system":
+                    slot["system_placeholder"] = True
+            elif m and any(str(t.get("drawingml_id")) == m.group(2) for t in extra["tables"] + extra["charts"]):
+                slot["container"] = "graphicFrame"  # table/chart text: edit through table_edits/chart_edits
+        for kind, key in (("tables", "table_id"), ("charts", "chart_id")):
+            names = {t[key]: t for t in extra[kind]}
+            for item in slide.get(kind, []):
+                x = names.get(item.get(key))
+                if x:
+                    item.setdefault("shape_id", str(x["drawingml_id"]))
+                    item.setdefault("shape_name", x["name"])
+                    item.setdefault("drawingml_id", x["drawingml_id"])
+                    if kind == "tables":
+                        item.setdefault("merge_slaves", x["merge_slaves"])
+        slide["slide_part"] = extra["slide_part"]
+        slide["pictures"] = extra["pictures"]
+        slide["links"] = extra["links"]
+        slide["notes_text"] = _notes_text(pkg, extra["slide_part"])
+        slide["transition"] = _transition(pkg, extra["slide_part"])
+    library["backend"] = {"name": "pm6", "ppt_master": "v6.7.0", "analysis": "fillnative-v4.8-port+pm6-fit"}
+    return library
+
+
+def scaffold_plan(library: dict[str, Any], selected_slides: Any = None, *, include_empty: bool = False) -> dict[str, Any]:
+    from . import fillnative
+
+    if selected_slides is not None and not isinstance(selected_slides, (list, tuple, set)):
+        selected_slides = None  # PM6-era callers passed content here; v4.8 contract takes slide numbers
+    plan = fillnative.scaffold_plan(library, list(selected_slides) if selected_slides else None, include_empty=include_empty)
+    by_index = {int(s["slide_index"]): s for s in library.get("slides", [])}
+    for slide in plan["slides"]:
+        lib = by_index.get(int(slide["source_slide"]), {})
+        system = {s["slot_id"] for s in lib.get("slots", []) if s.get("system_placeholder") or s.get("container") == "graphicFrame"}
+        slide["replacements"] = [r for r in slide["replacements"] if r.get("slot_id") not in system]
+        tables = {t["table_id"]: t for t in lib.get("tables", [])}
+        for edit in slide.get("table_edits", []):
+            t = tables.get(edit.get("table_id"), {})
+            slaves = {(c["row"], c["col"]) for row in t.get("rows", []) for c in row.get("cells", []) if c.get("is_merge_slave")}
+            edit["cells"] = [c for c in edit.get("cells", []) if (c["row"], c["col"]) not in slaves]
+        if lib.get("notes_text"):
+            slide["notes"] = lib["notes_text"]
+    return plan
+
+
+def _resolve_slot(lib_slide: dict[str, Any], rep: dict[str, Any]) -> dict[str, Any] | None:
+    for key, field in (("slot_id", "slot_id"), ("shape_id", "shape_id"), ("shape_name", "shape_name")):
+        if rep.get(key) not in (None, ""):
+            hits = [s for s in lib_slide.get("slots", []) if str(s.get(field)) == str(rep[key])]
+            return hits[0] if len(hits) == 1 else None
+    return None
+
+
+def replacement_text(rep: dict[str, Any]) -> str:
+    if isinstance(rep.get("paragraphs"), list):
+        return "\n".join(str(x) for x in rep["paragraphs"])
+    return str(rep.get("text") if rep.get("text") is not None else "")
+
+
+NOTES_KEEP = "keep"
+
+
+def check_plan(library: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
+    from . import fillnative
+
+    legacy = fillnative.check_plan(library, plan)
+    results: list[dict[str, Any]] = []
+    legacy_capacity: dict[tuple[int, str], dict[str, Any]] = {}
+    for r in legacy.get("results", []):
+        if r.get("code") in ("text_capacity", "text_fit"):
+            legacy_capacity[(int(r.get("plan_slide") or 0), str(r.get("slot_id") or r.get("selector") or ""))] = r
+            continue
+        results.append(r)
+    # Normalise plan entries to slot ids so the PM6 checks see every selector form.
+    by_index = {int(s["slide_index"]): s for s in library.get("slides", [])}
+    norm_slides = []
+    for item in plan.get("slides", []) if isinstance(plan.get("slides"), list) else []:
+        item = dict(item)
+        lib = by_index.get(int(item.get("source_slide") or 0), {})
+        reps = []
+        for rep in item.get("replacements", []) or [] if isinstance(item.get("replacements", []), list) else []:
+            rep = dict(rep)
+            slot = _resolve_slot(lib, rep)
+            if not rep.get("slot_id"):
+                if slot is None:
+                    continue  # legacy check already reports replacement_target_not_found
+                rep["slot_id"] = slot["slot_id"]
+            rep["text"] = replacement_text(rep)
+            if slot is not None and slot.get("container") == "graphicFrame":
+                if rep["text"] != slot.get("text"):
+                    results.append({"status": "ERROR", "code": "slot_is_table_or_chart", "plan_slide": len(norm_slides) + 1,
+                                    "slot_id": slot["slot_id"], "message": "edit table/chart text with table_edits/chart_edits"})
+                continue
+            reps.append(rep)
+        item["replacements"] = reps
+        item["table_edits"], item["chart_edits"] = [], []  # covered by the v4.8 checks
+        norm_slides.append(item)
+    pm6_library = {"slides": []}
+    for slide in library.get("slides", []):
+        slots = []
+        for slot in slide.get("slots", []):
+            slots.append({**slot, "role": "system" if slot.get("system_placeholder") else slot.get("role")})
+        pm6_library["slides"].append({"slide_index": int(slide["slide_index"]), "slots": slots, "tables": [], "charts": []})
+    pm6 = _pm6_check(pm6_library, {**plan, "schema": plan.get("schema"), "slides": norm_slides})
+    legacy_codes = {(r.get("plan_slide"), r.get("code")) for r in results}
+    for r in pm6["results"]:
+        if r["code"] in ("plan_schema_unsupported", "plan_has_no_slides", "source_slide_out_of_range") and any(
+                x.get("code") == r["code"] for x in results):
+            continue
+        if r["code"] == "slot_not_found" and (r.get("plan_slide"), "replacement_target_not_found") in legacy_codes:
+            continue
+        if r["code"] in ("text_fit", "text_fit_unknown"):
+            old = legacy_capacity.get((int(r.get("plan_slide") or 0), str(r.get("slot_id"))))
+            if old:
+                r = {**r, "legacy_status": old.get("status"), "legacy_message": old.get("message")}
+        results.append(r)
+    # notes / transitions
+    for plan_slide, item in enumerate(plan.get("slides", []) or [], 1):
+        if not isinstance(item, dict):
+            continue
+        notes = item.get("notes", item.get("speaker_notes"))
+        if notes is not None and not isinstance(notes, str):
+            results.append({"status": "ERROR", "code": "notes_invalid", "plan_slide": plan_slide,
+                            "message": "notes must be a string (or \"keep\" to keep the template's notes)"})
+        transition = item.get("transition")
+        if transition is not None:
+            from .notes_transitions import resolve_transition
+            try:
+                resolve_transition(item)
+            except (RuntimeError, ValueError) as exc:
+                results.append({"status": "ERROR", "code": "transition_invalid", "plan_slide": plan_slide, "message": str(exc)})
+        lib = by_index.get(int(item.get("source_slide") or 0), {})
+        if notes is None and lib.get("notes_text", "").strip():
+            results.append({"status": "WARN", "code": "template_notes_dropped", "plan_slide": plan_slide,
+                            "source_slide": item.get("source_slide"),
+                            "message": "the template slide has speaker notes; they are removed unless the plan sets notes (or \"keep\")"})
+    summary = Counter(r.get("status") for r in results)
+    return {"schema": "template_fill_pptx_check.v1", "backend": "pm6",
+            "summary": {"ok": summary.get("OK", 0), "warn": summary.get("WARN", 0), "error": summary.get("ERROR", 0)},
+            "results": results}

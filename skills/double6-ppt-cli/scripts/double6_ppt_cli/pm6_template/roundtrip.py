@@ -30,10 +30,11 @@ from typing import Any
 from lxml import etree
 
 from .library import CHART_RE, SLOT_RE, TABLE_RE
-from .ooxml import NS, Package, cnvpr, find_by_id, iter_shapes, q
+from .ooxml import NS, Package, cnvpr, find_by_id, iter_shapes, q  # noqa: F401
 from .style import fit_context
 from .textfit import Metrics, fit, map_levels
 from .txbody import apply_fit, set_text
+from .notes_transitions import apply_notes, apply_transition
 
 SVG = "http://www.w3.org/2000/svg"
 
@@ -270,6 +271,32 @@ def _drop_orphan_slide_rels(template: Path, dest: Path) -> tuple[Path, list[dict
     return dest, dropped
 
 
+# ----------------------------------------------------------------------------- selectors
+
+def _resolve_target(tpl: Package, src_part: str, item: dict[str, Any], kind: str) -> int | None:
+    """v4.8 selector forms: ``slot_id``/``table_id``/``chart_id``, else ``shape_id``, else unique ``shape_name``."""
+    regex, key = {"slot": (SLOT_RE, "slot_id"), "table": (TABLE_RE, "table_id"), "chart": (CHART_RE, "chart_id")}[kind]
+    if item.get(key):
+        m = regex.fullmatch(str(item[key]))
+        return int(m.group(2)) if m else None
+    if item.get("shape_id") not in (None, ""):
+        try:
+            return int(item["shape_id"])
+        except (TypeError, ValueError):
+            return None
+    if item.get("shape_name"):
+        hits = [cnvpr(e) for e in iter_shapes(tpl.xml(src_part)) if cnvpr(e) is not None and cnvpr(e).get("name") == item["shape_name"]]
+        if len(hits) == 1:
+            return int(hits[0].get("id"))
+    return None
+
+
+def _rep_text(rep: dict[str, Any]) -> str:
+    if isinstance(rep.get("paragraphs"), list):
+        return "\n".join(str(x) for x in rep["paragraphs"])
+    return str(rep.get("text") if rep.get("text") is not None else "")
+
+
 # ----------------------------------------------------------------------------- entry point
 
 def apply_plan(template: Path, plan: dict[str, Any], output: Path, transition: str = "keep",
@@ -286,7 +313,8 @@ def apply_plan(template: Path, plan: dict[str, Any], output: Path, transition: s
     tpl = Package.open(template)
     src_parts = tpl.slide_parts()
     receipt: dict[str, Any] = {"schema": "double6_pm6_apply_receipt.v1", "mode": mode, "pm6_root": str(root),
-                               "text": [], "tables": [], "charts": [], "svg_edits": [], "restored": []}
+                               "text": [], "tables": [], "charts": [], "svg_edits": [], "restored": [],
+                               "notes": [], "transitions": []}
     with tempfile.TemporaryDirectory(prefix="d6-pm6-") as tmp:
         ws = Path(tmp) / "ws"
         source_input, dropped = _drop_orphan_slide_rels(template, Path(tmp) / "input.pptx")
@@ -314,15 +342,14 @@ def apply_plan(template: Path, plan: dict[str, Any], output: Path, transition: s
             for i, (item, page) in enumerate(zip(slides, pages), 1):
                 src_part = src_parts[page["source_slide"] - 1]
                 for rep in item.get("replacements", []):
-                    m = SLOT_RE.fullmatch(str(rep.get("slot_id")))
-                    if not m:
+                    sid = _resolve_target(tpl, src_part, rep, "slot")
+                    if sid is None:
                         continue
-                    sid = int(m.group(2))
-                    if str(rep.get("text", "")) == str(rep.get("old_text", "\0")):
+                    if _rep_text(rep) == str(rep.get("old_text", "\0")):
                         continue
                     hits = find_by_id(tpl.xml(src_part), sid)
                     ctx = fit_context(tpl, src_part, hits[0]) if len(hits) == 1 and hits[0].find(q("p", "txBody")) is not None else None
-                    r = _svg_text_edit(svg_dir / page["svg"], sid, str(rep.get("text", "")), ctx, rep.get("levels"))
+                    r = _svg_text_edit(svg_dir / page["svg"], sid, _rep_text(rep), ctx, rep.get("levels"))
                     receipt["svg_edits"].append({"plan_slide": i, "drawingml_id": sid, **r})
         export_args = [str(scripts / "svg_to_pptx.py"), str(ws), "--roundtrip"]
         out_text = _run(export_args, Path(tmp), log)
@@ -342,43 +369,63 @@ def apply_plan(template: Path, plan: dict[str, Any], output: Path, transition: s
         if len(out_parts) != len(slides):
             raise PM6Error("output slide count differs from plan", "pm6_slide_count_mismatch")
         chart_jobs = []
+        auto_advance = False
         for i, (item, part) in enumerate(zip(slides, out_parts), 1):
             src_part = src_parts[int(item["source_slide"]) - 1]
             root_xml = pkg.xml(part)
             for rep in item.get("replacements", []):
-                m = SLOT_RE.fullmatch(str(rep.get("slot_id")))
-                if not m:
-                    continue
-                sid = int(m.group(2))
-                text = str(rep.get("text") if rep.get("text") is not None else "")
-                base = {"plan_slide": i, "slot_id": rep["slot_id"], "drawingml_id": sid}
+                sid = _resolve_target(tpl, src_part, rep, "slot")
+                if sid is None:
+                    raise PM6Error(f"replacement target not found on plan slide {i}", "replacement_target_not_found",
+                                   {k: rep.get(k) for k in ("slot_id", "shape_id", "shape_name")})
+                text = _rep_text(rep)
+                slot_id = rep.get("slot_id") or f"s{int(item['source_slide']):02d}_sh{sid}"
+                base = {"plan_slide": i, "slot_id": slot_id, "drawingml_id": sid}
                 if mode == "svg":
                     continue
                 if mode == "svg-restore" and text != str(rep.get("old_text", "\0")):
                     receipt["restored"].append({**base, "result": _restore_native(pkg, tpl, part, src_part, sid)})
                     root_xml = pkg.xml(part)
                 hits = [h for h in find_by_id(root_xml, sid) if h.tag == q("p", "sp")]
+                if not hits and text == str(rep.get("old_text", "\0")):
+                    receipt["text"].append({**base, "fit": "unchanged"})
+                    continue
                 if len(hits) != 1:
-                    raise PM6Error(f"slot {rep['slot_id']} not unique on output slide {i}", "pm6_slot_identity_lost", {"hits": len(hits)})
+                    raise PM6Error(f"slot {slot_id} not unique on output slide {i}", "pm6_slot_identity_lost", {"hits": len(hits)})
                 if text == str(rep.get("old_text", "\0")) and "old_text" in rep:
                     receipt["text"].append({**base, "fit": "unchanged"})
                     continue
                 _fill_text(pkg, part, hits[0], text, receipt["text"], base, rep.get("levels"))
                 pkg.touch(part)
             for edit in item.get("table_edits", []) or []:
-                m = TABLE_RE.fullmatch(str(edit.get("table_id")))
-                hits = find_by_id(root_xml, int(m.group(2))) if m else []
+                tid = _resolve_target(tpl, src_part, edit, "table")
+                hits = find_by_id(root_xml, tid) if tid is not None else []
                 if len(hits) != 1:
                     raise PM6Error(f"table {edit.get('table_id')} not found on output slide {i}", "pm6_table_identity_lost")
-                receipt["tables"].append({"plan_slide": i, "table_id": edit["table_id"], "cells": _fill_table(hits[0], edit)})
+                receipt["tables"].append({"plan_slide": i, "table_id": edit.get("table_id") or f"s{int(item['source_slide']):02d}_tbl{tid}", "cells": _fill_table(hits[0], edit)})
                 pkg.touch(part)
             for edit in item.get("chart_edits", []) or []:
-                m = CHART_RE.fullmatch(str(edit.get("chart_id")))
-                if m:
-                    chart_jobs.append((i, int(m.group(2)), edit))
+                cid = _resolve_target(tpl, src_part, edit, "chart")
+                if cid is not None:
+                    chart_jobs.append((i, cid, edit))
+            receipt["notes"].append({"plan_slide": i, **apply_notes(pkg, part, i, item)})
+            tr = apply_transition(pkg, part, item, transition, transition_duration)
+            auto_advance = auto_advance or tr.get("auto_advance", False)
+            receipt["transitions"].append({"plan_slide": i, **tr})
+        if auto_advance:
+            from pptx_transitions import set_package_use_timings
+            for part_name in list(pkg.dirty):
+                pkg.save_part(part_name)
+            set_package_use_timings(pkg.entries)
+            pkg._xml.clear()
         output.parent.mkdir(parents=True, exist_ok=True)
         pkg.save(output)
         receipt["charts"] = _fill_charts(output, chart_jobs)
+        from pptx_transitions import validate_pptx_transition_package
+        try:
+            validate_pptx_transition_package(output, require_use_timings=auto_advance)
+        except ValueError as exc:
+            raise PM6Error(f"transition package validation failed: {exc}", "pm6_transition_invalid") from exc
     receipt["log"] = [{k: v for k, v in row.items() if k != "stdout_tail"} | {"stdout_tail": row["stdout_tail"][-600:]} for row in log]
     output.with_name(output.stem + ".pm6_receipt.json").write_text(json.dumps(receipt, ensure_ascii=False, indent=1), encoding="utf-8")
     return receipt
