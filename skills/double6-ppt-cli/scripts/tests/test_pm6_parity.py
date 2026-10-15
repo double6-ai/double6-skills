@@ -78,6 +78,19 @@ class StyledRunsTest(unittest.TestCase):
         p = self._p('<a:r><a:rPr b="1"/><a:t>a</a:t></a:r><a:r><a:rPr b="1"/><a:t>b</a:t></a:r>')
         self.assertIsNone(styled_runs(p, "xyz"))
 
+    def test_proofing_attributes_are_not_mixed_formatting(self):
+        p = self._p('<a:r><a:rPr lang="en-US" dirty="0"/><a:t>a b</a:t></a:r><a:r><a:rPr lang="en-US" err="1"/><a:t>c</a:t></a:r>')
+        self.assertIsNone(styled_runs(p, "zzz"))
+
+    def test_explicit_level_zero_adds_no_empty_ppr(self):
+        body = etree.fromstring(f'<p:txBody xmlns:p="{P}" xmlns:a="{NS["a"]}"><a:bodyPr/><a:p><a:r><a:t>x</a:t></a:r></a:p>'
+                                '<a:p><a:pPr lvl="1"/><a:r><a:t>y</a:t></a:r></a:p></p:txBody>')
+        set_text(body, "a\nb\nc", levels=[0, 1, 0])
+        ps = body.findall(q("a", "p"))
+        self.assertIsNone(ps[0].find(q("a", "pPr")))
+        self.assertEqual(ps[1].find(q("a", "pPr")).get("lvl"), "1")
+        self.assertIsNone(ps[2].find(q("a", "pPr")))
+
     def test_unchanged_paragraph_keeps_fields_and_breaks(self):
         body = etree.fromstring(f'<p:txBody xmlns:p="{P}" xmlns:a="{NS["a"]}"><a:bodyPr/><a:p><a:r><a:t>Page </a:t></a:r>'
                                 '<a:fld id="{1}" type="slidenum"><a:t>3</a:t></a:fld></a:p><a:p><a:r><a:t>old</a:t></a:r></a:p></p:txBody>')
