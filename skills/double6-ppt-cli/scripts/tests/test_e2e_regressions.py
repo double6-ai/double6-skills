@@ -62,7 +62,7 @@ class RegressionTests(unittest.TestCase):
 
     def test_global_runtime_dir_not_overwritten_by_subcommand(self) -> None:
         args = build_parser().parse_args(["--runtime-dir", "/tmp/rt", "doctor"])
-        self.assertEqual(str(args.runtime_dir), "/tmp/rt")
+        self.assertEqual(Path(args.runtime_dir), Path("/tmp/rt"))
 
     def test_vendor_warnings_collected_and_surfaced(self) -> None:
         out = "ok\nWarning: chart legend omitted: no visible series names\nWarning: chart legend omitted: no visible series names\n"
