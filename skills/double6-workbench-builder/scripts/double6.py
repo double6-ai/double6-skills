@@ -12,6 +12,14 @@ SCRIPT_INTERFACE = "cli"
 
 sys.dont_write_bytecode = True
 
+MIN_PYTHON = (3, 10)
+if sys.version_info < MIN_PYTHON:
+    sys.stderr.write(
+        json.dumps({"status": "error", "error": f"需要 Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]} 或更高版本，当前为 {sys.version.split()[0]}"}, ensure_ascii=False)
+        + "\n"
+    )
+    raise SystemExit(2)
+
 from double6_runtime import (  # noqa: E402
     ContractError,
     build,

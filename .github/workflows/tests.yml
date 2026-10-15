@@ -22,12 +22,32 @@ jobs:
       run:
         working-directory: skills/${{ matrix.skill }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install pytest
       - run: python -m pytest -q -p no:cacheprovider tests
+
+  workbench-browser:
+    name: double6-workbench-builder browser evaluation (ubuntu, Playwright)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: skills/double6-workbench-builder
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pytest playwright
+      - run: python -m playwright install --with-deps chromium
+      - name: Browser evaluation (content ops, research reading, fitness)
+        env:
+          DOUBLE6_E2E_BROWSER: "1"
+        run: python -m pytest -q -p no:cacheprovider tests -k browser -rs
+      - name: Full suite with browser available
+        run: python -m pytest -q -p no:cacheprovider tests
 
   ppt-cli:
     name: double6-ppt-cli (py${{ matrix.python }}, ${{ matrix.os }})
@@ -41,8 +61,8 @@ jobs:
       run:
         working-directory: skills/double6-ppt-cli
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install -r requirements-core.lock pytest

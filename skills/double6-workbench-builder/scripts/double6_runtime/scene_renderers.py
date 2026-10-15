@@ -67,7 +67,10 @@ def _nav_icon_id(label: str) -> str:
 
 NAV_LABEL_RULES = [
     (("首页",), "首页"),
-    (("数据", "备份", "恢复"), "数据"),
+    (("备份", "恢复"), "数据"),
+    (("写作",), "写作"),
+    (("工作日志", "实验"), "日志"),
+    (("文献",), "文献"),
     (("错题",), "错题"),
     (("积分", "宠物", "奖励"), "奖励"),
     (("语文",), "语文"),
@@ -89,7 +92,50 @@ NAV_LABEL_RULES = [
 
 def _compact_nav_label(label: str) -> str:
     """侧栏只放高辨识度短标签；完整模块名继续留在 aria-label 与页面正文。"""
-    return next((short for words, short in NAV_LABEL_RULES if any(word in label for word in words)), label[:4])
+    if len(label) <= 4:
+        return label
+    return next((short for words, short in NAV_LABEL_RULES if any(word in label for word in words)), label)
+
+
+def _dedupe_nav(items: list[dict[str, str]]) -> list[dict[str, str]]:
+    """短标签撞名时回退为完整名称；导航文字允许换行，但不截断、不重名。"""
+    counts: dict[str, int] = {}
+    for item in items:
+        counts[item["nav_label"]] = counts.get(item["nav_label"], 0) + 1
+    result = []
+    for item in items:
+        if counts[item["nav_label"]] > 1 and item["view_id"] != "data-tools":
+            item = {**item, "nav_label": item["label"]}
+        result.append(item)
+    labels = [item["nav_label"] for item in result]
+    if len(labels) != len(set(labels)):
+        raise ValueError(f"导航标签重名：{labels}")
+    return result
+
+
+def _module_tiles(rows: list[dict[str, str]], emoji_by_id: dict[str, str]) -> str:
+    return "".join(
+        f"<a class='module-tile' href='#module-{_e(row['id'])}' data-dashboard-module-link='{_e(row['id'])}'>"
+        f"<span aria-hidden='true'>{_e(emoji_by_id.get(row['id'], '🧩'))}</span><div><strong>{_e(row['name'])}</strong>"
+        f"<small data-dashboard-module-status='{_e(row['id'])}'>{_e(row['description'])}</small></div></a>"
+        for row in rows
+    )
+
+
+def _ensure_all_modules_reachable(dashboard_html: str, capabilities: list[dict[str, Any]], emojis: list[str]) -> str:
+    """任何 renderer 只要首页漏掉已确认模块，就在首页末尾补一组“其他工作面”入口，保证全部可达。"""
+    rows = _module_rows(capabilities)
+    missing = [row for row in rows if f"data-dashboard-module-link='{row['id']}'" not in dashboard_html]
+    if not missing:
+        return dashboard_html
+    emoji_by_id = {row["id"]: emoji for row, emoji in zip(rows, emojis, strict=False)}
+    block = (
+        "<section class='all-modules dashboard-panel' data-dashboard-all-modules><div class='panel-heading'>"
+        "<div><span class='eyebrow'>其他工作面</span><h2>已确认的其余模块</h2></div></div>"
+        f"<div class='all-modules-grid'>{_module_tiles(missing, emoji_by_id)}</div></section>"
+    )
+    closing = dashboard_html.rfind("</section>")
+    return dashboard_html[:closing] + block + dashboard_html[closing:]
 
 
 def _nav_item(view_id: str, label: str, emoji: str) -> dict[str, str]:
@@ -171,6 +217,7 @@ def _base_result(
         raise ValueError("场景首页缺少可定位的 hero 结束标签")
     hero_end += len("</header>")
     dashboard_html = dashboard_html[:hero_end] + _today_workboard(primary) + dashboard_html[hero_end:]
+    dashboard_html = _ensure_all_modules_reachable(dashboard_html, capabilities, emojis)
     details = "".join(
         detail_renderer(row, index == 0, emoji)
         for index, (row, emoji) in enumerate(zip(capabilities, emojis, strict=True))
@@ -182,10 +229,10 @@ def _base_result(
     )
     nav_items.append(_nav_item("data-tools", "数据", "💾"))
     return {
+        "nav_items": _dedupe_nav(nav_items),
         "renderer_id": renderer_id,
         "dashboard_html": dashboard_html,
         "detail_views_html": details,
-        "nav_items": nav_items,
         "required_hooks": required_hooks,
         "primary_module_id": primary_id,
     }
@@ -243,27 +290,70 @@ def _child(product: dict[str, Any], template: dict[str, Any], capabilities: list
     return _base_result("child_learning_dashboard", dashboard, capabilities, detail_renderer, emojis, ["progress-label", "completion", "progress-bar"])
 
 
+CREATOR_WEEK = [
+    ("一", "长文", "公众号"), ("二", "短帖 ×2", "X / 即刻"), ("三", "图文", "小红书"), ("四", "短视频", "视频号 / 抖音"),
+    ("五", "数字复盘", "全平台"), ("六", "回评论", "不新发"), ("日", "休息", "攒素材"),
+]
+CREATOR_PLATFORMS = [("📕", "小红书"), ("🟢", "公众号"), ("🎬", "视频号 / 抖音"), ("✖️", "X / 即刻")]
+
+
 def _creator(product: dict[str, Any], template: dict[str, Any], capabilities: list[dict[str, Any]], detail_renderer: Callable[[dict[str, Any], bool, str], str], emojis: list[str]) -> dict[str, Any]:
     rows = _module_rows(capabilities)
     stages = "".join(
-        f"<a class='pipeline-stage' href='#module-{_e(row['id'])}' data-dashboard-module-link='{_e(row['id'])}'><span>0{index + 1}</span>"
-        f"<strong>{_e(label)}</strong><small data-dashboard-module-status='{_e(row['id'])}'>还没有项目</small></a>"
-        for index, (row, label) in enumerate(zip(rows[1:4], ["选题", "制作", "排期"], strict=False))
+        f"<a class='pipeline-stage' href='#module-{_e(row['id'])}' data-dashboard-module-link='{_e(row['id'])}'>"
+        f"<span aria-hidden='true'>{_e(emojis[index])}</span><strong>{index + 1:02d} · {_e(row['name'])}</strong>"
+        f"<small data-dashboard-module-status='{_e(row['id'])}'>{_e(row['description'])}</small></a>"
+        for index, row in enumerate(rows)
     )
+    week = "".join(
+        f"<div data-weekday='{index}'><small>周{day}</small><strong>{_e(kind)}</strong><small>{_e(where)}</small></div>"
+        for index, (day, kind, where) in enumerate(CREATOR_WEEK)
+    )
+    platforms = "".join(f"<span class='platform-chip'><i aria-hidden='true'>{icon}</i>{_e(name)}</span>" for icon, name in CREATOR_PLATFORMS)
     dashboard = (
         "<section id='dashboard' class='app-view dashboard-view creator-dashboard is-active' data-view-id='dashboard' "
-        "data-dashboard-signature='creator-production-pipeline-v1'>"
-        + _hero(product, template, "内容制作 · 把灵感推进到可发布", "今天推进哪一个作品？", "从素材入口开始，经过制作与排期；发布仍由你人工确认。", rows[0], "收下一条素材")
-        + "<section class='production-board' data-first-screen-slot='primary_surface'><div class='panel-heading'><div><span class='eyebrow'>制作管道</span>"
-        "<h2>选题 → 制作 → 排期</h2></div><strong data-double6-hook='progress-label'>已保存 0 条记录</strong></div>"
+        "data-dashboard-signature='creator-production-pipeline-v2'>"
+        + _hero(product, template, "一人内容工作室 · 多平台", "今天推进哪一条内容？", "素材 → 选题 → 制作 → 排期 → 复盘，一条线走完；发布始终由你在平台上确认。", rows[0], "收下一条素材")
+        + "<div class='creator-grid'><section class='production-board dashboard-panel' data-first-screen-slot='primary_surface'><div class='panel-heading'><div><span class='eyebrow'>内容流水线</span>"
+        "<h2>每个环节点进去就能干活</h2></div></div>"
         f"<div class='pipeline'>{stages}</div></section>"
-        "<div class='creator-lower'><section class='asset-inbox' data-first-screen-slot='supporting_panel'><span class='eyebrow'>素材入口</span>"
-        "<h2>先收集，再判断</h2><p>来源、观点和可用素材统一落到信息输入，避免灵感散在聊天与收藏里。</p>"
-        f"{_link(rows[0], '打开素材收件箱', 'text-link')}</section>"
-        "<section class='publish-reminder'><span>人工发布提醒</span><strong>没有自动发布</strong><p>页面只记录计划与结果，不会替你连接平台。</p></section></div>"
+        "<aside class='side-stack' data-first-screen-slot='supporting_panel'><section class='side-card'><span class='eyebrow'>建议的一周节奏</span>"
+        "<h3>一人也能持续的发布节奏</h3>"
+        f"<div class='week-rhythm'>{week}</div></section>"
+        "<section class='side-card'><span class='eyebrow'>常用平台</span>"
+        f"<div class='platform-row'>{platforms}</div><p>工作台不连接任何账号，也不会替你发布；排期到点后复制文案，到平台手动发。</p></section></aside></div>"
         + "</section>"
     )
     return _base_result("creator_production_dashboard", dashboard, capabilities, detail_renderer, emojis, ["progress-label"])
+
+
+READING_SHELF = [("📥", "想读", "先收进来，不急着读"), ("📖", "在读", "一次只读 1–2 本"), ("✅", "读完", "当天写一张读书卡"), ("🗂️", "已做笔记", "证据卡能被引用")]
+
+
+def _research(product: dict[str, Any], template: dict[str, Any], capabilities: list[dict[str, Any]], detail_renderer: Callable[[dict[str, Any], bool, str], str], emojis: list[str]) -> dict[str, Any]:
+    rows = _module_rows(capabilities)
+    emoji_by_id = {row["id"]: emoji for row, emoji in zip(rows, emojis, strict=False)}
+    reading = rows[0]
+    shelf = "".join(
+        f"<a class='shelf-stage' href='#module-{_e(reading['id'])}' data-dashboard-module-link='{_e(reading['id'])}'>"
+        f"<span aria-hidden='true'>{icon}</span><strong>{_e(name)}</strong><small>{_e(hint)}</small></a>"
+        for icon, name, hint in READING_SHELF
+    )
+    dashboard = (
+        "<section id='dashboard' class='app-view dashboard-view research-dashboard is-active' data-view-id='dashboard' "
+        "data-dashboard-signature='research-reading-desk-v1'>"
+        + _hero(product, template, "研究与阅读 · 每个结论都有出处", "今天读什么、想清楚什么？", "阅读清单、证据卡和研究问题连成一条线；摘录带页码，写作时直接引用。", rows[0], f"打开{rows[0]['name']}")
+        + "<div class='research-grid'><section class='reading-board dashboard-panel' data-first-screen-slot='primary_surface'><div class='panel-heading'><div><span class='eyebrow'>阅读书架</span>"
+        f"<h2>从想读到能引用</h2></div><small data-dashboard-module-status='{_e(reading['id'])}'>从第一本开始</small></div>"
+        f"<div class='reading-shelf'>{shelf}</div>"
+        "<div class='panel-heading' style='margin-top:18px'><div><span class='eyebrow'>研究工作流</span><h2>问题 · 证据 · 写作 · 复盘</h2></div></div>"
+        f"<div class='all-modules-grid'>{_module_tiles(rows[1:], emoji_by_id)}</div></section>"
+        "<aside class='side-stack' data-first-screen-slot='supporting_panel'><section class='side-card'><span class='eyebrow'>三遍阅读法</span>"
+        "<h3>一篇论文不用一次读懂</h3><ol><li>10 分钟：标题、摘要、图表、结论</li><li>抓主要论证，标出疑问</li><li>复现关键推理，写下可借鉴之处</li></ol></section>"
+        "<section class='side-card'><span class='eyebrow'>引用不丢</span><h3>摘录时就记页码</h3><p>证据卡 = 出处 + 原文 + 页码 + 我的理解。数据只存在这台设备，记得定期导出备份。</p></section></aside></div>"
+        + "</section>"
+    )
+    return _base_result("research_reading_dashboard", dashboard, capabilities, detail_renderer, emojis, ["progress-label"])
 
 
 def _teacher(product: dict[str, Any], template: dict[str, Any], capabilities: list[dict[str, Any]], detail_renderer: Callable[[dict[str, Any], bool, str], str], emojis: list[str]) -> dict[str, Any]:
@@ -406,6 +496,7 @@ def _life(product: dict[str, Any], template: dict[str, Any], capabilities: list[
         for row, emoji in zip(rows, emojis, strict=True)
     )
     result["nav_items"].append(_nav_item("data-tools", "数据", "💾"))
+    result["nav_items"] = _dedupe_nav(result["nav_items"])
     return result
 
 
@@ -420,8 +511,7 @@ def _generic(product: dict[str, Any], template: dict[str, Any], capabilities: li
         "<section id='dashboard' class='app-view dashboard-view generic-dashboard is-active' data-view-id='dashboard' "
         "data-dashboard-signature='generic-priority-board-v1'>"
         + _hero(product, template, "个人工作台", product["title"], "先进入最重要的工作面，其他记录按需打开。", rows[0], f"开始{rows[0]['name']}")
-        + f"<section class='generic-board dashboard-panel' data-first-screen-slot='primary_surface'><div class='panel-heading'><h2>现在要做什么</h2>"
-        "<strong data-double6-hook='progress-label'>已保存 0 条记录</strong></div>"
+        + f"<section class='generic-board dashboard-panel' data-first-screen-slot='primary_surface'><div class='panel-heading'><h2>现在要做什么</h2></div>"
         f"<div class='generic-card-grid'>{cards}</div></section>"
         + "<aside class='generic-support' data-first-screen-slot='supporting_panel'><p>所有进度都从本机记录开始计算。</p></aside></section>"
     )
@@ -431,6 +521,7 @@ def _generic(product: dict[str, Any], template: dict[str, Any], capabilities: li
 RENDERERS = {
     "child_learning_dashboard": _child,
     "creator_production_dashboard": _creator,
+    "research_reading_dashboard": _research,
     "teacher_lesson_dashboard": _teacher,
     "freelance_delivery_dashboard": _freelance,
     "travel_departure_dashboard": _travel,

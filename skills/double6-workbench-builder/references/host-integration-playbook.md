@@ -24,10 +24,10 @@ python scripts/double6.py evaluate --run <run_dir>
 
 ### SHA 获取路径（拿错就 ContractError）
 
-| 事件 | 绑定的 SHA | 从哪里读 |
-| --- | --- | --- |
-| `approve_product` | 理解稿 SHA | 当前 run 的 `product.json` → `presentation.content_sha256` |
-| `approve_visual` / `reject_visual` | 候选 SHA | 当前 `build` 返回结果中的 `candidate_sha256` |
+| 事件 | 事件字段 | 绑定的 SHA | 从哪里读 |
+| --- | --- | --- | --- |
+| `approve_product` | `presented_content_sha256` | 理解稿 SHA | 当前 run 的 `product.json` → `presentation.content_sha256` |
+| `approve_visual` / `reject_visual` | `presented_candidate_sha256` | 候选 SHA | 当前 `build` 返回结果中的 `candidate_sha256` |
 
 两条铁律：确认前**现读现用**，从当前 run 的文件里取，不复用缓存或上一轮的值；确认后任何产品内容变化都会使旧 SHA 失效，`build` 会强制重新提案与确认。
 
@@ -35,17 +35,69 @@ python scripts/double6.py evaluate --run <run_dir>
 
 stderr 中的 `SAFE_DELETE_FAIL_CLOSED` 是 Windows 沙箱无回收站导致的噪音，不代表失败。只要 exit code 正常即为成功——不要据此重试、判失败或中断流程。旧 run 若有残留 journal/staging，用 `cleanup --run` 恢复。
 
+### 事件文件最小示例
+
+`turn_index` 必须比 `events.json` 中最大的值更大；`event_id` 全局唯一；`raw_text` 是用户未经改写的原话。
+
+```json
+{"event_id": "ev-2", "turn_index": 2, "raw_text": "按推荐", "intent": "answer",
+ "decision_id": "<requirements.json 中 status=missing 的 decision_id>", "normalized_value": "recommended"}
+```
+
+```json
+{"event_id": "ev-3", "turn_index": 3, "raw_text": "确认，按这个做", "intent": "approve_product",
+ "presented_content_sha256": "<product.json → presentation.content_sha256>"}
+```
+
+```json
+{"event_id": "ev-4", "turn_index": 4, "raw_text": "看过了，可以", "intent": "approve_visual",
+ "presented_candidate_sha256": "<build 返回的 candidate_sha256>"}
+```
+
+`reject_visual` 同样使用 `presented_candidate_sha256`。
+
+### 产品文件最小示例
+
+`surface`、`starter` 可省略，CLI 会从 `requirements.json → recommendation_snapshot` 中对应模块原样补全；`recommendation_plan` 省略时采用全部默认核心模块。每个默认核心模块都要有一个 `in_page` 能力绑定（`recommendation_module_id`），且必须填写 `oracle.input_value`。`data_policy.sensitive_data` 与 `content_source.mode` 必须等于 `requirements.json` 中对应的已确认决策或 `safe_defaults`。
+
+```json
+{
+  "product_id": "solo-content-studio",
+  "title": "一人内容工作室",
+  "facts": [{"fact_id": "f1", "text": "<用户原话>", "evidence_refs": ["<events.json 首个 event_id>"]}],
+  "outcomes": [{"outcome_id": "o1", "text": "每天打开就知道先推进哪条内容"}],
+  "work_objects": [{"work_object_id": "wo-1", "name": "内容"}],
+  "core_flow": ["收集素材", "选题", "制作", "排期", "复盘"],
+  "capabilities": [
+    {"capability_id": "cap-1", "name": "信息输入", "description": "记录来源、观点和可用素材。", "mode": "in_page",
+     "work_object_ids": ["wo-1"], "recommendation_module_id": "content-input", "oracle": {"input_value": "一条素材"}},
+    {"capability_id": "cap-pub", "name": "平台发布", "description": "由用户在平台手动发布", "mode": "manual_handoff", "work_object_ids": ["wo-1"]}
+  ],
+  "data_policy": {"storage": "local_only", "sensitive_data": "synthetic_or_redacted", "export_import": true},
+  "device_target": "responsive_both",
+  "design_brief": {"primary_capability_id": "cap-1", "shortcut_capability_ids": [], "work_mode": "execute"},
+  "boundaries": [{"boundary_id": "b1", "mode": "manual_handoff", "reason": "不联网、不自动发布"}]
+}
+```
+
+（示例只列出一个 in_page 能力；实际需为快照中的每个核心模块各写一个。）
+
+### 文件编码
+
+`--request-file`、`--route-file`、`--event-file`、`--product-file` 接受 UTF-8（带或不带 BOM）与 UTF-16（Windows PowerShell 5 的 `Out-File` 默认输出）。其他编码会给出明确报错。
+
 ### ContractError 自查表
 
 | 报错场景 | 优先检查 |
 | --- | --- |
 | `start` 报路由相关错误 | `primary_domain` 是否在场景目录内；`evidence_spans` 是否逐字摘自原话；辅助领域是否超过两个或与主场景重复 |
-| `approve_product` 被拒 | SHA 是否取自当前 `product.json` 的 `presentation.content_sha256`；产品文件确认后是否被改动过 |
-| `approve_visual` / `reject_visual` 被拒 | SHA 是否取自**最近一次** `build` 的 `candidate_sha256`；是否重复或乱序提交事件 |
+| `approve_product` 被拒 | 事件字段名是否为 `presented_content_sha256`；SHA 是否取自当前 `product.json` 的 `presentation.content_sha256`；产品文件确认后是否被改动过 |
+| `approve_visual` / `reject_visual` 被拒 | 事件字段名是否为 `presented_candidate_sha256`；SHA 是否取自**最近一次** `build` 的 `candidate_sha256`；是否重复或乱序提交事件 |
 | `build` 失败要求重新提案 | 确认后标题、模块、内容、边界等是否发生变化——需重新走 propose → 展示 → approve_product |
 
 ## 2. 浏览器验收守则（宿主自写验收脚本时）
 
+- **浏览器自动发现**：依次查找 `DOUBLE6_CHROMIUM_EXECUTABLE`、系统 Chrome/Chromium（macOS `/Applications`、Windows `Program Files`/`LOCALAPPDATA`、Linux PATH 中的 google-chrome/chromium），以及 Playwright 缓存（`PLAYWRIGHT_BROWSERS_PATH`、`~/.cache/ms-playwright`、`~/Library/Caches/ms-playwright`、`%LOCALAPPDATA%\ms-playwright`，兼容 chrome-linux64 / chrome-mac-arm64 / chrome-win64 等新目录）。
 - **优先用系统 Chrome**：通过 `DOUBLE6_CHROMIUM_EXECUTABLE` 或 Playwright 的 `executable_path` 指向已安装的 Chrome.exe，不要先 `playwright install` 下载二进制。Windows 下 CLI 预检会自动尝试常见 Chrome 安装路径，先跑 `evaluate --preflight` 看指引。
 - **禁用 `networkidle`**：SPA 页面长连接/轮询会让它 30 秒超时。统一用 `domcontentloaded` + 显式等待（等待具体选择器或状态出现）。
 - **验证数据链路，不模拟完整答题**：答题 UI 自动化（自绘键盘、输入框焦点）太易碎。可靠做法是在页面内用 `page.evaluate` 直接执行与 `persist` 相同的写入逻辑，然后刷新页面、断言数据已落盘并正确回渲染。存储故障验收仍须按 `SKILL.md` 要求先填全部必填字段再逐字段比对。

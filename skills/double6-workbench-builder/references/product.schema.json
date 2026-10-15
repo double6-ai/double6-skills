@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://double6.local/schemas/product.schema.json",
   "title": "Double6 产品合同（提案前预检）",
+  "description": "与 scripts/double6_runtime/workflow.py 的 propose 校验保持一致。surface、starter、reward_economy 可省略，CLI 会从 requirements.json 的 recommendation_snapshot 原样补全；若提供则必须与快照完全一致。完整示例见 host-integration-playbook.md。",
   "type": "object",
   "required": ["product_id", "title", "facts", "outcomes", "work_objects", "core_flow", "capabilities", "data_policy", "device_target", "design_brief", "boundaries"],
   "properties": {
@@ -12,16 +13,69 @@
     "work_objects": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/workObject"}},
     "core_flow": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
     "capabilities": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/capability"}},
-    "data_policy": {"type": "object"},
+    "recommendation_plan": {"$ref": "#/$defs/recommendationPlan"},
+    "data_policy": {"$ref": "#/$defs/dataPolicy"},
     "device_target": {"const": "responsive_both"},
-    "design_brief": {"type": "object"},
-    "boundaries": {"type": "array", "items": {"$ref": "#/$defs/boundary"}}
+    "design_brief": {"$ref": "#/$defs/designBrief"},
+    "boundaries": {"type": "array", "items": {"$ref": "#/$defs/boundary"}},
+    "module_extensions": {"type": "array", "items": {"type": "object"}}
   },
   "$defs": {
-    "fact": {"type": "object", "required": ["fact_id", "text", "evidence_refs"], "properties": {"fact_id": {"type": "string", "minLength": 1}, "text": {"type": "string", "minLength": 1}, "evidence_refs": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}}},
+    "fact": {"type": "object", "required": ["fact_id", "text", "evidence_refs"], "properties": {"fact_id": {"type": "string", "minLength": 1}, "text": {"type": "string", "minLength": 1}, "evidence_refs": {"type": "array", "minItems": 1, "description": "events.json 中的 event_id（通常是首个用户原话事件）", "items": {"type": "string", "minLength": 1}}}},
     "outcome": {"type": "object", "required": ["outcome_id", "text"], "properties": {"outcome_id": {"type": "string", "minLength": 1}, "text": {"type": "string", "minLength": 1}}},
     "workObject": {"type": "object", "required": ["work_object_id", "name"], "properties": {"work_object_id": {"type": "string", "minLength": 1}, "name": {"type": "string", "minLength": 1}}},
-    "capability": {"type": "object", "required": ["capability_id", "name", "description", "mode", "work_object_ids"], "properties": {"capability_id": {"type": "string", "minLength": 1}, "name": {"type": "string", "minLength": 1}, "description": {"type": "string", "minLength": 1}, "mode": {"enum": ["in_page", "manual_handoff", "unsupported"]}, "work_object_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}}},
+    "capability": {
+      "type": "object",
+      "required": ["capability_id", "name", "description", "mode", "work_object_ids"],
+      "properties": {
+        "capability_id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1},
+        "mode": {"enum": ["in_page", "manual_handoff", "unsupported"]},
+        "work_object_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "recommendation_module_id": {"type": "string", "description": "in_page 必填：取自 recommendation_plan.selected_core_module_ids，每个模块恰好绑定一次"},
+        "surface": {"type": "object", "description": "可省略；提供时必须与快照中该模块的 surface 完全一致"},
+        "starter": {"type": "object", "description": "可省略；提供时必须与快照完全一致"},
+        "oracle": {"type": "object", "required": ["input_value"], "description": "in_page 必填：验收时写入的一条示例输入", "properties": {"input_value": {"type": "string", "minLength": 1}}}
+      },
+      "if": {"properties": {"mode": {"const": "in_page"}}},
+      "then": {"required": ["recommendation_module_id", "oracle"]}
+    },
+    "recommendationPlan": {
+      "type": "object",
+      "description": "可省略：省略时采用推荐快照的全部默认核心模块",
+      "required": ["catalog_id", "pack_id", "recommendation_sha256", "selected_core_module_ids"],
+      "properties": {
+        "catalog_id": {"type": "string"}, "pack_id": {"type": "string"}, "profile_id": {"type": ["string", "null"]},
+        "recommendation_sha256": {"type": "string"},
+        "selected_core_module_ids": {"type": "array", "minItems": 4, "maxItems": 15, "uniqueItems": true, "items": {"type": "string"}},
+        "optional_module_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "user_changes": {"type": "array"}
+      }
+    },
+    "dataPolicy": {
+      "type": "object",
+      "required": ["storage", "sensitive_data", "export_import"],
+      "properties": {
+        "storage": {"const": "local_only"},
+        "sensitive_data": {"type": "string", "description": "须等于 privacy-boundary 决策或安全默认值，通常为 synthetic_or_redacted"},
+        "export_import": {"const": true},
+        "content_source": {"type": "object", "required": ["mode"], "properties": {"mode": {"type": "string"}}}
+      }
+    },
+    "designBrief": {
+      "type": "object",
+      "required": ["primary_capability_id", "work_mode"],
+      "properties": {
+        "primary_capability_id": {"type": "string", "description": "必须是 capabilities 中某个 capability_id"},
+        "shortcut_capability_ids": {"type": "array", "maxItems": 3, "items": {"type": "string"}},
+        "work_mode": {"enum": ["orient", "execute", "review", "manage"]},
+        "experience": {"type": "object"},
+        "scene_template_id": {"type": "string"},
+        "template_id": {"type": "string"},
+        "icon_override": {"type": "string"}
+      }
+    },
     "boundary": {"type": "object", "required": ["boundary_id", "mode", "reason"], "properties": {"boundary_id": {"type": "string", "minLength": 1}, "mode": {"enum": ["manual_handoff", "unsupported"]}, "reason": {"type": "string", "minLength": 1}}}
   }
 }
