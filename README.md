@@ -8,7 +8,7 @@ Double6 AI 维护的开源 agent skills。仓库目前包含四个可以独立�
 |---|---|---|---|
 | [`double6-deep-research`](skills/double6-deep-research/) | 研究开放性问题、比较多个对象、形成有证据的决策建议，并交付可核验的完整报告 | 宿主 agent 已提供并允许使用搜索、网页或材料读取能力；Python 3.10+ 仅用于可选的交付校验 | 可公开使用 |
 | [`double6-pdf-translation`](skills/double6-pdf-translation/) | 将非扫描版英文 PDF 翻译为简体中文，尽量保留原始版式，并生成中文单语与中英双语 PDF | Python 3.11、`pdf2zh_next`、用户自行配置的 OpenAI-compatible 模型服务 | 可公开使用，但需要先配置运行环境 |
-| [`double6-ppt-cli`](skills/double6-ppt-cli/) | 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX，覆盖 Markdown/结构化材料创作、模板对象级填充，以及已有 PPTX 的质检与受限修复 | Python 3、OfficeCLI `1.0.144+`（bootstrap 固定装 pin）；**portable 档不需要 macOS**；native 档需要 macOS + Microsoft PowerPoint + `osascript` | 可公开使用；完整 native 闭环建议本机 PowerPoint，portable 档交付为 `pass_with_warnings` |
+| [`double6-ppt-cli`](skills/double6-ppt-cli/) | 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX，覆盖 Markdown/结构化材料创作、模板对象级填充，以及已有 PPTX 的质检与受限修复 | Python 3、OfficeCLI 1.x（bootstrap 固定安装 pin `1.0.144`，运行时接受 ≥ pin 的 1.x）；**portable 档不需要 macOS**；native 档需要 macOS + Microsoft PowerPoint + `osascript` | 可公开使用；完整 native 闭环建议本机 PowerPoint，portable 档交付为 `pass_with_warnings` |
 | [`double6-workbench-builder`](skills/double6-workbench-builder/) | 把反复要做的真实事情（学习台、备考台、任务面板、记录与复盘等）构建为离线优先、严格单文件的本地个人工作台，个人数据只留在当前设备 | Python 3（仅标准库）；浏览器验收可选 Playwright + Chromium | 可公开使用（实验性） |
 
 这些 skill 都不会随仓库分发模型、API key、搜索服务、OfficeCLI 二进制或第三方 PDF 后端。请根据任务选择安装，不必复制整个仓库。
@@ -36,10 +36,14 @@ cp -R skills/double6-workbench-builder <agent-skills-dir>/
 
 ```bash
 # skills.sh（GitHub 源）
+npx skills add double6-ai/double6-skills --skill double6-deep-research
+npx skills add double6-ai/double6-skills --skill double6-pdf-translation
 npx skills add double6-ai/double6-skills --skill double6-ppt-cli
 npx skills add double6-ai/double6-skills --skill double6-workbench-builder
 
 # ClawHub
+clawhub install double6-deep-research
+clawhub install double6-pdf-translation
 clawhub install double6-ppt-cli
 clawhub install double6-workbench-builder
 ```
@@ -57,7 +61,7 @@ clawhub install double6-workbench-builder
 请使用 $double6-deep-research 调研这个问题，明确给出证据、冲突、覆盖缺口、结论和限制。
 ```
 
-这个 skill 提供研究方法、逐问题覆盖与饱和停止规范和交付校验器，不按固定来源数判定深度，也不自带搜索引擎或网页抓取服务。宿主没有获准的检索能力，或关键来源无法核验时，它会将结果标记为 `partial` 或 `blocked`，而不是把推断包装成事实。当前 validator 交付合同版本为 `2.0.0`。
+这个 skill 提供研究方法、逐问题覆盖与饱和停止规范和交付校验器，不按固定来源数判定深度，也不自带搜索引擎或网页抓取服务。宿主没有获准的检索能力，或关键来源无法核验时，它会将结果标记为 `partial` 或 `blocked`，而不是把推断包装成事实。当前 validator 版本为 `2.2.1`，`research_record.json` 使用 schema v2。
 
 详细说明见 [`skills/double6-deep-research/SKILL.md`](skills/double6-deep-research/SKILL.md)。
 
@@ -101,7 +105,7 @@ bash run_translate.sh <input-file.pdf> --output-dir <output-dir> \
 适用边界：
 
 - 本机有 Microsoft PowerPoint 与 `osascript` 时走 native 验证；没有或系统拒绝辅助访问时，`verify --verify-tier auto` 自动降级 portable 档（OfficeCLI 校验/改字探针 + 可选 LibreOffice 渲染），交付状态为 `pass_with_warnings`。**非 macOS / 无 PowerPoint 可直接使用 portable 档。**
-- OfficeCLI 必须为 `1.0.144`，其它版本 fail closed；`--verify-tier native` 可强制要求 PowerPoint。
+- OfficeCLI 由 `bootstrap` 固定安装 pin `1.0.144`；运行时也接受更新的 1.x，非 pin 版本由 doctor 报 `warn` 并可继续使用，major ≠ 1 或低于最低兼容版本才 fail。`--verify-tier native` 可强制要求 PowerPoint。
 - `init --mode generate --design academic|business|training|neutral` 会创建 spec/design 与语义身份草稿；PowerPoint 始终是可选 native 验证能力，显式 portable 会完整跳过它。
 - 不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
 - 视觉检查默认要求；用户明确跳过时结果只能是 `pass_with_warnings`，不会伪装成完整视觉通过。
@@ -115,7 +119,7 @@ bash run_translate.sh <input-file.pdf> --output-dir <output-dir> \
 请使用 $double6-workbench-builder 把我反复要做的这件事做成一个可离线使用的本地工作台。
 ```
 
-这个 skill 通过 `start` → `respond` → `propose` → `build` → `evaluate` 的六步流程，把澄清后的需求构建成一个可离线打开的单个 `index.html`：内置可直接操作的起始内容、localStorage 本地保存、导入导出备份和移动端适配。联网、多人协作、账号、支付和公开发布不属于单文件交付范围，只标记为人工交接或暂不支持。
+这个 skill 用 `start` → `respond` → `propose` → `build` → `evaluate` 五个命令完成六步流程（选场景、澄清、理解稿确认、构建候选、候选确认、验收），把澄清后的需求构建成一个可离线打开的单个 `index.html`：内置可直接操作的起始内容、localStorage 本地保存、导入导出备份和移动端适配。联网、多人协作、账号、支付和公开发布不属于单文件交付范围，只标记为人工交接或暂不支持。
 
 适用边界：
 
@@ -140,7 +144,8 @@ skills/
 │   ├── SKILL.md
 │   ├── references/
 │   ├── scripts/
-│   └── tests/
+│   ├── tests/
+│   └── CHANGELOG.md
 ├── double6-pdf-translation/
 │   ├── SKILL.md
 │   ├── references/
@@ -149,12 +154,23 @@ skills/
 │   ├── SKILL.md
 │   ├── assets/
 │   ├── references/
-│   ├── scripts/
-│   └── vendor/
+│   ├── scripts/            # 含 scripts/tests/
+│   ├── vendor/             # ppt-master-core（MIT）
+│   ├── licenses/
+│   ├── LICENSE / NOTICE / THIRD_PARTY_NOTICES.md
+│   ├── MODIFICATIONS.md / UPSTREAM_LOCK.json
+│   ├── requirements-core.lock
+│   └── CHANGELOG.md
 └── double6-workbench-builder/
     ├── SKILL.md
+    ├── manifest.json
+    ├── agents/
+    ├── evals/
     ├── references/
-    └── scripts/
+    ├── scripts/
+    ├── security/
+    ├── tests/
+    └── CHANGELOG.md
 ```
 
 ## 反馈与更新
@@ -165,6 +181,6 @@ skills/
 
 ## 许可
 
-本仓库源码使用 [MIT License](LICENSE) 发布。`skills/double6-ppt-cli` 中的 Double6 原创 glue、policy、CLI、schema 与测试按该 skill 根目录的 Apache License 2.0 发布；`vendor/ppt-master-core` 继续适用 PPT Master 的 MIT 许可证。外部模型服务、Python 包、OfficeCLI、PDF 工具和其它第三方组件不随本仓库分发，并适用各自的许可证与服务条款。
+除 `skills/double6-ppt-cli` 外，本仓库源码使用 [MIT License](LICENSE) 发布。`skills/double6-ppt-cli` 是例外：其中 Double6 原创的 glue、policy、CLI、schema 与测试按该 skill 根目录的 Apache License 2.0 发布，`vendor/ppt-master-core` 继续适用 PPT Master 的 MIT 许可证，详见该目录的 [`LICENSE`](skills/double6-ppt-cli/LICENSE)、[`NOTICE`](skills/double6-ppt-cli/NOTICE) 与 [`THIRD_PARTY_NOTICES.md`](skills/double6-ppt-cli/THIRD_PARTY_NOTICES.md)。子目录中的 LICENSE 文件优先于根目录 LICENSE。外部模型服务、Python 包、OfficeCLI、PDF 工具和其它第三方组件不随本仓库分发，并适用各自的许可证与服务条款。
 
-发布到 ClawHub 的 skill 版本按该平台规则另行使用 MIT-0：允许使用、修改和再分发（包括商业使用），且不要求署名。GitHub 与 skills.sh 上的仓库源码仍适用根目录的 MIT License。
+发布到 ClawHub 的 skill 版本按该平台规则另行使用 MIT-0：允许使用、修改和再分发（包括商业使用），且不要求署名。该 MIT-0 说明不适用于 `double6-ppt-cli`：其 Apache-2.0 原创部分与 vendored MIT 组件仍须按各自许可证保留版权声明与 NOTICE。GitHub 与 skills.sh 上的仓库源码适用上述根目录及子目录许可证。

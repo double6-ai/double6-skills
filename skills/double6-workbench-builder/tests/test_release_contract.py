@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -19,11 +20,24 @@ class ReleaseContractTests(unittest.TestCase):
             [sys.executable, str(CLI), "--help"],
             cwd=SKILL_ROOT,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(str(manifest["version"]), result.stdout)
+
+    def test_cli_emits_utf8_on_non_utf8_console(self) -> None:
+        # Regression: Windows consoles/pipes default to cp1252 and crashed on Chinese help text.
+        env = dict(os.environ, PYTHONIOENCODING="cp1252", PYTHONUTF8="0")
+        result = subprocess.run(
+            [sys.executable, str(CLI), "--help"],
+            cwd=SKILL_ROOT,
+            capture_output=True,
+            env=env,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
+        self.assertIn("查看当前状态和下一步", result.stdout.decode("utf-8"))
 
     def test_route_catalog_is_available_without_writing_a_run(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -40,7 +54,7 @@ class ReleaseContractTests(unittest.TestCase):
                 ],
                 cwd=SKILL_ROOT,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stderr)

@@ -4,6 +4,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -1026,6 +1027,23 @@ class ValidateResearchBundleTests(unittest.TestCase):
             joined,
         )
 
+    def test_cli_output_survives_non_utf8_console(self) -> None:
+        # Regression: on Windows (cp1252 stdout) printing Chinese errors crashed
+        # with UnicodeEncodeError, exiting 1 with empty stdout.
+        report, record = complete_report()
+        Bundle(self.root, report, record)
+        env = dict(os.environ, PYTHONIOENCODING="cp1252", PYTHONUTF8="0")
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT_PATH), str(self.root)],
+            check=False,
+            capture_output=True,
+            env=env,
+        )
+        self.assertNotIn(b"UnicodeEncodeError", completed.stderr)
+        result = json.loads(completed.stdout.decode("utf-8"))
+        receipt = json.loads((self.root / "validation_receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(result, receipt)
+
     def test_partial_cli_returns_success(self) -> None:
         report, _ = complete_report()
         report = report.replace(
@@ -1040,10 +1058,10 @@ class ValidateResearchBundleTests(unittest.TestCase):
             [sys.executable, str(SCRIPT_PATH), str(self.root)],
             check=False,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
         )
 
-        self.assertEqual(completed.returncode, 0, completed.stdout)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
         receipt = json.loads(
             (self.root / "validation_receipt.json").read_text(encoding="utf-8")
         )
