@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import posixpath
 import re
 import zipfile
@@ -134,11 +135,61 @@ DEFAULT_FONT_MIN_PT = {
 }
 
 
+_PML = "http://schemas.openxmlformats.org/presentationml/2006/main"
+_DML = "http://schemas.openxmlformats.org/drawingml/2006/main"
+_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
+
+def _run_min_font_sizes(pptx: Path) -> dict[tuple[int, int], float]:
+    """Smallest explicit run size (pt) per visible text shape, keyed by (slide index, shape id).
+
+    OfficeCLI reports one shape-level size and omits it when runs are mixed, so
+    a single tiny run inside an otherwise normal paragraph would go unnoticed.
+    """
+    sizes: dict[tuple[int, int], float] = {}
+    try:
+        with zipfile.ZipFile(pptx) as archive:
+            pres = etree.fromstring(archive.read("ppt/presentation.xml"))
+            rels = etree.fromstring(archive.read("ppt/_rels/presentation.xml.rels"))
+            targets = {rel.get("Id"): rel.get("Target") for rel in rels}
+            slide_ids = pres.findall(f"{{{_PML}}}sldIdLst/{{{_PML}}}sldId")
+            for index, sld in enumerate(slide_ids, start=1):
+                target = targets.get(sld.get(f"{{{_REL}}}id"))
+                if not target:
+                    continue
+                part = posixpath.normpath(posixpath.join("ppt", target))
+                root = etree.fromstring(archive.read(part))
+                for shape in root.iter(f"{{{_PML}}}sp"):
+                    c_nv_pr = shape.find(f"{{{_PML}}}nvSpPr/{{{_PML}}}cNvPr")
+                    if c_nv_pr is None or not str(c_nv_pr.get("id") or "").isdigit():
+                        continue
+                    run_sizes = [
+                        int(run_pr.get("sz")) / 100
+                        for run in shape.iter(f"{{{_DML}}}r")
+                        for run_pr in [run.find(f"{{{_DML}}}rPr")]
+                        if run_pr is not None and str(run_pr.get("sz") or "").isdigit()
+                        and "".join(run.itertext()).strip()
+                    ]
+                    if run_sizes:
+                        sizes[(index, int(c_nv_pr.get("id")))] = min(run_sizes)
+    except (KeyError, OSError, zipfile.BadZipFile, etree.XMLSyntaxError):
+        return {}
+    return sizes
+
+
+def _declared_role(row: dict[str, Any]) -> str | None:
+    """Role recorded by Double6 compile in cNvPr descr (``source_id=...;role=...``)."""
+    alt = str((row.get("format") or {}).get("alt") or "")
+    match = re.search(r"(?:^|;)role=([a-z_]+)", alt)
+    return match.group(1) if match else None
+
+
 def _generic_findings(
     rows: list[dict[str, Any]],
     *,
     role_by_path: dict[str, str] | None = None,
     font_min_pt_by_role: dict[str, Any] | None = None,
+    run_min_sizes: dict[tuple[int, int], float] | None = None,
 ) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     rows_by_slide: dict[int, list[dict[str, Any]]] = {}
@@ -153,7 +204,13 @@ def _generic_findings(
         if slide_match:
             rows_by_slide.setdefault(int(slide_match.group(1)), []).append(row)
         size = _font_size(row)
-        role = role_by_path.get(path, "body")
+        run_level = False
+        shape_match = re.match(r"/slide\[(\d+)\]/\w+\[@id=(\d+)\]$", path)
+        if shape_match and run_min_sizes:
+            run_min = run_min_sizes.get((int(shape_match.group(1)), int(shape_match.group(2))))
+            if run_min is not None and (size is None or run_min < size):
+                size, run_level = run_min, True
+        role = role_by_path.get(path) or _declared_role(row) or "body"
         minimum = float(thresholds.get(role, thresholds.get("body", 12.0)))
         if size is not None and 0 < size < minimum and text.strip():
             finding = _finding(
@@ -163,6 +220,8 @@ def _generic_findings(
             )
             finding["evidence"]["semantic_role"] = role
             finding["evidence"]["minimum_pt"] = minimum
+            if run_level:
+                finding["evidence"]["run_level_min_pt"] = size
             findings.append(finding)
         name = str((row.get("format") or {}).get("name") or "")
         if row.get("type") == "picture" and re.search(r"公式|equation|formula", name, re.I):
@@ -446,6 +505,31 @@ def _template_findings(run: Path, manifest: dict[str, Any], pptx: Path, rows: li
     return findings
 
 
+def _compiler_warning_findings(run: Path) -> list[dict[str, Any]]:
+    """Surface PPT Master conversion warnings (e.g. dropped native chart legends)."""
+    path = run / "evidence" / "compiler_warnings.json"
+    if not path.is_file():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    counts: dict[str, int] = {}
+    for message in payload.get("warnings") or []:
+        counts[str(message)] = counts.get(str(message), 0) + 1
+    findings = []
+    for message, count in counts.items():
+        findings.append({
+            "finding_id": f"d6-compiler-warning-{hashlib.sha256(message.encode()).hexdigest()[:8]}",
+            "source_tool": "ppt-master", "severity": "warning", "category": "native_object",
+            "object": {"deck": True}, "source_id": None,
+            "message": f"PPT Master conversion warning (x{count}): {message}",
+            "evidence": {"compiler_warnings": "evidence/compiler_warnings.json", "occurrences": count},
+            "suggested_route": "manual_review", "deterministic": False,
+        })
+    return findings
+
+
 def inspect_run(run: Path, runtime_dir: Path | None = None) -> dict[str, Any]:
     run = run.resolve()
     manifest = load_run(run)
@@ -488,12 +572,14 @@ def inspect_run(run: Path, runtime_dir: Path | None = None) -> dict[str, Any]:
     findings = _normalize_issues(results["issues"])
     findings.extend(_generic_findings(
         rows,
+        run_min_sizes=_run_min_font_sizes(pptx),
         role_by_path=role_by_path,
         font_min_pt_by_role=inspection_rules.get("font_min_pt_by_role"),
     ))
     findings.extend(_declared_text_findings(rows, inspection_rules.get("text_rules", [])))
     findings.extend(_template_findings(run, manifest, pptx, rows))
     findings.extend(_package_hygiene_findings(pptx, inspection_rules.get("nonlogical_sample_patterns")))
+    findings.extend(_compiler_warning_findings(run))
     output_profile = build_pptx_profile(pptx)
     if contract:
         expected_slides = contract.get("expected_slide_count")

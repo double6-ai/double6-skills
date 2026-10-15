@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .common import D6PPTError, invalidate_pptx_derived_artifacts, load_run, save_run, set_status, sha256_file, skill_root, utc_now, write_json
+from .common import SCHEMA_VERSION, D6PPTError, invalidate_pptx_derived_artifacts, load_run, save_run, set_status, sha256_file, skill_root, utc_now, write_json
 from .semantic import apply_semantic_contract
 from .source_adapter import prepare_ppt_master_project
 
@@ -37,9 +37,31 @@ def _check_authoring_scaffold(project: Path, semantic: Path) -> None:
             "authoring_scaffold_incomplete",
             {
                 "path": str(spec),
+                "remaining_fields": [
+                    f"line {number}: {line.strip()}"
+                    for number, line in enumerate(spec_text.splitlines(), start=1)
+                    if "[fill" in line or line.strip() == "- status: draft"
+                ],
                 "next_step": "Fill every [fill] field and change '- status: draft' to '- status: confirmed'.",
             },
         )
+
+
+GENERIC_VENDOR_BANNERS = ("--native-charts-and-tables replaces shape-based SVG fallbacks",)
+
+
+def _vendor_conversion_warnings(output: str) -> list[str]:
+    """Collect PPT Master ``Warning:`` lines (e.g. silently omitted chart legends)."""
+    warnings: list[str] = []
+    for line in output.splitlines():
+        text = line.strip()
+        if not text.startswith("Warning:"):
+            continue
+        message = text[len("Warning:"):].strip()
+        if any(banner in message for banner in GENERIC_VENDOR_BANNERS):
+            continue
+        warnings.append(message)
+    return warnings
 
 
 def compile_run(run: Path, *, native_charts_and_tables: bool = True) -> dict:
@@ -101,6 +123,20 @@ def compile_run(run: Path, *, native_charts_and_tables: bool = True) -> dict:
         set_status(run, manifest, "blocked", "semantic_contract_failed", str(exc))
         raise
     raw.unlink(missing_ok=True)
+    compiler_warnings = _vendor_conversion_warnings(proc.stdout + "\n" + proc.stderr)
+    warnings_path = run / "evidence" / "compiler_warnings.json"
+    if compiler_warnings:
+        write_json(warnings_path, {
+            "schema_version": SCHEMA_VERSION,
+            "created_at": utc_now(),
+            "pptx_sha256": sha256_file(final),
+            "warnings": compiler_warnings,
+            "claim_boundary": "PPT Master reported these conversion-time omissions; they are surfaced as inspect warnings.",
+        })
+        manifest["artifacts"]["compiler_warnings"] = "evidence/compiler_warnings.json"
+    else:
+        warnings_path.unlink(missing_ok=True)
+        manifest["artifacts"].pop("compiler_warnings", None)
     manifest["artifacts"].update({
         "current_pptx": "artifacts/current.pptx",
         "object_path_map": "artifacts/object_path_map.json",
