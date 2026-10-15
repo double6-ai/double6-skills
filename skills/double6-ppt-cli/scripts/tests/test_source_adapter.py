@@ -59,5 +59,36 @@ class SourceAdapterTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "unsafe_source_flatten")
 
 
+    def test_stage_icons_from_vendored_library(self) -> None:
+        from double6_ppt_cli.common import skill_root
+        icons = skill_root() / "vendor" / "ppt-master-core" / "skills" / "ppt-master" / "templates" / "icons" / "tabler-outline"
+        sample = next(icons.glob("*.svg"))
+        name = sample.stem
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg">'
+            f'<g id="title" data-pptx-bounds="0 0 10 10"><text>Title</text></g>'
+            f'<g data-icon="tabler-outline/{name}"></g></svg>'
+        )
+        temp, project, semantic, build = self._fixture(svg)
+        self.addCleanup(temp.cleanup)
+        receipt = prepare_ppt_master_project(project, semantic, build, Path(temp.name) / "receipt.json")
+        staged = [c for c in receipt["changes"] if c.get("action") == "stage_icons"]
+        self.assertTrue(staged)
+        self.assertIn(f"tabler-outline/{name}", staged[0]["icons"])
+        self.assertTrue((build / "icons" / "tabler-outline" / f"{name}.svg").is_file())
+
+    def test_missing_icon_fails_closed(self) -> None:
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg">'
+            '<g id="title" data-pptx-bounds="0 0 10 10"><text>Title</text></g>'
+            '<g data-icon="tabler-outline/definitely-missing-icon-xyz"></g></svg>'
+        )
+        temp, project, semantic, build = self._fixture(svg)
+        self.addCleanup(temp.cleanup)
+        with self.assertRaises(D6PPTError) as caught:
+            prepare_ppt_master_project(project, semantic, build, Path(temp.name) / "receipt.json")
+        self.assertEqual(caught.exception.code, "icon_missing")
+
+
 if __name__ == "__main__":
     unittest.main()

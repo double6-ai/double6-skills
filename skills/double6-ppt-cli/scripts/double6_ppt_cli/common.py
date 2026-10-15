@@ -12,7 +12,7 @@ from typing import Any
 
 SCHEMA_VERSION = "2.0"
 LEGACY_SCHEMA_VERSIONS = {"1.0"}
-SKILL_VERSION = "0.4.0"
+SKILL_VERSION = "0.5.0"
 # Bootstrap always installs this exact OfficeCLI version.
 OFFICECLI_PIN_VERSION = "1.0.157"
 # Runtime accepts later 1.x builds; the previous pin (1.0.144) stays the minimum

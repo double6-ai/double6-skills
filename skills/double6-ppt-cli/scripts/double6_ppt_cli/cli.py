@@ -10,6 +10,9 @@ from .bootstrap import bootstrap
 from .common import D6PPTError, default_runtime_dir
 
 
+from .runs import DESIGN_PROFILES as DESIGN_CHOICES
+
+
 def _emit(value) -> None:
     print(json.dumps(value, ensure_ascii=False, indent=2))
 
@@ -20,7 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("doctor"); p.add_argument("--json", action="store_true"); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS); p.add_argument("--verify-tier", choices=("auto", "native", "portable"), default="auto"); p.add_argument("--mode", choices=("generate", "postflight", "template-fill"))
     p = sub.add_parser("bootstrap"); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS); p.add_argument("--yes", action="store_true")
-    p = sub.add_parser("init"); p.add_argument("--mode", choices=("generate", "postflight", "template-fill"), required=True); p.add_argument("--source", type=Path, required=True); p.add_argument("--template", type=Path); p.add_argument("--contract", type=Path); p.add_argument("--out", type=Path, required=True); p.add_argument("--verify-tier", choices=("auto", "native", "portable"), default="auto"); p.add_argument("--design-profile", "--design", dest="design_profile", choices=("neutral", "academic", "business", "training"), default="neutral")
+    p = sub.add_parser("init"); p.add_argument("--mode", choices=("generate", "postflight", "template-fill"), required=True); p.add_argument("--source", type=Path, required=True); p.add_argument("--template", type=Path); p.add_argument("--contract", type=Path); p.add_argument("--out", type=Path, required=True); p.add_argument("--verify-tier", choices=("auto", "native", "portable"), default="auto"); p.add_argument("--design-profile", "--design", dest="design_profile", choices=DESIGN_CHOICES, default="neutral")
     p = sub.add_parser("compile"); p.add_argument("--run", type=Path, required=True); p.add_argument("--no-native-charts-and-tables", action="store_true")
     p = sub.add_parser("template-analyze"); p.add_argument("--run", type=Path, required=True)
     p = sub.add_parser("template-asset-import"); p.add_argument("--run", type=Path, required=True); p.add_argument("--asset", type=Path, required=True); p.add_argument("--name", required=True)
@@ -28,7 +31,16 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("template-apply"); p.add_argument("--run", type=Path, required=True); p.add_argument("--plan", type=Path, required=True); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS)
     p = sub.add_parser("package-clean"); p.add_argument("--run", type=Path, required=True)
     p = sub.add_parser("visual-policy"); p.add_argument("--run", type=Path, required=True); p.add_argument("--capability", choices=("available", "unavailable", "unknown"), required=True); p.add_argument("--decision", choices=("perform", "waive"), required=True); p.add_argument("--reason", choices=("user_declined_switch", "no_visual_model", "user_requested_skip")); p.add_argument("--user-ack", action="store_true")
-    p = sub.add_parser("visual-review"); p.add_argument("--run", type=Path, required=True); p.add_argument("--status", choices=("accepted", "accepted_with_warnings", "rejected"), required=True); p.add_argument("--reviewer", required=True); p.add_argument("--notes", required=True)
+    p = sub.add_parser("visual-review"); p.add_argument("--run", type=Path, required=True); p.add_argument("--status", choices=("accepted", "accepted_with_warnings", "rejected"), required=True); p.add_argument("--reviewer", required=True); p.add_argument("--notes", required=True); p.add_argument("--rubric", type=Path, help="JSON file with 8 rubric scores (1-5)")
+    p = sub.add_parser("image-search"); p.add_argument("--query", required=True); p.add_argument("--count", type=int, default=12); p.add_argument("--min-width", type=int, default=1200); p.add_argument("--orientation", choices=("wide", "tall", "square", "any"), default="wide")
+    p = sub.add_parser("image-add"); p.add_argument("--run", type=Path, required=True); p.add_argument("--name", required=True); p.add_argument("--openverse-id"); p.add_argument("--url"); p.add_argument("--file", type=Path); p.add_argument("--placeholder", choices=("gradient", "orbs", "grain")); p.add_argument("--colors"); p.add_argument("--size", default="1600x900"); p.add_argument("--license"); p.add_argument("--creator"); p.add_argument("--source-url"); p.add_argument("--license-url"); p.add_argument("--treat", help="e.g. cover=1280x720;focus=0.5,0.4;duotone=#16181C,#B08D57;tint=#000000@0.3;round=24")
+    p = sub.add_parser("recipe", help="layout recipes: list | show | apply | deck")
+    rs = p.add_subparsers(dest="recipe_command", required=True)
+    rs.add_parser("list")
+    q = rs.add_parser("show"); q.add_argument("name")
+    q = rs.add_parser("apply"); q.add_argument("name"); q.add_argument("--run", type=Path, required=True); q.add_argument("--page", type=int, required=True); q.add_argument("--data", required=True, help="JSON object or path to a JSON file")
+    q = rs.add_parser("deck"); q.add_argument("--run", type=Path, required=True); q.add_argument("--plan", type=Path, required=True)
+    p = sub.add_parser("visual-metrics"); p.add_argument("--run", type=Path, required=True)
     p = sub.add_parser("render-import"); p.add_argument("--run", type=Path, required=True); p.add_argument("--pdf", type=Path, required=True); p.add_argument("--pages", type=Path, required=True, nargs="+"); p.add_argument("--contact-sheet", type=Path, required=True); p.add_argument("--tier", choices=("portable", "native"), default="portable"); p.add_argument("--renderer", required=True); p.add_argument("--fact-source", required=True)
     p = sub.add_parser("inspect"); p.add_argument("--run", type=Path, required=True); p.add_argument("--runtime-dir", type=Path, default=argparse.SUPPRESS)
     p = sub.add_parser("route"); p.add_argument("--run", type=Path, required=True); p.add_argument("--finding", required=True)
@@ -88,7 +100,38 @@ def main(argv: list[str] | None = None) -> int:
             result = set_visual_policy(args.run, args.capability, args.decision, args.reason, args.user_ack)
         elif args.command == "visual-review":
             from .visual_review import record_visual_review
-            result = record_visual_review(args.run, args.status, args.reviewer, args.notes)
+            import json as _json
+            rubric = _json.loads(args.rubric.read_text(encoding="utf-8")) if args.rubric else None
+            if isinstance(rubric, dict) and "scores" in rubric:
+                rubric = rubric["scores"]
+            result = record_visual_review(args.run, args.status, args.reviewer, args.notes, rubric=rubric)
+        elif args.command == "image-search":
+            from .images import search_openverse
+            result = {"provider": "openverse", "license_filter": "commercial,modification", "results": search_openverse(args.query, args.count, args.min_width, None if args.orientation == "any" else args.orientation)}
+        elif args.command == "image-add":
+            from .images import add_image
+            result = add_image(args.run, args.name, openverse_id=args.openverse_id, url=args.url, file=args.file, placeholder=args.placeholder,
+                               colours=args.colors.split(",") if args.colors else None, size=args.size, license=args.license, creator=args.creator,
+                               source_url=args.source_url, license_url=args.license_url, treatments=args.treat)
+        elif args.command == "recipe":
+            from . import recipes
+            if args.recipe_command == "list":
+                result = {"recipes": recipes.list_recipes()}
+            elif args.recipe_command == "show":
+                item = next((r for r in recipes.list_recipes() if r["name"] == args.name), None)
+                if item is None:
+                    raise D6PPTError(f"Unknown recipe '{args.name}'", "recipe_unknown", {"known": sorted(recipes.RECIPES)})
+                result = item
+            elif args.recipe_command == "apply":
+                raw = args.data
+                data = json.loads(Path(raw).read_text(encoding="utf-8")) if not raw.lstrip().startswith("{") else json.loads(raw)
+                data["recipe"] = args.name
+                result = recipes.apply(args.run, [data], [args.page], {k: data.pop(k) for k in ("footer", "audience", "lang", "design") if k in data})
+            else:
+                result = recipes.apply_deck(args.run, args.plan)
+        elif args.command == "visual-metrics":
+            from .visual_review import visual_metrics_for_run
+            result = visual_metrics_for_run(args.run)
         elif args.command == "render-import":
             record_render_manifest, load_run, resolve_run_path, sha256_file = _import_render_importer()
             run = args.run.resolve()

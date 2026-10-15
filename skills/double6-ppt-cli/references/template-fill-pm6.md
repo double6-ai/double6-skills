@@ -56,6 +56,11 @@ PPT Master 从 v5.0.0 起移除了 Template Fill Native。0.4.0-exp.2 起，temp
 - Windows/macOS 扫描系统字体目录，找不到时依次回退：微软雅黑 / 苹方 / 思源黑体 / Calibri / Arial 等。
 - 受字体差异影响，估算结果可能与 PowerPoint 实际渲染有偏差；可用 [powerpoint-verification.md](powerpoint-verification.md) 的脚本在实机上核对。
 
+## 0.5.0 新增
+
+- `template-analyze` 会识别**纯图片模板**：每页只有一张近整页图片、没有任何可编辑文本时，返回 `image_only_template` 并阻断，提示改用带真实文本框或占位符的模板，或改用 generate。只有部分页是图片时，返回 `pass_with_warnings` 并列出这些页。
+- 文本测宽计入字符间距 `a:rPr spc`。单行槽位（标题、kicker、标签）测得宽度超过可用宽度的 90% 时，按“需要缩字”处理，防止渲染器度量偏差导致意外折行。
+
 ## 已知限制
 
 - SmartArt、OLE、视频只读不改：check 阶段报 `non_text_content_unedited`，原样保留。
