@@ -1,0 +1,84 @@
+{
+  "schema": "d6ppt.visual_briefs.v1",
+  "purpose": "Reference briefs for the visual quality suite (references/visual-quality.md). Each brief is authored with the generate workflow, rendered, metric-checked and rubric-scored against upstream PPT Master output (A) and the previous release (B).",
+  "briefs": [
+    {
+      "id": "consulting_zh", "lang": "zh", "design": "consulting",
+      "title": "华东区零售渠道重组建议",
+      "audience": "集团管理层", "goal": "批准关闭 12 家低效门店并将预算转向即时零售",
+      "slides": [
+        {"type": "cover", "title": "华东区零售渠道重组建议", "subtitle": "2026 年 Q4 管理层决策会"},
+        {"type": "kpi", "title": "门店贡献高度集中：前 20% 门店贡献 64% 毛利", "data": {"门店数": "148", "前20%毛利占比": "64%", "亏损门店": "12", "即时零售增速": "+41%"}},
+        {"type": "chart", "title": "即时零售连续 6 个季度高速增长", "chart": {"kind": "column", "categories": ["Q3'25","Q4'25","Q1'26","Q2'26","Q3'26","Q4'26E"], "series": [{"name": "即时零售 GMV（亿元）", "values": [2.1,2.6,3.0,3.5,4.2,4.9]}]}},
+        {"type": "comparison", "title": "三个方案对比：方案 B 风险收益最优", "columns": ["方案 A 维持现状", "方案 B 关停 12 店 + 即时零售", "方案 C 全面收缩"], "rows": [["年化利润影响", "-0.8 亿", "+1.6 亿", "+0.9 亿"], ["实施周期", "—", "6 个月", "12 个月"], ["客户流失风险", "低", "中", "高"]]},
+        {"type": "timeline", "title": "实施路线：两阶段 6 个月完成", "steps": ["11 月 选址评估与员工沟通", "12 月 首批 6 店关停", "1–2 月 前置仓上线", "3–4 月 第二批关停与复盘"]},
+        {"type": "closing", "title": "请求决策：批准方案 B 与 3200 万一次性预算"}
+      ]
+    },
+    {
+      "id": "pitch_en", "lang": "en", "design": "investor-pitch",
+      "title": "Lumen — AI quality control for factory lines",
+      "audience": "Series A investors", "goal": "Raise $12M Series A",
+      "slides": [
+        {"type": "cover", "title": "Lumen", "subtitle": "Vision AI that catches defects before they ship"},
+        {"type": "problem", "title": "Manual inspection misses 1 in 5 defects", "bullets": ["$63B annual cost of poor quality in electronics", "Inspectors fatigue after 20 minutes", "Legacy machine vision needs months of rules tuning"]},
+        {"type": "kpi", "title": "Traction: 3x ARR in 12 months", "data": {"ARR": "$4.2M", "Customers": "38", "Net retention": "142%", "Payback": "7 mo"}},
+        {"type": "chart", "title": "ARR growth since launch", "chart": {"kind": "line", "categories": ["Q1","Q2","Q3","Q4","Q5","Q6"], "series": [{"name": "ARR ($M)", "values": [0.6,1.0,1.4,2.2,3.1,4.2]}]}},
+        {"type": "team", "title": "Team that built vision systems at scale", "people": ["Ana Ruiz — CEO, ex-Tesla Vision", "Wei Chen — CTO, PhD Stanford", "Omar Haddad — VP Sales, ex-Cognex"]},
+        {"type": "closing", "title": "Raising $12M to reach 150 lines by 2028"}
+      ]
+    },
+    {
+      "id": "launch_zh", "lang": "zh", "design": "product-launch",
+      "title": "Aster 降噪耳机发布",
+      "audience": "媒体与渠道伙伴", "goal": "传达三大卖点与上市信息",
+      "slides": [
+        {"type": "cover", "title": "Aster Pro", "subtitle": "安静，从这一刻开始"},
+        {"type": "statement", "title": "一副耳机，三十小时的专注"},
+        {"type": "features", "title": "三大核心升级", "items": [["自适应降噪", "每秒 48000 次环境采样"], ["空间音频", "头部追踪，延迟 < 20ms"], ["30 小时续航", "快充 10 分钟听 5 小时"]]},
+        {"type": "kpi", "title": "降噪深度提升 40%", "data": {"降噪深度": "-48dB", "重量": "5.1g", "续航": "30h"}},
+        {"type": "pricing", "title": "价格与上市", "data": {"首发价": "¥1299", "开售": "11 月 11 日", "渠道": "官网 / 天猫 / 线下 600 家门店"}},
+        {"type": "closing", "title": "Aster Pro，即刻预约"}
+      ]
+    },
+    {
+      "id": "opreview_en", "lang": "en", "design": "operating-review",
+      "title": "Q3 2026 Operating Review — Customer Support",
+      "audience": "COO staff meeting", "goal": "Report KPIs, explain backlog spike, agree actions",
+      "slides": [
+        {"type": "cover", "title": "Q3 Operating Review", "subtitle": "Customer Support · October 2026"},
+        {"type": "kpi", "title": "CSAT held while volume rose 22%", "data": {"Tickets": "184k", "CSAT": "4.6", "First response": "2.1h", "Backlog": "9.8k"}},
+        {"type": "chart", "title": "Backlog spiked in August after the billing migration", "chart": {"kind": "column", "categories": ["Jun","Jul","Aug","Sep"], "series": [{"name": "Backlog (k)", "values": [4.1,4.6,11.2,9.8]}, {"name": "Target (k)", "values": [5,5,5,5]}]}},
+        {"type": "table", "title": "Regional performance", "columns": ["Region","Tickets","CSAT","SLA met"], "rows": [["NA","72k","4.7","94%"],["EMEA","61k","4.5","89%"],["APAC","51k","4.6","91%"]]},
+        {"type": "actions", "title": "Three actions for Q4", "items": ["Add 14 billing specialists by Nov 15", "Ship self-serve refund flow", "Weekly backlog burn-down review"]},
+        {"type": "closing", "title": "Ask: approve 14 temporary hires ($310k)"}
+      ]
+    },
+    {
+      "id": "academic_zh", "lang": "zh", "design": "academic",
+      "title": "城市热岛效应与绿地布局：上海案例",
+      "audience": "学术研讨会", "goal": "报告研究方法与主要发现",
+      "slides": [
+        {"type": "cover", "title": "城市热岛效应与绿地布局", "subtitle": "基于 2015–2025 年 Landsat 数据的上海案例"},
+        {"type": "question", "title": "研究问题", "bullets": ["绿地斑块面积与降温强度是否存在阈值？", "分布格局比总面积更重要吗？"]},
+        {"type": "method", "title": "研究方法", "steps": ["地表温度反演", "绿地斑块识别", "缓冲区降温测算", "回归与阈值分析"]},
+        {"type": "chart", "title": "斑块面积超过 4.5 公顷后降温效应趋于饱和", "chart": {"kind": "line", "categories": ["0.5","1.5","2.5","3.5","4.5","5.5","6.5"], "series": [{"name": "降温强度 (℃)", "values": [0.4,0.9,1.3,1.6,1.8,1.85,1.87]}]}},
+        {"type": "findings", "title": "主要发现", "bullets": ["分散布局的小斑块总降温效果高于集中大斑块 23%", "水体邻接使降温距离延长 60 米"]},
+        {"type": "closing", "title": "政策含义：优先建设 2–5 公顷的分布式口袋公园"}
+      ]
+    },
+    {
+      "id": "training_en", "lang": "en", "design": "training",
+      "title": "Writing Effective Code Reviews",
+      "audience": "New engineers onboarding", "goal": "Teach a 4-step review method",
+      "slides": [
+        {"type": "cover", "title": "Writing Effective Code Reviews", "subtitle": "Onboarding workshop · 45 minutes"},
+        {"type": "agenda", "title": "Today's agenda", "items": ["Why reviews matter", "The 4-step method", "Writing comments", "Practice"]},
+        {"type": "process", "title": "The 4-step review method", "steps": ["Understand the intent", "Check correctness", "Assess design", "Polish & approve"]},
+        {"type": "comparison", "title": "Comment tone: before and after", "columns": ["Avoid", "Prefer"], "rows": [["This is wrong.", "This returns null when the list is empty — can we guard it?"], ["Why did you do this?", "What led to this approach? I'd consider X because…"]]},
+        {"type": "exercise", "title": "Practice: review PR #482 in pairs", "bullets": ["15 minutes", "Use the 4-step checklist", "Share one comment you rewrote"]},
+        {"type": "closing", "title": "Key takeaway: review the code, support the author"}
+      ]
+    }
+  ]
+}
