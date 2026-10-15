@@ -1,5 +1,15 @@
 # double6-ppt-cli 变更记录
 
+## 0.5.0（2026-10-15）
+
+视觉质量版本：generate 模式恢复上游 PPT Master 的设计能力，并新增视觉质量门。
+
+- **设计子集**：从 PPT Master v6.7.0 vendored 设计规范、15 个 style、`presentation_core` / `report_core` 版式、图表与表格模板、435 个 Tabler 线性图标（MIT，含署名）和形状脚本；BOM、许可证、attribution guard 与体积预算（设计子集 ≤2MB、Skill ≤15MB）同步更新。
+- **`--design` 预设**：consulting、investor-pitch、product-launch、operating-review、academic、training（`business` 为 consulting 别名），写入 spec_lock 调色、字号阶梯与图标库；配色行为遵循所选上游 style 的 Color Behavior。
+- **编译**：原生图表/表格自动套用 spec_lock 调色（不再出现 Office 默认蓝橙）；`<use data-icon>` 图标编译时自动嵌入；多行与内联强调文本的稳定身份问题修复；label / kicker / caption / page_mark 允许 9–10pt。
+- **模板填充**：识别纯图片模板并给出明确提示；单行标题加 10% 宽度安全余量；字距 `spc` 计入测量。
+- **视觉质量门**：8 维 rubric（均分 ≥3.5、每维 ≥3）+ 7 项确定性检查（对比度、上重下空、空页、每页非文字元素、≤7 种字号、Office 默认图表色、中文孤字）；新增 `visual-metrics` 命令与 `visual-review --rubric`，generate 模式缺 rubric 或不达标会被拒；6 个参考 brief、发布前盲评流程、模板填充保真回归。
+
 ## 0.4.0（2026-10-15）
 
 正式版，合并了下面 0.4.0-exp.1 至 exp.3 的全部开发内容：
