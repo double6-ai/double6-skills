@@ -5,15 +5,19 @@ from double6_ppt_cli.common import classify_officecli_version
 
 class OfficeCLIPolicyTest(unittest.TestCase):
     def test_pin_passes(self):
-        result = classify_officecli_version("1.0.144")
+        result = classify_officecli_version("1.0.157")
         self.assertEqual(result["status"], "pass")
         self.assertEqual(result["reason"], "pinned")
 
     def test_newer_same_major_warns(self):
-        result = classify_officecli_version("1.0.148")
+        result = classify_officecli_version("1.0.160")
         self.assertEqual(result["status"], "warn")
         self.assertEqual(result["action"], "bootstrap_optional")
         self.assertIn("bootstrap", result["message"])
+
+    def test_previous_pin_still_accepted_with_warning(self):
+        result = classify_officecli_version("1.0.144")
+        self.assertEqual(result["status"], "warn")
 
     def test_major_mismatch_fails(self):
         result = classify_officecli_version("2.0.0")

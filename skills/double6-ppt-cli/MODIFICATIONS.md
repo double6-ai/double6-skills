@@ -24,3 +24,9 @@ The integration is implemented outside the vendor tree. Version 0.2.3 keeps Powe
 - package-level detection and bounded cleanup of unreachable nonlogical template slides and unused slide-jump relationships, with live-slide/protected-part/relationship-closure invariants.
 
 The upstream PPT Master `SKILL.md` is retained only because it is part of the validated lean-core dependency closure. It is not a second user-facing Skill entry and is not the Double6 routing contract.
+
+## 0.3.0: upstream check (2026-10-15) and build-copy adapters
+
+- The vendor tree is still unchanged (`attribution_guard.py` passes). PPT Master upstream is now at v6.7.0. We did **not** upgrade, because v5.0.0 removed `template_fill_pptx/` and `native_enhance_pptx*` (22 vendored files) and replaced them with the "Edit Native PPTX" roundtrip route (`pptx_to_svg.py --roundtrip` / `svg_to_pptx.py --roundtrip`). Migrating means redesigning Double6 template-fill on top of that route. That is planned as a separate change.
+- Upstream rewrote its git history. The `v4.8.0` tag now resolves to `5da13a0…`. The 137 BOM files are byte-identical to the locked commit `53c9c2a…`, which is still reachable, and the official release asset is unchanged.
+- New Double6-side workaround outside the vendor tree: the source adapter collapses `<text data-pptx-shape-id><tspan x=same>…</tspan></text>` in the **build copy** only. Without this, the v4.8.0 tspan lowering drops `data-pptx-shape-id` on single-line text. The receipt records each change as `unwrap_single_line_tspan`.

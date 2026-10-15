@@ -12,9 +12,9 @@ The vendored 137-file lean core is stored in `vendor/ppt-master-core/`. The comp
 ## OfficeCLI
 
 Source: `https://github.com/iOfficeAI/OfficeCLI`
-Version: `v1.0.144`
-Commit: `1ced45e900782c5083ed550ddf328ee974e425e7`
-Package: `@officecli/officecli@1.0.144`
+Version: `v1.0.157`
+Commit: `b65272a18aef891941451705ff93e8a287f3eb72`
+Package: `@officecli/officecli@1.0.157`
 License: Apache-2.0
 
 OfficeCLI is installed into a user-cache runtime and is not included in this Skill. Its license and NOTICE are retained in `licenses/` for attribution and audit. The unrelated `officecli@0.2.x` package is explicitly excluded.

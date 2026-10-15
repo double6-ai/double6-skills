@@ -118,6 +118,24 @@ def resolve_visual_gate(run: Path, pptx_sha256: str) -> tuple[str, dict[str, Any
         )
         if valid:
             return "skipped_with_user_ack", waiver
+    from .common import load_run
+
+    policy = (load_run(run).get("visual_policy") or {})
+    if policy.get("decision") == "perform" and policy.get("pptx_sha256") == pptx_sha256:
+        # The decision is already recorded; only the review itself is missing.
+        raise D6PPTError(
+            "Visual review is pending: inspect the rendered pages/contact sheet, record "
+            "`visual-review`, then rerun `verify`.",
+            "visual_review_decision_required",
+            {
+                "visual_policy": "perform",
+                "next_steps": [
+                    "Review every rendered page (contact sheet + per-page PNG) with a vision-capable model",
+                    "d6ppt visual-review --run <run> --status <accepted|accepted_with_warnings|rejected> --reviewer <name> --notes <notes>",
+                    "d6ppt verify --run <run> --verify-tier <same tier>",
+                ],
+            },
+        )
     raise D6PPTError(
         "Visual review is pending. Use a vision-capable model, or record a per-run user waiver.",
         "visual_review_decision_required",

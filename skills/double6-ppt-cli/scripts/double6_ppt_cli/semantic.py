@@ -192,6 +192,64 @@ def _set_font_family(element: etree._Element, font_family: str) -> None:
             child.set("typeface", font_family)
 
 
+DEFAULT_NOWRAP_PADDING = {"cjk": 0.12, "latin": 0.04}
+
+
+def _has_cjk(text: str) -> bool:
+    return any(
+        "\u3000" <= ch <= "\u9fff" or "\uac00" <= ch <= "\ud7af" or "\uff00" <= ch <= "\uffef"
+        for ch in text
+    )
+
+
+def _pad_nowrap_text_frame(shape: etree._Element, slide_cx: int, padding: dict[str, float]) -> int:
+    """Widen a ``wrap="none"`` text frame so other renderers do not re-wrap it.
+
+    PPT Master sizes single-line/hard-break text frames from its own glyph
+    estimate. PowerPoint honours ``wrap="none"``, but LibreOffice (portable
+    tier) wraps at the frame width anyway, and its CJK/Latin auto-spacing makes
+    mixed Chinese text wider than the estimate, so a line such as
+    "第 7 天全量运行" breaks into two. Padding the frame keeps the glyphs where
+    they are (alignment-aware offset) while giving every renderer slack.
+    Returns the added width in EMU (0 when unchanged).
+    """
+    body = shape.find("p:txBody/a:bodyPr", NS)
+    if body is None or body.get("wrap") != "none":
+        return 0
+    xfrm = shape.find("p:spPr/a:xfrm", NS)
+    if xfrm is None or xfrm.get("rot") not in (None, "0"):
+        return 0
+    off, ext = xfrm.find("a:off", NS), xfrm.find("a:ext", NS)
+    if off is None or ext is None:
+        return 0
+    text = "".join(shape.xpath(".//a:t/text()", namespaces=NS))
+    if not text.strip():
+        return 0
+    ratio = padding["cjk"] if _has_cjk(text) else padding["latin"]
+    cx, x = int(ext.get("cx", "0")), int(off.get("x", "0"))
+    add = int(cx * ratio)
+    if add <= 0:
+        return 0
+    algn = (shape.xpath("string(.//a:p[1]/a:pPr/@algn)", namespaces=NS) or "l")
+    shift = add // 2 if algn == "ctr" else (add if algn == "r" else 0)
+    new_x = max(0, x - shift)
+    new_cx = min(cx + add, max(cx, slide_cx - new_x))
+    if new_cx <= cx and new_x == x:
+        return 0
+    off.set("x", str(new_x))
+    ext.set("cx", str(new_cx))
+    return new_cx - cx
+
+
+def _slide_width(source: zipfile.ZipFile) -> int:
+    try:
+        root = etree.fromstring(source.read("ppt/presentation.xml"))
+        size = root.find("p:sldSz", NS)
+        return int(size.get("cx")) if size is not None else 12192000
+    except (KeyError, etree.XMLSyntaxError, TypeError, ValueError):
+        return 12192000
+
+
 def apply_semantic_contract(
     input_pptx: Path,
     semantic_manifest_path: Path,
@@ -209,15 +267,27 @@ def apply_semantic_contract(
     for obj in semantic["objects"]:
         by_slide.setdefault(int(obj["slide"]), []).append(obj)
     roundtrip_font = (semantic.get("defaults") or {}).get("roundtrip_font_family")
+    padding_setting = (semantic.get("defaults") or {}).get("nowrap_text_padding", True)
+    padding = None
+    if padding_setting is True:
+        padding = dict(DEFAULT_NOWRAP_PADDING)
+    elif isinstance(padding_setting, dict):
+        padding = {**DEFAULT_NOWRAP_PADDING, **{k: float(v) for k, v in padding_setting.items() if k in DEFAULT_NOWRAP_PADDING}}
+    padded_frames = 0
     resolved: list[dict[str, Any]] = []
     output_pptx.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(input_pptx, "r") as source, zipfile.ZipFile(output_pptx, "w", zipfile.ZIP_DEFLATED) as target:
+        slide_cx = _slide_width(source)
         for info in source.infolist():
             data = source.read(info.filename)
             if info.filename.startswith("ppt/slides/slide") and info.filename.endswith(".xml"):
                 slide_number = int(posixpath.basename(info.filename)[5:-4])
-                if slide_number in by_slide or roundtrip_font:
+                if slide_number in by_slide or roundtrip_font or padding:
                     root = etree.fromstring(data)
+                    if padding:
+                        for text_shape in root.xpath(".//p:sp[.//a:t]", namespaces=NS):
+                            if _pad_nowrap_text_frame(text_shape, slide_cx, padding):
+                                padded_frames += 1
                     if roundtrip_font:
                         for text_shape in root.xpath(".//p:sp[.//a:t]", namespaces=NS):
                             _set_font_family(text_shape, str(roundtrip_font))
@@ -271,6 +341,7 @@ def apply_semantic_contract(
         "compiler_output_sha256": sha256_file(input_pptx),
         "pptx_sha256": sha256_file(output_pptx),
         "resolved_count": len(resolved),
+        "nowrap_text_frames_padded": padded_frames,
         "expected_count": len(semantic["objects"]),
         "objects": sorted(resolved, key=lambda item: (item["slide"], item["source_id"])),
     }

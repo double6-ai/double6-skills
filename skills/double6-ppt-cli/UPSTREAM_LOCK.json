@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "observed_at": "2026-08-22T00:17:08+08:00",
+  "observed_at": "2026-10-15T12:00:00+08:00",
   "status": "frozen",
   "frozen_since_double6_ppt_cli": "0.2.1-local",
-  "verified_for_double6_ppt_cli": "0.2.13",
-  "verification_note": "vendor/ 与本文件自 0.2.1-local（commit babc903）起未改动；0.2.13 由 attribution_guard.py 复核 BOM 通过",
+  "verified_for_double6_ppt_cli": "0.3.0",
+  "verification_note": "vendor/ 自 0.2.1-local（commit babc903）起未改动；0.3.0 由 attribution_guard.py 复核 BOM 通过。0.3.0 仅升级 OfficeCLI pin（外部依赖），ppt-master 维持 v4.8.0。",
   "upstreams": [
     {
       "name": "ppt-master",
@@ -20,20 +20,34 @@
         "bytes": 58401638,
         "sha256": "29dc7d303147f34d5308f140bce189c4676c77c32756b793e353f968a70e0f4c"
       },
-      "integration_boundary": "vendored_137_file_lean_core; complete Template Fill Native package restored byte-identically from the SHA-verified official v4.8.0 release asset; Double6 integration lives outside vendor tree"
+      "integration_boundary": "vendored_137_file_lean_core; complete Template Fill Native package restored byte-identically from the SHA-verified official v4.8.0 release asset; Double6 integration lives outside vendor tree",
+      "upstream_status_2026_10_15": {
+        "latest_release": "v6.7.0",
+        "latest_published_at": "2026-10-08T02:01:38Z",
+        "decision": "not_upgraded",
+        "reason": "v5.0.0 removed template_fill_pptx/ and native_enhance_pptx*（22 个 vendored 文件），由 'Edit Native PPTX' roundtrip 路线（pptx_to_svg.py --roundtrip / svg_to_pptx.py --roundtrip）取代；template-fill 模式需重新设计，单独立项。",
+        "history_rewrite_note": "上游重写了历史：v4.8.0 标签现指向 5da13a0…，与本锁的 53c9c2a 不同；逐文件比对 137 个 BOM 文件内容 0 差异，53c9c2a 仍可经 API 访问，官方 release asset 仍在。保留 53c9c2a 作为锁定身份。",
+        "current_tag_commit_prefix": "5da13a0"
+      }
     },
     {
       "name": "OfficeCLI",
       "official_repository": "https://github.com/iOfficeAI/OfficeCLI",
-      "release_url": "https://github.com/iOfficeAI/OfficeCLI/releases/tag/v1.0.144",
-      "npm_package": "@officecli/officecli@1.0.144",
-      "tag": "v1.0.144",
-      "commit": "1ced45e900782c5083ed550ddf328ee974e425e7",
-      "published_at": "2026-08-13T10:53:09Z",
+      "release_url": "https://github.com/iOfficeAI/OfficeCLI/releases/tag/v1.0.157",
+      "npm_package": "@officecli/officecli@1.0.157",
+      "tag": "v1.0.157",
+      "commit": "b65272a18aef891941451705ff93e8a287f3eb72",
+      "published_at": "2026-10-12T13:01:22Z",
       "license": "Apache-2.0",
       "license_sha256": "7e282402a5a6db33995fe638bb3fe79013f9884d8f7d15a42e481c1e86aadda1",
       "notice_sha256": "3a4715b268e148a8e9566f5e835f766f5c95c3da4d6e5ddd908806a258a2f07b",
-      "integration_boundary": "pinned_external_runtime_dependency; do_not_vendor binary; fail closed on versions other than 1.0.144"
+      "integration_boundary": "pinned_external_runtime_dependency; do_not_vendor binary; bootstrap installs pin 1.0.157 only; runtime accepts >=1.0.144 within major 1 (non-pin => warn), fails closed on other majors or older builds",
+      "npm_dist_integrity": "sha512-ZWMAd18gpsgHGx+QGbLjeDbHoVNSMSOrzMB8MJaKevnnSsnWBPVPXIyxEQ9FFF/Nvi4tcyAu5rUAG2HMwx4Ytw==",
+      "minimum_runtime_version": "1.0.144",
+      "previous_pin": {
+        "tag": "v1.0.144",
+        "commit": "1ced45e900782c5083ed550ddf328ee974e425e7"
+      }
     }
   ],
   "identity_exclusion": {

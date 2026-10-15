@@ -12,11 +12,12 @@ from typing import Any
 
 SCHEMA_VERSION = "2.0"
 LEGACY_SCHEMA_VERSIONS = {"1.0"}
-SKILL_VERSION = "0.2.13"
+SKILL_VERSION = "0.3.0"
 # Bootstrap always installs this exact OfficeCLI version.
-OFFICECLI_PIN_VERSION = "1.0.144"
-# Runtime accepts the pin and later 1.x builds (upstream ships quickly).
-OFFICECLI_MIN_VERSION = OFFICECLI_PIN_VERSION
+OFFICECLI_PIN_VERSION = "1.0.157"
+# Runtime accepts later 1.x builds; the previous pin (1.0.144) stays the minimum
+# so existing runtimes keep working with a warning instead of failing.
+OFFICECLI_MIN_VERSION = "1.0.144"
 OFFICECLI_VERSION = OFFICECLI_PIN_VERSION
 PPT_MASTER_VERSION = "4.8.0"
 PPT_MASTER_COMMIT = "53c9c2a5e9f1a49096324fba4f95833649c6a0f4"
@@ -237,8 +238,13 @@ def set_status(run: Path, manifest: dict[str, Any], status: str, stage: str, det
     save_run(run, manifest)
 
 
-def resolve_run_path(run: Path, relative: str) -> Path:
+def resolve_run_path(run: Path, relative: str | None) -> Path:
     root = run.resolve()
+    if not relative:
+        raise D6PPTError(
+            "Run has no current PPTX yet; finish compile (generate), template-apply (template-fill) or init (postflight) first",
+            "current_pptx_missing",
+        )
     result = (root / relative).resolve()
     if result != root and root not in result.parents:
         raise D6PPTError("Run path escapes run directory", "unsafe_path")
