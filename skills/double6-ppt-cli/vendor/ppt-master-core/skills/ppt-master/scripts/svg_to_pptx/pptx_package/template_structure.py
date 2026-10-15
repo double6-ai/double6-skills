@@ -16,6 +16,9 @@ Dependencies:
 
 from __future__ import annotations
 
+import base64
+import binascii
+import copy
 import hashlib
 import json
 import math
@@ -34,6 +37,8 @@ from pptx_to_svg.preset_authoring import (
 
 from ..drawingml.utils import (
     is_picture_effect_carrier,
+    parse_inline_style,
+    parse_opacity,
     parse_project_geometry_length,
     project_geometry_length_errors,
 )
@@ -42,7 +47,11 @@ from ..geometry_properties import (
     GeometryStyleError,
     materialize_inline_geometry_properties,
 )
-from ..native_objects import NativeMarkerAttributeError, native_replacement_kind
+from ..native_objects import (
+    NativeMarkerAttributeError,
+    native_json_is_authoritative,
+    native_replacement_kind,
+)
 
 
 _NON_VISUAL_TAGS = frozenset({"defs", "title", "desc", "metadata", "style"})
@@ -122,6 +131,10 @@ PPTX_STRUCTURE_MODES = frozenset({"structured", "preserve", "flat"})
 TEMPLATE_ADHERENCE_MODES = frozenset({"strict", "adaptive"})
 TEMPLATE_REUSE_SCOPES = frozenset({"mirror", "layout", "style"})
 PLACEHOLDER_BINDING_MODES = frozenset({"carrier", "proxy"})
+SOURCE_THEMES_FILENAME = "source_themes.json"
+SOURCE_THEMES_SCHEMA = "ppt-master.source-themes.v1"
+_DML_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 _TEMPLATE_SKIN_ATTRS = frozenset({
     "baseline-shift",
     "color",
@@ -248,6 +261,15 @@ class NativeLayoutSpec:
 
 
 @dataclass(frozen=True)
+class NativeSlideSpec:
+    """One source slide retained by index for exact round-trip passthrough."""
+
+    index: int
+    package_part: str
+    layout_key: str
+
+
+@dataclass(frozen=True)
 class NativeStructureContract:
     """Validated portable contract for a preserved source PPTX package."""
 
@@ -256,6 +278,7 @@ class NativeStructureContract:
     source_sha256: str
     slide_size_emu: tuple[int, int]
     layouts: tuple[NativeLayoutSpec, ...]
+    slides: tuple[NativeSlideSpec, ...]
 
     def layout(self, key: str) -> NativeLayoutSpec:
         for layout in self.layouts:
@@ -263,6 +286,15 @@ class NativeStructureContract:
                 return layout
         raise TemplateStructureError(
             f"native_structure.json has no layout key {key!r}"
+        )
+
+    def slide(self, index: int) -> NativeSlideSpec:
+        """Return one source slide contract by presentation-order index."""
+        for slide in self.slides:
+            if slide.index == index:
+                return slide
+        raise TemplateStructureError(
+            f"native_structure.json has no source slide {index}"
         )
 
 
@@ -424,6 +456,8 @@ def _svg_canvas(root: ET.Element) -> tuple[float, float, float, float]:
 def _is_full_canvas_solid_rect(
     elem: ET.Element,
     canvas: tuple[float, float, float, float],
+    *,
+    root: ET.Element | None = None,
 ) -> bool:
     """Return whether a direct rect is eligible for scoped p:bg compilation."""
     if canvas[2] <= 0 or canvas[3] <= 0:
@@ -431,6 +465,24 @@ def _is_full_canvas_solid_rect(
     if _local_tag(elem) != "rect":
         return False
     if any(elem.get(attr) for attr in ("transform", "filter", "clip-path")):
+        return False
+    style = parse_inline_style(elem.get("style"))
+    root_style = parse_inline_style(root.get("style")) if root is not None else {}
+
+    def root_value(name: str) -> str | None:
+        return root_style.get(name, root.get(name)) if root is not None else None
+
+    try:
+        fill_opacity = style.get("fill-opacity", elem.get("fill-opacity"))
+        if fill_opacity in {None, "inherit"}:
+            fill_opacity = root_value("fill-opacity")
+        opacity = style.get("opacity", elem.get("opacity"))
+        if opacity == "inherit":
+            opacity = root_value("opacity")
+        if any(parse_opacity(value, allow_percentage=True) < 1
+               for value in (fill_opacity, opacity, root_value("opacity"))):
+            return False
+    except ValueError:
         return False
     try:
         geometry = (
@@ -523,6 +575,92 @@ def _template_replication_mode(template_dir: Path) -> str | None:
         if match:
             return match.group(1).lower()
     return None
+
+
+def load_template_source_themes(
+    template_dir: Path,
+) -> dict[str, bytes] | None:
+    """Load exact per-Master themes carried by a Type A mirror workspace."""
+    path = template_dir / SOURCE_THEMES_FILENAME
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise TemplateStructureError(
+            f"Cannot read template source themes {path}: {exc}"
+        ) from exc
+    schema = payload.get("schema") if isinstance(payload, dict) else None
+    if not isinstance(payload, dict) or schema != SOURCE_THEMES_SCHEMA:
+        raise TemplateStructureError(
+            f"Unsupported template source theme schema: {schema!r}"
+        )
+    masters = payload.get("masters")
+    if not isinstance(masters, dict) or not masters:
+        raise TemplateStructureError(
+            f"{SOURCE_THEMES_FILENAME} requires a non-empty masters object"
+        )
+
+    themes: dict[str, bytes] = {}
+    for master_key, record in masters.items():
+        if (
+            not isinstance(master_key, str)
+            or not _MASTER_KEY_RE.fullmatch(master_key)
+        ):
+            raise TemplateStructureError(
+                f"{SOURCE_THEMES_FILENAME} has invalid Master key {master_key!r}"
+            )
+        if not isinstance(record, dict):
+            raise TemplateStructureError(
+                f"{SOURCE_THEMES_FILENAME} Master {master_key!r} must be an object"
+            )
+        if record.get("encoding") != "base64":
+            raise TemplateStructureError(
+                f"{SOURCE_THEMES_FILENAME} Master {master_key!r} must use base64"
+            )
+        encoded = record.get("payload")
+        expected_sha256 = record.get("sha256")
+        if (
+            not isinstance(encoded, str)
+            or not isinstance(expected_sha256, str)
+        ):
+            raise TemplateStructureError(
+                f"{SOURCE_THEMES_FILENAME} Master {master_key!r} lacks payload/hash"
+            )
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise TemplateStructureError(
+                f"{SOURCE_THEMES_FILENAME} Master {master_key!r} has invalid base64"
+            ) from exc
+        if base64.b64encode(raw).decode("ascii") != encoded:
+            raise TemplateStructureError(
+                f"{SOURCE_THEMES_FILENAME} Master {master_key!r} base64 is not canonical"
+            )
+        if hashlib.sha256(raw).hexdigest() != expected_sha256.strip().lower():
+            raise TemplateStructureError(
+                f"{SOURCE_THEMES_FILENAME} Master {master_key!r} hash differs"
+            )
+        try:
+            root = ET.fromstring(raw)
+        except ET.ParseError as exc:
+            raise TemplateStructureError(
+                f"{SOURCE_THEMES_FILENAME} Master {master_key!r} theme is malformed"
+            ) from exc
+        if root.tag != f"{{{_DML_NS}}}theme":
+            raise TemplateStructureError(
+                f"{SOURCE_THEMES_FILENAME} Master {master_key!r} is not a:theme"
+            )
+        if any(
+            isinstance(name, str) and name.startswith(f"{{{_REL_NS}}}")
+            for node in root.iter()
+            for name in node.attrib
+        ):
+            raise TemplateStructureError(
+                f"{SOURCE_THEMES_FILENAME} Master {master_key!r} has relationships"
+            )
+        themes[master_key] = raw
+    return themes
 
 
 def _template_svg_path(
@@ -788,6 +926,12 @@ def load_pptx_structure_lock(project_path: Path) -> PptxStructureLock | None:
             raw_basename,
             f"page_layouts P{slide_num:02d}",
         )
+        if basename.startswith("layout_"):
+            raise TemplateStructureError(
+                f"spec_lock.md page_layouts P{slide_num:02d} cannot select "
+                f"obsolete definition-only template SVG {basename!r}; create "
+                "and select a complete Slide prototype"
+            )
         prototypes.append(PptxPrototypeReference(
             slide_num=slide_num,
             template_basename=basename,
@@ -883,11 +1027,17 @@ def load_pptx_structure_lock(project_path: Path) -> PptxStructureLock | None:
                 prototype_slide_num = int(page_match.group(1))
             elif raw_source.startswith("template:"):
                 raw_basename = raw_source.split(":", 1)[1].strip()
-                _basename, prototype_svg_path = _template_svg_path(
+                basename, prototype_svg_path = _template_svg_path(
                     template_dir,
                     raw_basename,
                     f"pptx_layouts Layout {layout_key!r}",
                 )
+                if basename.startswith("layout_"):
+                    raise TemplateStructureError(
+                        f"spec_lock.md Layout {layout_key!r} cannot use obsolete "
+                        f"definition-only template SVG {basename!r}; use a "
+                        "complete Slide prototype"
+                    )
             else:
                 raise TemplateStructureError(
                     f"spec_lock.md Layout {layout_key!r} prototype source must be "
@@ -1021,8 +1171,12 @@ def _native_geometry(raw: Any, context: str) -> tuple[float, float, float, float
         values = tuple(float(raw[key]) for key in ("x", "y", "width", "height"))
     except (KeyError, TypeError, ValueError) as exc:
         raise TemplateStructureError(f"{context} geometry is invalid") from exc
-    if not all(math.isfinite(value) for value in values) or values[2] <= 0 or values[3] <= 0:
-        raise TemplateStructureError(f"{context} geometry must be finite and positive")
+    if not all(math.isfinite(value) for value in values) or values[2] < 0 or values[3] < 0:
+        raise TemplateStructureError(f"{context} geometry must be finite and non-negative")
+    if values[2] == 0 or values[3] == 0:
+        # PowerPoint writes <a:ext cx="0" cy="0"/> for a collapsed placeholder
+        # (built-in vertical-text layouts do this); it carries no usable box.
+        return None
     return values
 
 
@@ -1086,7 +1240,7 @@ def load_native_structure_contract(
     layouts: list[NativeLayoutSpec] = []
     seen_keys: set[str] = set()
     seen_parts: set[str] = set()
-    for index, item in enumerate(raw_layouts, start=1):
+    for index, item in enumerate(raw_layouts):
         context = f"{contract_path.name} layouts[{index}]"
         if not isinstance(item, dict):
             raise TemplateStructureError(f"{context} must be an object")
@@ -1119,7 +1273,7 @@ def load_native_structure_contract(
         if not isinstance(raw_placeholders, list):
             raise TemplateStructureError(f"{context} placeholders must be a list")
         placeholders: list[NativePlaceholderSpec] = []
-        for ph_index, placeholder in enumerate(raw_placeholders, start=1):
+        for ph_index, placeholder in enumerate(raw_placeholders):
             ph_context = f"{context} placeholders[{ph_index}]"
             if not isinstance(placeholder, dict):
                 raise TemplateStructureError(f"{ph_context} must be an object")
@@ -1150,6 +1304,59 @@ def load_native_structure_contract(
         seen_keys.add(key)
         seen_parts.add(package_part)
 
+    raw_slides = raw.get("slides")
+    if not isinstance(raw_slides, list) or not raw_slides:
+        raise TemplateStructureError(
+            f"{contract_path.name} must contain at least one source slide"
+        )
+    slides: list[NativeSlideSpec] = []
+    seen_slide_indices: set[int] = set()
+    slide_parts: set[str] = set()
+    for position, item in enumerate(raw_slides, start=1):
+        context = f"{contract_path.name} slides[{position}]"
+        if not isinstance(item, dict):
+            raise TemplateStructureError(f"{context} must be an object")
+        try:
+            slide_index = int(item.get("index"))
+        except (TypeError, ValueError) as exc:
+            raise TemplateStructureError(f"{context} index must be an integer") from exc
+        if slide_index <= 0 or slide_index in seen_slide_indices:
+            raise TemplateStructureError(
+                f"{context} index must be unique and positive"
+            )
+        layout_key = str(item.get("layoutKey") or "")
+        if layout_key not in seen_keys:
+            raise TemplateStructureError(
+                f"{context} references unknown layout key {layout_key!r}"
+            )
+        raw_package_part = item.get("packagePart")
+        if not isinstance(raw_package_part, str) or not raw_package_part:
+            raise TemplateStructureError(
+                f"{context} packagePart must be a non-empty string"
+            )
+        package_part = raw_package_part
+        if (
+            not package_part.startswith("ppt/slides/")
+            or ".." in Path(package_part).parts
+            or not package_part.endswith(".xml")
+            or package_part in slide_parts
+        ):
+            raise TemplateStructureError(
+                f"{context} packagePart must be a unique ppt/slides/*.xml part"
+            )
+        slides.append(NativeSlideSpec(
+            index=slide_index,
+            package_part=package_part,
+            layout_key=layout_key,
+        ))
+        seen_slide_indices.add(slide_index)
+        slide_parts.add(package_part)
+    expected_indices = set(range(1, len(slides) + 1))
+    if seen_slide_indices != expected_indices:
+        raise TemplateStructureError(
+            f"{contract_path.name} source slide indices must be contiguous from 1"
+        )
+
     try:
         with zipfile.ZipFile(source_template, "r") as package:
             package_parts = set(package.namelist())
@@ -1157,7 +1364,7 @@ def load_native_structure_contract(
         raise TemplateStructureError(
             f"Cannot open preserved source template {source_template}: {exc}"
         ) from exc
-    missing_parts = sorted(seen_parts - package_parts)
+    missing_parts = sorted((seen_parts | slide_parts) - package_parts)
     if missing_parts:
         raise TemplateStructureError(
             f"{source_template.name} is missing layout part(s): " + ", ".join(missing_parts)
@@ -1169,6 +1376,7 @@ def load_native_structure_contract(
         source_sha256=expected_sha,
         slide_size_emu=slide_size_emu,
         layouts=tuple(layouts),
+        slides=tuple(sorted(slides, key=lambda item: item.index)),
     )
 
 
@@ -1449,7 +1657,7 @@ def parse_template_slide(
         binding_raw = elem.get("data-pptx-binding")
         carrier_raw = elem.get("data-pptx-carrier")
         editable_raw = elem.get("data-pptx-editable")
-        is_background = _is_full_canvas_solid_rect(elem, canvas)
+        is_background = _is_full_canvas_solid_rect(elem, canvas, root=root)
         effective_layer = layer or ("slide" if is_background else None)
 
         if (
@@ -1543,7 +1751,8 @@ def parse_template_slide(
             raise TemplateStructureError(
                 f"{svg_path.name}: {element_id or tag} violates template paint order; "
                 "use Master background, Layout background, Slide background, "
-                "Master shapes, Layout shapes, then Slide content/placeholders"
+                "Master shapes, Layout shapes, then Slide content/placeholders. "
+                "Full-canvas solid rects are treated as backgrounds; translucent overlays are not backgrounds"
             )
         last_order_rank = order_rank
 
@@ -1924,12 +2133,14 @@ def structured_layout_definition_files(
     specs: list[TemplateSlideSpec],
     structure_lock: PptxStructureLock,
 ) -> list[Path]:
-    """Validate the unique Layout roster and return unused prototype SVGs.
+    """Validate the explicit registered Layout set and return unused carriers.
 
     A generated page can be the carrier for a used Layout definition. A Layout
     with no generated page must point at one installed template SVG; the builder
     converts that SVG on an internal trailing slide and removes the carrier slide
     after registering the reusable Layout.
+    Installed prototypes absent from ``pptx_layouts`` are never compiled.
+    Lockless Quick export compiles only its public pages' Layouts.
     """
     if structure_lock.mode != "structured":
         return []
@@ -2278,6 +2489,7 @@ def _element_tree_signature(
     svg_path: Path | None = None,
     asset_identity: bool = False,
     ignore_structure_attrs: bool = False,
+    ignore_json_native_preview: bool = False,
 ) -> tuple[object, ...]:
     """Return a stable structural or literal-visual SVG subtree signature."""
     text = (elem.text or "") if include_text else ""
@@ -2305,6 +2517,14 @@ def _element_tree_signature(
             )
         )
     ))
+    children = (
+        _mirror_comparison_children(elem)
+        if ignore_json_native_preview
+        else tuple(elem)
+    )
+    json_native_marker = (
+        ignore_json_native_preview and _is_json_first_native_marker(elem)
+    )
     return (
         elem.tag,
         attrs,
@@ -2313,14 +2533,57 @@ def _element_tree_signature(
             _element_tree_signature(
                 child,
                 include_skin=include_skin,
-                include_text=include_text,
+                include_text=(
+                    include_text
+                    or (
+                        json_native_marker
+                        and _local_tag(child) == "metadata"
+                    )
+                ),
                 svg_path=svg_path,
                 asset_identity=asset_identity,
                 ignore_structure_attrs=ignore_structure_attrs,
+                ignore_json_native_preview=ignore_json_native_preview,
             )
-            for child in elem
+            for child in children
         ),
     )
+
+
+def _is_json_first_native_marker(elem: ET.Element) -> bool:
+    """Return whether this element directly owns JSON-first Chart/Table data."""
+    try:
+        replacement_kind = native_replacement_kind(elem)
+    except NativeMarkerAttributeError:
+        return False
+    return (
+        native_json_is_authoritative(elem)
+        and replacement_kind in {"chart", "table"}
+    )
+
+
+def _mirror_comparison_children(elem: ET.Element) -> tuple[ET.Element, ...]:
+    """Exclude only the derived preview below a JSON-first native marker."""
+    if not _is_json_first_native_marker(elem):
+        return tuple(elem)
+    return tuple(child for child in elem if _local_tag(child) == "metadata")
+
+
+def _mirror_resource_projection(elem: ET.Element) -> ET.Element:
+    """Copy one comparison subtree without JSON-first derived previews."""
+    projected = copy.deepcopy(elem)
+
+    def prune(node: ET.Element) -> None:
+        if _is_json_first_native_marker(node):
+            for child in list(node):
+                if _local_tag(child) != "metadata":
+                    node.remove(child)
+            return
+        for child in node:
+            prune(child)
+
+    prune(projected)
+    return projected
 
 
 def _svg_reference_ids(elem: ET.Element) -> set[str]:
@@ -2523,10 +2786,17 @@ def _scope_visual_resources_signature(
     root: ET.Element,
     elements: tuple[ET.Element, ...],
     svg_path: Path,
+    *,
+    ignore_json_native_preview: bool = False,
 ) -> tuple[object, ...]:
     """Capture root inheritance, relevant CSS, and the referenced defs closure."""
     if not elements:
         return ()
+    comparison_elements = (
+        tuple(_mirror_resource_projection(element) for element in elements)
+        if ignore_json_native_preview
+        else elements
+    )
     root_attrs = tuple(sorted(
         (
             name,
@@ -2543,9 +2813,9 @@ def _scope_visual_resources_signature(
             and not name.rsplit("}", 1)[-1].startswith("data-")
         )
     ))
-    css_rules = _scope_css_signature(root, elements, svg_path)
+    css_rules = _scope_css_signature(root, comparison_elements, svg_path)
     references: set[str] = set()
-    for element in elements:
+    for element in comparison_elements:
         references.update(_svg_reference_ids(element))
     for _selector, declarations in css_rules:
         references.update(
@@ -2596,6 +2866,7 @@ def _structure_subtree_signature(
     include_skin: bool = False,
     include_text: bool = True,
     asset_identity: bool = False,
+    ignore_json_native_preview: bool = False,
 ) -> tuple[tuple[str, tuple[object, ...]], ...]:
     """Read structural or literal-visual signatures for direct SVG children."""
     try:
@@ -2626,6 +2897,7 @@ def _structure_subtree_signature(
                 include_text=include_text,
                 svg_path=svg_path,
                 asset_identity=asset_identity,
+                ignore_json_native_preview=ignore_json_native_preview,
             ),
         ))
     if include_skin:
@@ -2636,7 +2908,12 @@ def _structure_subtree_signature(
         )
         signatures.append((
             "__visual_resources__",
-            _scope_visual_resources_signature(root, selected, svg_path),
+            _scope_visual_resources_signature(
+                root,
+                selected,
+                svg_path,
+                ignore_json_native_preview=ignore_json_native_preview,
+            ),
         ))
     return tuple(signatures)
 
@@ -2672,8 +2949,9 @@ def _mirror_slide_local_signature(
 ) -> tuple[tuple[object, ...], tuple[object, ...]]:
     """Capture literal mirror visuals that are Slide-local on either page.
 
-    Visible text values may change, but their element topology, attributes,
-    grouping, paint, geometry, and referenced asset bytes remain literal.
+    Visible text values and JSON-first native preview children may change, but
+    other element topology, attributes, grouping, paint, geometry, and
+    referenced asset bytes remain literal.
     Structure metadata may change when adaptive template authoring assigns an
     evolved Layout identity to the same stable SVG id.
     """
@@ -2702,12 +2980,14 @@ def _mirror_slide_local_signature(
                 svg_path=spec.svg_path,
                 asset_identity=True,
                 ignore_structure_attrs=True,
+                ignore_json_native_preview=True,
             )
         )
     resources = _scope_visual_resources_signature(
         root,
         tuple(slide_elements),
         spec.svg_path,
+        ignore_json_native_preview=True,
     )
     return resources, tuple(slide_visuals)
 
@@ -2745,7 +3025,9 @@ def _layout_contract_difference(
         details.append("generated Layout element order differs")
     if not details:
         details.append(
-            "shared Layout element metadata, geometry, topology, or content differs"
+            "shared Layout element metadata (data-pptx-* attributes), geometry, "
+            "topology, or content differs; fills, strokes, and gradients may be "
+            "repainted"
         )
     return "; ".join(details)
 
@@ -2793,6 +3075,11 @@ def _mirror_element_difference(
     actual_tag = _local_tag(actual)
     if expected_tag != actual_tag:
         return f"{path}: expected <{expected_tag}>, found <{actual_tag}>"
+    if (
+        expected_tag == "metadata"
+        and (expected.text or "") != (actual.text or "")
+    ):
+        return f"{path}: metadata payload differs"
 
     expected_attrs = _mirror_comparable_attributes(
         expected,
@@ -2814,8 +3101,8 @@ def _mirror_element_difference(
                     f"{expected_value!r}, found {actual_value!r}"
                 )
 
-    expected_children = list(expected)
-    actual_children = list(actual)
+    expected_children = list(_mirror_comparison_children(expected))
+    actual_children = list(_mirror_comparison_children(actual))
     if len(expected_children) != len(actual_children):
         expected_tspans = sum(
             _local_tag(child) == "tspan" for child in expected_children
@@ -2899,10 +3186,12 @@ def _mirror_slide_local_difference(
         expected_root,
         tuple(expected_children),
         expected_spec.svg_path,
+        ignore_json_native_preview=True,
     ) != _scope_visual_resources_signature(
         actual_root,
         tuple(actual_children),
         actual_spec.svg_path,
+        ignore_json_native_preview=True,
     ):
         return "svg: referenced defs, CSS, root styling, or asset identity differs"
     return None
@@ -3003,12 +3292,14 @@ def template_prototype_errors(
                 prototype.master_elements,
                 include_skin=literal_visual,
                 asset_identity=literal_visual,
+                ignore_json_native_preview=literal_visual,
             )
             actual_master_structure = _structure_subtree_signature(
                 spec.svg_path,
                 spec.master_elements,
                 include_skin=literal_visual,
                 asset_identity=literal_visual,
+                ignore_json_native_preview=literal_visual,
             )
         except TemplateStructureError as exc:
             errors.append(str(exc))
@@ -3034,8 +3325,13 @@ def template_prototype_errors(
             errors.append(
                 f"{spec.svg_path.name}: template Master structure differs "
                 f"from prototype {reference.svg_path.name}; strict and adaptive "
-                "routes must retain its ids, topology, geometry, and content"
-                + (" including mirror visual styling" if literal_visual else "")
+                "routes must retain its ids, topology, geometry, data-pptx-* "
+                "metadata, and content"
+                + (
+                    " including mirror visual styling"
+                    if literal_visual
+                    else "; fills, strokes, and gradients may be repainted"
+                )
                 + (
                     f"; first difference: {master_difference}"
                     if master_difference else ""
@@ -3069,7 +3365,8 @@ def template_prototype_errors(
                     f"{spec.svg_path.name}: mirror Slide-local non-text visuals "
                     f"differ from prototype {reference.svg_path.name}; preserve "
                     "grouping, geometry, paint, effects, and referenced asset "
-                    "identity, changing only visible text content"
+                    "identity; only visible text content and JSON-first derived "
+                    "preview children may change"
                     + (f"; first difference: {difference}" if difference else "")
                 )
 
@@ -3079,12 +3376,14 @@ def template_prototype_errors(
                 prototype.layout_elements,
                 include_skin=literal_visual,
                 asset_identity=literal_visual,
+                ignore_json_native_preview=literal_visual,
             )
             actual_layout_structure = _structure_subtree_signature(
                 spec.svg_path,
                 spec.layout_elements,
                 include_skin=literal_visual,
                 asset_identity=literal_visual,
+                ignore_json_native_preview=literal_visual,
             )
             if literal_visual:
                 expected_placeholder_visual = _structure_subtree_signature(
@@ -3093,6 +3392,7 @@ def template_prototype_errors(
                     include_skin=True,
                     include_text=False,
                     asset_identity=True,
+                    ignore_json_native_preview=True,
                 )
                 actual_placeholder_visual = _structure_subtree_signature(
                     spec.svg_path,
@@ -3100,6 +3400,7 @@ def template_prototype_errors(
                     include_skin=True,
                     include_text=False,
                     asset_identity=True,
+                    ignore_json_native_preview=True,
                 )
             else:
                 expected_placeholder_visual = ()
@@ -3424,7 +3725,7 @@ def _placement_lint_errors(svg_path: Path) -> list[str]:
         layer = (elem.get("data-pptx-layer") or "").strip().lower() or None
         if layer not in _LAYERS:
             layer = None
-        is_background = _is_full_canvas_solid_rect(elem, canvas)
+        is_background = _is_full_canvas_solid_rect(elem, canvas, root=root)
         effective_layer = layer or ("slide" if is_background else None)
         if is_background and effective_layer is not None:
             order_rank = {"master": 0, "layout": 1, "slide": 2}[effective_layer]
@@ -3438,7 +3739,8 @@ def _placement_lint_errors(svg_path: Path) -> list[str]:
             errors.append(
                 f"{svg_path.name}: {elem.get('id') or tag} violates template paint "
                 "order; use Master background, Layout background, Slide background, "
-                "Master shapes, Layout shapes, then Slide content/placeholders"
+                "Master shapes, Layout shapes, then Slide content/placeholders. "
+                "Full-canvas solid rects are treated as backgrounds; translucent overlays are not backgrounds"
             )
             continue
         last_order_rank = order_rank

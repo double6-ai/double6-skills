@@ -29,7 +29,7 @@ def _text(element: etree._Element) -> str:
 
 def _cnvpr(element: etree._Element) -> etree._Element:
     nodes = element.xpath(
-        "./p:nvSpPr/p:cNvPr | ./p:nvGrpSpPr/p:cNvPr | ./p:nvCxnSpPr/p:cNvPr | ./p:nvGraphicFramePr/p:cNvPr",
+        "./p:nvSpPr/p:cNvPr | ./p:nvGrpSpPr/p:cNvPr | ./p:nvCxnSpPr/p:cNvPr | ./p:nvGraphicFramePr/p:cNvPr | ./p:nvPicPr/p:cNvPr",
         namespaces=NS,
     )
     if not nodes:
@@ -45,6 +45,8 @@ def _kind(element: etree._Element) -> str:
         return "group"
     if local == "cxnSp":
         return "connector"
+    if local == "pic":
+        return "picture"
     if local == "graphicFrame":
         if element.xpath(".//a:tbl", namespaces=NS):
             return "table"
@@ -65,7 +67,7 @@ def _path(element: etree._Element, slide: int) -> tuple[str, int, str]:
 
 
 def _candidates(root: etree._Element) -> list[etree._Element]:
-    return root.xpath(".//p:sp | .//p:grpSp | .//p:cxnSp | .//p:graphicFrame", namespaces=NS)
+    return root.xpath(".//p:sp | .//p:grpSp | .//p:cxnSp | .//p:graphicFrame | .//p:pic", namespaces=NS)
 
 
 def _find(root: etree._Element, obj: dict[str, Any]) -> etree._Element:

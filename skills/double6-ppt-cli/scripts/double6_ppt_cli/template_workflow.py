@@ -193,6 +193,13 @@ def _vendor_modules():
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
     package_dir = scripts / "template_fill_pptx"
+    if not (package_dir / "__init__.py").is_file():
+        raise D6PPTError(
+            "template-fill is not yet migrated to PPT Master v6.7.0 (upstream removed Template Fill Native in v5.0.0); "
+            "use the 0.3.x release for template-fill",
+            "template_fill_not_migrated",
+            {"ppt_master_version": "6.7.0", "tracking": "experimental roundtrip migration in progress"},
+        )
     module_name = "double6_vendor_template_fill_pptx"
     module = sys.modules.get(module_name)
     if module is None:
