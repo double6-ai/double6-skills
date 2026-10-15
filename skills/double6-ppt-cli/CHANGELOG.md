@@ -1,5 +1,20 @@
 # double6-ppt-cli 变更记录
 
+## 0.4.0-exp.1（实验，未发布）
+
+- **PPT Master v4.8.0 → v6.7.0**（commit `b4efe3d`，官方 asset SHA `40424d97…`），172 文件精简内核，BOM 已重建。仅适用于 generate。
+- template-fill 暂未迁移：调用时报 `template_fill_not_migrated`；`doctor --mode template-fill` 结果为 fail。
+- 新增 `native_markers.py`：
+  - 默认按 JSON-first 处理（bounds 自动写入 metadata）。
+  - 旧表格自动升级为 semantic-table.v2，并保持 v4.8 配色。
+  - receipt 中记录为 `normalize_native_markers`。
+- design_spec 模板新增 `- Relationships:` 行；compile 会检查占位符，并把 v6 质量报告中的错误展开到 `details.errors`。
+- 修复：semantic manifest 无法匹配图片（`p:pic`），新增 role `image`。
+- 已知行为差异：
+  - 水平条形图顺序反转（可用 `axes.category.reverse:false` 恢复）。
+  - compile 约慢 1 秒。
+  - waterfall 在 LibreOffice 下不显示。
+
 ## 0.3.0
 
 上游更新 + 全新 Linux 环境（portable 档）端到端实测修复。

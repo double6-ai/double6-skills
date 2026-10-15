@@ -1,33 +1,28 @@
 {
   "schema_version": 1,
-  "observed_at": "2026-10-15T12:00:00+08:00",
-  "status": "frozen",
-  "frozen_since_double6_ppt_cli": "0.2.1-local",
-  "verified_for_double6_ppt_cli": "0.3.0",
-  "verification_note": "vendor/ 自 0.2.1-local（commit babc903）起未改动；0.3.0 由 attribution_guard.py 复核 BOM 通过。0.3.0 仅升级 OfficeCLI pin（外部依赖），ppt-master 维持 v4.8.0。",
+  "observed_at": "2026-10-15T18:00:00+08:00",
+  "status": "experimental",
+  "verified_for_double6_ppt_cli": "0.4.0-exp.1",
+  "verification_note": "实验分支 exp/pm6-generate：vendor/ 重新取自 PPT Master v6.7.0 官方 release asset（172 文件逐字节一致，BOM 由 attribution_guard.py 复核）。仅覆盖 generate 路径；template-fill 尚未迁移（template_fill_not_migrated）。",
   "upstreams": [
     {
       "name": "ppt-master",
       "official_repository": "https://github.com/hugohe3/ppt-master",
-      "release_url": "https://github.com/hugohe3/ppt-master/releases/tag/v4.8.0",
-      "tag": "v4.8.0",
-      "commit": "53c9c2a5e9f1a49096324fba4f95833649c6a0f4",
-      "published_at": "2026-08-16T15:04:40Z",
+      "release_url": "https://github.com/hugohe3/ppt-master/releases/tag/v6.7.0",
+      "tag": "v6.7.0",
+      "commit": "b4efe3ddf237a97a42880164759162f8e2412f2f",
+      "published_at": "2026-10-08T02:01:38Z",
       "license": "MIT",
       "license_sha256": "80cefc234c1ec12a8cece4344f16300c634fa03df7891686fcf979e3828f0921",
       "official_release_asset": {
-        "name": "ppt-master-skill-v4.8.0.zip",
-        "bytes": 58401638,
-        "sha256": "29dc7d303147f34d5308f140bce189c4676c77c32756b793e353f968a70e0f4c"
+        "name": "ppt-master-skill-v6.7.0.zip",
+        "bytes": 22549906,
+        "sha256": "40424d9784fa25f771da8b312258c3c67a168925122aa6bb7faf6848e77ceee9"
       },
-      "integration_boundary": "vendored_137_file_lean_core; complete Template Fill Native package restored byte-identically from the SHA-verified official v4.8.0 release asset; Double6 integration lives outside vendor tree",
-      "upstream_status_2026_10_15": {
-        "latest_release": "v6.7.0",
-        "latest_published_at": "2026-10-08T02:01:38Z",
-        "decision": "not_upgraded",
-        "reason": "v5.0.0 removed template_fill_pptx/ and native_enhance_pptx*（22 个 vendored 文件），由 'Edit Native PPTX' roundtrip 路线（pptx_to_svg.py --roundtrip / svg_to_pptx.py --roundtrip）取代；template-fill 模式需重新设计，单独立项。",
-        "history_rewrite_note": "上游重写了历史：v4.8.0 标签现指向 5da13a0…，与本锁的 53c9c2a 不同；逐文件比对 137 个 BOM 文件内容 0 差异，53c9c2a 仍可经 API 访问，官方 release asset 仍在。保留 53c9c2a 作为锁定身份。",
-        "current_tag_commit_prefix": "5da13a0"
+      "integration_boundary": "vendored_172_file_lean_core (generate closure: svg_to_pptx, svg_quality_checker, project_manager, template_preview_pptx + data); Template Fill Native absent upstream since v5.0.0; Double6 integration lives outside vendor tree",
+      "previous_lock": {
+        "tag": "v4.8.0",
+        "commit": "53c9c2a5e9f1a49096324fba4f95833649c6a0f4"
       }
     },
     {

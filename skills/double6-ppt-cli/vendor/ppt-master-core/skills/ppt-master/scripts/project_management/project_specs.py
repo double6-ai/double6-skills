@@ -87,12 +87,22 @@ _CUSTOM_REFERENCE_CATALOGS = (
     ),
 )
 
+# Display names the registry carried before it was aligned with
+# references/canvas-formats.md; locks written against them still validate.
+_LEGACY_CANVAS_NAMES = {
+    "xiaohongshu": ("小红书",),
+    "moments": ("Moments/Instagram",),
+    "story": ("Story/Vertical",),
+    "banner": ("Horizontal Banner",),
+}
+
 _MARKDOWN_H2_RE = re.compile(r"^##[ \t]+(.+?)[ \t]*$", re.MULTILINE)
 _MARKDOWN_SUBHEADING_RE = re.compile(r"^#{3,6}[ \t]+(.+?)[ \t]*$", re.MULTILINE)
 _MARKDOWN_DATA_LINE_RE = re.compile(
     r"^[ \t]*-[ \t]+(?:\*\*)?([^:\n*]+?)(?:\*\*)?[ \t]*:[ \t]*(.*)$",
     re.MULTILINE,
 )
+_MARKDOWN_LIST_ITEM_RE = re.compile(r"^[ \t]*-[ \t]+(.*)$")
 _IMAGE_PATH_SUFFIXES = frozenset(
     {
         ".bmp",
@@ -120,6 +130,14 @@ _LEGACY_IMAGE_METADATA_KEYS = frozenset(
     }
 )
 _LEGACY_SPEC_LOCK_FORBIDDEN = frozenset({"Mixing icon libraries"})
+_LEGACY_SPEC_LOCK_FORBIDDEN_ANCHORS = (
+    "<style>",
+    "<foreignObject>",
+    "HTML named entities",
+    "Mixing icon libraries",
+    "rgba()",
+    "<g opacity",
+)
 _SCAFFOLD_TOKEN_RE = re.compile(r"\{\{[A-Z_]+\}\}")
 _SCHEMA_MARKER_RE = re.compile(
     r"^<!--[ \t]+ppt-master-schema:[ \t]*([a-z0-9-]+/v[1-9][0-9]*)[ \t]+-->$",
@@ -225,9 +243,9 @@ def _looks_like_image_path(raw: str) -> bool:
 def parse_spec_lock_image_value(key: str, value: str) -> dict[str, str]:
     """Parse one image-lock row while preserving supported legacy rows.
 
-    Current rows use ``<path> | source=... | pattern=... | crop=...``. Legacy
-    rows remain readable, but any row that starts using named metadata must
-    provide the complete current contract.
+    Current rows use ``<path> | source=... | crop=...`` and may retain the
+    legacy ``pattern=...`` projection. Legacy rows remain readable, but any row
+    that starts using named metadata must provide source and crop.
     """
     normalized_key = str(key).strip()
     normalized_value = str(value).strip()
@@ -274,9 +292,10 @@ def parse_spec_lock_image_value(key: str, value: str) -> dict[str, str]:
             raise ValueError(f"repeats metadata field {field!r}")
         metadata[field] = raw.strip()
 
-    expected_fields = {"source", "pattern", "crop"}
-    unknown_fields = sorted(set(metadata) - expected_fields)
-    missing_fields = sorted(expected_fields - set(metadata))
+    allowed_fields = {"source", "pattern", "crop"}
+    required_fields = {"source", "crop"}
+    unknown_fields = sorted(set(metadata) - allowed_fields)
+    missing_fields = sorted(required_fields - set(metadata))
     if unsupported_parts:
         shown = ", ".join(repr(part) for part in unsupported_parts)
         raise ValueError(f"has unsupported metadata token(s) {shown}")
@@ -309,7 +328,7 @@ def parse_spec_lock_image_value(key: str, value: str) -> dict[str, str]:
     if source not in _IMAGE_ACQUISITION_SOURCES:
         allowed = ", ".join(sorted(_IMAGE_ACQUISITION_SOURCES))
         raise ValueError(f"source must be one of {allowed}, got {metadata['source']!r}")
-    if not metadata["pattern"]:
+    if "pattern" in metadata and not metadata["pattern"]:
         raise ValueError("pattern must be non-empty")
     crop = metadata["crop"].casefold()
     if crop not in _IMAGE_CROP_POLICIES:
@@ -319,7 +338,7 @@ def parse_spec_lock_image_value(key: str, value: str) -> dict[str, str]:
     return {
         "path": normalized_path,
         "source": source,
-        "pattern": metadata["pattern"],
+        "pattern": metadata.get("pattern", ""),
         "crop": crop,
         "legacy": "false",
     }
@@ -333,8 +352,9 @@ def parse_spec_lock_artifact(
 ) -> list[dict[str, object]]:
     """Parse one execution lock and normalize supported legacy image rows.
 
-    New locks use ``- <key>: <path> | source=... | pattern=... | crop=...``.
-    Some versioned projects instead placed the image path before the colon.
+    Current locks use ``- <key>: <path> | source=... | crop=...`` and may retain
+    the legacy ``pattern=...`` projection. Some versioned projects instead
+    placed the image path before the colon.
     Preserve those projects by projecting the key path back into the value so
     every consumer sees the same path-first image value.
     """
@@ -374,7 +394,7 @@ def parse_spec_lock_artifact(
         compatibility_warnings.append(
             f"{lock_path.name} images: normalized {len(compatibility_keys)} legacy "
             "path-as-key row(s); new locks should use '- <key>: <path> | "
-            "source=... | pattern=... | crop=...' "
+            "source=... | crop=...' "
             f"(found: {sample}{suffix})"
         )
     return normalized_sections
@@ -422,6 +442,47 @@ def default_spec_lock_forbidden() -> frozenset[str]:
         if line.strip()
     )
     return current | _LEGACY_SPEC_LOCK_FORBIDDEN
+
+
+def _normalize_forbidden_row(row: str) -> str:
+    """Collapse whitespace for baseline comparison and diagnostics."""
+    return " ".join(row.split())
+
+
+def _validate_spec_lock_forbidden(
+    section: Mapping[str, object] | None,
+) -> list[str]:
+    """Require provenance tags on non-baseline rows in a versioned lock."""
+    if section is None:
+        return []
+
+    baseline = {
+        _normalize_forbidden_row(row)
+        for row in default_spec_lock_forbidden()
+    }
+    errors: list[str] = []
+    row_number = 0
+    for line in str(section.get("body", "")).splitlines():
+        match = _MARKDOWN_LIST_ITEM_RE.match(line)
+        if match is None:
+            continue
+        row = _normalize_forbidden_row(match.group(1))
+        if not row:
+            continue
+        row_number += 1
+        if (
+            row in baseline
+            or any(
+                anchor in row for anchor in _LEGACY_SPEC_LOCK_FORBIDDEN_ANCHORS
+            )
+            or row.endswith("(user)")
+        ):
+            continue
+        errors.append(
+            f"spec_lock.md forbidden: row {row_number} is not a baseline rule "
+            f"and lacks the (user) tag: {row[:60]}"
+        )
+    return errors
 
 
 def _load_markdown_schema(schema_path: Path) -> dict[str, object]:
@@ -788,6 +849,20 @@ def _validate_condition(
     return errors
 
 
+_PAGE_COUNT_ROW_RE = re.compile(
+    r"^\|[ \t]*Page Count[ \t]*\|[ \t]*([0-9]+)[ \t]*\|",
+    flags=re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _declared_page_count(section: Mapping[str, object] | None) -> int | None:
+    """Return the exact integer §I Page Count, or None when absent or not exact."""
+    if section is None:
+        return None
+    match = _PAGE_COUNT_ROW_RE.search(str(section.get("body", "")))
+    return int(match.group(1)) if match else None
+
+
 def _validate_slides(
     *,
     markdown_name: str,
@@ -810,6 +885,13 @@ def _validate_slides(
         return [f"{markdown_name} schema: content outline has no Slide blocks"]
 
     errors: list[str] = []
+    declared = _declared_page_count(matched.get("project_information"))
+    if declared is not None and declared != len(heading_matches):
+        errors.append(
+            f"{markdown_name} schema: §I Page Count is {declared} but the "
+            f"content outline has {len(heading_matches)} Slide block(s); "
+            "the two must match"
+        )
     required_fields = slide_contract.get("required_fields", [])
     if not isinstance(required_fields, list):
         return errors
@@ -975,6 +1057,8 @@ def _validate_spec_lock_relations(
     """Validate cross-section references that JSON field rules cannot express."""
     markdown_name = markdown_path.name
     errors: list[str] = []
+
+    errors.extend(_validate_spec_lock_forbidden(matched.get("forbidden")))
 
     def fields(section_id: str) -> dict[str, str]:
         section = matched.get(section_id)
@@ -1152,9 +1236,14 @@ def _validate_spec_lock_relations(
     if canvas is not None:
         expected_format = str(canvas["name"])
         expected_viewbox = str(canvas["viewbox"])
+        accepted_formats = {
+            expected_format,
+            format_key,
+            *_LEGACY_CANVAS_NAMES.get(format_key, ()),
+        }
         if (
             "format" in canvas_fields
-            and _normalize_schema_value(canvas_fields["format"]) != expected_format
+            and _normalize_schema_value(canvas_fields["format"]) not in accepted_formats
         ):
             errors.append(
                 f"{markdown_name} schema: canvas.format must be '{expected_format}'"
@@ -1172,7 +1261,27 @@ def _validate_spec_lock_relations(
 def validate_markdown_schema(markdown_path: Path, schema_path: Path) -> list[str]:
     """Validate one existing Markdown artifact against a versioned schema."""
     try:
-        text = markdown_path.read_text(encoding="utf-8-sig")
+        # Candidate validation removes exactly one BOM, as utf-8-sig did here.
+        text = markdown_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        return [f"Schema validation could not read {markdown_path.name}: {exc}"]
+
+    return validate_markdown_text(text, schema_path, markdown_path=markdown_path)
+
+
+def validate_markdown_text(
+    text: str,
+    schema_path: Path,
+    *,
+    markdown_path: Path = Path("design_spec.md"),
+) -> list[str]:
+    """Validate a candidate without reading or writing its Markdown file.
+
+    The path supplies diagnostic names and a base for schema-declared asset
+    references. A design-spec schema never loads the execution lock.
+    """
+    text = text.removeprefix("\ufeff").replace("\r\n", "\n").replace("\r", "\n")
+    try:
         schema = _load_markdown_schema(schema_path)
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
         return [f"Schema validation could not read {markdown_path.name}: {exc}"]

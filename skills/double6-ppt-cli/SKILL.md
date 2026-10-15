@@ -1,6 +1,6 @@
 ---
 name: double6-ppt-cli
-version: 0.3.0
+version: 0.4.0-exp.1
 description: 基于 ppt-master 与 iOfficeAI/OfficeCLI 两个开源项目，生成、套用模板、读取、检查和闭环修复原生 PPTX；“可编辑”重点指保留原生对象与稳定身份，方便 Agent 多轮定位、修改和复查。适用于从 Markdown、文本、结构化材料与本地授权图片制作演示文稿，复用常规 PPTX 模板，或质检和受限修复已有 PPTX；不负责 PDF/DOCX 内容解析、联网搜图、图片式 PPT、HTML slides、TTS 或视频。
 metadata:
   openclaw:
@@ -13,7 +13,9 @@ metadata:
         - py
 ---
 
-# Double6 PPT CLI 0.3.0
+# Double6 PPT CLI 0.4.0-exp.1（实验版）
+
+> **实验版**：内核已换成 PPT Master v6.7.0，目前只验证了 generate。`template-fill`（`template-analyze`/`template-check-plan`/`template-apply` 等）会返回 `template_fill_not_migrated`；需要模板填充请用 0.3.x。
 
 > 安装说明：从 [GitHub / skills.sh](https://github.com/double6-ai/double6-skills/tree/main/skills/double6-ppt-cli) 安装可获得完整 vendored PPT Master。ClawHub 包因网关体积限制省略了 `pptx_animation_presets.json` 与 `presetShapeDefinitions.xml`；需要原生 SVG 生成完整能力时，请改用 GitHub 安装。
 
@@ -31,7 +33,7 @@ metadata:
 ## Windows / 跨平台注意
 
 - CLI、portable 档、template-fill/postflight 均可在 Windows 运行；OfficeCLI 通过 `officecli.cmd` + PATH 上的 `node` 调用。
-- vendor BOM 校验对 CRLF/LF 已做归一化；`core.autocrlf` 不会导致 137/137 误报。
+- vendor BOM 校验对 CRLF/LF 已做归一化；`core.autocrlf` 不会导致 BOM 全量误报。
 - native PowerPoint 自动化目前仍是 macOS（`osascript`）。Windows 可探测已安装 PowerPoint，但 skill 未实现 COM 原生档，请用 `--verify-tier portable`。
 - run 清单内路径统一为正斜杠，产物可跨平台搬运。
 
@@ -39,7 +41,7 @@ metadata:
 
 本 Skill 使用了两个开源项目，并在其上增加 Double6 的集成代码、工作流约束、状态记录和质量门：
 
-- [ppt-master](https://github.com/hugohe3/ppt-master) `v4.8.0`（MIT）：精简内核随 Skill 一同提供，承担原生生成、模板分析与模板填充能力。
+- [ppt-master](https://github.com/hugohe3/ppt-master) `v6.7.0`（MIT）：精简内核随 Skill 一同提供，承担原生生成（SVG → 原生 DrawingML / 原生 chart、table）。上游 v5 起已删除 Template Fill Native，本实验版不提供模板填充。
 - [iOfficeAI/OfficeCLI](https://github.com/iOfficeAI/OfficeCLI) `v1.0.157`（Apache-2.0）：作为固定版本的外部运行依赖，承担 PPTX 结构读取、检查、确定性操作和 portable 验证；其二进制不包含在 Skill 包内。
 
 本 Skill 所说的“可编辑 PPTX”，重点是方便 Agent 多轮编辑。输出保留原生 DrawingML 对象，并通过稳定对象身份、inspection map、补丁计划、前后 package diff 和验证回执，让 Agent 能在后续轮次定位同一对象、继续修改并重新检查。文件也可以在 PowerPoint 中人工编辑；当前可编辑性验收主要衡量 Agent 重复编辑的可靠性。

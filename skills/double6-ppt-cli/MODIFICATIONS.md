@@ -1,4 +1,15 @@
-# Modifications to PPT Master v4.8.0
+# Modifications to PPT Master (v6.7.0 experimental; history from v4.8.0 below)
+
+## 0.4.0-exp.1: experimental re-vendor of PPT Master v6.7.0 (generate path only)
+
+- `vendor/ppt-master-core/` was replaced by a 172-file lean core taken byte-for-byte from the official `ppt-master-skill-v6.7.0.zip` asset (SHA-256 `40424d97…`, commit `b4efe3d`). The file set is the static import closure of `svg_to_pptx.py`, `svg_quality_checker.py`, `project_manager.py`, `project_management/cli.py` and `template_preview_pptx.py`, plus runtime-opened data, confirmed by an open-trace. Double6 still patches none of them; `attribution_guard.py` verifies the BOM.
+- Template Fill Native no longer exists upstream. `template-fill` fails closed with `template_fill_not_migrated`, and `doctor --mode template-fill` reports fail. A roundtrip-based migration is prototyped separately.
+- New Double6-side build-copy adapter `native_markers.py`: legacy table payloads are upgraded to `ppt-master.semantic-table.v2`, with the v4.8.0 default colours made explicit (v2 treats unset as noFill). Chart and table markers without an authority become JSON-first (`data-pptx-native-authority="json"`), with bounds taken from `data-pptx-bounds`. `semantic.defaults.native_marker_authority: author` opts out. Each change is recorded in the receipt as `normalize_native_markers`.
+- `design_spec.md` scaffold gains the per-slide `- Relationships:` line that the v6 checker requires. Compile pre-checks for remaining placeholders and surfaces v6 quality-report errors in `details.errors`.
+- Semantic manifest now resolves `p:pic` objects (role `image`). This was a pre-existing gap.
+
+## History (v4.8.0)
+
 
 The upstream source files in `vendor/ppt-master-core/` are retained byte-for-byte according to `BOM.json`. Double6 does not patch those 137 files. Version 0.2.0-local added the 18 Template Fill Native modules omitted by the earlier lean-copy closure, using the SHA-verified official v4.8.0 release asset. Version 0.2.1-local keeps that vendor tree unchanged and adds Double6-side slot provenance and package hygiene controls.
 

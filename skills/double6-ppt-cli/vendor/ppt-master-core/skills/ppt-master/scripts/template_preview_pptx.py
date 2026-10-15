@@ -2,8 +2,7 @@
 """
 PPT Master - Template Preview PPTX Exporter
 
-Export public SVG prototypes as a structured review deck while retaining
-definition-only Layout prototypes in the native package.
+Export complete Slide SVG prototypes as a structured review deck.
 
 Usage:
     python3 scripts/template_preview_pptx.py <template_workspace> [-o output.pptx]
@@ -11,7 +10,6 @@ Usage:
 Examples:
     python3 scripts/template_preview_pptx.py projects/my_template
     python3 scripts/template_preview_pptx.py templates/decks/my_template -o review.pptx
-    python3 scripts/template_preview_pptx.py templates/decks/legacy --visual-only
 
 Dependencies:
     python-pptx
@@ -21,10 +19,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import math
 import re
 import shutil
-import statistics
 import sys
 import tempfile
 from collections.abc import Iterator
@@ -33,6 +29,7 @@ from xml.etree import ElementTree as ET
 
 from attribution_guard import require_skill_integrity
 from console_encoding import configure_utf8_stdio
+from slide_roster import discover_slide_svgs
 
 
 configure_utf8_stdio()
@@ -40,11 +37,14 @@ configure_utf8_stdio()
 from pptx import Presentation  # noqa: E402
 
 from svg_to_pptx.drawingml.theme_fonts import (  # noqa: E402
-    MasterTextStyleSpec,
+    infer_master_text_style_spec,
 )
-from svg_to_pptx.drawingml.utils import font_px_to_hpt  # noqa: E402
 from svg_to_pptx.pptx_package.builder import (  # noqa: E402
     create_pptx_with_native_svg,
+)
+from svg_to_pptx.pptx_package.template_structure import (  # noqa: E402
+    load_template_source_themes,
+    parse_template_slides,
 )
 
 
@@ -60,18 +60,8 @@ _CANVAS_VIEWBOX_RE = re.compile(
     r"^canvas_viewbox\s*:\s*[\"']?([^\"'\r\n]+?)[\"']?\s*$",
     re.MULTILINE,
 )
-_FONT_SIZE_RE = re.compile(r"^([0-9]+(?:\.[0-9]+)?)(?:px)?$")
 _FILENAME_UNSAFE_RE = re.compile(r"[\\/:*?\"<>|\x00-\x1f]+")
 _PLACEHOLDER_MARKER_RE = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
-_TITLE_PLACEHOLDERS = frozenset({"title", "subtitle"})
-_BODY_PLACEHOLDERS = frozenset({
-    "body",
-    "date",
-    "footer",
-    "slide-number",
-})
-_DEFAULT_TITLE_PX = 40.0
-_DEFAULT_BODY_PX = 24.0
 
 
 def _review_marker_text(match: re.Match[str]) -> str:
@@ -144,55 +134,95 @@ def _review_svg_sources(
         yield review_files
 
 
-def _partition_svg_prototypes(
-    svg_files: list[Path],
-    *,
-    visual_only: bool,
-) -> tuple[list[Path], list[Path]]:
-    """Separate public pages from canonical definition-only Layout SVGs."""
-    if visual_only:
-        return svg_files, []
-    public_files: list[Path] = []
-    definition_files: list[Path] = []
-    for path in svg_files:
-        target = definition_files if path.stem.startswith("layout_") else public_files
-        target.append(path)
-    return public_files, definition_files
+_TEMPLATE_SPEC_NAME_RE = re.compile(
+    r"design_spec\.(?P<kind>brand|style|layout|deck)\.[^/\\]+\.md"
+)
+
+
+def _roster_spec(directory: Path) -> Path | None:
+    """Return the effective spec that owns this directory's SVG roster.
+
+    A library workspace keeps the exact ``design_spec.md``. A project workspace
+    shares one ``templates/`` across kinds. Layout owns structure when both
+    Layout and Deck are present; otherwise Deck owns it.
+    """
+    if not directory.is_dir():
+        return None
+    exact = directory / "design_spec.md"
+    qualified = []
+    for item in sorted(directory.glob("design_spec.*.md")):
+        match = _TEMPLATE_SPEC_NAME_RE.fullmatch(item.name)
+        if match is not None:
+            qualified.append((item, match.group("kind")))
+    if exact.is_file() and qualified:
+        raise ValueError(
+            "design_spec.md and design_spec.<kind>.<id>.md cannot share "
+            f"{directory}; rename the bare spec to its kind-qualified name"
+        )
+    kinds = [kind for _item, kind in qualified]
+    duplicate_kinds = sorted({
+        kind for kind in kinds if kinds.count(kind) > 1
+    })
+    if duplicate_kinds:
+        raise ValueError(
+            f"{directory} declares the same kind more than once: "
+            + ", ".join(duplicate_kinds)
+        )
+    try:
+        from register_template import (
+            SpecParseError,
+            validate_qualified_spec_identity,
+        )
+        for item, _kind in qualified:
+            validate_qualified_spec_identity(item)
+    except ImportError as exc:
+        raise ValueError(
+            f"Qualified Design Spec validator could not be imported: {exc}"
+        ) from exc
+    except (OSError, SpecParseError) as exc:
+        raise ValueError(str(exc)) from exc
+    if exact.is_file():
+        return exact
+    for preferred_kind in ("layout", "deck"):
+        for item, kind in qualified:
+            if kind == preferred_kind:
+                return item
+    return None
 
 
 def _resolve_workspace(path: Path) -> tuple[Path, Path]:
     """Resolve one workspace root and its canonical template-source directory."""
     candidate = path.expanduser().resolve()
-    nested_spec = candidate / "templates" / "design_spec.md"
-    if nested_spec.is_file():
+    if _roster_spec(candidate / "templates") is not None:
         return candidate, candidate / "templates"
-
-    direct_spec = candidate / "design_spec.md"
-    if direct_spec.is_file():
-        if candidate.name == "templates" and (candidate.parent / "exports").is_dir():
-            return candidate.parent, candidate
-        return candidate, candidate
-
     raise ValueError(
-        "template workspace must contain templates/design_spec.md "
-        "(current structure) or design_spec.md (legacy flat package)"
+        "template workspace root must contain templates/design_spec.md or "
+        "templates/design_spec.<layout|deck>.<id>.md"
     )
 
 
-def _template_id(spec_path: Path, workspace: Path) -> str:
-    """Read a portable template id, falling back to the workspace directory name."""
+def _template_id(spec_path: Path) -> str:
+    """Read the required portable template id."""
     text = spec_path.read_text(encoding="utf-8")
     match = _FRONTMATTER_ID_RE.search(text)
-    raw = match.group(1).strip().strip("'\"") if match else workspace.name
+    if match is None:
+        raise ValueError(
+            f"{spec_path.name} frontmatter must declare layout_id or deck_id"
+        )
+    raw = match.group(1).strip().strip("'\"")
     safe = _FILENAME_UNSAFE_RE.sub("_", raw).strip(" ._")
     return safe or "template"
 
 
 def _replication_mode(spec_path: Path) -> str:
-    """Read the template replication mode, defaulting legacy packages to standard."""
+    """Read the required template replication mode."""
     text = spec_path.read_text(encoding="utf-8")
     match = _REPLICATION_MODE_RE.search(text)
-    return match.group(1) if match else "standard"
+    if match is None:
+        raise ValueError(
+            f"{spec_path.name} frontmatter must declare replication_mode"
+        )
+    return match.group(1)
 
 
 def _canvas_viewbox(spec_path: Path) -> str | None:
@@ -205,65 +235,6 @@ def _canvas_viewbox(spec_path: Path) -> str | None:
         return None
     match = _CANVAS_VIEWBOX_RE.search(text[4:end])
     return match.group(1).strip() if match else None
-
-
-def _style_property(style: str, name: str) -> str | None:
-    """Return one inline CSS declaration value."""
-    for declaration in style.split(";"):
-        key, separator, value = declaration.partition(":")
-        if separator and key.strip().lower() == name:
-            return value.strip()
-    return None
-
-
-def _font_size_px(element: ET.Element) -> float | None:
-    """Read one finite positive SVG font size in px."""
-    raw = element.get("font-size")
-    if raw is None:
-        raw = _style_property(element.get("style", ""), "font-size")
-    if raw is None:
-        return None
-    match = _FONT_SIZE_RE.fullmatch(raw.strip())
-    if match is None:
-        return None
-    value = float(match.group(1))
-    return value if math.isfinite(value) and value > 0 else None
-
-
-def _carrier_sizes(svg_files: list[Path]) -> tuple[list[float], list[float]]:
-    """Collect authored title/body sizes from semantic placeholder carriers."""
-    title_sizes: list[float] = []
-    body_sizes: list[float] = []
-    for svg_path in svg_files:
-        root = ET.parse(svg_path).getroot()
-        for slot in root.iter():
-            placeholder = slot.get("data-pptx-placeholder")
-            if placeholder not in _TITLE_PLACEHOLDERS | _BODY_PLACEHOLDERS:
-                continue
-            for carrier in slot.iter():
-                if carrier.get("data-pptx-carrier") != "true":
-                    continue
-                size = _font_size_px(carrier)
-                if size is None:
-                    continue
-                target = title_sizes if placeholder in _TITLE_PLACEHOLDERS else body_sizes
-                target.append(size)
-    return title_sizes, body_sizes
-
-
-def _master_text_style(svg_files: list[Path]) -> tuple[MasterTextStyleSpec, float, float]:
-    """Build review-only Master text defaults without requiring a project lock."""
-    title_sizes, body_sizes = _carrier_sizes(svg_files)
-    title_px = float(statistics.median(title_sizes)) if title_sizes else _DEFAULT_TITLE_PX
-    body_px = float(statistics.median(body_sizes)) if body_sizes else _DEFAULT_BODY_PX
-    return (
-        MasterTextStyleSpec(
-            title_hpt=font_px_to_hpt(title_px),
-            body_hpt=font_px_to_hpt(body_px),
-        ),
-        title_px,
-        body_px,
-    )
 
 
 def _verify_output(
@@ -333,10 +304,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "template_workspace",
-        help=(
-            "Workspace containing templates/design_spec.md; legacy flat template "
-            "directories are also accepted."
-        ),
+        help="Workspace root containing templates/design_spec.md.",
     )
     parser.add_argument(
         "-o",
@@ -352,11 +320,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Replace an existing review PPTX after an intentional re-export.",
     )
     parser.add_argument(
-        "--visual-only",
+        "--native-charts-and-tables",
         action="store_true",
         help=(
-            "Export a legacy SVG roster as slide-local DrawingML for visual review. "
-            "This does not validate or claim a reusable Master/Layout contract."
+            "Replace eligible SVG chart/table fallbacks with PowerPoint-native "
+            "objects. Enabled automatically for typed chart/table placeholders; "
+            "otherwise the default keeps visible SVG fallbacks."
         ),
     )
     return parser
@@ -369,30 +338,36 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         workspace, template_dir = _resolve_workspace(Path(args.template_workspace))
-        all_svg_files = sorted(template_dir.glob("*.svg"))
+        all_svg_files = discover_slide_svgs(template_dir)
         if not all_svg_files:
             raise ValueError(f"template directory has no SVG prototypes: {template_dir}")
-        svg_files, layout_definition_files = _partition_svg_prototypes(
-            all_svg_files,
-            visual_only=args.visual_only,
-        )
-        if not svg_files:
+        definition_only_files = [
+            path.name
+            for path in all_svg_files
+            if path.stem.startswith("layout_")
+        ]
+        if definition_only_files:
             raise ValueError(
-                "template directory contains Layout definitions but no public "
-                f"SVG prototypes: {template_dir}"
+                "template workspaces accept only complete Slide prototypes; "
+                "replace definition-only Layout SVG(s) with authored Slide "
+                "prototypes: " + ", ".join(definition_only_files)
             )
+        svg_files = all_svg_files
 
-        spec_path = template_dir / "design_spec.md"
-        template_id = _template_id(spec_path, workspace)
+        spec_path = _roster_spec(template_dir)
+        template_id = _template_id(spec_path)
         replication_mode = _replication_mode(spec_path)
+        source_themes = load_template_source_themes(template_dir)
+        if source_themes is not None and replication_mode != "mirror":
+            raise ValueError(
+                "source_themes.json is allowed only in a mirror workspace"
+            )
         locked_canvas = _canvas_viewbox(spec_path)
-        if locked_canvas is None and not args.visual_only:
+        if locked_canvas is None:
             raise ValueError(
                 "design_spec.md frontmatter must declare canvas_viewbox"
             )
-        use_full_placeholder_frames = (
-            not args.visual_only and replication_mode != "mirror"
-        )
+        use_full_placeholder_frames = replication_mode != "mirror"
         output_path = (
             Path(args.output).expanduser().resolve()
             if args.output
@@ -405,22 +380,24 @@ def main(argv: list[str] | None = None) -> int:
                 f"output already exists: {output_path}; use --force to replace it"
             )
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        text_style: MasterTextStyleSpec | None = None
-        if not args.visual_only:
-            text_style, title_px, body_px = _master_text_style(all_svg_files)
+        text_style, title_px, body_px = infer_master_text_style_spec(
+            all_svg_files
+        )
+        typed_slots = sorted({
+            item.placeholder
+            for spec in parse_template_slides(svg_files)
+            for item in spec.placeholders
+            if item.placeholder in {"chart", "table"}
+        })
+        native_objects = args.native_charts_and_tables or bool(typed_slots)
 
         print("PPT Master - Template Preview PPTX Exporter")
         print(f"  Workspace: {workspace}")
         print(f"  Template source: {template_dir}")
-        print(f"  Public SVG prototypes: {len(svg_files)}")
-        if layout_definition_files:
-            print(
-                "  Definition-only Layout prototypes: "
-                f"{len(layout_definition_files)}"
-            )
-        if args.visual_only:
-            print("  Review mode: visual-only legacy compatibility")
-        elif replication_mode == "mirror":
+        print(f"  Slide SVG prototypes: {len(svg_files)}")
+        if typed_slots:
+            print("  Native Chart/Table compilation: required by typed " + ", ".join(typed_slots) + " slots")
+        if replication_mode == "mirror":
             print("  Review placeholder frames: preserved source Slide geometry")
         else:
             print(f"  Review Master defaults: title {title_px:g}px, body {body_px:g}px")
@@ -429,18 +406,13 @@ def main(argv: list[str] | None = None) -> int:
 
         with _review_svg_sources(
             workspace,
-            all_svg_files,
+            svg_files,
             shorten_placeholder_markers=use_full_placeholder_frames,
-        ) as review_all_svg_files:
-            review_svg_files, review_layout_definition_files = (
-                _partition_svg_prototypes(
-                    review_all_svg_files,
-                    visual_only=args.visual_only,
-                )
-            )
+        ) as review_svg_files:
             success = create_pptx_with_native_svg(
                 svg_files=review_svg_files,
                 output_path=output_path,
+                resource_root=workspace,
                 canvas_format=None,
                 expected_viewbox=locked_canvas,
                 verbose=True,
@@ -448,12 +420,12 @@ def main(argv: list[str] | None = None) -> int:
                 enable_notes=False,
                 animation=None,
                 image_optimize=False,
-                native_objects=True,
-                pptx_structure="flat" if args.visual_only else "structured",
+                native_objects=native_objects,
+                pptx_structure="structured",
                 use_layout_placeholder_frames=use_full_placeholder_frames,
                 master_text_style_spec=text_style,
                 structure_name=template_id,
-                layout_definition_files=review_layout_definition_files,
+                source_theme_xml_by_master=source_themes,
             )
         if not success or not output_path.is_file():
             print("Error: template preview export did not produce a PPTX", file=sys.stderr)
@@ -471,14 +443,13 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
 
-        label = "Visual-only template preview" if args.visual_only else "Template preview"
         placeholder_status = (
             f", {placeholder_count} full-frame placeholder(s)"
             if use_full_placeholder_frames
             else ""
         )
         print(
-            f"[OK] {label} verified: "
+            "[OK] Template preview verified: "
             f"{slide_count} slides, {master_count} master(s), "
             f"{layout_count} layout(s){placeholder_status}"
         )
