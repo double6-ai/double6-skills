@@ -393,7 +393,7 @@ def r_big_number(pg: Page, d):
     col = p["accent"] if pg.dark else p["primary"]
     sup = d.get("supporting") or []
     vsize = pg.SZ["mega"] if text_width(d["value"], pg.SZ["mega"], True) < 820 else pg.SZ["hero"]
-    vy = top + 40 + vsize * 0.8 + (30 if not sup else 0)
+    vy = (top + (504 - top) / 2 + vsize * 0.36) if sup else (top + 40 + vsize * 0.8 + 30)
     gx = M
     b += pg.text(gx - 6, vy, d["value"], vsize, col, "data", True)
     vw = text_width(d["value"], vsize, True)
