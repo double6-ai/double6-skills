@@ -18,7 +18,9 @@ class DesignPresetTests(unittest.TestCase):
             p = design_presets.resolve(name)
             self.assertTrue((VENDOR / "templates" / "styles" / p["style_id"] / "templates" / "design_spec.md").is_file(), name)
             self.assertTrue((VENDOR / "references" / "visual-styles" / f"{p['visual_style']}.md").is_file(), name)
-            self.assertLessEqual(len(p["type"]), 7)
+            self.assertLessEqual(len(set(p["type"].values())), 7)
+            self.assertGreaterEqual(p["type"]["body"], 20)
+            self.assertGreaterEqual(p["type"]["title"], 40)
             self.assertNotIn("#4472C4", p["chart_series"])
         self.assertEqual(design_presets.resolve("business")["name"], "consulting")
 

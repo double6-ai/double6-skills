@@ -28,7 +28,7 @@
 | `training` | workshop-teaching | 浅 | #FFFBF3 | #124E5C | #FF8A3D | #5BB5C8 | 协作人物、暖光、圆角裁切 |
 | `neutral` | — | — | 待填 | 待填 | 待填 | 待填 | 有品牌规范时自行填写 |
 
-spec_lock 还会写入 `gradient_from/to`、`on_accent`、`on_primary`（自动算出的高对比文字色）、`chart_series`（相邻系列 ΔE ≥ 25）和 `imagery`。字号阶梯（px）：hero 112 / display 60 / title 36 / subtitle 24 / body 18 / label 14 / caption 12。用户给了品牌色时以品牌为准。
+spec_lock 还会写入 `gradient_from/to`、`on_accent`、`on_primary`（自动算出的高对比文字色）、`chart_series`（相邻系列 ΔE ≥ 25）和 `imagery`。字号阶梯（px）：mega 200 / hero 120 / display 64 / title 40 / subtitle 28 / body 22 / label 15（caption 同 label）。正文不小于 14pt。用户给了品牌色时以品牌为准。
 
 ## 3. 配色与样式（以上游 style 为准）
 
@@ -56,9 +56,9 @@ spec_lock 还会写入 `gradient_from/to`、`on_accent`、`on_primary`（自动�
 
 ## 4b. 让 deck 好看：版式配方与图片
 
-“能交付”不等于“好看”。参照上游最佳示例和 Keynote、McKinsey/BCG、Pitch/Gamma 一类专业 deck，用下面的手段建立视觉节奏。可直接套用的配方见 [layout-recipes.md](layout-recipes.md)：
+“能交付”不等于“好看”。参照上游最佳示例和 Keynote、McKinsey/BCG、Pitch/Gamma 一类专业 deck，用下面的手段建立视觉节奏。这些手段已经做成 `d6ppt recipe` 命令，见 [layout-recipes.md](layout-recipes.md)。正文页以非卡片构图为主：
 
-- **大胆的字号对比**：每页一个主角。hero（112px）大数字或 display 标题，配 label 级说明，不要所有文字一样大。
+- **大胆的字号对比**：每页一个主角。mega（200px）或 hero（120px）大数字或 display 标题，配 label 级说明，不要所有文字一样大。
 - **大数字 hero**：关键指标做成渐变色块里的巨型数字，其余指标放在旁边一栏（不对称）。
 - **满版照片**：封面、章节页、结束页用满版照片加渐变 scrim（底部 0.6–0.85 黑），文字压在 scrim 上。
 - **分屏**：照片占半屏，另一半放论点；照片上可压一个大数字。

@@ -6,8 +6,8 @@ distinct chart series), a type ladder with hero numbers, and an imagery directio
 """
 from __future__ import annotations
 
-TYPE_LADDER = {  # SVG px on the 1280x720 canvas; 1 px = 0.75 pt. Seven steps, hero numbers included.
-    "hero": 112, "display": 60, "title": 36, "subtitle": 24, "body": 18, "label": 14, "caption": 12,
+TYPE_LADDER = {  # SVG px on the 1280x720 canvas; 1 px = 0.75 pt. Seven distinct steps (caption shares label's size).
+    "mega": 200, "hero": 120, "display": 64, "title": 40, "subtitle": 28, "body": 22, "label": 15, "caption": 15,
 }
 
 _NEUTRAL_LIGHT = {"text": "#141A22", "muted": "#566070", "line": "#DCE0E6"}

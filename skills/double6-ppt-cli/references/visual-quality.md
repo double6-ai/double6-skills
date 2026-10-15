@@ -43,6 +43,7 @@ generate 模式交付前必须通过本门：**确定性检查无 error** 且 **
 | `orphan_line` | 折行后末行过短：中文段末行只剩 ≤1 个汉字或 ≤6 个字符的拉丁/数字片段（如“4%”）；英文段末行只剩一个 ≤6 字符的单词 | error |
 | `cjk_latin_space` | 中文与数字/拉丁字母之间手动加了空格（如“11 月 11 日”） | error |
 | `chart_series_indistinct` | 同一图表相邻系列色 CIE76 ΔE < 25 | error |
+| `small_body_text` | 长段文字（≥50 个宽度单位，中文算 2）字号 < 14pt；页脚、署名、来源说明除外 | error |
 | `image_credit_missing` | `images/` 中的图片在 credits.json 缺少许可/作者/来源（compile 阶段报错） | error |
 
 注：LibreOffice 渲染时会在中文与拉丁字符之间自动加间距（即使源文本没有空格），PowerPoint 不会。这是渲染器的行为，不算 `cjk_latin_space`。
