@@ -5,7 +5,7 @@
     {
       "component": "lean_ppt_master_core_candidate",
       "license": "MIT",
-      "planned_form": "vendored_172_file_lean_core_unmodified_v6.7.0",
+      "planned_form": "vendored_173_file_lean_core_unmodified_v6.7.0",
       "required_actions": [
         "retain_upstream_LICENSE",
         "preserve_attribution_guard",

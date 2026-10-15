@@ -1,5 +1,11 @@
 # Modifications to PPT Master (v6.7.0 experimental; history from v4.8.0 below)
 
+## 0.4.0-exp.2: template-fill on the PPT Master v6.7.0 roundtrip
+
+- Added upstream `skills/ppt-master/scripts/pptx_to_svg.py` (byte-identical to the SHA-verified v6.7.0 asset; its `pptx_to_svg/` package was already vendored) so the roundtrip import runs from the vendor tree. BOM now lists 173 files; still no vendor file is patched.
+- `scripts/double6_ppt_cli/pm6_template/fillnative/` is a Double6-maintained port of the read-only parts of PPT Master v4.8.0 `scripts/template_fill_pptx/` (analyzer, chart_read, diagram_read, edit_safety, ooxml, package, selectors, checker, scaffolder, notes, transitions; commit `53c9c2a`, MIT, Copyright (c) Hugo He). Files carry an origin header; the only change is the module location (imports of shared helpers resolve to the vendored v6.7.0 `pptx_transitions` / `svg_to_pptx.pptx_package.notes`). The removed v4.8 applier is replaced by the roundtrip writer in `pm6_template/roundtrip.py`.
+- `template_workflow._normalize_txbody_paragraph_order` no longer sorts interleaved `a:r`/`a:br`/`a:fld` and only touches slide parts.
+
 ## 0.4.0-exp.1: experimental re-vendor of PPT Master v6.7.0 (generate path only)
 
 - `vendor/ppt-master-core/` was replaced by a 172-file lean core taken byte-for-byte from the official `ppt-master-skill-v6.7.0.zip` asset (SHA-256 `40424d97…`, commit `b4efe3d`). The file set is the static import closure of `svg_to_pptx.py`, `svg_quality_checker.py`, `project_manager.py`, `project_management/cli.py` and `template_preview_pptx.py`, plus runtime-opened data, confirmed by an open-trace. Double6 still patches none of them; `attribution_guard.py` verifies the BOM.

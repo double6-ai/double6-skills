@@ -1,7 +1,7 @@
 # Licenses and upstreams
 
 - Double6 原创 glue、policy、CLI、schema 和测试：Apache License 2.0，见根 `LICENSE` 与 `NOTICE`。
-- `vendor/ppt-master-core/`：**实验分支 0.4.0-exp.1**：PPT Master `v6.7.0`（commit `b4efe3ddf237a97a42880164759162f8e2412f2f`）172 文件精简内核，取自官方 release asset `ppt-master-skill-v6.7.0.zip`（SHA `40424d97…`，逐字节一致），MIT（LICENSE SHA `80cefc…` 与 v4.8.0 相同）。仅覆盖 generate 路径；Template Fill Native 上游已删除，未包含。原文件、许可证、BOM 与修改记录必须保留。此前为 v4.8.0 / `53c9c2a` 137 文件。
+- `vendor/ppt-master-core/`：**实验分支 0.4.0-exp.1**：PPT Master `v6.7.0`（commit `b4efe3ddf237a97a42880164759162f8e2412f2f`）173 文件精简内核，取自官方 release asset `ppt-master-skill-v6.7.0.zip`（SHA `40424d97…`，逐字节一致），MIT（LICENSE SHA `80cefc…` 与 v4.8.0 相同）。覆盖 generate 路径和 template-fill roundtrip 导入入口（`pptx_to_svg.py`）；Template Fill Native 上游已删除，其只读分析/检查模块由 Double6 移植到 `scripts/double6_ppt_cli/pm6_template/fillnative/`（MIT，保留来源头注释）。测试夹具 `scripts/tests/fixtures/poi_smartart.pptx` 来自 Apache POI（Apache-2.0）。原文件、许可证、BOM 与修改记录必须保留。此前为 v4.8.0 / `53c9c2a` 137 文件。
 - OfficeCLI：`iOfficeAI/OfficeCLI v1.0.157`（0.3.0 起；此前为 v1.0.144，两版 LICENSE/NOTICE 字节一致），Apache-2.0，作为外部固定依赖安装，不 vendoring 二进制。不要误装另一个 `officecli@0.2.x` 同名项目。
 - Open XML preset shape data 的 Apache/MIT provenance notice 保留在 vendor 原路径。
 
@@ -14,4 +14,4 @@
 
 ## 实验迁移记录（2026-10-15，0.4.0-exp.1）
 
-- PPT Master 升级至 `v6.7.0`，仅 generate；template-fill 返回 `template_fill_not_migrated`，由独立的 roundtrip 原型处理。
+- PPT Master 升级至 `v6.7.0`；template-fill 走 v6.7.0 roundtrip 后端（0.4.0-exp.2）。
