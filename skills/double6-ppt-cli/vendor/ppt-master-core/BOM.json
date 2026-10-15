@@ -1,19 +1,19 @@
 {
   "schema_version": 1,
-  "status": "experimental_for_double6_ppt_cli_generate_only",
+  "status": "vendored_for_double6_ppt_cli_0.4.0_generate_and_template_fill",
   "upstream": "https://github.com/hugohe3/ppt-master",
   "tag": "v6.7.0",
   "commit": "b4efe3ddf237a97a42880164759162f8e2412f2f",
   "license": "MIT",
-  "file_count": 172,
-  "total_bytes": 6088630,
+  "file_count": 173,
+  "total_bytes": 6097948,
   "official_release_asset": {
     "name": "ppt-master-skill-v6.7.0.zip",
     "bytes": 22549906,
     "sha256": "40424d9784fa25f771da8b312258c3c67a168925122aa6bb7faf6848e77ceee9",
     "verification": "every skills/ppt-master file below is byte-identical to the same path inside the SHA-verified release asset"
   },
-  "selection": "static import closure of svg_to_pptx.py + svg_quality_checker.py (+ runtime-opened project_manager.py, project_management/cli.py, template_preview_pptx.py), non-Python data in those package directories, templates/schemas + templates/scaffolds, pptx_shapes/data provenance files, and upstream license/attribution files",
+  "selection": "static import closure of svg_to_pptx.py + svg_quality_checker.py (+ runtime-opened project_manager.py, project_management/cli.py, template_preview_pptx.py), non-Python data in those package directories, templates/schemas + templates/scaffolds, pptx_shapes/data provenance files, and upstream license/attribution files; plus pptx_to_svg.py (roundtrip import entry for template-fill)",
   "files": [
     {
       "path": "LICENSE",
@@ -455,6 +455,15 @@
       "license": "MIT",
       "category": "drawingml_compiler",
       "why_needed": "Required by svg_to_pptx.py (editable DrawingML + native chart/table export) run by d6ppt compile."
+    },
+    {
+      "path": "skills/ppt-master/scripts/pptx_to_svg.py",
+      "bytes": 9318,
+      "sha256": "1f5aa7627dd144f4b18a48c5ab628a1ff3c67ec80eb750cb2fd675ae186f5218",
+      "origin_path": "skills/ppt-master/scripts/pptx_to_svg.py",
+      "license": "MIT",
+      "category": "runtime_code",
+      "why_needed": "CLI entry of the PPTX→SVG roundtrip import used by the double6 PM6 template-fill backend (pptx_to_svg/ package was already vendored)."
     },
     {
       "path": "skills/ppt-master/scripts/pptx_to_svg/__init__.py",

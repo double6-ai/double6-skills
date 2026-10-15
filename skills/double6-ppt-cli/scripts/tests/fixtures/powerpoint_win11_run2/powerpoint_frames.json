@@ -1,0 +1,182 @@
+﻿[
+    {
+        "deck":  "en_qbr_shrink",
+        "slide":  1,
+        "id":  2,
+        "name":  "Title 1",
+        "left":  54,
+        "top":  167.75,
+        "width":  612,
+        "height":  115.75
+    },
+    {
+        "deck":  "en_qbr_shrink",
+        "slide":  1,
+        "id":  3,
+        "name":  "Subtitle 2",
+        "left":  108,
+        "top":  306,
+        "width":  504,
+        "height":  138
+    },
+    {
+        "deck":  "en_qbr_shrink",
+        "slide":  2,
+        "id":  2,
+        "name":  "Title 1",
+        "left":  36,
+        "top":  21.62504,
+        "width":  648,
+        "height":  90
+    },
+    {
+        "deck":  "en_qbr_shrink",
+        "slide":  2,
+        "id":  3,
+        "name":  "Content Placeholder 2",
+        "left":  36,
+        "top":  126,
+        "width":  648,
+        "height":  356.375031
+    },
+    {
+        "deck":  "en_qbr_shrink",
+        "slide":  2,
+        "id":  4,
+        "name":  "KPI Callout",
+        "left":  55.11811,
+        "top":  464.566925,
+        "width":  472.440948,
+        "height":  39.37008
+    },
+    {
+        "deck":  "en_qbr_shrink",
+        "slide":  3,
+        "id":  2,
+        "name":  "Title 1",
+        "left":  36,
+        "top":  21.62504,
+        "width":  648,
+        "height":  90
+    },
+    {
+        "deck":  "en_qbr_shrink",
+        "slide":  3,
+        "id":  3,
+        "name":  "Table 2",
+        "left":  55.11811,
+        "top":  133.858261,
+        "width":  472.440948,
+        "height":  94.48819
+    },
+    {
+        "deck":  "en_qbr_shrink",
+        "slide":  3,
+        "id":  4,
+        "name":  "Chart 3",
+        "left":  551.1811,
+        "top":  133.858261,
+        "width":  354.330719,
+        "height":  236.220474
+    },
+    {
+        "deck":  "en_qbr_shrink",
+        "slide":  4,
+        "id":  2,
+        "name":  "Title 1",
+        "left":  36,
+        "top":  21.62504,
+        "width":  648,
+        "height":  90
+    },
+    {
+        "deck":  "en_qbr_shrink",
+        "slide":  4,
+        "id":  3,
+        "name":  "Content Placeholder 2",
+        "left":  36,
+        "top":  126,
+        "width":  648,
+        "height":  356.375031
+    },
+    {
+        "deck":  "en_qbr_shrink",
+        "slide":  4,
+        "id":  4,
+        "name":  "KPI Callout",
+        "left":  55.11811,
+        "top":  464.566925,
+        "width":  472.440948,
+        "height":  39.37008
+    },
+    {
+        "deck":  "zh_factory_shrink",
+        "slide":  1,
+        "id":  2,
+        "name":  "Title 1",
+        "left":  54,
+        "top":  167.75,
+        "width":  612,
+        "height":  115.75
+    },
+    {
+        "deck":  "zh_factory_shrink",
+        "slide":  1,
+        "id":  3,
+        "name":  "Subtitle 2",
+        "left":  108,
+        "top":  306,
+        "width":  504,
+        "height":  138
+    },
+    {
+        "deck":  "zh_factory_shrink",
+        "slide":  2,
+        "id":  2,
+        "name":  "Title 1",
+        "left":  36,
+        "top":  21.62504,
+        "width":  648,
+        "height":  90
+    },
+    {
+        "deck":  "zh_factory_shrink",
+        "slide":  2,
+        "id":  3,
+        "name":  "Content Placeholder 2",
+        "left":  36,
+        "top":  126,
+        "width":  648,
+        "height":  356.375031
+    },
+    {
+        "deck":  "zh_factory_shrink",
+        "slide":  2,
+        "id":  4,
+        "name":  "卡片1",
+        "left":  55.11811,
+        "top":  393.700775,
+        "width":  259.842529,
+        "height":  70.86614
+    },
+    {
+        "deck":  "zh_factory_shrink",
+        "slide":  2,
+        "id":  5,
+        "name":  "卡片2",
+        "left":  338.582672,
+        "top":  393.700775,
+        "width":  259.842529,
+        "height":  70.86614
+    },
+    {
+        "deck":  "zh_factory_shrink",
+        "slide":  2,
+        "id":  6,
+        "name":  "卡片3",
+        "left":  622.047241,
+        "top":  393.700775,
+        "width":  259.842529,
+        "height":  70.86614
+    }
+]

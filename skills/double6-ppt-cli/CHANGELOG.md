@@ -1,6 +1,48 @@
 # double6-ppt-cli 变更记录
 
-## 0.4.0-exp.1（实验，未发布）
+## 0.4.0（2026-10-15）
+
+正式版，合并了下面 0.4.0-exp.1 至 exp.3 的全部开发内容：
+
+- **PPT Master v4.8.0 → v6.7.0**（commit `b4efe3d`，官方 asset SHA `40424d97…`）：随 Skill 提供 173 个文件的精简内核，版本由 BOM 和 UPSTREAM_LOCK 锁定，不再需要设置 `D6PPT_PM6_ROOT`。
+- **generate** 改走 PPT Master v6.7.0 的原生生成路径。
+- **template-fill** 改用 v6.7.0 roundtrip 后端（`pm6_template`）：
+  - 形状 ID、占位符继承、段落属性和项目符号都保持原生；
+  - 沿用 v4.8 的分析/检查/计划契约；
+  - 支持讲者备注、切换效果，以及段落内的混合格式。
+- **文本适配按 PowerPoint 实测校准**：
+  - 缩字直接写进 run 的字号，不依赖 normAutofit fontScale；
+  - 按角色设缩字下限；
+  - 内容明显超出可用高度，或会压到下方卡片、指标框时，计划检查报 ERROR；
+  - 估算与 Win11 + PowerPoint 16 的实测误差在 0.1pt 以内。
+- 新增 Windows/macOS 一键 PowerPoint 验证脚本（`scripts/verify/`），以及 11 个真实模板、共 14 组的回归测试。
+- OfficeCLI 固定版本仍为 `1.0.157`。
+
+### 0.4.0-exp.3（开发过程记录）
+
+- 根据 Win11 + PowerPoint 16 实测修正文本适配：
+  - 缩字一律显式写入 run 的 `sz`，`normAutofit` 不再写 fontScale/lnSpcReduction（实测 PowerPoint 重算时会把 fontScale 重置为 100%）；
+  - 缩字下限：比例 0.7 / 0.85，标题不小于 20pt，正文不小于 12pt；
+  - 多段文字在原字号下超过可用高度 1.6 倍，或到下限仍放不下，计划检查报 ERROR；
+  - 文本框下方的卡片、指标框等形状会缩小可用高度（避免文字压到这些形状上）；
+  - 度量引擎重新校准：行高 1.2 倍字号，第一段不计 spcBef，安全余量为高度 ×1.06、宽度 ×0.97。11 个实测文本框的估算与 PowerPoint 误差在 0.1pt 以内（之前在需要 552pt 的地方只估了 340pt）。
+- 验证脚本：增加「文字压到其他形状」检测；PowerPoint 重算后字号或 fontScale 与我方不一致即判失败；用例增至 5 个并写明预期结果；有失败时退出码为 1。
+- 新增回归测试 `test_powerpoint_calibration.py`，使用 PowerPoint 实测数据（`tests/fixtures/powerpoint_win11/`）。
+
+### 0.4.0-exp.2（开发过程记录）
+
+- **template-fill 迁移到 PPT Master v6.7.0 roundtrip**（`scripts/double6_ppt_cli/pm6_template/`）：
+  - 导入 → 对象原生回传（cloned_passthrough）→ 导出后按 cNvPr id 原生改写 txBody；形状 ID、占位符继承、段落属性、项目符号都保持原生。
+  - 用真实字体度量做中英文换行（Linux 用 fontconfig；Windows/macOS 扫描系统字体目录），结果映射到原生 normAutofit/spAutoFit/缩字；估算会溢出时 check 阶段报 ERROR。
+  - 分析/计划草稿/检查沿用 v4.8 契约：Double6 维护的 v4.8 只读模块移植（`pm6_template/fillnative/`，MIT），包括 SmartArt 读取、图表编辑能力、合并单元格拓扑、选择器（slot_id/shape_id/shape_name）、`paragraphs`、复用集中度告警。
+  - 讲者备注（`notes`：替换 / `"keep"` / 省略时删除模板示例备注）和切换效果（`transition`：保留 / 替换 / `none`）。
+  - 同一段落内混合格式：未改动的段落原样保留全部 run、换行和字段；改动段落保留公共前后缀所在 run 的样式。
+- vendor 新增上游 `pptx_to_svg.py`（173 文件，逐字节一致，BOM 已更新），版本由 BOM 锁定；不再需要 `D6PPT_PM6_ROOT`（仅作开发覆盖）。
+- 修复：`_normalize_txbody_paragraph_order` 把交错的 `a:r`/`a:br` 排序打乱，并且会改写母版/版式（T1 版式 26/32 字节漂移的根因）。现在只调整 pPr/endParaRPr 的位置，也只处理幻灯片部件。
+- doctor：template-fill 能力改为检查 roundtrip 入口和 `pm6_template` 包。
+- 新增 PowerPoint 实机一键验证脚本 `scripts/verify/`（Windows COM / macOS AppleScript）。
+
+### 0.4.0-exp.1（开发过程记录）
 
 - **PPT Master v4.8.0 → v6.7.0**（commit `b4efe3d`，官方 asset SHA `40424d97…`），172 文件精简内核，BOM 已重建。仅适用于 generate。
 - template-fill 暂未迁移：调用时报 `template_fill_not_migrated`；`doctor --mode template-fill` 结果为 fail。

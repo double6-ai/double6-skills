@@ -180,7 +180,10 @@ def _vendor_integrity(root: Path) -> dict[str, Any]:
         "capabilities": {
             "postflight": status != "fail",
             "full_generate": status == "pass",
-            "template_fill": status == "pass" and (root / "vendor" / "ppt-master-core" / "skills" / "ppt-master" / "scripts" / "template_fill_pptx" / "__init__.py").is_file(),
+            # PM6 roundtrip backend: needs the vendored roundtrip entry points + the Double6 backend package
+            "template_fill": status == "pass"
+            and all((root / "vendor" / "ppt-master-core" / "skills" / "ppt-master" / "scripts" / name).is_file() for name in ("pptx_to_svg.py", "svg_to_pptx.py"))
+            and (root / "scripts" / "double6_ppt_cli" / "pm6_template" / "__init__.py").is_file(),
         },
         "repair": "Install the complete skill from GitHub or skills.sh when full generate/template-fill capability is required.",
     }

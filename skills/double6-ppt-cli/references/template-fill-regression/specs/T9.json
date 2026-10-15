@@ -1,0 +1,22 @@
+{
+ "template": "T9-en-lo-inspiration.pptx",
+ "title": "auto",
+ "slides": [
+  {
+   "source": 1,
+   "text": {
+    "PlaceHolder 1": "Continue to deliver the priority",
+    "PlaceHolder 2": "To deliver the priority programs while"
+   },
+   "notes": "New speaker notes for page 1"
+  },
+  {
+   "source": 1,
+   "text": {
+    "PlaceHolder 1": "Continue to deliver the priority",
+    "PlaceHolder 2": "To deliver the priority programs while"
+   },
+   "notes": "New speaker notes for page 1"
+  }
+ ]
+}

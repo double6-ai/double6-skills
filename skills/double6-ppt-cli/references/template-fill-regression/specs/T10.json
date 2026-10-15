@@ -1,0 +1,196 @@
+{
+ "template": "T10-en-poi-layouts.pptx",
+ "title": "auto",
+ "slides": [
+  {
+   "source": 1,
+   "text": {
+    "Title 1": "Continue to deliver the priority",
+    "Subtitle 2": "To deliver the priority programs while"
+   },
+   "notes": "New speaker notes for page 1"
+  },
+  {
+   "source": 2,
+   "text": {
+    "Title 1": "Deliver the priority programs",
+    "Content Placeholder 2": {
+     "text": "The priority programs while improving operating efficiency and customer experience\nPriority\nPrograms\nWhile improving\nImproving\nOperating",
+     "levels": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+     ]
+    },
+    "KPI Callout": "Revenue: 14.1M USD"
+   },
+   "notes": "New speaker notes for page 2",
+   "transition": {
+    "effect": "wipe",
+    "duration": 0.6
+   }
+  },
+  {
+   "source": 3,
+   "text": {
+    "Title 1": "Priority programs while improving",
+    "Text Placeholder 2": {
+     "text": "Programs while improving operating efficiency and customer experience and we\nWhile improving operating efficiency and customer experience\nImproving operating efficiency and customer experience and\nOperating efficiency and customer experience and",
+     "levels": [
+      0,
+      1,
+      0,
+      1
+     ]
+    }
+   },
+   "notes": "New speaker notes for page 3"
+  },
+  {
+   "source": 4,
+   "text": {
+    "Title 1": "Efficiency and customer experience",
+    "Content Placeholder 2": {
+     "text": "We continue to deliver the priority programs while improving operating efficiency\nContinue\nTo deliver\nDeliver the\nThe priority\nPriority\nPrograms while improving operating efficiency and customer",
+     "levels": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      1
+     ]
+    },
+    "Content Placeholder 3": {
+     "text": "While improving operating efficiency and customer experience and we strengthen\nImproving\nOperating\nEfficiency\nWe continue\nContinue to deliver the priority programs while improving",
+     "levels": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      1
+     ]
+    }
+   },
+   "notes": "New speaker notes for page 4"
+  },
+  {
+   "source": 5,
+   "text": {
+    "Title 1": "To deliver the",
+    "Text Placeholder 2": "Deliver the priority",
+    "Content Placeholder 3": {
+     "text": "Programs while improving operating efficiency and customer experience and we\nWhile improving\nImproving\nOperating efficiency and customer experience and we\nEfficiency and customer experience and we strengthen risk",
+     "levels": [
+      0,
+      1,
+      2,
+      1,
+      0
+     ]
+    },
+    "Text Placeholder 4": "We continue to",
+    "Content Placeholder 5": "Deliver the priority"
+   },
+   "notes": "New speaker notes for page 5"
+  },
+  {
+   "source": 6,
+   "text": {
+    "Title 1": "Improving operating efficiency"
+   },
+   "notes": "New speaker notes for page 6"
+  },
+  {
+   "source": 7,
+   "text": {
+    "Title 1": "Operating efficiency and customer",
+    "TextBox 3": "Efficiency and",
+    "TextBox 4": {
+     "text": "We continue\nContinue to deliver\nTo deliver\nDeliver the\nThe priority",
+     "levels": [
+      0,
+      0,
+      0,
+      1,
+      2
+     ]
+    }
+   },
+   "notes": "New speaker notes for page 7"
+  },
+  {
+   "source": 8,
+   "text": {
+    "Title 1": "Priority programs while improving",
+    "Content Placeholder 2": {
+     "text": "Programs while improving operating efficiency and customer experience and we\nWhile improving\nImproving\nOperating\nEfficiency\nWe continue to deliver the priority programs while\nContinue to deliver the priority programs while improving",
+     "levels": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      1,
+      0
+     ]
+    },
+    "Text Placeholder 3": {
+     "text": "To deliver the priority programs while improving operating efficiency and customer\nDeliver the priority programs while improving operating\nThe priority programs while improving operating efficiency",
+     "levels": [
+      0,
+      1,
+      0
+     ]
+    }
+   },
+   "notes": "New speaker notes for page 8"
+  },
+  {
+   "source": 9,
+   "text": {
+    "Title 1": "Priority programs while improving",
+    "Text Placeholder 3": {
+     "text": "Programs while improving operating efficiency and customer experience and we\nWhile improving operating efficiency and customer experience\nImproving operating efficiency and customer experience and\nOperating efficiency and customer experience and",
+     "levels": [
+      0,
+      1,
+      0,
+      1
+     ]
+    }
+   },
+   "notes": "New speaker notes for page 9"
+  },
+  {
+   "source": 10,
+   "text": {
+    "Title 4": "Efficiency and",
+    "Content Placeholder 5": {
+     "text": "We continue to deliver the priority programs while improving operating efficiency\nContinue\nTo deliver the priority programs\nDeliver the priority\nThe priority programs while improving operating efficiency",
+     "levels": [
+      0,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   },
+   "notes": "New speaker notes for page 10"
+  },
+  {
+   "source": 1,
+   "text": {
+    "Title 1": "Continue to deliver the priority",
+    "Subtitle 2": "To deliver the priority programs while"
+   },
+   "notes": "New speaker notes for page 1"
+  }
+ ]
+}

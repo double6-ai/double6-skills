@@ -130,7 +130,8 @@ class CompilerDiagnosticsTest(unittest.TestCase):
 
 class TemplateFillGateTest(unittest.TestCase):
     def test_template_fill_reports_not_migrated(self):
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(tw, "skill_root", return_value=Path(tmp)):
+        # template-fill now runs on the PM6 roundtrip backend; only the legacy v4.8 backend is refused.
+        with mock.patch.dict("os.environ", {"D6PPT_TEMPLATE_BACKEND": "v48"}):
             with self.assertRaises(D6PPTError) as ctx:
                 tw._vendor_modules()
         self.assertEqual(ctx.exception.code, "template_fill_not_migrated")
