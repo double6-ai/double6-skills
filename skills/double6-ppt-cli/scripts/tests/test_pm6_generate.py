@@ -13,7 +13,9 @@ from double6_ppt_cli.common import D6PPTError
 from double6_ppt_cli.native_markers import (
     TABLE_SCHEMA_V2,
     V48_TABLE_STYLE_DEFAULTS,
+    apply_chart_palette,
     normalize_native_markers,
+    parse_spec_lock_palette,
     upgrade_table_payload,
 )
 
@@ -89,6 +91,50 @@ class NativeMarkerTest(unittest.TestCase):
         self.assertNotIn("data-pptx-json", group.attrib)
         self.assertEqual(_payload(group)["schema"], TABLE_SCHEMA_V2)
         self.assertIn("metadata_attribute_to_child", records[0]["actions"])
+
+
+class DeckPaletteTest(unittest.TestCase):
+    def test_parse_spec_lock_palette(self):
+        palette = parse_spec_lock_palette("""
+## colors
+- primary: #1B4F72
+- accent: #E67E22
+- text: #1F2937
+- bg: #FFFFFF
+- surface: #F4F6F8
+- line: #CBD5E1
+- chart_series: #1B4F72, #E67E22, #64748B
+## typography
+- title: 28
+""")
+        self.assertEqual(palette["primary"], "#1B4F72")
+        self.assertEqual(palette["chart_series"], ["#1B4F72", "#E67E22", "#64748B"])
+
+    def test_chart_gets_deck_series_colors(self):
+        root = _svg(
+            '<g id="c" data-pptx-replace-with="chart" data-pptx-bounds="10 20 300 200">'
+            '<metadata>{"type":"bar","categories":["a"],"series":[{"name":"s","values":[1]}]}</metadata></g>'
+        )
+        palette = {"chart_series": ["#112233", "#445566"], "text": "#111111", "line": "#222222"}
+        records = normalize_native_markers(root, palette=palette)
+        p = _payload(root[0])
+        self.assertEqual(p["style"]["colors"], ["#112233", "#445566"])
+        self.assertEqual(p["style"]["text_color"], "#111111")
+        self.assertIn("deck_palette_series_colors", records[0]["actions"])
+
+    def test_chart_author_colors_win(self):
+        payload = {"type": "bar", "style": {"colors": ["#AAAAAA"]}}
+        actions = apply_chart_palette(payload, {"chart_series": ["#112233"]})
+        self.assertEqual(actions, [])
+        self.assertEqual(payload["style"]["colors"], ["#AAAAAA"])
+
+    def test_schema_table_still_gets_deck_palette(self):
+        payload = {"schema": TABLE_SCHEMA_V2, "rows": [["1"]]}
+        actions = upgrade_table_payload(payload, {"primary": "#1B4F72", "text": "#111111", "bg": "#FFFFFF", "surface": "#F0F0F0", "line": "#CCCCCC"})
+        self.assertEqual(payload["style"]["header_fill"], "#1B4F72")
+        self.assertIn("deck_palette_table:", actions[0])
+        # already-schema tables must not re-apply v48
+        self.assertFalse(any(a.startswith("v48_") for a in actions))
 
 
 class SemanticPictureTest(unittest.TestCase):
