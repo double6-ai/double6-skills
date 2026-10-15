@@ -52,7 +52,19 @@ def _proto_text(p: etree._Element) -> str:
     return "".join(out)
 
 
-MIN_KEEP = 2  # shortest common prefix/suffix worth keeping with its own run style
+MIN_KEEP = 2
+# rPr attributes that do not change the look (proofing/editing state); ignored when deciding whether
+# a paragraph really mixes formats.
+NOISE_ATTRS = {"lang", "altLang", "dirty", "err", "noProof", "smtClean", "smtId", "bmk"}
+
+
+def style_key(rpr: etree._Element | None) -> bytes:
+    if rpr is None:
+        return b""
+    c = deepcopy(rpr)
+    for a in NOISE_ATTRS:
+        c.attrib.pop(a, None)
+    return etree.tostring(c, method="c14n")  # shortest common prefix/suffix worth keeping with its own run style
 
 
 def styled_runs(proto: etree._Element, line: str) -> list[tuple[etree._Element | None, str]] | None:
@@ -69,7 +81,7 @@ def styled_runs(proto: etree._Element, line: str) -> list[tuple[etree._Element |
     for r in runs:
         t = r.find(q("a", "t"))
         pieces.append((r.find(q("a", "rPr")), (t.text or "") if t is not None else ""))
-    keys = {etree.tostring(rp) if rp is not None else b"" for rp, _t in pieces}
+    keys = {style_key(rp) for rp, _t in pieces}
     if len(keys) < 2:
         return None
     old = "".join(t for _rp, t in pieces)
@@ -133,13 +145,16 @@ def set_text(txbody: etree._Element, text: str, ctx_levels: list[int] | None = N
                 p.remove(child)
         ppr = p.find(q("a", "pPr"))
         if explicit:
-            if ppr is None:
+            if ppr is None and lvl:
                 ppr = etree.Element(q("a", "pPr"))
                 p.insert(0, ppr)
-            if lvl:
-                ppr.set("lvl", str(lvl))
-            elif "lvl" in ppr.attrib:
-                del ppr.attrib["lvl"]
+            if ppr is not None:
+                if lvl:
+                    ppr.set("lvl", str(lvl))
+                elif "lvl" in ppr.attrib:
+                    del ppr.attrib["lvl"]
+                if not len(ppr) and not ppr.attrib:
+                    p.remove(ppr)
         end = p.find(q("a", "endParaRPr"))
         mixed = styled_runs(proto, line) if line != _proto_text(proto) else None
         if line == _proto_text(proto) and line:
