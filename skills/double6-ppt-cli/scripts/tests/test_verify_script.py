@@ -54,6 +54,23 @@ class VerifyScriptTest(unittest.TestCase):
             self.assertIn("PowerPoint", (out / "REPORT.md").read_text(encoding="utf-8"))
             json.dumps(rows, ensure_ascii=False)
 
+    def test_real_powerpoint_run2_passes_without_false_overlaps(self):
+        # Win11/PowerPoint 16 run of 0.4.0-exp.3: card text sits on the body placeholder *frame* (by
+        # template design) but not on its text; that must not count as an overlap.
+        mod = _load()
+        fix = Path(__file__).parent / "fixtures" / "powerpoint_win11_run2"
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            (out / "powerpoint").mkdir()
+            for f in fix.iterdir():
+                if f.name != "report.json":
+                    (out / "powerpoint" / f.name).write_bytes(f.read_bytes())
+            r = json.loads((fix / "report.json").read_text(encoding="utf-8-sig"))
+            ppt = dict(r["powerpoint"], shapes=r["powerpoint_shapes"])
+            cmp_ = mod.compare(out, r["cases"], ppt)
+        self.assertEqual(cmp_["status"], "passed", [x for x in cmp_["slots"] if x["failures"]])
+        self.assertEqual((cmp_["slots_overflowing_in_powerpoint"], cmp_["slots_overlapping"], cmp_["slots_font_scale_mismatch"]), (0, 0, 0))
+
     def test_launchers_present(self):
         for name in ("verify_template_fill_windows.cmd", "verify_template_fill_macos.command", "powerpoint_measure.ps1", "powerpoint_measure.applescript"):
             self.assertTrue((HERE / name).is_file(), name)

@@ -172,20 +172,28 @@ def _frames(out: Path, ppt: dict) -> list[dict]:
     return ppt.get("frames") or []
 
 
-def _overlaps(m: dict, frames: list[dict], slide_w: float = 0.0) -> list[str]:
-    """Shapes hit by the rendered text itself (PowerPoint's text bounds, not the frame).
-
-    Frames often overlap by design (a body placeholder behind cards); only text that actually reaches
-    another shape counts.
-    """
+def _text_rect(m: dict) -> tuple[float, float, float, float] | None:
     if m.get("top") is None or m.get("bound_height_after") is None:
-        return []
+        return None
     top = m.get("bound_top_open")
     if top is None:
         top = m["top"] + (m.get("margin_top") or 0)
     left = m.get("bound_left_open", m.get("left")) or 0.0
     width = m.get("bound_width_open", m.get("width")) or 0.0
-    text = (left, top, left + width, top + m["bound_height_after"])
+    return (left, top, left + width, top + m["bound_height_after"])
+
+
+def _overlaps(m: dict, frames: list[dict], slide_w: float = 0.0, shapes: list[dict] | None = None) -> list[str]:
+    """Shapes hit by the rendered text itself (PowerPoint's text bounds, not the frame).
+
+    Frames often overlap by design (a body placeholder behind cards); only text that actually reaches
+    another shape counts. For another *text* shape its rendered text is the obstacle, not its frame
+    (PowerPoint 16 run: card text vs. the body placeholder frame behind it was a false positive).
+    """
+    text = _text_rect(m)
+    if text is None:
+        return []
+    by_key = {(s.get("deck"), s.get("slide"), s.get("id")): s for s in (shapes or []) if s.get("id") is not None}
     hits = []
     for f in frames:
         if f.get("deck") != m.get("deck") or f.get("slide") != m.get("slide"):
@@ -194,7 +202,10 @@ def _overlaps(m: dict, frames: list[dict], slide_w: float = 0.0) -> list[str]:
             continue
         if slide_w and f.get("width", 0) >= 0.9 * slide_w:
             continue  # full-slide background
-        r = (f["left"], f["top"], f["left"] + f["width"], f["top"] + f["height"])
+        other = by_key.get((f.get("deck"), f.get("slide"), f.get("id")))
+        r = _text_rect(other) if other is not None else None
+        if r is None:
+            r = (f["left"], f["top"], f["left"] + f["width"], f["top"] + f["height"])
         if r[0] < text[2] - 1 and text[0] < r[2] - 1 and r[1] < text[3] - 1 and text[1] < r[3] - 1:
             hits.append(f.get("name") or str(f.get("id")))
     return hits
@@ -248,7 +259,7 @@ def compare(out: Path, cases_rows: list[dict], ppt: dict) -> dict:
                 fo, fa = m.get("font_size_first_run"), m.get("font_size_after")
                 if isinstance(fo, (int, float)) and isinstance(fa, (int, float)) and abs(fo - fa) > 0.5:
                     failures.append("powerpoint_recompute_changed_size")
-                hits = _overlaps(m, frames, slide_w)
+                hits = _overlaps(m, frames, slide_w, shapes)
                 if hits:
                     row["overlaps"] = hits
                     failures.append("overlap")
