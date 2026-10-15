@@ -214,6 +214,23 @@ validator 对旧 schema 失败关闭并返回 `schema_version_invalid:expected_2
 
 检查程序会把 `fact`、`calculation`、`unchanged`、`official`、`news` 归一成规范词，并把误放进检查名单的 `omission_scan` 去掉。它仍不重新上网。
 
+2.3.0 仍使用 schema 2，只追加可选字段，旧记录不受影响。`task_type=open_landscape` 且
+`research_status=complete` 时，检查程序额外要求：
+
+- `landscape.segments` 和 `landscape.entities` 非空；每个分段映射到已有问题且至少有一个实体；
+  每个实体至少有一个已打开来源，名字出现在报告正文里；
+- `landscape.coverage_table_section` 指向报告里的覆盖表，表中写到每个分段；
+- 每个已回答问题的回答章节至少引用两个已打开来源，其中至少一个不是 `first_party`；
+- `research_rounds[].queries` 合计至少覆盖四种 `facet`，并包含 `citation_snowball`；
+- 最后一轮 `adversarial_saturation_check` 至少有两种面向的查询、`new_source_ids` 里至少两个新打开
+  的来源，并且 `new_material_findings_count` 为 0。
+
+这些都是防止过早停止的底线，不是充分性证明；独立 reviewer 仍要判断分段是否合理、是否漏掉重要
+实体。`validation_receipt.json` 的 `checks.depth_metrics` 给出查询数、面向、每题实际使用的来源
+数和逐轮新信息率，供 reviewer 判断饱和是否可信。检查程序还会对只出现在书目里的来源和同一发布者
+过度集中给出警告，防止用链接数量冒充深度。请求里出现"全景""综述""landscape"等词但没有写
+`task_type` 时，会给出 `task_type_not_recorded` 警告。
+
 `research_as_of` 使用 `YYYY-MM-DD` 或带时区的 ISO 8601 时间。涉及当前状态、价格、政策、
 版本或排名时，还要优先记录各来源的 `published_at`，必要时在具体 claim 附近说明更窄的
 事实时间点。
