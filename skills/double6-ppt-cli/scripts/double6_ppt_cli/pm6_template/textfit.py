@@ -25,11 +25,15 @@ DEFAULT_LATIN = "Liberation Sans"
 MIN_FONT_SCALE = 0.70
 EXPLICIT_SHRINK_FLOOR = 0.85
 # Calibrated against PowerPoint 16 / Win11 bound heights (tests/fixtures/powerpoint_win11_measurements.json):
-# single line spacing = max(font ascent+descent, 1.2 em); spcBef applies to every paragraph incl. the first.
+# single line spacing = 1.2 em; spcBef is NOT applied to the first paragraph of a text body (en/zh bodies
+# land within +1.3pt of PowerPoint's BoundHeight this way).
 PPT_LINE_FACTOR = 1.2
 SAFETY_H = 1.06   # conservative: need_h * SAFETY_H must fit
 SAFETY_W = 0.97   # conservative: wrap at 97% of the inner width
-MAX_OVERFILL = 1.75  # unscaled need/avail above this is a rewrite, not a shrink -> check ERROR
+# Multi-paragraph text needing more than this much height at full size (safety included) is a rewrite,
+# not a shrink -> check ERROR (~ a 0.8 font scale). Single paragraphs are left to the floor test, since
+# line-break quantisation makes a 2-line title in a 1-line box look "2x full".
+MAX_OVERFILL = 1.6
 MIN_PT = {"title": 20.0, "body": 12.0}  # never shrink below these point sizes
 
 
@@ -259,6 +263,7 @@ def layout(ctx: dict[str, Any], paragraphs: list[tuple[int, str]], scale: float 
     out_lines = []
     max_line_w = 0.0
     engines = set()
+    area = 0.0
     for index, (lvl, text) in enumerate(paragraphs):
         props = ctx["levels"].get(str(lvl)) or ctx["levels"].get("0")
         m = Metrics(props, scale)
@@ -286,12 +291,14 @@ def layout(ctx: dict[str, Any], paragraphs: list[tuple[int, str]], scale: float 
             lh *= (1.0 - ln_reduction)
             total += lh
         out_lines.append(lines)
-        total += _spacing_pt(props.get("spcBef"), m.size, m.size * PPT_LINE_FACTOR)
+        area += sum(m.width(x) for x in lines) * m.size * PPT_LINE_FACTOR
+        if index > 0:
+            total += _spacing_pt(props.get("spcBef"), m.size, m.size * PPT_LINE_FACTOR)
         if index < len(paragraphs) - 1:
             total += _spacing_pt(props.get("spcAft"), m.size, m.size * PPT_LINE_FACTOR)
     need_h = total * (SAFETY_H if safety else 1.0) + body["tIns"] + body["bIns"]
     return {"lines": out_lines, "line_count": sum(len(x) for x in out_lines), "need_h_pt": need_h,
-            "max_line_w_pt": max_line_w, "inner_w_pt": inner_w, "engine": "+".join(sorted(engines))}
+            "max_line_w_pt": max_line_w, "inner_w_pt": inner_w, "text_area_pt2": area, "engine": "+".join(sorted(engines))}
 
 
 def map_levels(ctx: dict[str, Any], text: str, levels: list[int] | None = None) -> list[tuple[int, str]]:
@@ -351,8 +358,10 @@ def fit(ctx: dict[str, Any], text: str, *, policy: str = "auto", levels: list[in
     floor = max(floor, min(1.0, min_pt / max(base_sz, 1.0)))
     report["min_scale"] = round(floor, 3)
     overfill = base["need_h_pt"] / max(avail_h, 1)
-    if policy != "never-shrink" and overfill > MAX_OVERFILL:
-        report.update(status="overflow", reason="overfill", font_scale=floor, ratio=round(overfill, 3))
+    report["overfill"] = round(overfill, 3)
+    if policy != "never-shrink" and len(paragraphs) > 1 and overfill > MAX_OVERFILL:
+        report.update(status="overflow", reason="overfill", font_scale=floor, overfill=round(overfill, 3),
+                      ratio=round(base["need_h_pt"] / max(avail_h, 1), 3))
         return report
     if policy == "never-shrink":
         floor = 1.0
