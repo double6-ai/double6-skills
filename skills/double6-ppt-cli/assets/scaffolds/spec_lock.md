@@ -23,7 +23,7 @@
 - style_reference: {{STYLE_REF}}
 
 ## colors
-<!-- One deck-wide palette. Do not change primary/accent per slide. Accent covers <=10% of a page. -->
+<!-- Deck colour anchors; colour behaviour follows the selected upstream style (see references/visual-design.md §3). -->
 - bg: {{BG}}
 - surface: {{SURFACE}}
 - primary: {{PRIMARY}}

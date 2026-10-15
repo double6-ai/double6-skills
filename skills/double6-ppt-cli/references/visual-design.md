@@ -26,17 +26,17 @@
 | `training` | workshop-teaching | soft-rounded | #FFFDF8 | #3D4A3F | #B08A50 | 培训、课程、工作坊 |
 | `neutral` | — | — | 待填 | 待填 | 待填 | 有品牌规范时自行填写 |
 
-所有预设共用：正文 #1E2733、次要文字 #5B6573、分隔线 #D9DDE2；字号阶梯（px）display 64 / title 34 / subtitle 24 / body 18 / label 14 / caption 12。用户给了品牌色时，只替换 primary/accent，其余规则不变。
+所有预设的起始值共用：正文 #1E2733、次要文字 #5B6573、分隔线 #D9DDE2；字号阶梯（px）display 64 / title 34 / subtitle 24 / body 18 / label 14 / caption 12。用户给了品牌色时以品牌为准。
 
-## 3. 默认约束（用户偏好，优先级高于上游示例）
+## 3. 配色与样式（以上游 style 为准）
 
-- **一套调色贯穿全 deck**：一个主色 + 一个强调色 + 中性灰阶。**禁止逐页换主色或换强调色**，章节之间也不换。
-- **低饱和**：不用高饱和纯色（如 #FF0000、#00B0F0）；强调色在一页中的面积不超过约 10%（60-30-10）。
-- 强调色只给关键数字、关键词、焦点系列或最重要的那一项；其余用主色和灰阶。
-- 阴影“感觉得到但看不见”（不透明度 0.06–0.10），每页最多 2–3 个浮起对象；优先用留白、字重、细线、浅底色区分层级。
-- 字号不超过 7 档（用 §2 阶梯即可）；kicker、标签、页码可以用 label/caption 档。
-- 图表系列色取自 spec_lock `chart_series`：焦点系列用强调色，其余用主色和灰色调；禁止 Office 默认蓝橙配色。直接在数据上标注，弱化网格和图例。
-- 图标只用一个库（默认 `tabler-outline` 线性图标），统一尺寸（32–48px）和颜色；图标要服务于含义，不要做装饰性图标墙。
+- 配色行为以所选 style 的 `V. Visual System Defaults → Color Behavior` 与 `references/executor-base.md` 的 everyday effects 为准（如 60-30-10 起始比例、强调色用于焦点、同色相渐变、按编码需要决定色相数）。预设只给一组起始色值，可按 style、品牌或内容调整（例如 product-launch 可深浅交替，creative 类风格可使用更多色相）。
+- spec_lock `## colors` 是全 deck 的颜色锚点；新增的反复使用的颜色应作为具名角色写进 spec_lock，保持上游意义上的调色一致性。
+- 正文对比度 ≥ 4.5:1（大字 ≥ 3:1）。
+- 有 deck 调色时，原生图表系列色取自 spec_lock `chart_series`（compile 自动写入）；不要沿用 Office 默认蓝橙配色。直接在数据上标注，弱化网格与图例。
+- 阴影、渐变、发光的用量遵循 executor-base（resting 阴影 0.06–0.10，每页 2–3 个浮起对象以内）。
+- 字号不超过 7 档（§2 阶梯即可）；kicker、标签、页码用 label/caption 档。
+- 图标默认一个库（`tabler-outline`），统一尺寸（32–48px）与处理方式；图标服务于含义。
 
 ## 4. 页面构图速查（摘自 executor-base）
 
@@ -56,16 +56,16 @@
 
 1. 整页 bullet 列表、白底黑字、无任何视觉元素（“Word 文档式”页面）。
 2. 内容挤在左上，下半页大面积空白（上重下空）。
-3. 每页换一种主色或强调色；彩虹配色；高饱和撞色。
+3. 颜色没有角色：同一语义在不同页用不同颜色、颜色与 style 的 Color Behavior 无关。
 4. 原生图表沿用 Office 默认蓝橙，或系列色与 deck 调色无关。
 5. 对称卡片网格泛滥：每页都是 3 张一样的卡片。
 6. 字号超过 7 档，或同一角色在不同页字号不同。
 7. 中文孤字换行（如“算/法”）、文字压线、文字溢出卡片。
 8. 装饰性图标墙、混用多个图标库、图标与含义无关。
-9. 大面积渐变、发光、重阴影（Office 2007 风格）。
+9. 超出 executor-base 用量的重阴影、发光（Office 2007 风格）。
 
 ## 6. 质量门与视觉复核
 
 - compile 会自动嵌入 `data-icon` 图标、把调色写进原生图表和表格（见 SKILL.md）。
-- `inspect` 的视觉指标（`visual_metrics`）检查对比度、留白平衡、非文字元素、色相数和饱和度、跨页换色、字号档数、Office 默认图表色、中文孤字等，详见 [visual-quality.md](visual-quality.md)。
-- 模型视觉复核用 8 维评分表；未达到通过线（均值 ≥3.5，配色克制 ≥4，单维 ≥3）时不得 finalize 为 `pass`。
+- `inspect` 的视觉指标（`visual_metrics`）检查对比度、留白平衡、非文字元素、字号档数、Office 默认图表色、中文孤字等，详见 [visual-quality.md](visual-quality.md)。
+- 模型视觉复核用 8 维评分表；未达到通过线（均值 ≥3.5，且每一维 ≥3）时不得 finalize 为 `pass`。

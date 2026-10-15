@@ -10,26 +10,19 @@ ROOT = Path(__file__).resolve().parents[2]
 VENDOR = ROOT / "vendor" / "ppt-master-core" / "skills" / "ppt-master"
 
 
-def _sat(hex_color):
-    h = hex_color.lstrip("#")
-    rgb = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
-    return max(rgb) - min(rgb)  # chroma: robust for dark navy/ink colours
-
 
 class DesignPresetTests(unittest.TestCase):
-    def test_presets_are_restrained_and_map_to_vendored_styles(self):
+    def test_presets_map_to_vendored_styles(self):
         self.assertGreaterEqual(len(design_presets.PRESETS), 6)
         for name in design_presets.PRESETS:
             p = design_presets.resolve(name)
-            self.assertLessEqual(_sat(p["accent"]), 0.45, name)
-            self.assertLessEqual(_sat(p["primary"]), 0.45, name)
             self.assertTrue((VENDOR / "templates" / "styles" / p["style_id"] / "templates" / "design_spec.md").is_file(), name)
             self.assertTrue((VENDOR / "references" / "visual-styles" / f"{p['visual_style']}.md").is_file(), name)
             self.assertLessEqual(len(p["type"]), 7)
             self.assertNotIn("#4472C4", p["chart_series"])
         self.assertEqual(design_presets.resolve("business")["name"], "consulting")
 
-    def test_init_writes_unified_palette(self):
+    def test_init_writes_palette_anchors(self):
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / "s.md"; src.write_text("# x", encoding="utf-8")
             run = Path(tmp) / "run"
