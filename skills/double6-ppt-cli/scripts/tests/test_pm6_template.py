@@ -1,11 +1,12 @@
 """Regression tests for the experimental PPT Master v6.7 template-fill backend (exp/pm6-template).
 
 Unit tests run everywhere (lxml; python-pptx for fixtures). Roundtrip integration tests need a
-PPT Master v6.x checkout: set D6PPT_PM6_ROOT (and optionally D6PPT_PM6_PYTHON) or they are skipped.
+the vendored PPT Master v6.7.0 core (vendor/ppt-master-core); skipped only if python-pptx is missing.
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import tempfile
 import unittest
@@ -289,7 +290,7 @@ def _pm6_available() -> bool:
         return False
 
 
-@unittest.skipUnless(HAVE_PPTX and _pm6_available(), "set D6PPT_PM6_ROOT to a PPT Master v6.x checkout")
+@unittest.skipUnless(HAVE_PPTX and _pm6_available(), "vendored PPT Master v6.7.0 core unavailable")
 class RoundtripIntegrationTest(unittest.TestCase):
     """End-to-end: repeat a slide, rewrite a multi-paragraph body; check identity + package contract."""
 
@@ -368,6 +369,19 @@ class RoundtripIntegrationTest(unittest.TestCase):
         self.assertEqual(len(hits[0].findall("./p:txBody/a:p", NS)), 4)
 
 
+class FontIndexTest(unittest.TestCase):
+    def test_name_lookup_uses_fallbacks_without_fontconfig(self):
+        from unittest import mock
+        from double6_ppt_cli.pm6_template import textfit
+        fake = {("arial", False): ("arial.ttf", 0), ("microsoft yahei", False): ("msyh.ttc", 0),
+                ("microsoft yahei", True): ("msyhbd.ttc", 0)}
+        with mock.patch.object(textfit, "_font_index", return_value=fake):
+            self.assertEqual(textfit._lookup_by_name("Arial", False, False), ("arial.ttf", 0))
+            self.assertEqual(textfit._lookup_by_name("Unknown Font", False, False), ("arial.ttf", 0))
+            self.assertEqual(textfit._lookup_by_name("", True, True), ("msyhbd.ttc", 0))
+            self.assertEqual(textfit._lookup_by_name("Arial", False, True), ("arial.ttf", 0))
+
+
 class BackendSwitchTest(unittest.TestCase):
     def test_invalid_backend_rejected(self):
         from double6_ppt_cli.common import D6PPTError
@@ -384,6 +398,35 @@ class BackendSwitchTest(unittest.TestCase):
                 os.environ.pop("D6PPT_TEMPLATE_BACKEND", None)
             else:
                 os.environ["D6PPT_TEMPLATE_BACKEND"] = old
+
+    def test_default_is_pm6_and_v48_refused(self):
+        from double6_ppt_cli.common import D6PPTError
+        from double6_ppt_cli.template_workflow import template_backend
+        old = os.environ.pop("D6PPT_TEMPLATE_BACKEND", None)
+        try:
+            self.assertEqual(template_backend(), "pm6")
+            os.environ["D6PPT_TEMPLATE_BACKEND"] = "v48"
+            with self.assertRaises(D6PPTError) as cm:
+                template_backend()
+            self.assertEqual(cm.exception.code, "template_fill_not_migrated")
+        finally:
+            os.environ.pop("D6PPT_TEMPLATE_BACKEND", None)
+            if old is not None:
+                os.environ["D6PPT_TEMPLATE_BACKEND"] = old
+
+    def test_vendored_root_is_version_locked(self):
+        from double6_ppt_cli.pm6_template.roundtrip import PM6_LOCKED_TAG, pm6_root, vendor_root
+        old = os.environ.pop("D6PPT_PM6_ROOT", None)
+        try:
+            root = pm6_root()
+            self.assertTrue(str(root).startswith(str(vendor_root())))
+            bom = json.loads((vendor_root() / "BOM.json").read_text(encoding="utf-8"))
+            self.assertEqual(bom["tag"], PM6_LOCKED_TAG)
+            paths = {e["path"] for e in bom["files"]}
+            self.assertIn("skills/ppt-master/scripts/pptx_to_svg.py", paths)
+        finally:
+            if old is not None:
+                os.environ["D6PPT_PM6_ROOT"] = old
 
 
 if __name__ == "__main__":

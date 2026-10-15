@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import math
 import posixpath
 import re
@@ -161,12 +160,19 @@ def import_template_asset(run: Path, asset: Path, name: str) -> dict[str, Any]:
 
 
 def template_backend() -> str:
-    """Experimental switch (exp/pm6-template): ``D6PPT_TEMPLATE_BACKEND=pm6`` uses the PPT Master v6.7
-    roundtrip backend in ``pm6_template``; default stays on the vendored v4.8 Fill Native package."""
+    """Template-fill backend. PPT Master removed Template Fill Native in v5.0.0, so on the v6.7.0
+    vendor tree the only backend is ``pm6`` (roundtrip + native txBody rewrite in ``pm6_template``).
+    ``D6PPT_TEMPLATE_BACKEND=v48`` is refused with a pointer to the 0.3.x release."""
     import os
 
-    value = os.environ.get("D6PPT_TEMPLATE_BACKEND", "v48").strip().lower()
-    if value not in {"v48", "pm6"}:
+    value = os.environ.get("D6PPT_TEMPLATE_BACKEND", "pm6").strip().lower()
+    if value == "v48":
+        raise D6PPTError(
+            "The v4.8 Template Fill Native backend is not vendored with PPT Master v6.7.0; use the 0.3.x release",
+            "template_fill_not_migrated",
+            {"ppt_master_version": "6.7.0", "available_backends": ["pm6"]},
+        )
+    if value != "pm6":
         raise D6PPTError(f"Unknown template backend: {value}", "template_backend_invalid")
     return value
 
@@ -187,33 +193,8 @@ def _pm6_modules():
 
 
 def _vendor_modules():
-    if template_backend() == "pm6":
-        return _pm6_modules()
-    scripts = skill_root() / "vendor" / "ppt-master-core" / "skills" / "ppt-master" / "scripts"
-    if str(scripts) not in sys.path:
-        sys.path.insert(0, str(scripts))
-    package_dir = scripts / "template_fill_pptx"
-    if not (package_dir / "__init__.py").is_file():
-        raise D6PPTError(
-            "template-fill is not yet migrated to PPT Master v6.7.0 (upstream removed Template Fill Native in v5.0.0); "
-            "use the 0.3.x release for template-fill",
-            "template_fill_not_migrated",
-            {"ppt_master_version": "6.7.0", "tracking": "experimental roundtrip migration in progress"},
-        )
-    module_name = "double6_vendor_template_fill_pptx"
-    module = sys.modules.get(module_name)
-    if module is None:
-        spec = importlib.util.spec_from_file_location(
-            module_name,
-            package_dir / "__init__.py",
-            submodule_search_locations=[str(package_dir)],
-        )
-        if spec is None or spec.loader is None:
-            raise D6PPTError("Vendored PPT Master Fill Native package is unavailable", "vendor_template_fill_missing")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-    return module.analyze_pptx, module.apply_plan, module.check_plan, module.scaffold_plan
+    template_backend()
+    return _pm6_modules()
 
 
 def _template_path(run: Path, manifest: dict[str, Any]) -> Path:
