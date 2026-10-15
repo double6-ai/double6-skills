@@ -30,10 +30,73 @@ def is_wide(ch: str) -> bool:
     return unicodedata.east_asian_width(ch) in ("W", "F")
 
 
+EA_FALLBACKS = ("Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", "Hiragino Sans GB", "SimHei", "SimSun")
+LATIN_FALLBACKS = ("Calibri", "Arial", "Helvetica", "Helvetica Neue", "Liberation Sans", "DejaVu Sans")
+
+
+def _font_dirs() -> list[str]:
+    import os
+    import sys
+    dirs: list[str] = []
+    if sys.platform.startswith("win"):
+        windir = os.environ.get("WINDIR", r"C:\Windows")
+        dirs.append(os.path.join(windir, "Fonts"))
+        local = os.environ.get("LOCALAPPDATA")
+        if local:
+            dirs.append(os.path.join(local, "Microsoft", "Windows", "Fonts"))
+    elif sys.platform == "darwin":
+        dirs += ["/System/Library/Fonts", "/System/Library/Fonts/Supplemental", "/Library/Fonts",
+                 os.path.expanduser("~/Library/Fonts")]
+    else:
+        dirs += ["/usr/share/fonts", "/usr/local/share/fonts", os.path.expanduser("~/.fonts"),
+                 os.path.expanduser("~/.local/share/fonts")]
+    return [d for d in dirs if os.path.isdir(d)]
+
+
+@functools.lru_cache(maxsize=1)
+def _font_index() -> dict[tuple[str, bool], tuple[str, int]]:
+    """family(lower), bold -> (file, face index), built with Pillow's name lookup (no fontconfig)."""
+    import os
+    index: dict[tuple[str, bool], tuple[str, int]] = {}
+    if ImageFont is None:
+        return index
+    for root_dir in _font_dirs():
+        for dirpath, _dirs, files in os.walk(root_dir):
+            for name in files:
+                if not name.lower().endswith((".ttf", ".otf", ".ttc", ".otc")):
+                    continue
+                path = os.path.join(dirpath, name)
+                for face in range(8 if name.lower().endswith((".ttc", ".otc")) else 1):
+                    try:
+                        family, style = ImageFont.truetype(path, 12, index=face).getname()
+                    except Exception:
+                        break
+                    if not family:
+                        continue
+                    bold = "bold" in (style or "").lower()
+                    key = (family.lower(), bold)
+                    regular = (style or "").lower() in ("regular", "normal", "roman", "book", "")
+                    if key not in index or regular:
+                        index[key] = (path, face)
+    return index
+
+
+def _lookup_by_name(family: str, ea: bool, bold: bool) -> tuple[str, int] | None:
+    idx = _font_index()
+    for fam in ((family,) if family else ()) + (EA_FALLBACKS if ea else LATIN_FALLBACKS):
+        for b in ((bold, False) if bold else (False,)):
+            hit = idx.get((fam.lower(), b))
+            if hit:
+                return hit
+    return None
+
+
 @functools.lru_cache(maxsize=256)
 def font_file(family: str, ea: bool, bold: bool) -> tuple[str, int] | None:
+    """Resolve a font file: fontconfig (Linux, matches LibreOffice) else a name index of the OS font
+    folders (Windows/macOS, approximates PowerPoint's substitution with common fallbacks)."""
     if not shutil.which("fc-match"):
-        return None
+        return _lookup_by_name(family, ea, bold)
     pattern = (family or (DEFAULT_EA if ea else DEFAULT_LATIN))
     if bold:
         pattern += ":bold"
@@ -42,9 +105,9 @@ def font_file(family: str, ea: bool, bold: bool) -> tuple[str, int] | None:
     try:
         out = subprocess.run(["fc-match", "-f", "%{file}|%{index}", pattern], capture_output=True, text=True, timeout=10).stdout
     except Exception:
-        return None
+        return _lookup_by_name(family, ea, bold)
     if "|" not in out:
-        return None
+        return _lookup_by_name(family, ea, bold)
     path, index = out.rsplit("|", 1)
     return path, int(index or 0)
 
@@ -70,7 +133,7 @@ class Metrics:
         self.ea = props.get("ea") or ""
         self.f_lat = _font(self.latin, False, self.bold, round(self.size, 2))
         self.f_ea = _font(self.ea, True, self.bold, round(self.size, 2))
-        self.engine = "fontconfig" if (self.f_lat and self.f_ea) else "heuristic"
+        self.engine = ("fontconfig" if shutil.which("fc-match") else "font-index") if (self.f_lat and self.f_ea) else "heuristic"
 
     def width(self, text: str) -> float:
         total = 0.0

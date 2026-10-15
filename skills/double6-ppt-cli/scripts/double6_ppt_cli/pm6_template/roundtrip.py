@@ -45,17 +45,40 @@ class PM6Error(RuntimeError):
         self.details = details
 
 
+PM6_LOCKED_TAG = "v6.7.0"
+PM6_LOCKED_COMMIT = "b4efe3ddf237a97a42880164759162f8e2412f2f"
+
+
+def vendor_root() -> Path:
+    return Path(__file__).resolve().parents[3] / "vendor" / "ppt-master-core"
+
+
 def pm6_root() -> Path:
+    """Vendored PPT Master core, version-locked through vendor/ppt-master-core/BOM.json.
+
+    ``D6PPT_PM6_ROOT`` is a developer override only (e.g. to test a newer upstream); it is
+    recorded in the receipt and never needed in normal use."""
     env = os.environ.get("D6PPT_PM6_ROOT")
-    candidates = [Path(env)] if env else []
-    here = Path(__file__).resolve()
-    candidates.append(here.parents[3] / "vendor" / "ppt-master-v6" / "skills" / "ppt-master")
-    for c in candidates:
-        if (c / "scripts" / "svg_to_pptx.py").is_file():
-            return c
-        if (c / "skills" / "ppt-master" / "scripts" / "svg_to_pptx.py").is_file():
-            return c / "skills" / "ppt-master"
-    raise PM6Error("PPT Master v6.x not found; set D6PPT_PM6_ROOT", "pm6_missing")
+    if env:
+        c = Path(env)
+        for cand in (c, c / "skills" / "ppt-master"):
+            if (cand / "scripts" / "svg_to_pptx.py").is_file() and (cand / "scripts" / "pptx_to_svg.py").is_file():
+                return cand
+        raise PM6Error(f"D6PPT_PM6_ROOT does not contain PPT Master scripts: {env}", "pm6_missing")
+    vroot = vendor_root()
+    bom_path = vroot / "BOM.json"
+    try:
+        bom = json.loads(bom_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise PM6Error("vendored PPT Master BOM missing or unreadable", "pm6_missing", {"bom": str(bom_path)}) from exc
+    if bom.get("tag") != PM6_LOCKED_TAG or bom.get("commit") != PM6_LOCKED_COMMIT:
+        raise PM6Error("vendored PPT Master version does not match the template-fill lock", "pm6_version_mismatch",
+                       {"expected": [PM6_LOCKED_TAG, PM6_LOCKED_COMMIT], "found": [bom.get("tag"), bom.get("commit")]})
+    root = vroot / "skills" / "ppt-master"
+    for name in ("pptx_to_svg.py", "svg_to_pptx.py"):
+        if not (root / "scripts" / name).is_file():
+            raise PM6Error(f"vendored PPT Master is missing scripts/{name}", "pm6_missing")
+    return root
 
 
 def _python() -> str:
@@ -63,7 +86,9 @@ def _python() -> str:
 
 
 def _run(args: list[str], cwd: Path, log: list[dict[str, Any]]) -> str:
-    proc = subprocess.run([_python(), *args], cwd=cwd, capture_output=True, text=True, timeout=900)
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    proc = subprocess.run([_python(), *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8",
+                          errors="replace", timeout=900, env=env)
     log.append({"argv": args, "returncode": proc.returncode, "stdout_tail": proc.stdout[-4000:], "stderr_tail": proc.stderr[-4000:]})
     if proc.returncode != 0:
         raise PM6Error(f"PPT Master step failed: {args[0]}: {(proc.stderr or proc.stdout)[-800:]}", "pm6_step_failed", log[-1])
@@ -284,7 +309,7 @@ def apply_plan(template: Path, plan: dict[str, Any], output: Path, transition: s
         identity = [p["source_slide"] for p in pages] == list(range(1, len(src_parts) + 1))
         if not identity:
             plan_pages = [{"source_slide": p["source_slide"], **({"svg": p["svg"]} if p["svg"] != f"slide_{p['source_slide']:02d}.svg" else {})} for p in pages]
-            (ws / "page_plan.json").write_text(json.dumps({"schema": "ppt-master.roundtrip-page-plan.v1", "pages": plan_pages}, indent=1))
+            (ws / "page_plan.json").write_text(json.dumps({"schema": "ppt-master.roundtrip-page-plan.v1", "pages": plan_pages}, indent=1), encoding="utf-8")
         if mode in ("svg", "svg-restore"):
             for i, (item, page) in enumerate(zip(slides, pages), 1):
                 src_part = src_parts[page["source_slide"] - 1]
@@ -355,5 +380,5 @@ def apply_plan(template: Path, plan: dict[str, Any], output: Path, transition: s
         pkg.save(output)
         receipt["charts"] = _fill_charts(output, chart_jobs)
     receipt["log"] = [{k: v for k, v in row.items() if k != "stdout_tail"} | {"stdout_tail": row["stdout_tail"][-600:]} for row in log]
-    output.with_name(output.stem + ".pm6_receipt.json").write_text(json.dumps(receipt, ensure_ascii=False, indent=1))
+    output.with_name(output.stem + ".pm6_receipt.json").write_text(json.dumps(receipt, ensure_ascii=False, indent=1), encoding="utf-8")
     return receipt
