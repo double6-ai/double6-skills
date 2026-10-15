@@ -69,7 +69,7 @@ class TextFitTest(unittest.TestCase):
         long = "word " * 60
         self.assertEqual(textfit.fit(_ctx(w_pt=300, h_pt=60), long)["status"], "overflow")
         auto = textfit.fit(_ctx(w_pt=300, h_pt=70, autofit="norm"), "word " * 14)
-        self.assertIn(auto["status"], {"autofit", "fits"})
+        self.assertIn(auto["status"], {"shrunk", "fits"})
         grow = textfit.fit(_ctx(w_pt=300, h_pt=20, autofit="shape"), "word " * 30)
         self.assertEqual(grow["status"], "grow")
         self.assertGreater(grow["new_h_pt"], 20)
@@ -139,11 +139,12 @@ class TxBodyTest(unittest.TestCase):
 
     def test_apply_fit_norm_autofit_position(self):
         sp = etree.fromstring(f'<p:sp xmlns:p="{NS["p"]}" xmlns:a="{A}"><p:txBody><a:bodyPr><a:prstTxWarp prst="textNoShape"/><a:spAutoFit/></a:bodyPr></p:txBody></p:sp>')
-        apply_fit(sp, {"status": "autofit", "font_scale": 0.85, "ln_spc_reduction": 0.1, "autofit_mode": "norm"})
+        apply_fit(sp, {"status": "shrunk", "font_scale": 0.85, "autofit_mode": "norm"})
         kids = [etree.QName(c).localname for c in sp.find("./p:txBody/a:bodyPr", NS)]
         self.assertEqual(kids, ["prstTxWarp", "normAutofit"])
         norm = sp.find(".//a:normAutofit", NS)
-        self.assertEqual((norm.get("fontScale"), norm.get("lnSpcReduction")), ("85000", "10000"))
+        # sizes are baked into runs; fontScale would double-scale and PowerPoint resets it anyway
+        self.assertEqual((norm.get("fontScale"), norm.get("lnSpcReduction")), (None, None))
 
 
 @unittest.skipUnless(HAVE_PPTX, "python-pptx needed for fixtures")

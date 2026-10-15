@@ -127,4 +127,35 @@ def plan_zh(lib):
     ]}
 
 
-CASES = [("en_qbr", build_case_en, plan_en), ("zh_factory", build_case_zh, plan_zh)]
+def plan_zh_shrink(lib):
+    """zh_factory with the first three body lines: must fit above the three cards with an explicit shrink."""
+    plan = plan_zh(lib)
+    rep = plan["slides"][1]["replacements"][1]
+    rep["text"] = "\n".join(rep["text"].split("\n")[:3])
+    return plan
+
+
+def plan_en_overfull(lib):
+    """Twice the en_qbr bullets in one body: far beyond MAX_OVERFILL, plan check must ERROR (no apply)."""
+    plan = plan_en(lib)
+    rep = plan["slides"][1]["replacements"][0]
+    rep["text"] = rep["text"] + "\n" + rep["text"]
+    plan["slides"] = plan["slides"][:2]
+    return plan
+
+
+def plan_en_shrink(lib):
+    """en_qbr with the first five bullets: needs a real (explicit-size) shrink but stays above the floor."""
+    plan = plan_en(lib)
+    rep = plan["slides"][1]["replacements"][0]
+    rep["text"] = "\n".join(rep["text"].split("\n")[:5])
+    return plan
+
+
+CASES = [("en_qbr", build_case_en, plan_en), ("en_qbr_shrink", build_case_en, plan_en_shrink), ("zh_factory", build_case_zh, plan_zh), ("zh_factory_shrink", build_case_zh, plan_zh_shrink), ("en_overfull", build_case_en, plan_en_overfull)]
+# expected outcome per case (anything else is a verification failure)
+# en_qbr's 7-bullet body is ~1.8x its frame (PowerPoint measured 552pt text in a 349pt frame at 32pt):
+# since 0.4.0-exp.3 that is a rewrite, not a shrink, so the plan check blocks it.
+EXPECT = {"en_qbr": "blocked_by_check", "en_qbr_shrink": "applied", # zh_factory's 5-line body would run into the three cards (PowerPoint: 432pt text, cards start 268pt
+# below the body top), so it is blocked too; the *_shrink variants must apply and pass in PowerPoint.
+"zh_factory": "blocked_by_check", "zh_factory_shrink": "applied", "en_overfull": "blocked_by_check"}

@@ -30,12 +30,24 @@ class VerifyScriptTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "report"
             rows = mod.run_cases(out)
-            self.assertEqual([r["status"] for r in rows], ["applied", "applied"], rows)
-            first = rows[0]["text"][0]
-            fake = {"status": "measured", "shapes": [{"deck": rows[0]["case"], "slide": first["plan_slide"], "id": first["drawingml_id"],
-                                                      "overflow_pt": 5.0, "font_size_after": 18}]}
+            self.assertTrue(all(r["as_expected"] for r in rows), [(r["case"], r["status"]) for r in rows])
+            self.assertEqual({r["case"]: r["status"] for r in rows},
+                             {"en_qbr": "blocked_by_check", "en_qbr_shrink": "applied", "zh_factory": "blocked_by_check", "zh_factory_shrink": "applied",
+                              "en_overfull": "blocked_by_check"})
+            zh = next(r for r in rows if r["case"] == "zh_factory_shrink")
+            body = next(t for t in zh["text"] if t["drawingml_id"] == 3)
+            # spilled body (PowerPoint geometry) runs into a card; PowerPoint wanted a smaller size on recompute
+            fake = {"status": "measured", "shapes": [
+                {"deck": "zh_factory_shrink", "slide": 2, "id": 3, "name": "Content Placeholder 2", "left": 36, "top": 126, "width": 648, "height": 356.4,
+                 "margin_top": 3.6, "margin_bottom": 3.6, "bound_height_open": 432, "bound_height_after": 432, "bound_left_open": 63, "bound_width_open": 600,
+                 "font_size_first_run": 28, "font_size_after": 25, "overflow_open_pt": 82.8, "overflow_pt": 82.8}],
+                "frames": [{"deck": "zh_factory_shrink", "slide": 2, "id": 4, "name": "卡片1", "left": 55, "top": 393.7, "width": 259.8, "height": 70.9}]}
             cmp_ = mod.compare(out, rows, fake)
-            self.assertEqual(cmp_["slots_measured"], 1)
+            row = next(r for r in cmp_["slots"] if r["case"] == "zh_factory_shrink" and r["drawingml_id"] == body["drawingml_id"])
+            self.assertEqual(row["verdict"], "FAIL")
+            self.assertEqual(set(row["failures"]), {"overflow", "powerpoint_recompute_changed_size", "overlap"})
+            self.assertEqual(row["overlaps"], ["卡片1"])
+            self.assertEqual(cmp_["status"], "failed")
             self.assertEqual(cmp_["slots_overflowing_in_powerpoint"], 1)
             report = {"created_at": "t", "host": {"platform": "x", "python": "3"}, "cases": rows, "powerpoint": fake, "comparison": cmp_}
             mod.write_markdown(out, report)

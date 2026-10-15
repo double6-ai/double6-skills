@@ -20,7 +20,7 @@ PPT Master 从 v5.0.0 起移除了 Template Fill Native。0.4.0-exp.2 起，temp
    - 用 vendored `pptx_to_svg.py --roundtrip` 导入；
    - 用 `page_plan.json` 实现重排和复用；
    - SVG 文字保持不动，用 `svg_to_pptx.py --roundtrip` 导出，所有对象原样回传（`rebuilt=0`）；
-   - 按 cNvPr id 改写原生 txBody，并按度量结果写入 `normAutofit fontScale/lnSpcReduction`、`spAutoFit` 增高或显式缩字（下限 0.85）；
+   - 按 cNvPr id 改写原生 txBody，按度量结果做两种处理：`spAutoFit` 的文本框增高；需要缩字时把缩小后的字号显式写进 run 的 `sz`，`normAutofit` 不带 fontScale（PowerPoint 实测不认 fontScale，见 powerpoint-verification.md）。缩字下限：比例 0.7（非 normAutofit 文本框为 0.85），标题不小于 20pt，正文不小于 12pt。下方有其他形状时，可用高度截止到该形状；内容超过可用高度 1.75 倍或到下限仍放不下时报 ERROR；
    - 表格单元格和图表数据按 id 原生回填；
    - 处理讲者备注和切换效果。
 4. 外层流程（处置、同页来源绑定、导航重建与 active 状态、SHA 绑定图片替换、计划确认门、OfficeCLI 校验）由 `template_workflow.py` 负责，与后端无关。

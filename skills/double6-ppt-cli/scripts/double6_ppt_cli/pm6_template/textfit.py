@@ -24,6 +24,13 @@ DEFAULT_EA = "Noto Sans CJK SC"
 DEFAULT_LATIN = "Liberation Sans"
 MIN_FONT_SCALE = 0.70
 EXPLICIT_SHRINK_FLOOR = 0.85
+# Calibrated against PowerPoint 16 / Win11 bound heights (tests/fixtures/powerpoint_win11_measurements.json):
+# single line spacing = max(font ascent+descent, 1.2 em); spcBef applies to every paragraph incl. the first.
+PPT_LINE_FACTOR = 1.2
+SAFETY_H = 1.06   # conservative: need_h * SAFETY_H must fit
+SAFETY_W = 0.97   # conservative: wrap at 97% of the inner width
+MAX_OVERFILL = 1.75  # unscaled need/avail above this is a rewrite, not a shrink -> check ERROR
+MIN_PT = {"title": 20.0, "body": 12.0}  # never shrink below these point sizes
 
 
 def is_wide(ch: str) -> bool:
@@ -173,16 +180,9 @@ class Metrics:
         return sum((1.0 if wide else 0.55) for _ in seg) * self.size
 
     def line_height(self, has_wide: bool, has_narrow: bool) -> float:
-        h = 0.0
-        for f, used in ((self.f_ea, has_wide), (self.f_lat, has_narrow or not has_wide)):
-            if not used:
-                continue
-            if f is not None:
-                asc, desc = f.getmetrics()
-                h = max(h, (asc + desc) / SCALE)
-            else:
-                h = max(h, self.size * 1.25)
-        return h or self.size * 1.2
+        # PowerPoint "single" spacing is 1.2 em for Latin and CJK alike (measured: 44pt -> 52.8pt per line,
+        # 32pt -> 38.4pt, Calibri and the zh-CN default EA font); font ascent+descent is not used.
+        return self.size * PPT_LINE_FACTOR
 
 
 def tokenize(text: str) -> list[str]:
@@ -248,9 +248,11 @@ def _spacing_pt(spec, size: float, line_h: float) -> float:
     return value if kind == "pts" else value * line_h
 
 
-def layout(ctx: dict[str, Any], paragraphs: list[tuple[int, str]], scale: float = 1.0, ln_reduction: float = 0.0) -> dict[str, Any]:
+def layout(ctx: dict[str, Any], paragraphs: list[tuple[int, str]], scale: float = 1.0, ln_reduction: float = 0.0,
+           safety: bool = True) -> dict[str, Any]:
     body = ctx["body"]
     inner_w = ctx["box"]["w_pt"] - body["lIns"] - body["rIns"]
+    wrap_w = inner_w * (SAFETY_W if safety else 1.0)
     if body.get("vert") in ("vert", "vert270", "eaVert"):
         inner_w = ctx["box"]["h_pt"] - body["tIns"] - body["bIns"]
     total = 0.0
@@ -263,8 +265,8 @@ def layout(ctx: dict[str, Any], paragraphs: list[tuple[int, str]], scale: float 
         engines.add(m.engine)
         mar = props["marL"]
         first = mar + (props["indent"] if not props["bullet"] else 0.0)
-        width = max(1.0, inner_w - mar)
-        first_width = max(1.0, inner_w - max(0.0, first))
+        width = max(1.0, wrap_w - mar)
+        first_width = max(1.0, wrap_w - max(0.0, first))
         if body["wrap"] == "none":
             lines = text.split("\v")
         else:
@@ -284,11 +286,10 @@ def layout(ctx: dict[str, Any], paragraphs: list[tuple[int, str]], scale: float 
             lh *= (1.0 - ln_reduction)
             total += lh
         out_lines.append(lines)
-        if index > 0:
-            total += _spacing_pt(props.get("spcBef"), m.size, m.size * 1.2)
+        total += _spacing_pt(props.get("spcBef"), m.size, m.size * PPT_LINE_FACTOR)
         if index < len(paragraphs) - 1:
-            total += _spacing_pt(props.get("spcAft"), m.size, m.size * 1.2)
-    need_h = total + body["tIns"] + body["bIns"]
+            total += _spacing_pt(props.get("spcAft"), m.size, m.size * PPT_LINE_FACTOR)
+    need_h = total * (SAFETY_H if safety else 1.0) + body["tIns"] + body["bIns"]
     return {"lines": out_lines, "line_count": sum(len(x) for x in out_lines), "need_h_pt": need_h,
             "max_line_w_pt": max_line_w, "inner_w_pt": inner_w, "engine": "+".join(sorted(engines))}
 
@@ -321,7 +322,11 @@ def levels_are_implicit(ctx: dict[str, Any], text: str, levels: list[int] | None
 def fit(ctx: dict[str, Any], text: str, *, policy: str = "auto", levels: list[int] | None = None) -> dict[str, Any]:
     """Decide how a replacement text fits its native frame.
 
-    status: fits | autofit (normAutofit fontScale) | grow (spAutoFit) | shrunk (explicit size) | overflow
+    status: fits | grow (spAutoFit) | shrunk (explicit reduced sz written into the runs) | overflow
+
+    PowerPoint does not reliably apply a saved normAutofit fontScale (verified on PowerPoint 16/Win11:
+    the scale is reset to 100% on recompute), so shrinking is always baked into explicit run sizes.
+    The floor is the larger of the scale floor and the role's minimum point size.
     """
     paragraphs = map_levels(ctx, text, levels)
     body = ctx["body"]
@@ -341,12 +346,20 @@ def fit(ctx: dict[str, Any], text: str, *, policy: str = "auto", levels: list[in
             report.update(status="grow", ratio=round(base["need_h_pt"] / max(avail_h, 1), 3), new_h_pt=round(base["need_h_pt"], 2))
             return report
     floor = MIN_FONT_SCALE if body["autofit"] == "norm" else EXPLICIT_SHRINK_FLOOR
+    base_sz = max((v["sz"] for v in ctx["levels"].values()), default=18.0)
+    min_pt = MIN_PT["title"] if ctx.get("is_title") else MIN_PT["body"]
+    floor = max(floor, min(1.0, min_pt / max(base_sz, 1.0)))
+    report["min_scale"] = round(floor, 3)
+    overfill = base["need_h_pt"] / max(avail_h, 1)
+    if policy != "never-shrink" and overfill > MAX_OVERFILL:
+        report.update(status="overflow", reason="overfill", font_scale=floor, ratio=round(overfill, 3))
+        return report
     if policy == "never-shrink":
         floor = 1.0
     best = None
     scale = 0.975
     while scale >= floor - 1e-6 and best is None:
-        for red in (0.0, 0.1, 0.2) if body["autofit"] == "norm" else (0.0,):
+        for red in (0.0,):
             trial = layout(ctx, paragraphs, scale, red)
             w_ok = body["wrap"] != "none" or trial["max_line_w_pt"] <= trial["inner_w_pt"] + 0.5
             if trial["need_h_pt"] <= avail_h + 0.5 and w_ok:
@@ -355,11 +368,11 @@ def fit(ctx: dict[str, Any], text: str, *, policy: str = "auto", levels: list[in
         scale -= 0.025
     if best is not None:
         s, red, trial = best
-        report.update(status="autofit" if body["autofit"] == "norm" else "shrunk", font_scale=round(s, 3),
+        report.update(status="shrunk", font_scale=round(s, 3),
                       ln_spc_reduction=red, need_h_pt=round(trial["need_h_pt"], 2), lines=trial["lines"],
                       line_count=trial["line_count"], ratio=round(trial["need_h_pt"] / max(avail_h, 1), 3))
         return report
-    trial = layout(ctx, paragraphs, floor, 0.2 if body["autofit"] == "norm" else 0.0)
+    trial = layout(ctx, paragraphs, floor, 0.0)
     report.update(status="overflow", font_scale=floor, need_h_pt=round(trial["need_h_pt"], 2),
                   ratio=round(trial["need_h_pt"] / max(avail_h, 1), 3), lines=trial["lines"], line_count=trial["line_count"])
     return report

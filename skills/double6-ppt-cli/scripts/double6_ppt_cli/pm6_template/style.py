@@ -229,6 +229,40 @@ def body_props(element: etree._Element, layers: dict[str, Any]) -> dict[str, Any
     return out
 
 
+def _obstacle_limit(element: etree._Element, box: tuple[int, int, int, int], slide_w: int) -> tuple[float | None, list[str]]:
+    """Height (EMU) available before the first sibling shape that sits inside the lower part of this frame.
+
+    Text that grows down into a card/callout overlaps it in PowerPoint even when the frame itself is
+    large enough (verified on PowerPoint 16), so such shapes cap the usable height.
+    """
+    parent = element.getparent()
+    if parent is None or etree.QName(parent).localname != "spTree":
+        return None, []
+    x, y, cx, cy = box
+    limit, names = None, []
+    for sib in parent:
+        if sib is element or etree.QName(sib).localname not in ("sp", "pic", "graphicFrame", "grpSp", "cxnSp"):
+            continue
+        b = _xfrm(sib)
+        if b is None and etree.QName(sib).localname == "grpSp":
+            g = sib.find("./p:grpSpPr/a:xfrm", NS)
+            if g is not None and g.find(q("a", "off")) is not None:
+                o, e = g.find(q("a", "off")), g.find(q("a", "ext"))
+                b = (int(o.get("x")), int(o.get("y")), int(e.get("cx")), int(e.get("cy")))
+        if b is None or (slide_w and b[2] >= 0.9 * slide_w):
+            continue
+        bx, by, bcx, bcy = b
+        overlap_w = min(x + cx, bx + bcx) - max(x, bx)
+        if overlap_w <= 0.1 * cx:
+            continue
+        if y + 0.2 * cy < by < y + cy:
+            if limit is None or by - y < limit:
+                limit = by - y
+            c = sib.find(".//p:cNvPr", NS)
+            names.append(c.get("name") if c is not None else etree.QName(sib).localname)
+    return limit, names
+
+
 def fit_context(pkg: Package, slide_part: str, element: etree._Element, *, txbody: etree._Element | None = None) -> dict[str, Any] | None:
     """Fit context for a p:sp text frame (or a table cell when txbody is given: geometry left to caller)."""
     layers = text_layers(pkg, slide_part, element)
@@ -254,12 +288,16 @@ def fit_context(pkg: Package, slide_part: str, element: etree._Element, *, txbod
             run = proto.find(q("a", "endParaRPr"))
         per_level[str(lvl)] = level_props(layers, lvl, proto, run)
     slide_w, slide_h = pkg.slide_size()
+    limit, obstacles = (None, []) if txbody is not None else _obstacle_limit(element, (x, y, cx, cy), slide_w)
+    usable_cy = min(cy, limit) if limit is not None else cy
     return {
         "box": {"x_pt": (dx + x * sx) / EMU_PER_PT, "y_pt": (dy + y * sy) / EMU_PER_PT,
-                "w_pt": cx * sx / EMU_PER_PT, "h_pt": cy * sy / EMU_PER_PT},
+                "w_pt": cx * sx / EMU_PER_PT, "h_pt": usable_cy * sy / EMU_PER_PT, "frame_h_pt": cy * sy / EMU_PER_PT},
+        "obstacles": obstacles,
         "slide": {"w_pt": slide_w / EMU_PER_PT, "h_pt": slide_h / EMU_PER_PT},
         "body": body_props(element, layers),
         "levels": per_level,
         "template_paragraph_levels": levels,
         "placeholder": list(layers["ph"]) if layers["ph"] else None,
+        "is_title": bool(layers.get("is_title")),
     }
