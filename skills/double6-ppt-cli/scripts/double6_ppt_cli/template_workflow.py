@@ -41,12 +41,13 @@ NS = {"p": PML, "a": AML, "r": RML, "pr": PKG_REL}
 SLIDE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
 SLIDE_JUMP_ACTION = "ppaction://hlinksldjump"
 
-# ECMA-376 CT_TextParagraph child order used to repair Fill Native output.
+# ECMA-376 CT_TextParagraph: pPr?, (r | br | fld)*, endParaRPr?  -- runs, breaks and fields form ONE
+# interleaved choice group, so their relative order is content and must never be sorted.
 _PARAGRAPH_CHILD_ORDER = {
     f"{{{AML}}}pPr": 0,
     f"{{{AML}}}r": 10,
-    f"{{{AML}}}br": 20,
-    f"{{{AML}}}fld": 30,
+    f"{{{AML}}}br": 10,
+    f"{{{AML}}}fld": 10,
     f"{{{AML}}}endParaRPr": 40,
 }
 
@@ -60,7 +61,8 @@ def _normalize_txbody_paragraph_order(pptx: Path) -> int:
     except zipfile.BadZipFile:
         return 0
     for name, data in list(entries.items()):
-        if not (name.startswith("ppt/slides/") or name.startswith("ppt/slideLayouts/") or name.startswith("ppt/slideMasters/")):
+        # Only slides are written by template fill; layouts/masters stay byte-identical.
+        if not name.startswith("ppt/slides/"):
             continue
         if not name.endswith(".xml"):
             continue
