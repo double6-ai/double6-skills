@@ -1,0 +1,495 @@
+{
+  "schema_version": 1,
+  "contract_version": "double6_capability_graph_v1",
+  "compiler_version": "1.1.0",
+  "status": "contract_ready",
+  "scope": {
+    "domain_count": 16,
+    "scene_profile_count": 35,
+    "selected_scope_only": true,
+    "catalog_is_not_execution": true,
+    "child_learning_content_changed": false,
+    "child_learning_atoms_added": false
+  },
+  "source_bindings": {
+    "scene_profiles": "scene-profiles.json#scene_profiles",
+    "modules_and_capabilities": "domain-content-packs.json#packs[].modules[].evidence_refs",
+    "capability_contracts": "scene-capability-starters.json#scenes[].capabilities",
+    "atomic_capabilities": "atomic-capabilities.json#atomic_capabilities",
+    "surface_primitives": "surface-primitives.json#surface_primitives",
+    "policy_packs": "policy-packs.json#policy_packs"
+  },
+  "materialization_contract": {
+    "scene_to_module": "scene_paths[].recommended_module_ids must exactly match the corresponding authoritative scene profile",
+    "module_to_capability": "derive only from the selected module evidence_refs; never borrow a capability from another module",
+    "capability_to_atomic_capability": [
+      {
+        "binding_basis": "direct_capability",
+        "rule": "atom is executable_ready, names the capability_id, supports the selected module surface, and permits the domain"
+      },
+      {
+        "binding_basis": "surface_runtime_generic",
+        "rule": "atom is executable_ready, supports the selected module surface, permits the domain, and is recorded as a generic surface binding rather than a semantic CAP match"
+      }
+    ],
+    "atomic_capability_to_surface": "use only the selected module legacy surface mapping and only when that stable surface primitive is executable_ready",
+    "policy_binding": "policy IDs are requirements inherited from selected executable atoms; a contract_ready policy remains a non-executable requirement until its independent runtime promotion",
+    "contract_or_catalog_binding": "exclude from executable_atom_bindings and report under excluded_non_executable_bindings",
+    "empty_executable_binding": "mark the module and selection blocked; never promote registration to execution"
+  },
+  "selection_contract": {
+    "module_min": 4,
+    "module_max": 15,
+    "adopt_default": "the scene profile recommended_module_ids",
+    "delete_cascade": [
+      "capability",
+      "atomic_capability",
+      "surface_primitive",
+      "policy_pack"
+    ],
+    "capability_adjustment": "every selected capability must belong to at least one selected module and every selected module must retain at least one of its own capabilities",
+    "final_snapshot": "serialize selected scene and selected module paths only; never serialize the full graph or unselected module inventory"
+  },
+  "clarification_contract": {
+    "maximum_questions_per_scene": 5,
+    "compiler_adds_questions": false,
+    "scene_switch_resets_upstream_counter": true,
+    "compiler_behavior": "validate an observed counter when supplied; selection compilation itself never asks another question",
+    "question_budget_scope": "preferences_only",
+    "authorization_questions_count_separately": true
+  },
+  "scene_paths": [
+    {
+      "scene_profile_id": "scene.personal-execution.weekly-personal-control",
+      "domain_id": "personal-execution",
+      "recommended_module_ids": [
+        "personal-inbox",
+        "personal-week-plan",
+        "personal-today",
+        "personal-projects",
+        "personal-habits",
+        "personal-life-log",
+        "personal-review"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.personal-execution.personal-life-dashboard",
+      "domain_id": "personal-execution",
+      "recommended_module_ids": [
+        "personal-today",
+        "personal-habits",
+        "life-inspiration",
+        "life-mood",
+        "life-finance",
+        "life-food",
+        "life-movement",
+        "life-reading",
+        "life-vocabulary"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.household-collaboration.weekly-household-handoff",
+      "domain_id": "household-collaboration",
+      "recommended_module_ids": [
+        "household-chores",
+        "household-shopping",
+        "household-handoff",
+        "household-review",
+        "household-room"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.household-collaboration.shared-household-budget",
+      "domain_id": "household-collaboration",
+      "recommended_module_ids": [
+        "household-shopping",
+        "household-expenses",
+        "household-handoff",
+        "household-review",
+        "household-room"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.content-operations.idea-to-publish",
+      "domain_id": "content-operations",
+      "recommended_module_ids": [
+        "content-input",
+        "content-topics",
+        "content-briefs",
+        "content-production",
+        "content-schedule",
+        "content-review"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.content-operations.multi-account-editorial-calendar",
+      "domain_id": "content-operations",
+      "recommended_module_ids": [
+        "content-accounts",
+        "content-input",
+        "content-topics",
+        "content-production",
+        "content-schedule",
+        "content-review"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.research-knowledge.evidence-to-report",
+      "domain_id": "research-knowledge",
+      "recommended_module_ids": [
+        "research-questions",
+        "research-evidence",
+        "research-writing",
+        "research-review",
+        "research-log"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.research-knowledge.experiment-weekly-control",
+      "domain_id": "research-knowledge",
+      "recommended_module_ids": [
+        "research-questions",
+        "research-log",
+        "research-metrics",
+        "research-writing",
+        "research-review"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.sales-trade.lead-to-followup",
+      "domain_id": "sales-trade",
+      "recommended_module_ids": [
+        "sales-leads",
+        "sales-clients",
+        "sales-followups",
+        "sales-orders",
+        "sales-quotes",
+        "sales-review"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.sales-trade.inquiry-to-quote",
+      "domain_id": "sales-trade",
+      "recommended_module_ids": [
+        "sales-clients",
+        "sales-orders",
+        "sales-quotes",
+        "sales-followups",
+        "sales-review"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.finance-tax-contract.monthly-bookkeeping",
+      "domain_id": "finance-tax-contract",
+      "recommended_module_ids": [
+        "finance-transactions",
+        "finance-vouchers",
+        "finance-tax",
+        "finance-review",
+        "finance-audit"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.finance-tax-contract.project-budget-contract",
+      "domain_id": "finance-tax-contract",
+      "recommended_module_ids": [
+        "finance-projects",
+        "finance-budget",
+        "finance-transactions",
+        "finance-vouchers",
+        "finance-review"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.ecommerce-operations.product-order-ops",
+      "domain_id": "ecommerce-operations",
+      "recommended_module_ids": [
+        "commerce-products",
+        "commerce-inventory",
+        "commerce-orders",
+        "commerce-service",
+        "commerce-metrics"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.ecommerce-operations.campaign-content-ops",
+      "domain_id": "ecommerce-operations",
+      "recommended_module_ids": [
+        "commerce-products",
+        "commerce-content",
+        "commerce-campaigns",
+        "commerce-inventory",
+        "commerce-metrics"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.local-service-store.daily-booking-service",
+      "domain_id": "local-service-store",
+      "recommended_module_ids": [
+        "store-bookings",
+        "store-shifts",
+        "store-services",
+        "store-followups",
+        "store-metrics"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.local-service-store.member-inventory-review",
+      "domain_id": "local-service-store",
+      "recommended_module_ids": [
+        "store-members",
+        "store-inventory",
+        "store-services",
+        "store-followups",
+        "store-metrics"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.education-learning.baby-growth-explorer",
+      "domain_id": "education-learning",
+      "recommended_module_ids": [
+        "education-language",
+        "education-math",
+        "education-english",
+        "education-reading",
+        "education-explore",
+        "education-movement",
+        "education-errors",
+        "education-rewards",
+        "education-parent"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.education-learning.primary-transition-1-to-2",
+      "domain_id": "education-learning",
+      "recommended_module_ids": [
+        "education-language",
+        "education-math",
+        "education-english",
+        "education-reading",
+        "education-explore",
+        "education-movement",
+        "education-errors",
+        "education-rewards",
+        "education-parent"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.education-learning.primary-transition-2-to-3",
+      "domain_id": "education-learning",
+      "recommended_module_ids": [
+        "education-language",
+        "education-math",
+        "education-english",
+        "education-reading",
+        "education-explore",
+        "education-movement",
+        "education-errors",
+        "education-rewards",
+        "education-parent"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.education-learning.primary-transition-3-to-4",
+      "domain_id": "education-learning",
+      "recommended_module_ids": [
+        "education-language",
+        "education-math",
+        "education-english",
+        "education-reading",
+        "education-explore",
+        "education-movement",
+        "education-errors",
+        "education-rewards",
+        "education-parent"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.teaching-classroom.classroom-management",
+      "domain_id": "teaching-classroom",
+      "recommended_module_ids": [
+        "teaching-daily",
+        "teaching-progress",
+        "teaching-students",
+        "teaching-attendance",
+        "teaching-review"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.teaching-classroom.single-lesson-preparation",
+      "domain_id": "teaching-classroom",
+      "recommended_module_ids": [
+        "teaching-prep",
+        "teaching-daily",
+        "teaching-progress",
+        "teaching-research",
+        "teaching-review"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.exam-preparation.civil-service-exam",
+      "domain_id": "exam-preparation",
+      "recommended_module_ids": [
+        "exam-goal",
+        "exam-today",
+        "exam-practice",
+        "exam-errors",
+        "exam-materials"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.exam-preparation.certification-study-cycle",
+      "domain_id": "exam-preparation",
+      "recommended_module_ids": [
+        "exam-goal",
+        "exam-today",
+        "exam-practice",
+        "exam-errors",
+        "exam-materials",
+        "exam-mock",
+        "exam-pomodoro",
+        "exam-review"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.hr-employment.recruiting-to-onboarding",
+      "domain_id": "hr-employment",
+      "recommended_module_ids": [
+        "hr-recruitment",
+        "hr-onboarding",
+        "hr-events",
+        "hr-policies"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.hr-employment.employee-cycle-records",
+      "domain_id": "hr-employment",
+      "recommended_module_ids": [
+        "hr-events",
+        "hr-one-on-one",
+        "hr-policies",
+        "hr-organization",
+        "hr-compensation"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.fitness-nutrition.fat-loss-routine",
+      "domain_id": "fitness-nutrition",
+      "recommended_module_ids": [
+        "fitness-today",
+        "fitness-log",
+        "fitness-food",
+        "fitness-metrics",
+        "fitness-review"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.fitness-nutrition.training-consistency",
+      "domain_id": "fitness-nutrition",
+      "recommended_module_ids": [
+        "fitness-today",
+        "fitness-log",
+        "fitness-metrics",
+        "fitness-courses",
+        "fitness-reminders",
+        "fitness-review"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.health-pregnancy.pregnancy-management",
+      "domain_id": "health-pregnancy",
+      "recommended_module_ids": [
+        "health-timeline",
+        "health-checkups",
+        "health-reports",
+        "health-life",
+        "health-questions"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.health-pregnancy.prenatal-visit-preparation",
+      "domain_id": "health-pregnancy",
+      "recommended_module_ids": [
+        "health-checkups",
+        "health-reports",
+        "health-questions",
+        "health-symptoms",
+        "health-sources"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.travel-planning.weekend-trip",
+      "domain_id": "travel-planning",
+      "recommended_module_ids": [
+        "travel-conditions",
+        "travel-itinerary",
+        "travel-bookings",
+        "travel-backups",
+        "travel-packing"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.travel-planning.multi-day-trip",
+      "domain_id": "travel-planning",
+      "recommended_module_ids": [
+        "travel-conditions",
+        "travel-itinerary",
+        "travel-bookings",
+        "travel-backups",
+        "travel-budget",
+        "travel-journal"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.professional-services.client-delivery",
+      "domain_id": "professional-services",
+      "recommended_module_ids": [
+        "professional-projects",
+        "professional-deliverables",
+        "professional-contracts",
+        "professional-time",
+        "professional-review"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.professional-services.creative-service-project",
+      "domain_id": "professional-services",
+      "recommended_module_ids": [
+        "professional-projects",
+        "professional-materials",
+        "professional-deliverables",
+        "professional-time",
+        "professional-review"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.research-knowledge.reading-desk",
+      "domain_id": "research-knowledge",
+      "recommended_module_ids": [
+        "research-reading",
+        "research-evidence",
+        "research-questions",
+        "research-writing",
+        "research-review"
+      ]
+    }
+  ],
+  "legacy_profile_mapping_source": "scene-profiles.json#audit.existing_profile_migration",
+  "audit": {
+    "audited_at": "2026-08-31",
+    "domain_count": 16,
+    "scene_profile_count": 35,
+    "recommended_scene_module_path_count": 204,
+    "all_domain_module_bindings_materialized_at_runtime": true,
+    "binding_basis_values": [
+      "direct_capability",
+      "surface_runtime_generic"
+    ],
+    "honest_gaps": [
+      "scene profiles that remain catalog_only are graph-addressable but cannot be claimed usable until separately promoted with evidence",
+      "all policy packs are contract_ready in the source registry and remain non-executable requirements in v0.51",
+      "the reward-exchange surface now binds atom.shared.request-reward-redemption and atom.shared.post-reward-ledger-event; the child playground adapter remains a presentation runtime and the frozen child candidate is not rewritten",
+      "this graph does not package, install, sync, deploy, publish, or alter the frozen child candidate"
+    ]
+  }
+}

@@ -3,9 +3,18 @@
 from .builder import build
 from .core import ContractError, cleanup_transaction, manifest, read_json, read_text_arg
 from .evaluation import browser_environment, evaluate
-from .workflow import clone_confirmed_run, propose, respond, start_run, status
+from .workflow import (
+    clone_confirmed_run,
+    draft_product_from_snapshot,
+    propose,
+    propose_from_snapshot,
+    respond,
+    start_run,
+    status,
+)
 
 __all__ = [
     "ContractError", "browser_environment", "build", "cleanup_transaction", "clone_confirmed_run",
-    "evaluate", "manifest", "propose", "read_json", "read_text_arg", "respond", "start_run", "status",
+    "draft_product_from_snapshot", "evaluate", "manifest", "propose", "propose_from_snapshot",
+    "read_json", "read_text_arg", "respond", "start_run", "status",
 ]

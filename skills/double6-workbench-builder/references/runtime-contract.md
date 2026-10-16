@@ -1,98 +1,171 @@
-# Double6 工作台制作器完整运行合同
+# Double6 工作台制作器
 
-本文定义完整流程语义与不可突破的边界。活动版本、命令与 schema 以 `manifest.json` 为准；儿童学习场景的专属细则见 `education-rules.md`（路由命中时必读）。
+把反复要做的事做成一个可离线打开的 `index.html`，数据只留在当前设备。常见场景：个人一周执行、选题到人工发布、销售跟进、儿童学习、备考或生活记录。从本 Skill 根目录运行 `python scripts/double6.py`（Python 3.10+）。版本、命令和 schema 以 `manifest.json` 为准。
 
-## 不可突破的边界
+本文是完整运行合同。命令细节和 Windows 噪音见 `references/host-integration-playbook.md`。只有路由到教育/儿童学习时再读 `references/education-rules.md`；改题目、练习或行动卡时再执行 `references/content-truth-review.md`。改儿童乐园入口、题量、题图或页面承诺时，先读并跑 `references/review-invariants.md`。改**任何场景**的题目或作答页时再读 `references/content-mines.md`，先跑 `python -B scripts/check_content_mines.py` 再给用户看页。改完页面后按 `references/visual-self-review.md` 截图并自己看图；只跑 Playwright 断言不够。什么叫好工作台、下一刀怎么切，见 `references/good-workbench.md`。本 Skill 是单人可跑的执行合同，不规定多 agent。检出或修好的问题必须追到根因并回写本 Skill（合同、检查器、运行时或审查规范）；只改某份 iteration HTML 不算解决。执行链路踩坑见 `references/execution-pits.md`。
 
-### 交付与数据
+## 不可代劳的边界
 
-- 交付物是可离线打开的单个 `index.html`（文件名固定使用 ASCII，不使用中文文件名）；个人数据只写入该产品唯一的 localStorage 命名空间（`data_policy.storage` 固定为 `local_only`），并启用导入导出。
-- 儿童、学生、客户、财务、医疗和健康任务默认使用合成或脱敏数据（`synthetic_or_redacted`）。只有用户明确授权、有权控制数据且确认本地保护条件时，才允许录入真实数据；不得保存 token、密码、Cookie 或会话密钥。这些安全默认不占澄清轮次。
-- 联网数据、多人协作、账号操作、消息发送、公开发布、下单和支付只能标为人工交接或暂不支持；capability mode 只能是 `in_page`、`manual_handoff` 或 `unsupported`。发布由独立宿主流程执行，并以真实链接和内容校验回执为准。
-- 公开发布（云托管）与本机部署（磁盘持久化、局域网访问）是两个不同的方向，都超出单文件交付本身；用户主动提出其中任一方向时，宿主按对应的独立流程直接执行，不要求额外的授权前置。
-- 用户想在手机长期使用或分享时，候选须说明"先备份、确认无真实隐私数据、取得明确授权后再走独立宿主发布流程、拿到真实链接和回执后才可添加到主屏幕"。页面不得自行上线、发送或公开数据。
+- 交付物是单个 ASCII 文件名的 `index.html`。个人数据只写该产品的 localStorage 命名空间，`data_policy.storage` 固定 `local_only`，必须能导入导出。
+- 儿童、学生、客户、财务、医疗和健康默认合成或脱敏数据。真实数据必须用户明确授权、有权控制且确认本机保护；不得保存 token、密码、Cookie 或会话密钥。这些默认不占澄清轮次。
+- 联网、多人、账号、发消息、公开发布、下单和支付只能标人工交接或暂不支持。`capability.mode` 只能是 `in_page`、`manual_handoff` 或 `unsupported`。
+- 不要按关键词静默选场景。不要伪造用户回答、产品确认或视觉确认。不要复用上一轮 SHA。不要把 `catalog_only` / `contract_ready` 写成已经可执行。不要在用户授权前打包、覆盖宿主或公开发布。
+- 测试夹具和环境变量只能用于自动化测试，不能写入生产 run。
 
-### 模块与内容
+## 怎么独立跑完
 
-- 每个工作台选择 4–15 个核心模块。需要新增、删减或保留哪些能力，必须在澄清阶段问清楚；首页只呈现用户确认后的内容，并让每个已确认模块可直接进入，不能在页面底部再用"更多入口""完整能力"补一份未确认的模块清单。能安全采用的设备、本地保存与通用内容默认值直接采用，不要求用户逐项确认。
-- 每个核心模块必须同时具备两层：无需用户先录数据即可操作的内置内容（内部合同名 `starter`）和用户自有记录。内置内容至少包含真实动作、模板、题目、计算器、生成器或参考卡之一，并声明动作结果、手机交互、状态和来源边界；空数组、占位卡、纯说明和只有 CRUD 空表都不算能力。
-- 每个核心模块还必须绑定一种真实交互表面：`action_checklist`、`record_ledger`、`stage_board`、`metric_log`、`review_journal` 或 `reward_economy`，并实现合同声明的增删改查、状态变化、刷新恢复和导入导出。
-- 凡能力语义包含出题、练习、测验或错题，默认直接提供可作答的通用自编题，不得为"是否需要题目"再问用户。每题至少有题干、选项或输入控件、答案、即时对错、解析、知识点、难度和来源标签；教育与备考内容包各至少 12 题，且不得标为"演示"。只有用户明确指定教材、真题、考纲、地区或版本时才询问来源。
-- 通用题不等于随意编题。宿主对年级适配、知识点、答案或安全边界没有把握时，必须先联网检索与该问题匹配的可靠来源：课程对齐优先课程标准或用户指定教材，词义/用法查权威词典，科学与安全事实优先一手机构或学术/科普权威来源；不要把所有题目都伪装成来自官方课程标准。记录实际采用来源的 URL、核验日期和"自编通用/未对齐指定教材"的边界。检索后仍不能决定，应在 `clarifying` 状态向用户询问具体来源、范围或期待答案；不得擅自猜测、伪造来源，也不得静默删掉该类题。教育场景另见 `references/education-content-research-policy.md`。
-- 儿童学习场景的星星经济、参考内容包、各学段题量、口算生成器、功能说明卡与家长回顾等专属细则，统一见 `references/education-rules.md`。
+公开命令：`start`、`respond`、`propose`、`build`、`evaluate`、`cleanup`、`status`。每步先看返回 JSON 的 `state` / `next`；看待决 `decision_id` 用 `status --run <dir> --verbose`。长文本用 `--request-file`。exit code：`0` 成功；`1` 是 `evaluation_blocked`、候选失败或 JSON `status=error`，先读 JSON 再决定；`2` 是 ContractError，读 stderr JSON 的 `error`。不要把非零一律重试。`SAFE_DELETE_FAIL_CLOSED` 是 Windows 噪音，不要当失败。
 
-### 文案与标识符
-
-- 内部标识符不得进入用户可见文案：学段 ID（如 `primary-transition-2-to-3`）、能力 ID（`CAP-XX-XX`）、模块 ID（如 `education-math`）、surface 类型名、`starter`、`action`、`question` 等内容类型字段只能出现在源码、合同与数据属性中。孩子与成人可见的文案里只允许出现友好名称；静态验收与浏览器验收都会扫描可见文案，命中即判候选失败。
-- 治理文案与使用者文案分层：来源边界、未对齐教材声明只能出现在已声明边界的功能说明卡或家长回顾区，不得以"通用内容；有自己的材料时再替换"这类元文案打断主流程；主流程文案使用产品语言（如"可反复练习，进度只保存在这台设备上"）。
-- 候选不得携带其他场景的代码与标记：渲染产物只注入当前产品已确认模块所需的脚本；非个人生活场景的候选中不得出现 `life-*` 模块代码、热量/收支等指标标记，静态验收命中即判失败。
-
-### PWA 与首屏
-
-- 候选必须是"PWA 就绪"的单文件：浏览器标签页 favicon 与添加到主屏幕的图标默认和首页标题旁的品牌块一致——当前视觉模板的 motif emoji 置于模板主色圆角块上，九套模板各一套离线渲染 PNG（`references/app-icons.json`，64 favicon/180/192/512/maskable，由治理脚本 `render_app_icons.py` 渲染）。只有用户明确要求时，才经 `design_brief.icon_override` 换用另一套模板 motif 或 `double6_brand` 品牌图标（源自 `references/page-icon.svg`）；非法取值以 ContractError 拒绝。同时内嵌 data-URI manifest（名称、短名称、standalone 显示、主题色与背景色、三张 PNG 图标）和 Apple 主屏元数据（apple-touch-icon 必须用 PNG，SVG 在 iOS 无效）。
-- 候选 `<head>` 内置 Content-Security-Policy：只允许内联脚本/样式与 `data:` 资源，`connect-src`、`form-action` 等一律为 `none`，从机制上阻断任何外联请求。
-- 只声明元数据：不得注册 service worker，不得声称"已可安装"或"已上线"。真实安装提示只在独立发布流程提供 https 入口后出现；file:// 或局域网打开时浏览器忽略 manifest 属正常行为。内嵌 manifest 与主屏图标不代表已发布或可安装。
-- 每个首页都必须把"今天要处理"放在工作流最前：只汇总带日期、尚未完成且到期日为今天或更早的行动；过期项显示为"已顺延到今天"但保留原始日期，并能在卡片上直接完成。没有待办时只能引导用户从已确认的首要模块开始，不能伪造任务或逾期记录。
-- 首屏同时提供导出备份与导入恢复；本地记录达到 30 条时提示导出。含 `entry_type + amount` 的已确认财务流水可额外导出 CSV。
-
-### 移动交互
-
-- 题目在手机上采用单题流：大触控选项或合适的数字/文本键盘、提交后即时反馈、解析与错题记录、下一题、刷新后续做；不得把桌面题表缩小后塞进手机。数字答案题必须使用页面内自绘数字键盘（0–9、删除、清空），不得用 `input[type=number]` 调起系统键盘顶掉页面；答对给予明确的庆祝动效（星星飘落），答错给予轻微抖动与正确答案提示，动效不得遮挡作答区。
-- 移动端输入字号不小于 16px；数字字段使用数值键盘。手机和平板统一使用可纵向滚动的左侧导航栏：每项必须是彩色 emoji 加可见的精简文字，竖屏采用上 emoji、下文字的纵向堆叠（电脑横屏保持左 emoji、右文字），文字可以在窄屏适度缩小和换行，但不得隐藏成只剩图标；导航必须列出首页、全部已确认模块和数据入口，不能截断前四项，也不能遮挡正文。导航文字不得被截成半个词，也不得与其他入口重名（静态验收会检查）。
-- 可使用浏览器本机朗读辅助，但不得承诺未实现的语音或智能判定能力。
-
-## 六步流程
-
-1. `start` 只保存用户原话和已选择的路由。未提供路由时只返回完整场景目录，不创建 run；新运行只接受当前版本，旧运行保留作历史记录而不混入新状态机。路由文件中的 `evidence_spans` 必须逐字摘自用户原话——校验器做逐字包含比对，概括、改写或编造的片段会以 ContractError 拒绝。
-2. 状态为 `clarifying` 时用 `respond` 逐次记录关键答案，最多询问三个会改变工作对象、核心动作、数据/来源边界或验收结果的问题。每个问题必须给出推荐值、推荐原因和"按推荐"的可用回答；宿主把"按推荐"标准化为该题的 `recommended_value`。儿童学习场景的澄清顺序与默认值见 `references/education-rules.md`。
-3. 状态为 `intake` 时，根据不可变的 `recommendation_snapshot` 提交产品合同并调用 `propose`。理解稿同时展示 4–15 个默认模块、每个模块的 starter 数量/类型与确认前可加入的可选模块；不得只在隐藏推理或内部产品 JSON 中列清单。
-4. 把返回的完整 `conversation_text` 展示给用户。`approve_product` 只能绑定当前理解稿 SHA：事件字段 `presented_content_sha256` 取自当前 run 的 `product.json` 现读的 `presentation.content_sha256`，复用旧值或拿错字段都会以 ContractError 拒绝。确认回执还会绑定不含回执自身的完整产品内容 SHA。确认后只要标题、主能力、模块、内容、扩展事项或边界发生变化，`build` 必须失败并要求重新提案、展示和确认。这仍不独立证明用户在任何宿主 UI 中看过它。
-5. 产品确认后调用 `build`，只生成一个推荐候选。建议紧接着调用 `evaluate --preflight` 或 `status --environment`；环境未就绪时先修好，不要让用户先做视觉确认。必须先让用户查看当前候选；只有绑定当前候选 SHA 的 `approve_visual` 才能进入验收，`reject_visual` 也必须绑定该 SHA。候选 SHA 取自当前 `build` 返回的 `candidate_sha256`，写入事件字段 `presented_candidate_sha256`，同样必须现读现用。
-6. 视觉确认后调用 `evaluate`。通过即为 `local_delivered`；静态或候选质量失败时保留产品确认并用新 build ID 修复。仅缺 Playwright/Chromium 等环境时状态为 `evaluation_blocked`——这是环境问题，不代表候选质量失败；环境就绪后直接重试同一个 `evaluate`，不得强制重建、再次视觉确认、新建 run 或改动已确认的产品合同。`evaluate --skip-browser` 只返回静态预检通过，绝不交付。若反馈需要 renderer/CSS 源码修订，维护者修订后以 `renderer_revised` 事件回到 `ready_to_build`，新 build 自动生成新候选 SHA。
-
-公开 CLI 为 `start`、`respond`、`propose`、`build`、`evaluate`、`cleanup`、`status`。`start --clone-from <已确认 run>` 只可复用同版本、内容未变且不含真实数据授权的产品确认；候选、视觉确认与评估证据不会复制。`cleanup --run` 恢复事务 journal，并报告受宿主限制而保留的 staging。
-
-## Windows 与受限宿主环境
-
-- 事务 journal 会在数据全部落盘后标记为 `committed`；受限宿主拦截删除时，残留 journal 或 staging 只会产生 warning，不能把已提交数据报成 CLI 失败。旧 run 可调用 `cleanup --run` 恢复。
-- 以进程 exit code 为唯一成败判据。stderr 中出现 `SAFE_DELETE_FAIL_CLOSED` 是 Windows 沙箱无回收站导致的噪音，只要 exit code 正常即为成功，不要据此重试、判失败或中断流程。
-- 浏览器验收使用 Playwright 与 Chromium。先执行 `evaluate --preflight`；可设置 `DOUBLE6_BROWSER_PYTHON` 和 `DOUBLE6_CHROMIUM_EXECUTABLE`。Windows 会自动尝试 `.venv\Scripts\python.exe`、常见 Chrome 安装路径及 `%LOCALAPPDATA%\ms-playwright`，仍缺失时预检会给出安装指引。
-- 宿主 CLI 操作、浏览器验收守则与本机服务器扩展守则见 `references/host-integration-playbook.md`。
-
-## 视觉反馈合同
-
-- 自动重建只承诺真正生效且能映射到已登记模板的颜色反馈；它会保留 renderer 与内容结构并切换 palette。视觉模板通过不等于 palette 已通过；只有绑定当前候选 SHA 的用户反馈才能记录为接受。
-- 构图、密度、字体、资产、场景辨识或交互反馈如果需要改 renderer/CSS，状态必须变为 `renderer_revision_required`，由维护者修改源代码后以 `renderer_revised` 事件恢复到 `ready_to_build`；禁止只改 metadata、换 build ID 或空跑三轮。`renderer_revision_required` 是 run 的状态标记，不是第八个状态机节点。
-- 候选使用 `references/vivid-social-template-system.json` 中九套去重模板、十个特定场景 renderer 和一个通用回退 renderer（`generic_dashboard`，未精确命中时使用）。场景不由制作器按关键词自动决定：调用方必须先从路由目录选择主场景、可选子场景，并附用户原话证据；制作器只校验选择合法、生成对应推荐快照。辅助领域不得触发特定 renderer。已登记场景若缺 renderer、四个首屏槽位（hero、primary_surface、progress、supporting_panel）或候选锁漂移，构建必须失败。首屏不得再叠加与模块卡片重复的纯文本快捷入口清单。
-
-## 事件与产品合同
-
-- 事件只保留 `event_id`、递增 `turn_index`、未经改写的 `raw_text`、`intent`，以及确认场景所需的 SHA。运行时不读取或保存 provenance、宿主 session、trace、数据库回执、可见回复回查或置信度字段。允许的 intent：`answer`、`approve_product`、`revise_product`、`approve_visual`、`reject_visual`、`switch_scene`、`renderer_revised`。
-- 测试夹具、临时事件和环境变量只能用于自动化测试，禁止写入生产 run、伪造用户回答、产品确认或视觉确认；任何由测试通道产生的确认都不得进入交付状态。
-- 产品文件必须包含 `product_id`、`title`、`facts`、`outcomes`、`work_objects`、`core_flow`、`capabilities`、`recommendation_plan`、`data_policy`、`device_target`（固定为 `responsive_both`）、`design_brief` 和 `boundaries`。`references/product.schema.json` 是宿主提案前对照的产品合同 schema。
-- 教育、课堂和备考任务若声称采用指定教材、真题或考纲，必须登记用户提供或官方可核验的来源；否则只能使用通用内容（`generic_non_claimed`）。
-- `references/scene-capability-starters.json` 与 `references/education-stage-starters.json` 是 starter 内容合同。产品中的 starter 必须来自不可变推荐快照，调用方不得自行删空、替换或伪造。
-- 用户明确提出且需要在模块内长期打卡的周期事项使用 `module_extensions`：每项必须绑定已选模块、真实用户事件证据、标题、结果和 1–7 的星期值，并完整进入理解稿。它与不可变内置内容分层保存，不能靠改内容包或把需求塞进描述文本冒充已实现。
-- blocked 决策必须进入 `unsupported` 边界，不能静默默认。
-
-## 候选数据安全
-
-- 导入前必须确认，导入后可立即撤销；清空与删除必须二次确认。
-- “今天”、周起点、连续天数等所有日期都按设备本地时区计算，不得用 UTC 日期（`toISOString().slice(0,10)`）冒充本地日期。
-- 导入文件最大 2 MB，每个模块最多 500 条记录。已知字段按类型归一化，未知字段保守保留在导出文件的 `legacyImport.unmapped` 中。
-- 外部记录 ID 不可信：不符合安全格式时重新生成；所有进入 HTML 属性或 script 的动态值必须转义，禁止把导入内容直接拼进 `innerHTML`。
-- 存储失败时不得丢失表单输入；验收必须先按真实表面填写全部必填字段，再触发保存故障并逐字段比较前后值，不能只填第一个文本框，也不能为了通过测试改变产品主模块。导出、恢复、旧简易 `{value, checked}` 数据兼容和未知字段保留都必须经过浏览器验收。
-
-## 验证
-
-随包测试 `tests/`（`python -m pytest -q tests`）覆盖 16 个领域及其细分档案的六步端到端流程与静态验收；检测到 Playwright + Chromium 时自动追加浏览器验收（CI 的 ubuntu browser job 固定执行）。
-
-完整发布门由维护者的治理包执行，不随本 Skill 分发；在维护者项目中的调用方式为：
+### 1. 保存原话
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python -B workflows/double6-workbench-governance/scripts/validate_release.py
+python scripts/double6.py start --run <run_dir> --request-file request.txt
 ```
 
-活动门的 60 秒预算只验证核心发布合同：内容包与 starter 完整性、理解稿/产品/候选 SHA 确认链与同 run 重建、儿童教育内容包（题库、口算生成器、星星经济、参考内容包与点读）、PWA 就绪元数据、导航与内部标识符泄漏扫描、周期事项、数据导入导出与完整浏览器交付；逐项明细以治理包测试为准。完整 16 领域浏览器矩阵仅是治理包中的手动诊断，用于内容包大改或专项排障，不阻塞每次发布。
+场景已经明确时同时传 `--route-file`。`evidence_spans` 必须是当前规范化请求里的逐字连续片段。缺路由也会创建 run，进入 `scene-discovery`，一次问清「谁使用、反复完成什么、期望什么结果」。合法 `primary_domain` / `scene_profile_id` 只从这次 `start` 返回的 `route_options` 里选，不要猜，也不要把完整能力目录丢给用户。
+
+路由文件最小字段：`primary_domain`、`evidence_spans`；知道场景时再加 `scene_profile_id`。可选：`profile_id`、`auxiliary_domains`、`classifier`。
+
+### 2. 普通澄清最多五问，必要授权单列
+
+同一 `scene_session` 里，普通需求和偏好澄清最多五问，场景厘清计入；已明确的不重复问。授权、身份及不可逆动作所需的必要确认单列，不消耗偏好额度。运行时按已知 `decision_id` 分类，宿主不得把普通偏好伪装成授权问题绕过上限。`question_count` 记录普通澄清，`authorization_question_count` 记录边界确认；旧 run 的计数保守保留，不倒扣历史。必要确认缺失时暂停相关动作，集中询问，继续其它已授权且不依赖答案的工作。五问后普通低风险项采用已展示且适用的默认值，不得伪造回答或默认批准真实数据及外部动作。`switch_scene` 新开会话并将两类计数归零。
+
+```bash
+python scripts/double6.py respond --run <run_dir> --event-file event.json
+```
+
+`event_id` 必须唯一；`turn_index` 从 `1` 起严格递增（`start` 已占用 `0`）。`decision_id` 只用于 `answer`。用户指定教材、真题或考纲时，另传 `--sources-file`。
+
+普通回答：
+
+```json
+{
+  "event_id": "event-1",
+  "turn_index": 1,
+  "raw_text": "按推荐",
+  "intent": "answer",
+  "decision_id": "<当前 missing 的 decision_id>",
+  "normalized_value": "按推荐"
+}
+```
+
+`normalized_value` 写成 `按推荐` / `recommended` / `use_recommendation` 时，运行时会改成该题的 `recommended_value`。场景厘清必须由宿主给出 route，不能只回一句话：
+
+```json
+{
+  "event_id": "event-1",
+  "turn_index": 1,
+  "raw_text": "给孩子做小学一升二学习台",
+  "intent": "answer",
+  "decision_id": "scene-discovery",
+  "normalized_value": {
+    "request": "给孩子做小学一升二学习台",
+    "route": {
+      "primary_domain": "education-learning",
+      "scene_profile_id": "scene.education-learning.primary-transition-1-to-2",
+      "evidence_spans": ["小学一升二"]
+    }
+  }
+}
+```
+
+允许的 `intent`：`answer`、`approve_product`、`revise_product`、`approve_visual`、`reject_visual`、`switch_scene`、`renderer_revised`。
+
+### 3. 按快照提案
+
+状态到 `intake` 后，默认不要手写整份产品合同：
+
+```bash
+python scripts/double6.py propose --run <run_dir> --from-snapshot
+```
+
+需要改标题或产品 ID 时再加 `--title` / `--product-id`。只有用户改了模块、能力、边界或主流程，才写 `--product-file`；字段见 `references/product.schema.json`，模块和 starter 仍必须来自当前 `recommendation_snapshot`。理解稿只展示 4–15 个已选模块和开箱内容，完整能力图谱不得进入成品。
+
+### 4. 展示理解稿，绑定当前 SHA
+
+把返回的完整 `conversation_text` 给用户看。用户同意后，从**当前** `product.json` 现读 `presentation.content_sha256`，再 `respond`：
+
+```json
+{
+  "event_id": "event-2",
+  "turn_index": 2,
+  "raw_text": "确认，开始制作",
+  "intent": "approve_product",
+  "presented_content_sha256": "<现读的 content_sha256>"
+}
+```
+
+确认后改标题、模块、内容、扩展事项或边界，`build` 会失败，必须重新提案、展示和确认。这仍不证明用户在宿主 UI 里看过理解稿。修订用 `revise_product`，同一工作台必须保留 `product_id`。
+
+### 5. 构建并让用户看见页面
+
+```bash
+python scripts/double6.py evaluate --run <run_dir> --preflight
+python scripts/double6.py build --run <run_dir>
+```
+
+环境没就绪先修，不要先让用户做视觉确认。把候选路径交给用户自己打开。Agent 自己点页面、截图或回归时，用无头 Playwright / `evaluate`，不要接管用户正在用的 Chrome。截图之后必须把 PNG 当图像打开并写出视觉 finding，见 `references/visual-self-review.md`；只报 Playwright 字号、可点和 `data-*` 不算视觉检查。默认仍把候选路径交给用户自己打开。用户已经明确把视觉判断交给当前会话（「你觉得可通过就通过」「不要总是让我看」）时，监督会话必须自己截图、打开 PNG、按 `references/good-workbench.md` 五问判定；五问都是「是」才可用**这一次** `build` 返回的 `candidate_sha256` 写视觉确认，并留下 `agent-as-user` 回执。五问有「否」或「说不清」就不能过，不要再把同一页丢回用户。未获这项授权时，仍只有用户看过当前页才能确认：
+
+```json
+{
+  "event_id": "event-3",
+  "turn_index": 3,
+  "raw_text": "这个页面可以",
+  "intent": "approve_visual",
+  "presented_candidate_sha256": "<现读的 candidate_sha256>"
+}
+```
+
+不要用旧 SHA，不要替用户点头。拒绝时把 `intent` 改成 `reject_visual`，SHA 仍绑定当前候选。
+
+### 6. 验收
+
+视觉确认后再 `evaluate`。通过即 `local_delivered`。考公、记账等专用今晚板自己带 `data-today-workboard`、首页主动作、房间入口和备份控件，不得再插通用「今天要处理」板；`evaluate` 按这块骨架验收，不清掉开箱种子也不把种子当成脏数据。静态或候选质量失败时保留产品确认，用新 build 修复。缺 Playwright/Chromium 是 `evaluation_blocked`，环境好了直接重试同一个 `evaluate`，不要重建或再要一次视觉确认。`--skip-browser` 只做静态预检，绝不交付。
+
+`start --clone-from <已确认 run>` 只能复用同版本、内容未变且不含真实数据授权的产品确认；候选、视觉和评估证据不会复制。旧 run 用 `cleanup --run` 恢复残留 journal。
+
+## SHA 现读现用
+
+| 事件 | 绑定字段 | 从哪里读 |
+| --- | --- | --- |
+| `approve_product` | `presented_content_sha256` | 当前 `product.json` → `presentation.content_sha256` |
+| `approve_visual` / `reject_visual` | `presented_candidate_sha256` | 最近一次 `build` 返回的 `candidate_sha256` |
+
+## 产品规则（跑流程时必须守）
+
+- 每个工作台 4–15 个核心模块。先按已确认场景推荐，再让用户采用、删减或调整；不要先甩完整能力目录。首页只放最终确认内容。
+- 全部 35 个场景走同一条 `compile_composition`。16 个正式 pack 都必须登记 `execution_projection`，由 `today_module_ids`、`lifecycle_module_ids`、`attention_module_ids`、`next_action_fields`、`blocker_fields` 和 `completion_events` 派生首页的「今天先做什么 / 整体到哪了 / 哪里受阻 / 下一步是什么」，不得在各 renderer 另写一套互相漂移的通用逻辑。已登记 pack 保持精确模块范围，其余按已选模块派生。场景之间只按 `catalog_only` / `contract_ready` / `executable_ready` / `release_ready` 区分深度。当前 16 个 `executable_ready` 场景是个人一周执行、个人生活工作台、选题到人工发布、线索到下一次跟进、减脂日常、班主任班务日常、考公刷题、四级冲刺、家庭今晚家务、月度记账、店铺今晚订单、研究今晚结论，以及宝宝、一升二、二升三、三升四；`release_ready` 仍为 0。减脂日常打开就记下今天的体重、三餐和有没有练；热量是自己填的估计，不保证瘦下来。激励是每日一句鼓励或正向暖心诗词，不是儿童关卡，也不是完全不需要。班主任打开就看见今天的班务、考勤和待跟进，家校消息仍是人工发。开箱合成对象必须跨这三块共用，至少带一条今晚例外；只用 `小A` 这类代号，禁止真名、真校、真学籍。细则见 `references/teacher-tonight-content.md`。家庭今晚打开就看见谁做饭、谁洗碗、要买什么，能勾掉；待当面说不是已发送。考公打开就选行测、申论或面试。技能先给出三科框架；第二步可接入本站题库和打判。接上后首页不再写施工中，改写打判不是官方分、不保证上岸。未接打判时才写打判还没接上。个人一周只服务「同时有日常、又有几件必须自己盯的真事」的人：首页要同时看见这几件的进展，今天有动作的动手，没有动作的也不掉出视野；不得写成每天只推一件。成人开箱不得再要求先填一条空记录。儿童学段都走 `child_playground_v2`：不写教材对齐、不用邻年级顶替、不把惩罚当掌握、幼儿默认家长陪同。家长区「重置今日」只撤销当天身体充电打卡，不等于清空全部。家庭任务默认关闭，打开后不加星星、不改掌握。打卡月历只表示这天有没有本机记录，不是掌握，也不推进学习日。一升二学科页分学一学 / 练一练 / 题库；填空按原文顺序排空并高亮当前空，空位不显示答案。儿童学习默认带激励循环：答对得星、连击、今天三站奖励、小卖部和徽章墙；奖励绑定通用可执行 atom，不新增儿童学习内容 atom；冻结页 SHA `5b31d9fc` 不原位改写。加深衍生场景时：先读该场景社媒吸收报告，再补 atom 或 pack，最后才改成熟度。
+- 个人生活工作台固定装配 `personal-today`、`personal-habits`、`life-inspiration`、`life-mood`、`life-finance`、`life-food`、`life-movement`、`life-reading`、`life-vocabulary`。首页一次完成今日 Top 1、心情和一个习惯/目标打卡，侧栏仍保留九个逐模块入口。成人事实投影只从完成日期、用户目标和本地流水计算去重连续天数、剩余量、目标进度与里程碑；建议日均只能写成「剩余量 ÷ 剩余天数」的目标等分。21 天目标和奖励由用户自填，只做本地庆祝，不改健康、掌握或结果真值。
+- 四级冲刺固定装配 `exam-goal`、`exam-today`、`exam-practice`、`exam-errors`、`exam-materials`、`exam-mock`、`exam-pomodoro`、`exam-review`。考试日期由用户填写；题库只有 18 道原创可判分题和 6 道人工复核写作/翻译题，错题回炉保留原错题事实，写作与翻译不得伪造自动评分。专注计时按时间戳恢复；没有合适英文语音时必须显示「朗读不可用」。只引用教育部教育考试院考试大纲和 CET4 考核结构，题目明确非真题、不保证通过。
+- 成人主题只读 `references/adult-theme-system.json`。多个主题是设计阶段的候选，不是成品功能；每个候选页面必须在 `design.current.adult_theme_id` 锁定并只编译一个主题。最终 HTML 不生成主题选择器、切换脚本或 UI 偏好 localStorage 键。未知主题或资产 SHA 不匹配时构建失败，不把不完整主题带进成品。主题只改变 CSS token、原创插画、空间布局和状态表达，不得改变业务导出字节、连续天数和完成事实。儿童冻结主题和 SHA 不受成人 registry 影响。
+- 能力图谱只是构建供给。编译结果只保留 selected scope。只有 `executable_ready` atom 可进入可执行绑定。
+- 每个页面的主活动必须是做这件事，不能只是记这件事。开箱内容必须能当场答题、判断、排期、演算、对照或生成待核验草案。空表、占位卡、纯说明和“请自己再记一条”不算能力。内容丰富度是一等指标：已选房间都要在侧栏里，点进去都有能做的活；不得靠收目录假装干净。侧栏点进去也必须立刻能做事，不能只剩「查看内置示例详情」。考公第一题必须像行测练习，不能是小学生近义词；记账演算必须标明收入、支出，不能写数值 1 / 数值 2。使用者看得见的文案不能是「内置内容 / 自有记录」。改完必须自己走每一个侧栏并写下用户没点名的问题；只修点名项不算解决。记录表单只能作残留，不能摊成「完整操作区」。开箱卡顶不能写「先从这里开始 / 可反复练习」，要说打开就能做、今晚就能做。开箱卡不能写「小任务 / 可编辑模板 / 完成这一项 / 标记已查看」，动作是勾掉、按这个改、看过了。手机开箱动作条不得吸底挡住选项。科目写去做题时必须打开对应考点的那一题，不能只打开做题房第一题。申论必须能当场写问题、原因、对策，不能只看提纲或把写作塞进残留记录表。手机第一屏必须看见问题写作框。记账开箱不得预填晚饭流水；首页空账，金额自己填。记账首页隐私条不得把税/银行免责再贴一遍。选题参考、读书进度等外部事实走可核验只读 API 或官方导出；未拿到真实响应前标 `contract_only` / `manual_handoff`，不得假装已接入微信读书或热点接口。
+- 每个核心模块必须有开箱内容（真实动作、模板、题目、计算器、生成器或参考卡）和一种真实表面：`action_checklist`、`record_ledger`、`stage_board`、`metric_log`、`review_journal` 或 `reward_economy`。
+- 含出题/练习/测验的能力默认提供可作答通用题，不要再问「要不要题」。儿童学习与四级冲刺各至少 12 题，不得标「演示」。考公框架台默认只有几道自编练习，完整题库和打判是第二步再接入。指定教材、真题或考纲时才问来源；答不上来就停在 `clarifying`，不要编来源或删题。
+- 内部 ID（`CAP-XX-XX`、模块 ID、`starter` 等）不得进入用户可见文案。非个人生活场景不得泄漏 `life-*` 或热量/收支标记。
+- 第一次打开且还没有自有记录时，显示可关掉的短说明：先做首页那一件、数据只在这台设备、换电脑前先导出；电脑 Chrome 可用应用窗口打开，但不得写成已经安装。不得注册 service worker，不得声称已可安装或已上线。
+- 用户数据是 `double6_workspace_v1`（`schemaVersion: 4`）。保存、导入导出、剪贴板和本地提醒使用 `ready / broken / declined / stale` 四态。导入最大 8 MB、每模块最多 2000 条；空间不够改用 IndexedDB，不假装已经上云。导入/清空前自动写本机恢复点，导出不含恢复点。
+- 外部操作确认后的唯一诚实状态是 `not_executed`。奖励不能改写掌握、业务真值或完成证据。页面不得把本机勾选、草稿或 CSV 写入写成已经发到学校、家长群、平台或云端。
+- 跨场景套模板时扫描邻域词和假提交语气。改运行时或场景页后跑 `python -B scripts/check_domain_remnants.py`。坏 JSON 或写入失败必须把存储恢复成导入前的字节；记录型 CSV 只给记账流水、店铺订单和考勤，且只出现在成人设置，不得上首页。
+
+儿童学习的奖励、题量、口算和家长回顾见 `references/education-rules.md`。用户已经指出过的入口、题量、题图、房间和内容雷见 `references/review-invariants.md`，改完必须跑 `python -B scripts/check_child_review_invariants.py`。题目排雷不限于儿童：备考、生活词汇、HR、孕期等场景的选择题也会犯标题泄题、答案总在第一项。方法见 `references/content-mines.md`，改题后跑 `python -B scripts/check_content_mines.py`。不要再靠人工一题一题扫。改减脂日常后另跑 `python -B scripts/check_fitness_tonight.py`：首页必须是今天的体重、三餐和打卡，不能把小学勾组当这个场景的主活动。改班主任后另跑 `python -B scripts/check_teacher_class.py`：首页必须是今天的班务、考勤和待跟进，开箱代号必须共用且带例外，不能套今晚一件、小学三站或真名花名册。改家庭今晚后另跑 `python -B scripts/check_household_tonight.py`：首页必须是今晚谁做什么、能勾掉、待当面说，不能是周历空表或假装已发送。改月度记账后另跑 `python -B scripts/check_finance_tonight.py`：首页必须是记今晚这笔、今日合计、凭证可勾、税待专业处理，不能是空月结台、银行余额、已申报或预填晚饭流水。改店铺订单后另跑 `python -B scripts/check_commerce_tonight.py`：首页必须是今天这几单、库存快照、待在平台回，不能是空经营台、实时库存或已发货。改研究结论后另跑 `python -B scripts/check_research_tonight.py`：首页必须能写下今晚这条带出处的结论，缺出处就标缺口，不能是空资料库或无来源已证实。改考公后另跑 `python -B scripts/check_exam_practice.py`：首页必须是行测、申论、面试三扇纸面，主动作是去做行测；三扇门要一眼分得出行测卷、申论稿纸、面试计时，不能是三颗同色按钮。接入题库后，三扇门必须进独立房间，错题再做一次必须打开同一道行测原题；打判要写明不是官方分。未接入时默认题要少，并写明打判还没接上。申论能写，面试能计时贴转写；导入必须先声明有权使用。不能冒充真题。给人看的页禁止写成走查工作台，门牌必须是考公工作台。改导入、备份或跨场景文案后再跑 `python -B scripts/check_domain_remnants.py`。版式、真值、PWA 图标、三视口和构建器强制项见 `references/content-truth-review.md`、`references/product.schema.json` 与运行时；宿主不要在入口复述这些实现细节。
+
+## 必守边界
+
+发布门由维护者治理包执行，不随本 Skill 分发：
+
+## 按需读取
 
 打包、安装目录覆盖、SMB 上传、重启、共享晋升和外部发布都需要用户另行授权。
+
+## 合并后的补充能力
+
+研究阅读是独立细分场景 `scene.research-knowledge.reading-desk`，可用 `profile_id=reading-desk` 明确选择；保留原有问题—证据—报告与实验周控场景。阅读清单、三遍阅读法、读书卡、证据卡和写作大纲均为本地内容，不声称接入微信读书或外部知识库。
+
+内容运营保留可直接写开头、来源到人工发布的对象链；同时提供多平台素材卡、选题打分、一鱼多吃、发布自检、建议的一周节奏和数据复盘。建议节奏可供参考，不构成自动排期或发布。
+
+普通候选与儿童展示适配器均内置 CSP，阻止页面外联。儿童已审内容的构建依赖随包保存于 `references/child-learning-source/`，构建前核对原始 SHA；不能回退读取作者机器上的其它项目目录。冻结儿童基准不原位改写。
+
+输入文件支持 UTF-8、UTF-8 BOM 与 UTF-16；CLI 强制 UTF-8 输出。Playwright 仍按需加载，缓存发现兼容 macOS、Linux、Windows 及 `PLAYWRIGHT_BROWSERS_PATH`。
+
+旧备份或自定义方案涉及 `exam-q06`–`exam-q12` 时，按需读取 `references/legacy-exam-content.json` 核对原题。它们保留自完整 1.1.0，后续本地优化已将其移出默认框架台；不要自动加入首页或冒称正式题库。

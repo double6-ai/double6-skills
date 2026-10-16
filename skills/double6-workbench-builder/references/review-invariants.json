@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "contract_version": "child_review_invariants_v1",
+  "purpose": "用户已经提出过的产品问题必须沉淀成可反复跑的审查，不能只修一次口头消失。",
+  "how_to_add": "用户再指出低级错误时：先在 invariants 加一条，写清 user_finding、raised_on、checker，再改产品。禁止只改页面不登记。",
+  "command": "python -B scripts/check_child_review_invariants.py",
+  "invariants": [
+    {
+      "id": "promised-remaining-has-entry",
+      "user_finding": "每个页面都写着「这组还有 5 题可以玩」，但是并没有进入剩下 5 题的入口。",
+      "raised_on": "2026-08-17",
+      "severity": "blocking",
+      "checker": "promised_remaining_has_entry",
+      "surfaces": ["teach", "practice", "world-practice"]
+    },
+    {
+      "id": "type-bank-6-to-10",
+      "user_finding": "感觉每类题型好像都只有一题，默认得需要有 6~10 题。",
+      "raised_on": "2026-08-17",
+      "severity": "blocking",
+      "checker": "type_bank_6_to_10",
+      "stages": ["baby-growth-explorer", "primary-transition-2-to-3", "primary-transition-3-to-4"]
+    },
+    {
+      "id": "giraffe-not-own-friend",
+      "user_finding": "高矮小队是要帮长颈鹿找朋友，但是答案里又有长颈鹿。",
+      "raised_on": "2026-08-17",
+      "severity": "blocking",
+      "checker": "giraffe_not_own_friend",
+      "item_id": "baby-math-02"
+    },
+    {
+      "id": "hero-matches-story-not-option-cat",
+      "user_finding": "更重要的是图案，最上面图案是一只猫，并且感觉选项最好改为图片或 emoji 的形式。",
+      "raised_on": "2026-08-17",
+      "severity": "blocking",
+      "checker": "hero_and_picture_options",
+      "item_id": "baby-math-02"
+    },
+    {
+      "id": "room-not-covered-by-today-board",
+      "user_finding": "今天三站好像覆盖住了一个图片。",
+      "raised_on": "2026-08-17",
+      "severity": "blocking",
+      "checker": "room_not_covered_by_today_board"
+    },
+    {
+      "id": "overlay-practice-must-have-hero",
+      "user_finding": "除一升二外按钮点不了。",
+      "raised_on": "2026-08-16",
+      "severity": "blocking",
+      "checker": "overlay_practice_must_have_hero"
+    },
+    {
+      "id": "kid-voice-not-exam-paper",
+      "user_finding": "很多页面不像是给小朋友看的，连大人看着想理解都有点费劲。",
+      "raised_on": "2026-08-17",
+      "severity": "blocking",
+      "checker": "kid_voice_not_exam_paper"
+    },
+    {
+      "id": "scene-confirm-before-new-group",
+      "user_finding": "宝宝场景里，怎么做完3次6道题了，还又出现了新的题？或者应该在每个场景之前让家长/小朋友先确认一下吧。",
+      "raised_on": "2026-08-17",
+      "severity": "blocking",
+      "checker": "scene_confirm_before_new_group"
+    },
+    {
+      "id": "four-stages-not-same-face",
+      "user_finding": "四档儿童页看不出大差异，同一套壳只换标题和第一站。",
+      "raised_on": "2026-08-17",
+      "severity": "blocking",
+      "checker": "four_stages_not_same_face",
+      "stages": [
+        "baby-growth-explorer",
+        "primary-transition-1-to-2",
+        "primary-transition-2-to-3",
+        "primary-transition-3-to-4"
+      ]
+    },
+    {
+      "id": "content-mines",
+      "user_finding": "做完一题后不该再出一堆题名；故事和问题不能拆页；正确答案不能总在第一项；标题不能泄题；弟弟不该去配大象。题图不能用答案的图；一组做完不能从头循环；数量图画的必须是被数的物件，不能是盘子。家长要能看见做到第几题，例如 2/6。",
+      "raised_on": "2026-08-17",
+      "severity": "blocking",
+      "checker": "content_mines"
+    },
+    {
+      "id": "option-letters-fit-card",
+      "user_finding": "选项字母放到很大，但手机上被卡片切掉。字号数字过了不等于字露出来。",
+      "raised_on": "2026-08-17",
+      "severity": "blocking",
+      "checker": "option_letters_fit_card"
+    },
+    {
+      "id": "stage-copy-is-group-play",
+      "user_finding": "已经一组连做，首页还在写「各一题」。",
+      "raised_on": "2026-08-17",
+      "severity": "blocking",
+      "checker": "stage_copy_is_group_play"
+    },
+    {
+      "id": "four-rooms-distinct-composition",
+      "user_finding": "四档房间大图还是同一套女孩、房子、篱笆，只换了熊猫或勇士。",
+      "raised_on": "2026-08-18",
+      "severity": "blocking",
+      "checker": "four_stages_not_same_face"
+    },
+    {
+      "id": "visible-copy-avoids-licensed-ultraman",
+      "user_finding": "伙伴卡写着奥特曼遇险，画的是原创粘土勇士。",
+      "raised_on": "2026-08-17",
+      "severity": "blocking",
+      "checker": "visible_copy_avoids_licensed_ultraman"
+    },
+    {
+      "id": "companion-mood-portraits",
+      "user_finding": "是不是还需要一些，类似狗狗说饿了、或者熊猫说饿了的图片",
+      "raised_on": "2026-08-18",
+      "severity": "blocking",
+      "checker": "companion_mood_portraits"
+    },
+    {
+      "id": "room-claim-visible",
+      "user_finding": "房间还要更像「这是我的」，至少能写名字、放一件自己的东西。",
+      "raised_on": "2026-08-18",
+      "severity": "blocking",
+      "checker": "room_claim_visible"
+    },
+    {
+      "id": "room-prop-sits-in-hero",
+      "user_finding": "没必要。小朋友要的不是摆小素材，家长喜欢的也不是这个。",
+      "raised_on": "2026-08-18",
+      "severity": "blocking",
+      "checker": "room_claim_visible"
+    },
+    {
+      "id": "warrior-waiting-shows-beast",
+      "user_finding": "感觉怪兽在远处晃，需要真的能看见怪兽。",
+      "raised_on": "2026-08-18",
+      "severity": "blocking",
+      "checker": "warrior_waiting_shows_beast"
+    },
+    {
+      "id": "tonight-board-before-room",
+      "user_finding": "小朋友要的是今晚三站和还在等他的伙伴。房间大图把今天三站挤出手机首屏，家长三秒看不出今晚做成了没有。",
+      "raised_on": "2026-08-18",
+      "severity": "blocking",
+      "checker": "tonight_board_before_room"
+    },
+    {
+      "id": "phone-home-only-today-count",
+      "user_finding": "一升二手机首屏先是今天路线、连续、星星、徽章四格，今天三站被顶下去。",
+      "raised_on": "2026-08-19",
+      "severity": "blocking",
+      "checker": "phone_home_only_today_count"
+    },
+    {
+      "id": "visit-familiarity-on-companion",
+      "user_finding": "孩子连续三天打开，首页伙伴卡还是第一天的样子；花园条在首屏下面，打开本身也不算来过。",
+      "raised_on": "2026-08-20",
+      "severity": "blocking",
+      "checker": "visit_familiarity_on_companion"
+    }
+  ]
+}

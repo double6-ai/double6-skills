@@ -6,11 +6,12 @@ import re
 from functools import lru_cache
 from typing import Any
 
+from .content_mines import serve_question
 from .core import ContractError, REFERENCES, read_json
 
 
 CAPABILITY_ID = re.compile(r"CAP-(?:0[0-9]|1[0-5])-[0-9]{2}")
-ITEM_KINDS = {"action", "template", "question", "calculator", "reference", "prompt", "generator"}
+ITEM_KINDS = {"action", "template", "question", "calculator", "reference", "prompt", "generator", "draft", "manual_review", "speak"}
 GENERATOR_TYPES = {"mental_arithmetic"}
 GENERATOR_STAGES = {
     "baby-growth-explorer", "primary-transition-1-to-2",
@@ -88,10 +89,26 @@ def education_stage_overrides() -> dict[str, dict[str, list[dict[str, Any]]]]:
             if any(not isinstance(item, dict) or item.get("kind") != "question" for item in items):
                 raise ContractError(f"学段题库只能覆盖真实题目：{stage_id}/{module_id}")
             if module_id in EDUCATION_PRACTICE_MODULES:
-                if len(items) != 8:
-                    raise ContractError(f"学段练习题必须恰好为 8 道：{stage_id}/{module_id}")
-                if len({str(item.get("knowledge_point") or "").strip() for item in items} - {""}) < 6:
+                if len(items) < 8:
+                    raise ContractError(f"学段练习题至少 8 道：{stage_id}/{module_id}")
+                knowledge_points = {str(item.get("knowledge_point") or "").strip() for item in items} - {""}
+                if len(knowledge_points) < 6:
                     raise ContractError(f"学段练习题必须覆盖至少 6 个知识点：{stage_id}/{module_id}")
+                if stage_id in {
+                    "baby-growth-explorer",
+                    "primary-transition-2-to-3",
+                    "primary-transition-3-to-4",
+                }:
+                    by_point: dict[str, int] = {}
+                    for item in items:
+                        point = str(item.get("knowledge_point") or "").strip()
+                        if point:
+                            by_point[point] = by_point.get(point, 0) + 1
+                    for point, count in by_point.items():
+                        if not 6 <= count <= 10:
+                            raise ContractError(
+                                f"每个题型需要 6–10 题：{stage_id}/{module_id}/{point}={count}"
+                            )
             for item in items:
                 required = ["item_id", "title", "prompt", "answer", "explanation", "knowledge_point", "difficulty", "source_label"]
                 if any(not str(item.get(key) or "").strip() for key in required):
@@ -216,6 +233,9 @@ def starter_catalog() -> dict[str, Any]:
                         raise ContractError(f"题目缺答案、解析、知识点、难度或来源：{item.get('item_id')}")
                     if not item.get("options") and item.get("input_type") not in {"text", "number"}:
                         raise ContractError(f"题目缺可作答控件：{item.get('item_id')}")
+                    exam_topics = {"听辨", "阅读", "词汇"} if str(item.get("item_id") or "").startswith("cet4-") else {"言语", "判断", "数量", "资料", "常识"}
+                    if "exam-practice" in (item.get("module_ids") or []) and str(item.get("topic") or "") not in exam_topics:
+                        raise ContractError(f"做题必须标明题型：{item.get('item_id')}")
                 elif not str(item.get("result") or "").strip():
                     raise ContractError(f"非题目 starter 必须声明动作结果：{item.get('item_id')}")
                 if item["kind"] == "generator":
@@ -234,6 +254,22 @@ def starter_catalog() -> dict[str, Any]:
                             raise ContractError(f"生成器学段参数无效：{item['item_id']}/{stage_key}")
                 if item["kind"] == "prompt" and (not isinstance(item.get("prompts"), list) or len(item["prompts"]) < 2):
                     raise ContractError(f"灵感 starter 必须至少提供两条可切换提示：{item.get('item_id')}")
+                if item["kind"] == "draft":
+                    sections = item.get("sections")
+                    if not isinstance(sections, list) or not sections:
+                        raise ContractError(f"写作面必须有可写段落：{item.get('item_id')}")
+                    if not str(item.get("prompt") or item.get("body") or "").strip():
+                        raise ContractError(f"写作面必须有可写的材料：{item.get('item_id')}")
+                    for section in sections:
+                        if not isinstance(section, dict) or not str(section.get("key") or "").strip() or not str(section.get("label") or "").strip():
+                            raise ContractError(f"写作面段落缺字段名：{item.get('item_id')}")
+                if item["kind"] == "speak":
+                    if not str(item.get("prompt") or item.get("body") or "").strip():
+                        raise ContractError(f"开口练习必须有题目：{item.get('item_id')}")
+                    if not isinstance(item.get("think_seconds"), int) or item["think_seconds"] < 10:
+                        raise ContractError(f"开口练习必须给出思考秒数：{item.get('item_id')}")
+                    if not isinstance(item.get("speak_seconds"), int) or item["speak_seconds"] < 30:
+                        raise ContractError(f"开口练习必须给出作答秒数：{item.get('item_id')}")
     by_domain: dict[str, int] = {domain: 0 for domain in QUESTION_DOMAINS}
     for scene in scenes:
         domains = set(scene.get("domain_ids", []))
@@ -290,7 +326,10 @@ def _resolve_generator(item: dict[str, Any], learning_stage_id: str | None) -> d
     return resolved
 
 
-def starter_for_module(module: dict[str, Any], *, learning_stage_id: str | None = None) -> dict[str, Any]:
+def starter_for_module(
+    module: dict[str, Any], *, learning_stage_id: str | None = None,
+    starter_profile_id: str | None = None,
+) -> dict[str, Any]:
     module_id = str(module.get("module_id") or "")
     refs = [str(ref) for ref in module.get("evidence_refs", [])]
     index = capability_index()
@@ -305,6 +344,10 @@ def starter_for_module(module: dict[str, Any], *, learning_stage_id: str | None 
             dict(item) for item in capability.get("starter_items", [])
             if not item.get("module_ids") or module_id in item.get("module_ids", [])
         ]
+        if starter_profile_id == "cet4-sprint" and module_id in {"exam-practice", "exam-errors", "exam-materials"}:
+            selected_items = [item for item in selected_items if str(item.get("item_id", "")).startswith("cet4-")]
+        if starter_profile_id == "civil-service-exam" and module_id in {"exam-practice", "exam-errors", "exam-materials"}:
+            selected_items = [item for item in selected_items if not str(item.get("item_id", "")).startswith("cet4-")]
         if not selected_items:
             continue
         contracts.append({
@@ -319,11 +362,11 @@ def starter_for_module(module: dict[str, Any], *, learning_stage_id: str | None 
         for item in selected_items:
             if item["item_id"] not in seen_items:
                 seen_items.add(item["item_id"])
-                items.append(item)
+                items.append(serve_question(item))
     stage_items = education_stage_overrides().get(str(learning_stage_id), {}).get(module_id, []) if learning_stage_id else []
     if stage_items:
         items = [item for item in items if item.get("kind") != "question"]
-        items.extend(dict(item) for item in stage_items)
+        items.extend(serve_question(dict(item)) for item in stage_items)
     stage_references = education_stage_references().get(str(learning_stage_id), {}).get(module_id, []) if learning_stage_id else []
     if stage_references:
         seen_references = {item["item_id"] for item in items}
@@ -333,25 +376,33 @@ def starter_for_module(module: dict[str, Any], *, learning_stage_id: str | None 
         raise ContractError(f"模块没有可执行 starter 内容：{module_id} / {refs}")
     kinds = sorted({str(item["kind"]) for item in items})
     kind_labels = {
-        "action": "小任务",
-        "template": "可编辑模板",
+        "action": "今晚勾掉",
+        "template": "可改的提纲",
         "question": "练习题",
         "calculator": "小工具",
         "reference": "参考内容",
         "prompt": "每日提示",
         "generator": "口算生成器",
+        "draft": "今晚写",
+        "speak": "开口练习",
+        "manual_review": "人工复核",
     }
+    family = str(module_id).split("-", 1)[0]
     if kinds == ["question"]:
         summary = f"这里有 {len(items)} 道练习题，答完马上能看结果和解析"
+    elif family == "exam":
+        summary = f"这里有 {len(items)} 项今晚就能做"
+    elif family == "finance":
+        summary = f"这里有 {len(items)} 项今晚就能记、勾或判断"
     elif "generator" in kinds and "reference" in kinds:
-        summary = f"这里有 {len(items)} 项可以直接开始的内容（含不限题量的口算天天练与可点读的参考内容）"
+        summary = f"这里有 {len(items)} 项今晚就能练（含不限题量的口算天天练与可点读的参考内容）"
     elif "generator" in kinds:
-        summary = f"这里有 {len(items)} 项可以直接开始的内容（含不限题量的口算天天练）"
-    elif "reference" in kinds:
+        summary = f"这里有 {len(items)} 项今晚就能练（含不限题量的口算天天练）"
+    elif "reference" in kinds and family in {"education", "exam"}:
         labels = "、".join(kind_labels[kind] for kind in kinds)
-        summary = f"这里有 {len(items)} 项可以直接开始的内容（{labels}）"
+        summary = f"这里有 {len(items)} 项今晚就能看（{labels}；参考内容点一点就能听）"
     else:
-        summary = f"这里有 {len(items)} 项可以直接开始的内容（{'、'.join(kind_labels[kind] for kind in kinds)}）"
+        summary = f"这里有 {len(items)} 项今晚就能做（{'、'.join(kind_labels[kind] for kind in kinds)}）"
     return {
         "contract_version": "mobile_scene_capability_v1",
         "module_id": module_id,

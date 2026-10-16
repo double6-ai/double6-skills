@@ -1,0 +1,317 @@
+{
+  "schema_version": "child-learning-content-atom-catalog/v1",
+  "catalog_id": "primary-transition-1-to-2-foundation-atoms",
+  "version": "1.0.0",
+  "status": "candidate",
+  "definition": "孩子可以具体学习、练习，并用独立表现与迁移题观察是否掌握的最小能力项。",
+  "stage_id": "primary-transition-1-to-2",
+  "supporting_state_primitives": "workflows/workbench-platform/examples/child-learning-atomic-core/readiness-manifest.json",
+  "atoms": [
+    {
+      "schema_version": "child-learning-content-atom/v1",
+      "atom_id": "learn-hanzi-shape-sound-meaning-v1",
+      "version": "1.0.0",
+      "title": "汉字形—音—义识认",
+      "subject": "语文",
+      "stage_ids": ["primary-transition-1-to-2"],
+      "learner_can": "看到一个已学常用字时，能读出字音、指出基本意思，并在另一个词语中再次认出它。",
+      "prerequisite_atom_ids": [],
+      "content_scope": {
+        "included": ["常用独体字", "字形辨认", "口头读音", "基本字义", "换词再认"],
+        "excluded": ["默写", "笔顺评分", "指定教材同步", "生僻字诊断"]
+      },
+      "teaching_sequence": [
+        {"step": 1, "teacher_action": "先给实物、动作或熟悉情境，说出要学的意思。", "learner_action": "看情境并说出熟悉的口语词。", "success_signal": "孩子知道这个字要表达什么。"},
+        {"step": 2, "teacher_action": "展示大字，慢读一次，再指出一处可辨认的字形特征。", "learner_action": "指字跟读，不要求书写。", "success_signal": "读音与目标字对应。"},
+        {"step": 3, "teacher_action": "把目标字放进二选一或四选一中。", "learner_action": "从相近或相反字中找到目标字。", "success_signal": "不是靠固定位置猜中。"},
+        {"step": 4, "teacher_action": "换到一个新词或新句子中再出现目标字。", "learner_action": "再次认出并说出词义。", "success_signal": "新情境仍能认出。"}
+      ],
+      "practice": {
+        "recommended_trials": 4,
+        "variation_axes": ["目标字", "干扰字", "出现位置", "词语情境"],
+        "items": [
+          {"item_id": "hanzi-water", "kind": "recognition", "prompt": "哪个字表示“水”？", "stimulus": {"meaning": "可以喝、会流动的水"}, "response_mode": "single_choice", "options": ["水", "火", "山", "日"], "correct_answer": "水", "explanation": "“水”读 shuǐ，表示水。", "transfer": false},
+          {"item_id": "hanzi-mountain", "kind": "recognition", "prompt": "“山水”里的“山”是哪一个字？", "stimulus": {"word": "山水"}, "response_mode": "single_choice", "options": ["山", "水", "日", "月"], "correct_answer": "山", "explanation": "“山水”的第一个字是“山”。", "transfer": false},
+          {"item_id": "hanzi-big", "kind": "recognition", "prompt": "看到一只很大的象，应该选哪个字？", "stimulus": {"context": "这只象很___。"}, "response_mode": "single_choice", "options": ["小", "大", "少", "口"], "correct_answer": "大", "explanation": "“大”读 dà，表示大小里的大。", "transfer": false},
+          {"item_id": "hanzi-sun-transfer", "kind": "recognition", "prompt": "哪个词里有表示太阳的“日”？", "stimulus": {"target_meaning": "太阳"}, "response_mode": "single_choice", "options": ["日月", "山水", "人口", "大小"], "correct_answer": "日月", "explanation": "“日月”里的“日”可以表示太阳。", "transfer": true}
+        ]
+      },
+      "misconceptions": [
+        {"signal": "只记住选项位置，换位置就选错。", "likely_cause": "没有建立字形与意思的连接。", "remediation": "撤掉固定四选一，回到情境—大字—换位置再认。"},
+        {"signal": "能跟读但单独出现认不出。", "likely_cause": "只模仿了声音。", "remediation": "让孩子先指目标字，再自己读；随后放进新词复认。"}
+      ],
+      "mastery_oracle": {"evidence_mode": "hybrid", "min_scored_trials": 4, "min_correct": 3, "required_transfer_correct": true, "max_hints": 0, "pass_state": "evidence_sufficient_for_current_atom", "fail_state": "continue_practice", "not_claimed": ["不代表会写这个字", "不作识字量诊断", "不代表掌握一年级写字表"]},
+      "source_boundary": {"content_origin": "mixed", "textbook_alignment": "generic_not_aligned_to_specific_textbook_region_or_exam", "real_child_validation": false, "privacy": ["不录音", "不采集手写图片", "只保存本地作答事实"]},
+      "evidence_refs": [
+        {"role": "historical_project_evidence", "path": "workflows/double6-workbench-builder/references/education-stage-references.json", "scope": "一升二 100 字参考内容池"},
+        {"role": "optimization_target", "path": "04_iterations/2026-08-11_child-learning-content-atom-correction/gap_audit.md", "scope": "补齐教法、变式与掌握判据"}
+      ]
+    },
+    {
+      "schema_version": "child-learning-content-atom/v1",
+      "atom_id": "learn-english-word-meaning-v1",
+      "version": "1.0.0",
+      "title": "英语单词词义识认",
+      "subject": "英语",
+      "stage_ids": ["primary-transition-1-to-2"],
+      "learner_can": "看到或听到一个已学主题词时，能把英文词形、读音和中文意思对应，并在新句子中再次认出。",
+      "prerequisite_atom_ids": [],
+      "content_scope": {"included": ["场所", "天气", "学习用品", "颜色", "情境中复认"], "excluded": ["拼写默写", "音标教学", "自由造句评分", "指定教材逐词同步"]},
+      "teaching_sequence": [
+        {"step": 1, "teacher_action": "先给可理解的图片替代描述或生活情境，不先展示中文答案。", "learner_action": "说出情境里的物品、地点或天气。", "success_signal": "理解情境。"},
+        {"step": 2, "teacher_action": "展示英文词并慢读，中文意思只出现一次。", "learner_action": "看词形、听读音并跟读。", "success_signal": "词形、声音、意义建立第一次连接。"},
+        {"step": 3, "teacher_action": "混入同主题干扰词，改变目标位置。", "learner_action": "根据英文词选意义，或根据情境选英文词。", "success_signal": "双向选择均可完成。"},
+        {"step": 4, "teacher_action": "把单词放入一个新短句。", "learner_action": "从句子情境推断并认出目标词。", "success_signal": "离开原卡片仍能认出。"}
+      ],
+      "practice": {
+        "recommended_trials": 4,
+        "variation_axes": ["主题", "英到中或中到英", "词在句中位置", "干扰词"],
+        "items": [
+          {"item_id": "english-school", "kind": "recognition", "prompt": "school 的意思是？", "stimulus": {"sentence": "I go to school with my bag."}, "response_mode": "single_choice", "options": ["学校", "医院", "公园", "商店"], "correct_answer": "学校", "explanation": "school 表示学校。", "transfer": false},
+          {"item_id": "english-book", "kind": "recognition", "prompt": "书包里有一本书，应选哪个英文词？", "stimulus": {"context": "书包里的书"}, "response_mode": "single_choice", "options": ["book", "ruler", "sunny", "blue"], "correct_answer": "book", "explanation": "book 表示书。", "transfer": false},
+          {"item_id": "english-sunny", "kind": "recognition", "prompt": "sunny 表示什么天气？", "stimulus": {"context": "天空晴朗，太阳很亮"}, "response_mode": "single_choice", "options": ["晴天", "雨天", "雪天", "大风"], "correct_answer": "晴天", "explanation": "sunny 表示有阳光的晴天。", "transfer": false},
+          {"item_id": "english-blue-transfer", "kind": "recognition", "prompt": "句子“The bag is blue.”里，blue 告诉我们什么？", "stimulus": {"sentence": "The bag is blue."}, "response_mode": "single_choice", "options": ["书包是蓝色的", "书包很大", "书包在学校", "书包是新的"], "correct_answer": "书包是蓝色的", "explanation": "blue 在新句子里仍表示蓝色。", "transfer": true}
+        ]
+      },
+      "misconceptions": [
+        {"signal": "只会英译中，不会根据中文情境找英文词。", "likely_cause": "连接是单向的。", "remediation": "交替做英到中、中到英，并把词放回情境。"},
+        {"signal": "换到句子里就认不出。", "likely_cause": "只记住孤立卡片版式。", "remediation": "用同一个词造两句很短的新情境，再隐藏中文。"}
+      ],
+      "mastery_oracle": {"evidence_mode": "hybrid", "min_scored_trials": 4, "min_correct": 3, "required_transfer_correct": true, "max_hints": 0, "pass_state": "evidence_sufficient_for_current_atom", "fail_state": "continue_practice", "not_claimed": ["不代表会拼写", "不作发音评分", "不代表对齐指定教材"]},
+      "source_boundary": {"content_origin": "mixed", "textbook_alignment": "generic_not_aligned_to_specific_textbook_region_or_exam", "real_child_validation": false, "privacy": ["不录音", "不上传语音", "不建立儿童画像"]},
+      "evidence_refs": [
+        {"role": "historical_project_evidence", "path": "workflows/workbench-platform/examples/child-learning-v1/src/content.ts", "scope": "en-school 与 en-weather 用户已接受 V1 seed"},
+        {"role": "historical_project_evidence", "path": "workflows/double6-workbench-builder/references/education-stage-references.json", "scope": "一升二 34 个英语主题词内容池"}
+      ]
+    },
+    {
+      "schema_version": "child-learning-content-atom/v1",
+      "atom_id": "learn-count-one-to-one-20-v1",
+      "version": "1.0.0",
+      "title": "20 以内一一对应数数",
+      "subject": "数学",
+      "stage_ids": ["baby-growth-explorer", "primary-transition-1-to-2"],
+      "learner_can": "面对 20 个以内、排列方式不同的一组物体，能每个只数一次，并用最后一个数表示总数。",
+      "prerequisite_atom_ids": [],
+      "content_scope": {"included": ["一一对应", "稳定数序", "基数概念", "直线与散乱排列", "5或10分组复核"], "excluded": ["100 以内数位", "估算", "加减运算", "速度测评"]},
+      "teaching_sequence": [
+        {"step": 1, "teacher_action": "把物体排开，示范手指碰一个、嘴里说一个数。", "learner_action": "边指边数，每个物体只碰一次。", "success_signal": "指点与数词一一对应。"},
+        {"step": 2, "teacher_action": "问“最后说到几，所以一共有几个？”", "learner_action": "不重新数，直接说最后数词是总数。", "success_signal": "理解基数。"},
+        {"step": 3, "teacher_action": "打乱位置或排成两行。", "learner_action": "选择起点和方向，避免漏数、重复。", "success_signal": "排列变化后仍正确。"},
+        {"step": 4, "teacher_action": "数量较多时引导每 5 个或 10 个分一组复核。", "learner_action": "先分组，再数组内与剩余。", "success_signal": "能解释自己的防漏方法。"}
+      ],
+      "practice": {
+        "recommended_trials": 4,
+        "variation_axes": ["数量", "排列方式", "物体种类", "是否允许分组"],
+        "items": [
+          {"item_id": "count-seven-line", "kind": "counting", "prompt": "一共有几个圆点？", "stimulus": {"objects": ["●", "●", "●", "●", "●", "●", "●"], "layout": "line"}, "response_mode": "number", "correct_answer": 7, "explanation": "从一端开始，每个圆点只数一次，最后数到 7。", "transfer": false},
+          {"item_id": "count-twelve-two-rows", "kind": "counting", "prompt": "两行星形一共有几个？", "stimulus": {"rows": [["◆", "◆", "◆", "◆", "◆", "◆"], ["◆", "◆", "◆", "◆", "◆", "◆"]]}, "response_mode": "number", "correct_answer": 12, "explanation": "可以先数第一行 6 个，再接着数第二行到 12。", "transfer": false},
+          {"item_id": "count-sixteen-groups", "kind": "counting", "prompt": "先按 5 个一组，一共有几个方块？", "stimulus": {"groups": [5, 5, 5, 1], "symbol": "■"}, "response_mode": "number", "correct_answer": 16, "explanation": "三组 5 个是 15，再加 1 个是 16。", "transfer": false},
+          {"item_id": "count-nineteen-scattered-transfer", "kind": "counting", "prompt": "散开的物体容易漏数。选一个起点逐个标记后，一共有几个？", "stimulus": {"count": 19, "layout": "scattered", "strategy_required": "choose_start_and_mark_once"}, "response_mode": "number", "correct_answer": 19, "explanation": "先固定起点，每数一个就做一次标记，最后的数 19 是总数。", "transfer": true}
+        ]
+      },
+      "misconceptions": [
+        {"signal": "手指移动和嘴里数词不同步。", "likely_cause": "尚未建立一一对应。", "remediation": "把物体拉开，速度放慢到一次触碰对应一个数词。"},
+        {"signal": "散乱排列时漏数或重复。", "likely_cause": "没有固定起点和已数标记。", "remediation": "先圈起点，数过的移到另一边或做标记。"},
+        {"signal": "数完后不能回答总数。", "likely_cause": "只背数序，未理解最后数词代表总量。", "remediation": "每次结束都追问“最后数到几，所以一共几？”"}
+      ],
+      "mastery_oracle": {"evidence_mode": "hybrid", "min_scored_trials": 4, "min_correct": 3, "required_transfer_correct": true, "max_hints": 0, "pass_state": "evidence_sufficient_for_current_atom", "fail_state": "continue_practice", "not_claimed": ["不代表会做加减法", "不作发展水平诊断", "不要求限时"]},
+      "source_boundary": {"content_origin": "mixed", "textbook_alignment": "generic_not_aligned_to_specific_textbook_region_or_exam", "real_child_validation": false, "privacy": ["不摄像", "不记录动作视频", "只记录答案与提示次数"]},
+      "evidence_refs": [
+        {"role": "historical_project_evidence", "path": "workflows/double6-workbench-builder/references/education-stage-starters.json", "scope": "baby-error-01 一一对应数数 seed"},
+        {"role": "optimization_target", "path": "04_iterations/2026-08-11_child-learning-content-atom-correction/gap_audit.md", "scope": "作为一升二运算前置能力补齐"}
+      ]
+    },
+    {
+      "schema_version": "child-learning-content-atom/v1",
+      "atom_id": "learn-add-make-ten-100-v1",
+      "version": "1.0.0",
+      "title": "两位数加一位数凑整",
+      "subject": "数学",
+      "stage_ids": ["primary-transition-1-to-2"],
+      "learner_can": "计算两位数加一位数时，能把一位数拆成“先补到整十、再加剩余”，并说出拆分过程。",
+      "prerequisite_atom_ids": ["learn-count-one-to-one-20-v1"],
+      "content_scope": {"included": ["和在 100 以内", "个位需要进位", "拆分一位数", "口头解释凑整"], "excluded": ["竖式", "三位数", "连续进位", "限时竞赛"]},
+      "teaching_sequence": [
+        {"step": 1, "teacher_action": "先问两位数离下一个整十还差几。", "learner_action": "找出补整需要的数。", "success_signal": "能说出如 28 差 2 到 30。"},
+        {"step": 2, "teacher_action": "把要加的一位数拆成补整部分和剩余。", "learner_action": "说出如 7 拆成 2 和 5。", "success_signal": "拆分总和不变。"},
+        {"step": 3, "teacher_action": "先完成补整，再加剩余。", "learner_action": "口头完成 28+2=30，30+5=35。", "success_signal": "结果与步骤一致。"},
+        {"step": 4, "teacher_action": "换一个个位和加数，不再提示拆几。", "learner_action": "独立选择拆分并解释。", "success_signal": "新算式能迁移策略。"}
+      ],
+      "practice": {
+        "recommended_trials": 4,
+        "variation_axes": ["个位", "加数", "补整距离", "是否提供拆分提示"],
+        "items": [
+          {"item_id": "add-28-7", "kind": "computation", "prompt": "28 + 7 等于多少？", "stimulus": {"expression": "28 + 7", "strategy_prompt": "先补到 30"}, "response_mode": "number", "correct_answer": 35, "explanation": "7 拆成 2 和 5；28+2=30，再加 5 得 35。", "transfer": false},
+          {"item_id": "add-36-8", "kind": "computation", "prompt": "36 + 8 等于多少？", "stimulus": {"expression": "36 + 8"}, "response_mode": "number", "correct_answer": 44, "explanation": "8 拆成 4 和 4；36+4=40，再加 4 得 44。", "transfer": false},
+          {"item_id": "add-47-6", "kind": "computation", "prompt": "47 + 6 等于多少？", "stimulus": {"expression": "47 + 6"}, "response_mode": "number", "correct_answer": 53, "explanation": "6 拆成 3 和 3；47+3=50，再加 3 得 53。", "transfer": false},
+          {"item_id": "add-59-4-transfer", "kind": "computation", "prompt": "不看提示，算出 59 + 4，并说说怎样先到整十。", "stimulus": {"expression": "59 + 4", "explanation_required": true}, "response_mode": "number", "correct_answer": 63, "explanation": "4 拆成 1 和 3；59+1=60，再加 3 得 63。", "transfer": true}
+        ]
+      },
+      "misconceptions": [
+        {"signal": "拆分后少加或多加一部分。", "likely_cause": "没有检查拆出的两数仍等于原加数。", "remediation": "拆分后先口头检查“2+5还是7”。"},
+        {"signal": "看到任何题都机械补十但说不清。", "likely_cause": "只背步骤，没有理解补整目标。", "remediation": "先单练“离下一个整十差几”，再回到完整算式。"}
+      ],
+      "mastery_oracle": {"evidence_mode": "hybrid", "min_scored_trials": 4, "min_correct": 3, "required_transfer_correct": true, "max_hints": 0, "pass_state": "evidence_sufficient_for_current_atom", "fail_state": "continue_practice", "not_claimed": ["不代表掌握全部 100 以内加法", "不评价计算速度", "不替代书面竖式教学"]},
+      "source_boundary": {"content_origin": "historical_project_evidence", "textbook_alignment": "generic_not_aligned_to_specific_textbook_region_or_exam", "real_child_validation": false, "privacy": ["不采集手写", "不上传作答", "只保留本地结果"]},
+      "evidence_refs": [{"role": "historical_project_evidence", "path": "workflows/workbench-platform/examples/child-learning-v1/src/content.ts", "scope": "math-plus 的 28+7 与凑整解释"}]
+    },
+    {
+      "schema_version": "child-learning-content-atom/v1",
+      "atom_id": "learn-subtract-bridge-ten-100-v1",
+      "version": "1.0.0",
+      "title": "两位数减一位数破整",
+      "subject": "数学",
+      "stage_ids": ["primary-transition-1-to-2"],
+      "learner_can": "计算两位数减一位数时，能把减数拆成“先减到整十、再减剩余”，并说出拆分过程。",
+      "prerequisite_atom_ids": ["learn-count-one-to-one-20-v1"],
+      "content_scope": {"included": ["100 以内两位数减一位数", "个位不够直接减", "拆分减数", "口头解释破整"], "excluded": ["竖式退位", "三位数", "连续退位", "限时竞赛"]},
+      "teaching_sequence": [
+        {"step": 1, "teacher_action": "先看个位，问先减几可以到整十。", "learner_action": "找出到前一个整十需要减的数。", "success_signal": "能说出如 46 先减 6 到 40。"},
+        {"step": 2, "teacher_action": "把完整减数拆成到整十部分和剩余。", "learner_action": "说出如 8 拆成 6 和 2。", "success_signal": "拆分总和等于减数。"},
+        {"step": 3, "teacher_action": "先减到整十，再减剩余。", "learner_action": "完成 46-6=40，40-2=38。", "success_signal": "结果与过程一致。"},
+        {"step": 4, "teacher_action": "换一题且取消拆分提示。", "learner_action": "独立选择拆分并解释。", "success_signal": "新算式仍能使用策略。"}
+      ],
+      "practice": {
+        "recommended_trials": 4,
+        "variation_axes": ["被减数个位", "减数", "跨十距离", "是否提供拆分提示"],
+        "items": [
+          {"item_id": "subtract-46-8", "kind": "computation", "prompt": "46 - 8 等于多少？", "stimulus": {"expression": "46 - 8", "strategy_prompt": "先减到 40"}, "response_mode": "number", "correct_answer": 38, "explanation": "8 拆成 6 和 2；46-6=40，再减 2 得 38。", "transfer": false},
+          {"item_id": "subtract-52-7", "kind": "computation", "prompt": "52 - 7 等于多少？", "stimulus": {"expression": "52 - 7"}, "response_mode": "number", "correct_answer": 45, "explanation": "7 拆成 2 和 5；52-2=50，再减 5 得 45。", "transfer": false},
+          {"item_id": "subtract-61-6", "kind": "computation", "prompt": "61 - 6 等于多少？", "stimulus": {"expression": "61 - 6"}, "response_mode": "number", "correct_answer": 55, "explanation": "6 拆成 1 和 5；61-1=60，再减 5 得 55。", "transfer": false},
+          {"item_id": "subtract-73-9-transfer", "kind": "computation", "prompt": "不看提示，算出 73 - 9，并说说怎样先到整十。", "stimulus": {"expression": "73 - 9", "explanation_required": true}, "response_mode": "number", "correct_answer": 64, "explanation": "9 拆成 3 和 6；73-3=70，再减 6 得 64。", "transfer": true}
+        ]
+      },
+      "misconceptions": [
+        {"signal": "把第二步误写成加法。", "likely_cause": "只记住凑整外形，没有保持减法意义。", "remediation": "用拿走物体的语言完整说“先拿走、再拿走”。"},
+        {"signal": "减到整十后忘记剩余减数。", "likely_cause": "拆分结果没有保留。", "remediation": "在纸面或口头保留“8=6+2”，完成后逐项划掉。"}
+      ],
+      "mastery_oracle": {"evidence_mode": "hybrid", "min_scored_trials": 4, "min_correct": 3, "required_transfer_correct": true, "max_hints": 0, "pass_state": "evidence_sufficient_for_current_atom", "fail_state": "continue_practice", "not_claimed": ["不代表掌握全部 100 以内减法", "不评价计算速度", "不替代竖式退位教学"]},
+      "source_boundary": {"content_origin": "historical_project_evidence", "textbook_alignment": "generic_not_aligned_to_specific_textbook_region_or_exam", "real_child_validation": false, "privacy": ["不采集手写", "不上传作答", "只保留本地结果"]},
+      "evidence_refs": [{"role": "historical_project_evidence", "path": "workflows/workbench-platform/examples/child-learning-v1/src/content.ts", "scope": "math-minus 的 46-8 与破整解释"}]
+    },
+    {
+      "schema_version": "child-learning-content-atom/v1",
+      "atom_id": "learn-sentence-who-where-do-v1",
+      "version": "1.0.0",
+      "title": "按“谁—在哪里—做什么”排句子",
+      "subject": "语文",
+      "stage_ids": ["primary-transition-1-to-2"],
+      "learner_can": "面对被打乱的简单陈述句成分，能找出人物、地点和动作，排成通顺完整的句子。",
+      "prerequisite_atom_ids": ["learn-hanzi-shape-sound-meaning-v1"],
+      "content_scope": {"included": ["简单陈述句", "谁—在哪里—做什么", "句首句末", "语义通顺"], "excluded": ["复杂从句", "唯一文学表达评分", "标点专项", "书写规范评分"]},
+      "teaching_sequence": [
+        {"step": 1, "teacher_action": "把词块按人物、地点、动作分成三类。", "learner_action": "先回答谁、在哪里、做什么。", "success_signal": "三类成分找对。"},
+        {"step": 2, "teacher_action": "用口头问句串起三个答案。", "learner_action": "按“谁—在哪里—做什么”完整说一遍。", "success_signal": "口头句子意思完整。"},
+        {"step": 3, "teacher_action": "再把对应词块排成句子。", "learner_action": "移动词块并读出来检查。", "success_signal": "顺序与口头句一致。"},
+        {"step": 4, "teacher_action": "换人物、地点和动作。", "learner_action": "不看模板完成新句。", "success_signal": "结构迁移到新内容。"}
+      ],
+      "practice": {
+        "recommended_trials": 4,
+        "variation_axes": ["人物", "地点", "动作", "词块长度"],
+        "items": [
+          {"item_id": "sentence-ming-running", "kind": "ordering", "prompt": "把词块排成通顺句子。", "stimulus": {"tokens": ["跑步", "小明", "在操场上"]}, "response_mode": "ordered_tokens", "correct_answer": ["小明", "在操场上", "跑步"], "explanation": "小明—在操场上—跑步。先说谁，再说在哪里，最后说做什么。", "transfer": false},
+          {"item_id": "sentence-cat-sleeping", "kind": "ordering", "prompt": "把词块排成通顺句子。", "stimulus": {"tokens": ["在沙发上", "睡觉", "小猫"]}, "response_mode": "ordered_tokens", "correct_answer": ["小猫", "在沙发上", "睡觉"], "explanation": "小猫—在沙发上—睡觉。", "transfer": false},
+          {"item_id": "sentence-sister-reading", "kind": "ordering", "prompt": "把词块排成通顺句子。", "stimulus": {"tokens": ["妹妹", "看书", "在图书角"]}, "response_mode": "ordered_tokens", "correct_answer": ["妹妹", "在图书角", "看书"], "explanation": "妹妹—在图书角—看书。", "transfer": false},
+          {"item_id": "sentence-birds-transfer", "kind": "ordering", "prompt": "没有颜色提示，把新词块排成一句话。", "stimulus": {"tokens": ["唱歌", "小鸟", "在树枝上"], "hint_colors": false}, "response_mode": "ordered_tokens", "correct_answer": ["小鸟", "在树枝上", "唱歌"], "explanation": "小鸟—在树枝上—唱歌。", "transfer": true}
+        ]
+      },
+      "misconceptions": [
+        {"signal": "按给出的词块位置照抄。", "likely_cause": "没有先理解人物、地点和动作。", "remediation": "先隐藏词块顺序，只口头回答三个问题，再排列。"},
+        {"signal": "句子语法可读但意思不完整。", "likely_cause": "漏掉地点或动作。", "remediation": "完成后逐一检查“谁、哪里、做什么”是否都有答案。"}
+      ],
+      "mastery_oracle": {"evidence_mode": "automated", "min_scored_trials": 4, "min_correct": 3, "required_transfer_correct": true, "max_hints": 0, "pass_state": "evidence_sufficient_for_current_atom", "fail_state": "continue_practice", "not_claimed": ["不代表掌握所有句式", "不评价文学表达", "不作书写评分"]},
+      "source_boundary": {"content_origin": "historical_project_evidence", "textbook_alignment": "generic_not_aligned_to_specific_textbook_region_or_exam", "real_child_validation": false, "privacy": ["不采集手写", "不要求真实姓名", "只保存本地排序结果"]},
+      "evidence_refs": [{"role": "historical_project_evidence", "path": "workflows/workbench-platform/examples/child-learning-v1/src/content.ts", "scope": "lang-order 与谁—在哪里—做什么解释"}]
+    },
+    {
+      "schema_version": "child-learning-content-atom/v1",
+      "atom_id": "learn-read-explicit-information-v1",
+      "version": "1.0.0",
+      "title": "从短文找到明确信息",
+      "subject": "阅读",
+      "stage_ids": ["primary-transition-1-to-2"],
+      "learner_can": "阅读 1–3 句短文后，能根据问题回到原文找到人物、地点、动作或结果的明确线索。",
+      "prerequisite_atom_ids": ["learn-hanzi-shape-sound-meaning-v1"],
+      "content_scope": {"included": ["人物", "地点", "动作", "结果", "原文线索定位"], "excluded": ["隐含主题推理", "作者情感", "长篇阅读", "阅读速度诊断"]},
+      "teaching_sequence": [
+        {"step": 1, "teacher_action": "先读问题，圈出问题在问谁、哪里、做什么或结果。", "learner_action": "说出要找的信息类型。", "success_signal": "知道问题要找什么。"},
+        {"step": 2, "teacher_action": "回到短文逐句寻找同义或原词线索。", "learner_action": "指出支持答案的原句。", "success_signal": "答案有原文依据。"},
+        {"step": 3, "teacher_action": "把答案与三个不符合原文的干扰项比较。", "learner_action": "选择答案并说明哪句话支持。", "success_signal": "不靠常识代替文本。"},
+        {"step": 4, "teacher_action": "换一篇人物与场景不同的短文。", "learner_action": "独立按问题—定位—回答完成。", "success_signal": "方法迁移到新短文。"}
+      ],
+      "practice": {
+        "recommended_trials": 4,
+        "variation_axes": ["问题类型", "线索位置", "同义改写", "短文场景"],
+        "items": [
+          {"item_id": "read-umbrella", "kind": "comprehension", "prompt": "小熊做了什么？", "stimulus": {"passage": "下雨了，小熊把自己的伞举到小兔头上，两个人一起回家。"}, "response_mode": "single_choice", "options": ["和小兔共用雨伞", "把伞藏起来", "独自跑走", "在雨里玩水"], "correct_answer": "和小兔共用雨伞", "explanation": "“把自己的伞举到小兔头上”是直接线索，所以小熊在和小兔共用雨伞。", "transfer": false},
+          {"item_id": "read-library", "kind": "comprehension", "prompt": "乐乐在哪里看书？", "stimulus": {"passage": "午后，乐乐来到图书馆。他在窗边坐下，安静地看完一本故事书。"}, "response_mode": "single_choice", "options": ["图书馆", "操场", "家里", "商店"], "correct_answer": "图书馆", "explanation": "第一句直接写了“来到图书馆”。", "transfer": false},
+          {"item_id": "read-cup", "kind": "comprehension", "prompt": "妈妈最后做了什么？", "stimulus": {"passage": "妈妈洗好杯子，把它倒扣在架子上。过了一会儿，杯子里的水干了。"}, "response_mode": "single_choice", "options": ["把杯子倒扣在架子上", "打碎杯子", "买了新杯子", "把杯子装进书包"], "correct_answer": "把杯子倒扣在架子上", "explanation": "“把它倒扣在架子上”是妈妈的明确动作。", "transfer": false},
+          {"item_id": "read-kite-transfer", "kind": "comprehension", "prompt": "风停以后，风筝怎样了？请选出有原文支持的答案。", "stimulus": {"passage": "风很大时，风筝飞得高高的。傍晚风停了，风筝慢慢落到草地上。"}, "response_mode": "single_choice", "options": ["落到草地上", "飞得更高", "掉进河里", "被小鸟带走"], "correct_answer": "落到草地上", "explanation": "第二句直接写了“慢慢落到草地上”。", "transfer": true}
+        ]
+      },
+      "misconceptions": [
+        {"signal": "答案符合常识但原文没有写。", "likely_cause": "用生活经验代替文本证据。", "remediation": "要求用手指指出支持答案的原句，没有原句就暂不选。"},
+        {"signal": "看到相同词就选，没有核对问题。", "likely_cause": "未先识别问题类型。", "remediation": "先圈问题词“谁、哪里、做什么、怎样”，再找线索。"}
+      ],
+      "mastery_oracle": {"evidence_mode": "hybrid", "min_scored_trials": 4, "min_correct": 3, "required_transfer_correct": true, "max_hints": 0, "pass_state": "evidence_sufficient_for_current_atom", "fail_state": "continue_practice", "not_claimed": ["不代表主题概括能力", "不代表长篇阅读水平", "不作阅读速度诊断"]},
+      "source_boundary": {"content_origin": "mixed", "textbook_alignment": "generic_not_aligned_to_specific_textbook_region_or_exam", "real_child_validation": false, "privacy": ["不采集朗读声音", "不要求真实生活经历", "只保存本地答案"]},
+      "evidence_refs": [{"role": "historical_project_evidence", "path": "workflows/workbench-platform/examples/child-learning-v1/src/content.ts", "scope": "read-umbrella 用户接受 V1 seed"}]
+    },
+    {
+      "schema_version": "child-learning-content-atom/v1",
+      "atom_id": "learn-read-aloud-phrase-retell-v1",
+      "version": "1.0.0",
+      "title": "朗读分句与口头复述",
+      "subject": "阅读",
+      "stage_ids": ["primary-transition-1-to-2"],
+      "learner_can": "朗读 2–4 句短文时能在标点处停顿，读后用自己的话说出至少两个关键内容。",
+      "prerequisite_atom_ids": ["learn-hanzi-shape-sound-meaning-v1", "learn-read-explicit-information-v1"],
+      "content_scope": {"included": ["标点停顿", "关键词预读", "两点复述", "允许自我纠正"], "excluded": ["录音", "自动发音评分", "情感朗诵打分", "背诵"]},
+      "teaching_sequence": [
+        {"step": 1, "teacher_action": "先圈出 2–3 个可能读不准的词，并按词组示范一次。", "learner_action": "先读关键词，不急着读全文。", "success_signal": "关键词可辨认。"},
+        {"step": 2, "teacher_action": "用斜线标出逗号短停、句号长停。", "learner_action": "按分句朗读，允许停下重来。", "success_signal": "停顿基本跟随标点。"},
+        {"step": 3, "teacher_action": "朗读后只问“谁/什么、发生了什么”两个问题。", "learner_action": "不用背原句，说出两个关键内容。", "success_signal": "复述包含主体和事件。"},
+        {"step": 4, "teacher_action": "换一段未读过的同长度短文。", "learner_action": "独立预看、分句读和两点复述。", "success_signal": "新短文仍能完成流程。"}
+      ],
+      "practice": {
+        "recommended_trials": 4,
+        "variation_axes": ["短文主题", "句子数量", "关键词", "复述问题"],
+        "items": [
+          {"item_id": "aloud-flower", "kind": "read_aloud", "prompt": "圈出“清晨、巡逻、约定”，在逗号处短停、句号处停稳；读完说出谁在守护小花。", "stimulus": {"passage": "清晨，小花慢慢抬起头。大护卫站在花盆旁，小护卫沿着石板路巡逻。它们约定今天一起做好三件小事。", "retell_points": ["小花", "两位护卫在守护"]}, "response_mode": "guardian_observation", "correct_answer": ["punctuation_pauses_observed", "two_retell_points_present"], "explanation": "核验的是停顿和两点复述，不要求一字不差或表演式朗诵。", "transfer": false},
+          {"item_id": "aloud-clock", "kind": "read_aloud", "prompt": "读清“先、再、最后”，读完复述三件事的顺序。", "stimulus": {"passage": "小雨先写作业，再收玩具，最后读十分钟故事。每件事都有自己的时间。", "retell_points": ["先写作业", "再收玩具", "最后读故事"]}, "response_mode": "guardian_observation", "correct_answer": ["sequence_words_clear", "retell_order_correct"], "explanation": "重点是顺序词和事件顺序。", "transfer": false},
+          {"item_id": "aloud-leaves", "kind": "read_aloud", "prompt": "在三个时间词前稍作准备，读完说出小芽的两个变化。", "stimulus": {"passage": "第一天，泥土没有变化。第三天，一点嫩绿钻了出来。第七天，小芽舒展开两片叶子。", "retell_points": ["嫩绿钻出来", "长出两片叶子"]}, "response_mode": "guardian_observation", "correct_answer": ["punctuation_pauses_observed", "two_retell_points_present"], "explanation": "复述可以用自己的话，不要求背原文。", "transfer": false},
+          {"item_id": "aloud-birds-transfer", "kind": "read_aloud", "prompt": "第一次读这段话：先看关键词“窗台、面包屑”，再分句朗读；读完说出谁来了、做了什么。", "stimulus": {"passage": "早晨，两只小鸟落在窗台上。它们啄了几粒面包屑，又一起飞向大树。", "retell_points": ["两只小鸟", "吃了面包屑后飞向大树"]}, "response_mode": "guardian_observation", "correct_answer": ["punctuation_pauses_observed", "two_retell_points_present"], "explanation": "新短文用于观察是否能迁移“预看—分句—两点复述”。", "transfer": true}
+        ]
+      },
+      "misconceptions": [
+        {"signal": "为了不断句而越读越快。", "likely_cause": "把流利误解为不停顿。", "remediation": "先只读一小句，标点处允许呼吸，再逐句连接。"},
+        {"signal": "能读完但复述只重复最后几个字。", "likely_cause": "注意力都用于解码文字。", "remediation": "读前先给两个复述问题，读后允许回看原文找两个关键点。"},
+        {"signal": "家长按口音或表演感主观评分。", "likely_cause": "观察标准不清。", "remediation": "只核验标点停顿、关键词可辨认、两个内容点；不评价口音。"}
+      ],
+      "mastery_oracle": {"evidence_mode": "guardian_observation", "min_scored_trials": 4, "min_correct": 3, "required_transfer_correct": true, "max_hints": 0, "pass_state": "evidence_sufficient_for_current_atom", "fail_state": "continue_practice", "not_claimed": ["不作发音或口音评分", "不采集音频", "不代表背诵或表演朗诵能力"]},
+      "source_boundary": {"content_origin": "mixed", "textbook_alignment": "generic_not_aligned_to_specific_textbook_region_or_exam", "real_child_validation": false, "privacy": ["不录音", "不上传声音", "家长只勾选观察项"]},
+      "evidence_refs": [{"role": "historical_project_evidence", "path": "workflows/workbench-platform/examples/child-learning-v1/src/content.ts", "scope": "14 篇 V1 朗读文本与 focus"}]
+    }
+  ],
+  "candidate_backlog": [
+    "反义词配对",
+    "问号使用",
+    "整点认识",
+    "等差规律",
+    "平均分初步",
+    "长度单位选择",
+    "故事主题概括",
+    "观察表达",
+    "英语问候与年龄表达",
+    "植物生长条件",
+    "光影观察"
+  ],
+  "claims": {
+    "project_local_content_ready": false,
+    "shared_atom_promotion": false,
+    "parent_capability_promotion": false,
+    "deployment_performed": false,
+    "real_child_validation": false
+  }
+}

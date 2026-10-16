@@ -1,0 +1,3715 @@
+{
+  "schema_version": 1,
+  "contract_version": "double6_scene_profiles_v1",
+  "supply_contract_version": "double6_capability_supply_v1",
+  "source_catalog_id": "double6-domain-content-packs-v1",
+  "domain_count": 16,
+  "scene_profile_count": 35,
+  "maturity_summary": {
+    "catalog_only": 10,
+    "contract_ready": 9,
+    "executable_ready": 16,
+    "release_ready": 0
+  },
+  "scene_profiles": [
+    {
+      "scene_profile_id": "scene.personal-execution.weekly-personal-control",
+      "domain_id": "personal-execution",
+      "label": "个人一周执行台",
+      "maturity": "executable_ready",
+      "user": "同时有一份日常、又有几件必须自己盯的真事的人，例如副业、装修、论文或搬家；不是「所有想把生活管好的人」",
+      "goal": "一眼看见这几件各自到哪了；今天该动的动手，今天不用动的也知道没掉。不是每天只推一件，也不是把一周记下来",
+      "frequency": "daily_with_weekly_review",
+      "inputs": [
+        "尚未承诺的临时想法",
+        "本周三个结果与容量",
+        "当前承诺与截止时间",
+        "项目阶段与下一步",
+        "可启停的重复习惯",
+        "本周完成、阻塞与顺延事实"
+      ],
+      "outputs": [
+        "已分流的收件箱",
+        "本周结果与时间块",
+        "今日最多三项优先行动",
+        "项目唯一下一步",
+        "习惯完成记录",
+        "可回查事实日志",
+        "三段式周复盘与下周首步"
+      ],
+      "risk_class": "low",
+      "risk_flags": [],
+      "recommended_module_ids": [
+        "personal-inbox",
+        "personal-week-plan",
+        "personal-today",
+        "personal-projects",
+        "personal-habits",
+        "personal-life-log",
+        "personal-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "本机维护任务、项目、习惯和复盘"
+        ],
+        "out_of_scope": [
+          "自动读取系统日历",
+          "替用户作出目标取舍",
+          "承诺跨设备同步"
+        ],
+        "data_rule": "用户自有数据默认只在当前设备处理",
+        "external_handoffs": []
+      },
+      "clarification_conditions": [
+        {
+          "when": "同时出现多个目标且先后顺序不清",
+          "ask": "接下来七天最不能拖延的一个结果是什么？",
+          "skip_when": "用户已给出截止日或唯一优先结果"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "收件箱直接变成今日承诺",
+          "没有可执行下一步",
+          "目标过多导致今日清单超载",
+          "受阻事项在复盘时消失"
+        ],
+        "recovery": [
+          "先分流为本周、以后或删除",
+          "退回目标与项目模块补一条可在今天开始的动作",
+          "只保留用户确认的前三项",
+          "将受阻项带入顺延队列并显式决定"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "recommended_module_count_at_least_7",
+        "all_modules_exist_in_personal_execution",
+        "inbox_is_not_automatic_commitment",
+        "week_plan_has_outcome_done_definition_and_status",
+        "today_output_has_at_most_3_priority_actions",
+        "review_includes_blockers_and_carry_over",
+        "dedicated_renderer_required",
+        "no_calendar_sync_claim"
+      ],
+      "executable_readiness": {
+        "version": "1.0.0",
+        "runtime_scope": "local_selected_scope_only",
+        "required_atom_ids": [
+          "atom.shared.import-backup-preview"
+        ],
+        "evidence_contract": "double6.v0591.sales-visibility/v1"
+      }
+    },
+    {
+      "scene_profile_id": "scene.personal-execution.personal-life-dashboard",
+      "domain_id": "personal-execution",
+      "legacy_profile_ids": [
+        "personal-life-dashboard"
+      ],
+      "label": "个人生活工作台",
+      "maturity": "executable_ready",
+      "user": "希望在一个本地入口记录日常生活的成年人",
+      "goal": "在今日一页完成 Top 1、心情和一个习惯，并保留九个生活模块的逐模块入口",
+      "frequency": "daily",
+      "inputs": [
+        "当天心情与备注",
+        "自行录入的收支和饮食",
+        "运动完成事实",
+        "阅读进度",
+        "词汇复习结果"
+      ],
+      "outputs": [
+        "可回看的生活记录",
+        "只基于录入事实的汇总",
+        "阅读阶段与下一页",
+        "答错词优先回看队列"
+      ],
+      "risk_class": "moderate",
+      "risk_flags": [
+        "personal-local-data"
+      ],
+      "recommended_module_ids": [
+        "personal-today",
+        "personal-habits",
+        "life-inspiration",
+        "life-mood",
+        "life-finance",
+        "life-food",
+        "life-movement",
+        "life-reading",
+        "life-vocabulary"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "当前设备上的生活记录与确定性计算"
+        ],
+        "out_of_scope": [
+          "心理判断",
+          "营养或训练处方",
+          "银行账户连接",
+          "语音评分"
+        ],
+        "data_rule": "真实个人数据只在用户明确选择后本地录入，并支持导出与清空",
+        "external_handoffs": [
+          "需要专业健康判断时转交专业人员"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "用户只说想做生活工作台但没有说明最常使用的动作",
+          "ask": "你每天最想先完成的是记录、行动还是复习？",
+          "skip_when": "用户已给出一个明确主动作"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "模块过多失去主入口",
+          "把手工记录误写成自动监测"
+        ],
+        "recovery": [
+          "保留一个主动作并把其余模块降为快捷入口",
+          "所有汇总回退到用户录入事实"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "exact_nine_module_composition",
+        "today_page_three_real_actions",
+        "deduped_completion_date_streak",
+        "local_fact_only_aggregates",
+        "theme_preference_isolated"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.household-collaboration.weekly-household-handoff",
+      "domain_id": "household-collaboration",
+      "label": "家庭事务周交接",
+      "maturity": "executable_ready",
+      "user": "在同一家庭里分担今晚家务、但只共用这一台设备的人",
+      "goal": "打开就看见今晚谁做什么，能勾掉，需要对方知道的只记待当面说；不是周历空表，也不是账号同步",
+      "frequency": "daily_with_weekly_handoff",
+      "inputs": [
+        "家庭成员称呼与人工约定",
+        "家务和采购事项",
+        "负责人和截止时间",
+        "需要告知其他成员的变化"
+      ],
+      "outputs": [
+        "家务与采购清单",
+        "带责任人的人工交接队列",
+        "本周共同结论",
+        "可导出的交接文件"
+      ],
+      "risk_class": "moderate",
+      "risk_flags": [
+        "multi-user"
+      ],
+      "recommended_module_ids": [
+        "household-chores",
+        "household-shopping",
+        "household-handoff",
+        "household-review",
+        "household-room"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "单设备任务分工与人工交接"
+        ],
+        "out_of_scope": [
+          "真实账号体系",
+          "权限分级",
+          "实时多人同步",
+          "自动通知"
+        ],
+        "data_rule": "家庭数据只保存在当前设备；导出前由用户检查敏感字段",
+        "external_handoffs": [
+          "通过导出文件或线下沟通交接"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "出现多人但未说明谁可查看或修改",
+          "ask": "哪些成员会在这台设备上使用，哪些内容不能共享？",
+          "skip_when": "成员和当前设备边界已明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "把本地状态误认为其他成员已收到",
+          "导入交接文件覆盖旧状态"
+        ],
+        "recovery": [
+          "状态保留为待人工告知",
+          "导入前预览并允许撤销"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_household_collaboration",
+        "every_handoff_has_manual_status",
+        "no_realtime_sync_claim"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.household-collaboration.shared-household-budget",
+      "domain_id": "household-collaboration",
+      "label": "家庭采购与共同收支",
+      "maturity": "contract_ready",
+      "user": "需要共同维护家庭采购与轻量收支事实的家庭成员",
+      "goal": "让采购动作、预算差异和待结算事项有同一份本地事实记录",
+      "frequency": "weekly_and_event_driven",
+      "inputs": [
+        "采购清单",
+        "用户手工录入的预算和实际金额",
+        "付款或结算说明",
+        "成员人工确认"
+      ],
+      "outputs": [
+        "待采购与已完成清单",
+        "只基于录入金额的预算差异",
+        "待结算事项",
+        "周度家庭复盘"
+      ],
+      "risk_class": "moderate",
+      "risk_flags": [
+        "multi-user",
+        "financial-data"
+      ],
+      "recommended_module_ids": [
+        "household-shopping",
+        "household-expenses",
+        "household-handoff",
+        "household-review",
+        "household-room"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "手工收支记录与简单确定性计算"
+        ],
+        "out_of_scope": [
+          "支付账户连接",
+          "自动转账",
+          "共同账户权限",
+          "税务或理财建议"
+        ],
+        "data_rule": "只记录用户明确提供的最小必要金额和用途",
+        "external_handoffs": [
+          "真实支付和结算在外部渠道完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "预算属于个人还是全家不清楚",
+          "ask": "这份金额记录给谁看，按家庭总额还是成员分别记录？",
+          "skip_when": "记录口径已明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "金额口径不一致",
+          "把待结算误标为已支付"
+        ],
+        "recovery": [
+          "保留原始记录并要求用户确认口径",
+          "支付状态回退为待外部确认"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_household_collaboration",
+        "calculated_totals_match_user_records",
+        "no_payment_success_without_external_confirmation"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.content-operations.idea-to-publish",
+      "domain_id": "content-operations",
+      "label": "选题到人工发布",
+      "maturity": "executable_ready",
+      "user": "独立创作者或小团队内容负责人",
+      "goal": "打开就写今晚这一篇开头，再按人工发布交接",
+      "frequency": "daily_with_weekly_review",
+      "inputs": [
+        "带来源的信息与素材",
+        "选题目标和受众",
+        "稿件或脚本阶段",
+        "计划发布时间",
+        "人工录入的平台结果"
+      ],
+      "outputs": [
+        "带来源的素材卡",
+        "选题阶段与下一步",
+        "带受众和验收标准的内容任务书",
+        "制作与审核清单",
+        "待人工发布排期",
+        "基于录入数据的复盘"
+      ],
+      "risk_class": "moderate",
+      "risk_flags": [
+        "external-side-effect"
+      ],
+      "recommended_module_ids": [
+        "content-input",
+        "content-topics",
+        "content-briefs",
+        "content-production",
+        "content-schedule",
+        "content-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "内容生产过程和人工发布状态记录"
+        ],
+        "out_of_scope": [
+          "自动发布",
+          "账号登录",
+          "伪造平台数据",
+          "无来源事实生成"
+        ],
+        "data_rule": "外部事实保留来源、日期和可用范围",
+        "external_handoffs": [
+          "公开发布由用户在平台单独确认"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "内容结果、平台或受众会改变生产形态",
+          "ask": "这批内容要交付给谁、以什么形态发布？",
+          "skip_when": "平台、受众和交付形态已明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "来源丢失",
+          "排期被误写成已发布",
+          "复盘数据无采集时间"
+        ],
+        "recovery": [
+          "阻断无来源素材进入成稿",
+          "发布状态回退为待人工确认",
+          "要求补录指标来源和时间"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "recommended_module_count_at_least_6",
+        "all_modules_exist_in_content_operations",
+        "brief_has_audience_problem_evidence_format_and_acceptance",
+        "every_external_claim_has_source",
+        "publish_pipeline_separates_scheduled_copied_opened_and_confirmed",
+        "dedicated_renderer_required",
+        "no_publish_success_without_user_confirmation"
+      ],
+      "executable_readiness": {
+        "version": "1.0.0",
+        "runtime_scope": "local_selected_scope_plus_manual_external_handoff",
+        "required_atom_ids": [
+          "atom.shared.import-backup-preview",
+          "atom.shared.retrieve-library-item",
+          "atom.shared.generate-review-draft",
+          "atom.shared.record-metric",
+          "atom.shared.summarize-metrics",
+          "atom.shared.confirm-external-operation"
+        ],
+        "evidence_contract": "double6.v0591.sales-visibility/v1"
+      }
+    },
+    {
+      "scene_profile_id": "scene.content-operations.multi-account-editorial-calendar",
+      "domain_id": "content-operations",
+      "label": "多账号内容排期",
+      "maturity": "contract_ready",
+      "user": "需要区分多个账号定位和发布节奏的内容运营者",
+      "goal": "按账号定位把选题和制作任务排入可调整的人工发布日历",
+      "frequency": "weekly_planning_and_daily_execution",
+      "inputs": [
+        "账号定位与禁区",
+        "内容主题和素材",
+        "制作负责人或步骤",
+        "计划发布日期",
+        "人工发布结果"
+      ],
+      "outputs": [
+        "账号—主题映射",
+        "周度排期",
+        "冲突和缺口清单",
+        "逐稿制作状态",
+        "账号级复盘"
+      ],
+      "risk_class": "moderate",
+      "risk_flags": [
+        "external-side-effect",
+        "account-data"
+      ],
+      "recommended_module_ids": [
+        "content-accounts",
+        "content-input",
+        "content-topics",
+        "content-production",
+        "content-schedule",
+        "content-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "账号定位和内容状态的本地记录"
+        ],
+        "out_of_scope": [
+          "保存账号密钥",
+          "自动登录或发布",
+          "平台规则实时保证"
+        ],
+        "data_rule": "不得接收 token、密码、Cookie 或会话密钥",
+        "external_handoffs": [
+          "登录、发布和平台规则核验在外部完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "同一内容是否跨账号复用不清楚",
+          "ask": "哪些账号共用素材，哪些必须独立改写？",
+          "skip_when": "账号间复用规则已给出"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "跨账号内容串线",
+          "排期冲突",
+          "规则过期"
+        ],
+        "recovery": [
+          "按账号重新过滤并保留原稿",
+          "标出冲突等待用户调整",
+          "把规则状态标记为待核验"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_content_operations",
+        "every_scheduled_item_has_account_id",
+        "no_secret_fields",
+        "no_auto_publish_claim"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.research-knowledge.evidence-to-report",
+      "domain_id": "research-knowledge",
+      "label": "问题—证据—报告",
+      "maturity": "executable_ready",
+      "user": "需要完成可引用研究报告的个人研究者",
+      "goal": "让研究问题、来源证据、写作主张和覆盖缺口可追踪",
+      "frequency": "project_based_with_weekly_review",
+      "inputs": [
+        "研究问题与范围",
+        "来源、摘录和核验时间",
+        "主张与反证",
+        "交付格式和截止时间"
+      ],
+      "outputs": [
+        "研究问题看板",
+        "证据表",
+        "主张—来源映射",
+        "写作清单",
+        "覆盖缺口与下一步"
+      ],
+      "risk_class": "low",
+      "risk_flags": [],
+      "recommended_module_ids": [
+        "research-questions",
+        "research-evidence",
+        "research-writing",
+        "research-review",
+        "research-log"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "研究过程、来源与写作状态管理"
+        ],
+        "out_of_scope": [
+          "生成无来源结论",
+          "把未核验摘录当事实",
+          "自动同步外部知识库"
+        ],
+        "data_rule": "外部结论必须保留来源、适用范围和核验时间",
+        "external_handoffs": [
+          "文献下载与外部知识库同步由用户完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "问题范围过宽或交付标准不清",
+          "ask": "这次报告必须回答哪一个决策问题，证据截止到什么时间？",
+          "skip_when": "决策问题和时间边界已明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "主张无来源",
+          "来源与用途脱节",
+          "覆盖缺口被隐藏"
+        ],
+        "recovery": [
+          "无来源主张回退为待验证",
+          "重新绑定证据用途",
+          "在报告前列出未覆盖问题"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_research_knowledge",
+        "every_report_claim_has_evidence_or_gap_status",
+        "every_external_source_has_time_scope"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.research-knowledge.experiment-weekly-control",
+      "domain_id": "research-knowledge",
+      "label": "实验与研究周控制",
+      "maturity": "contract_ready",
+      "user": "需要按周推进实验、分析和组会交付的研究者",
+      "goal": "从当前问题出发记录过程异常、人工确认指标和下一周实验动作",
+      "frequency": "daily_log_with_weekly_review",
+      "inputs": [
+        "当前研究问题",
+        "实验步骤与版本",
+        "结果和异常",
+        "人工确认的数据指标",
+        "组会或周报截止时间"
+      ],
+      "outputs": [
+        "实验日志",
+        "异常与恢复记录",
+        "指标快照",
+        "组会写作清单",
+        "下周唯一优先实验"
+      ],
+      "risk_class": "low",
+      "risk_flags": [],
+      "recommended_module_ids": [
+        "research-questions",
+        "research-log",
+        "research-metrics",
+        "research-writing",
+        "research-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "人工记录研究过程与指标"
+        ],
+        "out_of_scope": [
+          "自动执行实验",
+          "伪造统计显著性",
+          "从日志直接推导确定性结论"
+        ],
+        "data_rule": "指标保留采集方法、版本和人工确认状态",
+        "external_handoffs": [
+          "实验运行和正式统计分析在相应工具完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "同一周有多个实验但评价标准不同",
+          "ask": "本周哪个实验的哪项可观察结果决定下一步？",
+          "skip_when": "优先实验和判定标准已给出"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "日志缺版本",
+          "指标口径不一致",
+          "异常被当成有效结果"
+        ],
+        "recovery": [
+          "补录环境或版本后再纳入比较",
+          "冻结旧口径并创建新快照",
+          "把异常结果标记为待复核"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_research_knowledge",
+        "every_metric_has_method_or_manual_confirmation",
+        "every_failure_has_recovery_status"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.sales-trade.lead-to-followup",
+      "domain_id": "sales-trade",
+      "label": "线索到下一次跟进",
+      "maturity": "executable_ready",
+      "user": "需要管理少量销售线索和客户推进动作的业务人员",
+      "goal": "让每条线索有来源、阶段、下一动作和人工沟通状态",
+      "frequency": "daily",
+      "inputs": [
+        "合成或脱敏线索",
+        "线索来源",
+        "当前阶段",
+        "下一次跟进动作与时间",
+        "用户记录的沟通结果"
+      ],
+      "outputs": [
+        "线索与客户管道",
+        "今日跟进清单",
+        "逾期或无下一步项",
+        "询盘与报价准备状态",
+        "人工沟通结果",
+        "周度业务复盘"
+      ],
+      "risk_class": "sensitive",
+      "risk_flags": [
+        "customer-data",
+        "external-side-effect"
+      ],
+      "recommended_module_ids": [
+        "sales-leads",
+        "sales-clients",
+        "sales-followups",
+        "sales-orders",
+        "sales-quotes",
+        "sales-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "脱敏客户状态与动作管理"
+        ],
+        "out_of_scope": [
+          "自动联系客户",
+          "抓取私人联系方式",
+          "承诺成交",
+          "保存账号密钥"
+        ],
+        "data_rule": "客户资料默认合成或脱敏，真实数据需明确授权且最小化",
+        "external_handoffs": [
+          "消息发送和成交承诺由用户在外部渠道完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "线索目标或下一步不清",
+          "ask": "这条线索当前最希望对方完成的一个动作是什么？",
+          "skip_when": "阶段和下一动作已明确"
+        },
+        {
+          "when": "请求使用真实客户资料",
+          "ask": "是否已获授权，并确认只在当前设备记录最小必要字段？",
+          "skip_when": "使用合成或脱敏数据"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "客户数据越界",
+          "把提醒当成已发送",
+          "没有下一步"
+        ],
+        "recovery": [
+          "阻断保存敏感字段并改用脱敏标识",
+          "状态回退为待人工发送",
+          "要求补一个明确动作"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "recommended_module_count_at_least_6",
+        "all_modules_exist_in_sales_trade",
+        "every_active_lead_has_source_stage_next_action_and_owner",
+        "due_and_overdue_followups_visible",
+        "quote_and_message_states_remain_manual_handoff",
+        "dedicated_renderer_required",
+        "no_message_sent_without_external_receipt"
+      ],
+      "executable_readiness": {
+        "version": "1.0.0",
+        "runtime_scope": "local_selected_scope_plus_manual_external_handoff",
+        "required_atom_ids": [
+          "atom.shared.import-backup-preview",
+          "atom.shared.export-selected-csv",
+          "atom.shared.schedule-reminder",
+          "atom.shared.confirm-external-operation"
+        ],
+        "evidence_contract": "double6.v0591.sales-visibility/v1"
+      }
+    },
+    {
+      "scene_profile_id": "scene.sales-trade.inquiry-to-quote",
+      "domain_id": "sales-trade",
+      "label": "询盘到报价交接",
+      "maturity": "contract_ready",
+      "user": "处理询盘、样品、核价和报价节点的销售或外贸人员",
+      "goal": "把询盘事实、订单节点、报价版本和待客户确认项清楚交接",
+      "frequency": "event_driven_with_daily_review",
+      "inputs": [
+        "脱敏客户与询盘需求",
+        "产品、数量和交付条件",
+        "人工核验成本",
+        "报价版本",
+        "待确认条款"
+      ],
+      "outputs": [
+        "询盘与样品节点",
+        "报价准备清单",
+        "带版本和待确认项的报价记录",
+        "下一次人工跟进"
+      ],
+      "risk_class": "sensitive",
+      "risk_flags": [
+        "customer-data",
+        "external-side-effect"
+      ],
+      "recommended_module_ids": [
+        "sales-clients",
+        "sales-orders",
+        "sales-quotes",
+        "sales-followups",
+        "sales-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "报价过程与版本状态记录"
+        ],
+        "out_of_scope": [
+          "自动核定实时成本",
+          "自动发送报价",
+          "法律或成交承诺",
+          "伪造订单成功"
+        ],
+        "data_rule": "客户与价格数据默认使用合成或脱敏值",
+        "external_handoffs": [
+          "最终核价、报价发送与合同承诺由责任人完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "币种、贸易条件或有效期会改变报价",
+          "ask": "这份报价的币种、适用条件和有效期是什么？",
+          "skip_when": "三项均已明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "成本未核验",
+          "报价版本混淆",
+          "发送状态虚假"
+        ],
+        "recovery": [
+          "保持草稿并列出待核价项",
+          "恢复到最后确认版本",
+          "回退为待人工发送"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_sales_trade",
+        "every_quote_has_version_and_confirmation_status",
+        "no_quote_sent_without_external_receipt"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.finance-tax-contract.monthly-bookkeeping",
+      "domain_id": "finance-tax-contract",
+      "label": "月度记账与凭证准备",
+      "maturity": "executable_ready",
+      "user": "需要整理月度收支、凭证和税务材料状态的小微经营者或财务协作者",
+      "goal": "形成可核验的月度资金事实、缺失凭证和待专业处理事项",
+      "frequency": "weekly_entry_with_monthly_close",
+      "inputs": [
+        "合成或脱敏收支事实",
+        "凭证状态",
+        "发票和申报材料状态",
+        "差异证据",
+        "地区与核验日期"
+      ],
+      "outputs": [
+        "月度收支台账",
+        "缺失凭证清单",
+        "税务材料状态",
+        "对账差异与处理动作",
+        "待专业人员确认项"
+      ],
+      "risk_class": "high_stakes",
+      "risk_flags": [
+        "financial-data",
+        "sensitive-data"
+      ],
+      "recommended_module_ids": [
+        "finance-transactions",
+        "finance-vouchers",
+        "finance-tax",
+        "finance-review",
+        "finance-audit"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "用户提供事实的整理和确定性汇总"
+        ],
+        "out_of_scope": [
+          "自动报税",
+          "付款",
+          "开票",
+          "无来源法规结论",
+          "替代会计或税务意见"
+        ],
+        "data_rule": "财务数据默认合成或脱敏；法规、税率和地区规则记录版本与日期",
+        "external_handoffs": [
+          "申报、开票和法规判断由有资质人员或外部系统完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "地区、主体或申报周期不清",
+          "ask": "这份材料对应哪个地区、主体和期间？",
+          "skip_when": "地区、主体和期间均明确"
+        },
+        {
+          "when": "请求使用真实财务数据",
+          "ask": "是否已脱敏并确认只在当前设备处理？",
+          "skip_when": "使用合成数据"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "凭证与流水不匹配",
+          "法规版本缺失",
+          "把材料齐备误写成已申报"
+        ],
+        "recovery": [
+          "保留差异并进入待核验",
+          "阻断法规结论并要求来源",
+          "申报状态回退为待外部确认"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_finance_tax_contract",
+        "every_regulatory_item_has_region_version_and_date",
+        "no_filing_or_payment_success_without_external_receipt"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.finance-tax-contract.project-budget-contract",
+      "domain_id": "finance-tax-contract",
+      "label": "项目预算与合同节点",
+      "maturity": "contract_ready",
+      "user": "按项目管理合同、预算、收付款事实和凭证的经营者",
+      "goal": "让合同里程碑、预算差异和付款节点围绕同一项目可回查",
+      "frequency": "project_milestone_driven",
+      "inputs": [
+        "项目与合同版本",
+        "预算项目",
+        "用户提供的收支事实",
+        "付款节点状态",
+        "关联凭证"
+      ],
+      "outputs": [
+        "项目合同节点",
+        "预算与实际差异",
+        "待收待付事实清单",
+        "凭证缺口",
+        "项目对账复盘"
+      ],
+      "risk_class": "high_stakes",
+      "risk_flags": [
+        "financial-data",
+        "sensitive-data"
+      ],
+      "recommended_module_ids": [
+        "finance-projects",
+        "finance-budget",
+        "finance-transactions",
+        "finance-vouchers",
+        "finance-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "合同与预算事实的本地状态管理"
+        ],
+        "out_of_scope": [
+          "合同法律意见",
+          "自动付款",
+          "银行连接",
+          "确认对方已收款"
+        ],
+        "data_rule": "合同和金额默认合成或脱敏，真实数据最小化",
+        "external_handoffs": [
+          "签署、付款和法律判断由责任人或专业系统完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "项目完成定义或付款触发条件不清",
+          "ask": "哪个可核验里程碑触发哪一笔付款？",
+          "skip_when": "里程碑与付款节点已绑定"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "合同版本错配",
+          "预算口径变化",
+          "付款状态无证据"
+        ],
+        "recovery": [
+          "恢复到最后确认版本",
+          "冻结旧预算并建立新版本",
+          "状态回退为待外部核验"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_finance_tax_contract",
+        "every_payment_node_has_project_and_evidence_status",
+        "no_legal_or_payment_completion_claim"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.ecommerce-operations.product-order-ops",
+      "domain_id": "ecommerce-operations",
+      "label": "商品—库存—订单日常运营",
+      "maturity": "executable_ready",
+      "user": "需要维护商品、库存快照、订单与售后动作的小店运营者",
+      "goal": "从人工确认的商品和订单事实生成今日经营动作与异常清单",
+      "frequency": "daily",
+      "inputs": [
+        "商品状态",
+        "带采集时间的库存快照",
+        "订单与售后阶段",
+        "客服待办",
+        "人工录入经营指标"
+      ],
+      "outputs": [
+        "商品台账",
+        "库存差异提示",
+        "订单与售后处理队列",
+        "客服人工回复清单",
+        "经营指标快照"
+      ],
+      "risk_class": "sensitive",
+      "risk_flags": [
+        "external-side-effect",
+        "account-data"
+      ],
+      "recommended_module_ids": [
+        "commerce-products",
+        "commerce-inventory",
+        "commerce-orders",
+        "commerce-service",
+        "commerce-metrics"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "人工确认经营事实与动作管理"
+        ],
+        "out_of_scope": [
+          "实时库存保证",
+          "自动下单或退款",
+          "自动客服发送",
+          "平台账号登录"
+        ],
+        "data_rule": "外部经营数据记录来源和采集时间；不得保存账号密钥",
+        "external_handoffs": [
+          "价格、库存、下单、退款和客服发送由外部平台确认"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "平台数据是实时还是手工快照不清",
+          "ask": "这些商品、库存和订单数据来自哪个平台、采集于什么时候？",
+          "skip_when": "来源和采集时间已记录"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "快照过期",
+          "订单状态与平台不一致",
+          "售后动作误标完成"
+        ],
+        "recovery": [
+          "标记过期并要求重新核验",
+          "保留本地差异且以平台为准",
+          "回退为待外部处理"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_ecommerce_operations",
+        "every_external_snapshot_has_source_and_time",
+        "no_order_refund_or_message_success_without_external_receipt"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.ecommerce-operations.campaign-content-ops",
+      "domain_id": "ecommerce-operations",
+      "label": "商品活动与内容准备",
+      "maturity": "contract_ready",
+      "user": "需要围绕商品活动协调内容、库存准备与复盘的运营者",
+      "goal": "在活动前列清商品、内容、库存和待核验条件，活动后只按真实录入指标复盘",
+      "frequency": "campaign_cycle",
+      "inputs": [
+        "活动目标与日期",
+        "商品清单",
+        "内容制作任务",
+        "库存快照",
+        "人工录入表现数据"
+      ],
+      "outputs": [
+        "活动阶段与准备清单",
+        "商品内容任务",
+        "库存风险项",
+        "待外部发布事项",
+        "活动复盘"
+      ],
+      "risk_class": "moderate",
+      "risk_flags": [
+        "external-side-effect",
+        "account-data"
+      ],
+      "recommended_module_ids": [
+        "commerce-products",
+        "commerce-content",
+        "commerce-campaigns",
+        "commerce-inventory",
+        "commerce-metrics"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "活动准备、内容任务和人工指标记录"
+        ],
+        "out_of_scope": [
+          "自动发布",
+          "实时库存承诺",
+          "自动改价",
+          "虚构转化数据"
+        ],
+        "data_rule": "经营指标必须带来源、时间和人工确认状态",
+        "external_handoffs": [
+          "发布、改价和库存调整在外部平台完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "活动目标无法转成验收指标",
+          "ask": "活动结束后用哪个用户可核验指标判断是否达到目标？",
+          "skip_when": "目标指标和数据来源已给出"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "活动与内容脱节",
+          "库存快照过期",
+          "指标来源缺失"
+        ],
+        "recovery": [
+          "重新绑定商品和内容任务",
+          "阻断库存结论并要求核验",
+          "复盘保持未评估"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_ecommerce_operations",
+        "every_campaign_has_product_content_and_metric_links",
+        "no_external_operation_success_claim"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.local-service-store.daily-booking-service",
+      "domain_id": "local-service-store",
+      "label": "门店预约与到店服务",
+      "maturity": "contract_ready",
+      "user": "需要按日管理预约快照、班次、服务与回访的本地门店人员",
+      "goal": "把人工确认的预约推进到服务记录和下一次人工回访",
+      "frequency": "daily",
+      "inputs": [
+        "合成或获授权的预约快照",
+        "班次",
+        "服务事项",
+        "到店与完成状态",
+        "待回访动作"
+      ],
+      "outputs": [
+        "今日预约与班次视图",
+        "服务状态记录",
+        "未到店或异常项",
+        "待人工回访清单",
+        "经营指标快照"
+      ],
+      "risk_class": "sensitive",
+      "risk_flags": [
+        "customer-data",
+        "external-side-effect"
+      ],
+      "recommended_module_ids": [
+        "store-bookings",
+        "store-shifts",
+        "store-services",
+        "store-followups",
+        "store-metrics"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "预约快照与门店动作的本地管理"
+        ],
+        "out_of_scope": [
+          "实时预约",
+          "自动通知",
+          "收款或退款",
+          "伪造客户到店"
+        ],
+        "data_rule": "客户资料默认合成或脱敏；真实数据需授权并最小化",
+        "external_handoffs": [
+          "预约确认、通知、支付和退款由外部系统完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "请求使用真实客户资料",
+          "ask": "是否已获授权，并确认只记录服务所需的最小字段？",
+          "skip_when": "使用合成或脱敏数据"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "预约快照过期",
+          "客户状态无依据",
+          "回访被误写成已发送"
+        ],
+        "recovery": [
+          "标记待外部核验",
+          "恢复为未知状态",
+          "回退为待人工回访"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_local_service_store",
+        "every_booking_has_confirmation_status",
+        "no_notification_payment_or_refund_success_without_external_receipt"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.local-service-store.member-inventory-review",
+      "domain_id": "local-service-store",
+      "label": "会员事项与库存复盘",
+      "maturity": "contract_ready",
+      "user": "需要维护最小化会员事项、服务历史和库存快照的门店负责人",
+      "goal": "基于获授权记录发现需人工跟进的会员事项和库存缺口",
+      "frequency": "weekly",
+      "inputs": [
+        "获授权的会员事项",
+        "服务记录",
+        "库存快照与时间",
+        "人工回访结果",
+        "经营指标"
+      ],
+      "outputs": [
+        "会员事项阶段",
+        "库存缺口清单",
+        "服务—回访关联",
+        "周度经营复盘",
+        "待外部处理项"
+      ],
+      "risk_class": "sensitive",
+      "risk_flags": [
+        "customer-data",
+        "external-side-effect"
+      ],
+      "recommended_module_ids": [
+        "store-members",
+        "store-inventory",
+        "store-services",
+        "store-followups",
+        "store-metrics"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "经授权会员事项和人工库存快照"
+        ],
+        "out_of_scope": [
+          "会员账号系统",
+          "自动营销",
+          "实时库存",
+          "自动扣款"
+        ],
+        "data_rule": "只保留业务所需的最小会员标识和授权事项",
+        "external_handoffs": [
+          "会员通知、库存调整和支付在外部系统完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "会员资料授权和用途不清",
+          "ask": "这些资料由谁提供、用于哪项明确服务、何时可以清除？",
+          "skip_when": "使用合成数据或授权、用途、清除边界均明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "会员资料超出用途",
+          "库存时间缺失",
+          "营销动作无授权"
+        ],
+        "recovery": [
+          "删除非必要字段并暂停使用",
+          "快照标记未知",
+          "动作保持待人工确认"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_local_service_store",
+        "every_real_member_record_has_authorization_and_purpose",
+        "no_marketing_or_payment_success_claim"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.education-learning.baby-growth-explorer",
+      "domain_id": "education-learning",
+      "legacy_profile_ids": [
+        "baby-growth-explorer"
+      ],
+      "label": "宝宝成长探索",
+      "maturity": "executable_ready",
+      "user": "约三至六岁幼儿及在旁陪伴的家长",
+      "goal": "用既有亲子题做今天三站，家长陪同，并沿用攒星、连击、小卖部和徽章墙",
+      "frequency": "short_daily_session",
+      "inputs": [
+        "已确定的幼儿阶段",
+        "家长选择的使用时长",
+        "既有内容包中的可用任务",
+        "完成、停止和感受记录"
+      ],
+      "outputs": [
+        "短时活动入口",
+        "完成与停止事实",
+        "待回看项目",
+        "家长周度观察"
+      ],
+      "risk_class": "sensitive",
+      "risk_flags": [
+        "child-data"
+      ],
+      "recommended_module_ids": [
+        "education-language",
+        "education-math",
+        "education-english",
+        "education-reading",
+        "education-explore",
+        "education-movement",
+        "education-errors",
+        "education-rewards",
+        "education-parent"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "只编排既有模块和已审内容"
+        ],
+        "out_of_scope": [
+          "新增儿童学习 atom",
+          "新增或改写儿童题目",
+          "学习效果诊断",
+          "无人看护高风险活动"
+        ],
+        "data_rule": "儿童数据默认合成；真实数据需监护人明确授权并仅本机最小化记录",
+        "external_handoffs": [
+          "照片、录音和视频由家长在外部文件保管"
+        ]
+      },
+      "clarification_policy": {
+        "resolved_without_question": [
+          "阶段=宝宝成长探索",
+          "不把学习重点作为固定问题"
+        ],
+        "prohibited_questions": [
+          "重复询问年龄阶段",
+          "固定追问学习重点"
+        ],
+        "allowed_conditions": [
+          "真实儿童数据授权",
+          "指定教材或来源请求"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "明确要求使用真实儿童数据",
+          "ask": "监护人是否授权在当前设备记录这些最小字段，并同意可导出和清空？",
+          "skip_when": "使用合成数据"
+        },
+        {
+          "when": "明确要求指定教材或外部内容",
+          "ask": "请提供教材版本、地区、来源和版权边界。",
+          "skip_when": "使用既有自编通用内容"
+        },
+        {
+          "when": "希望孩子独自长时间对着屏幕使用",
+          "ask": "这个台默认家长陪同、短时使用；是否接受先做一件开箱内容、不把星星当掌握？",
+          "skip_when": "已说明家长陪同和短时使用"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "把亲子游戏写成测评或教材",
+          "幼儿独立长时用屏",
+          "要求键盘写字或自动判掌握",
+          "采集真实儿童敏感数据"
+        ],
+        "recovery": [
+          "保持通用亲子游戏并不作测评",
+          "回到家长陪同一件开箱内容",
+          "手写只自我对照",
+          "切换为合成数据并清除未授权字段"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_education_learning",
+        "no_new_child_atom_or_content_reference",
+        "no_fixed_learning_priority_question",
+        "parent_beside_default",
+        "no_keyboard_writing_as_mastery",
+        "no_age_curriculum_or_screen_time_claim",
+        "family_tasks_opt_in_default_off",
+        "incentive_loop_first_class",
+        "companion_stake_visible",
+        "room_theme_switchable",
+        "room_claim_visible",
+        "warm_incorrect_visible",
+        "companion_growth_visible",
+        "garden_progress_visible",
+        "stage_playable_today_three",
+        "parent_star_adjust",
+        "combo_and_badge_wall"
+      ],
+      "executable_readiness": {
+        "version": "1.0.0",
+        "runtime_scope": "local_selected_scope_only",
+        "required_atom_ids": [
+          "atom.shared.post-reward-ledger-event",
+          "atom.shared.request-reward-redemption"
+        ],
+        "evidence_contract": "double6.v100.baby-playable/v1"
+      }
+    },
+    {
+      "scene_profile_id": "scene.education-learning.primary-transition-1-to-2",
+      "domain_id": "education-learning",
+      "legacy_profile_ids": [
+        "primary-transition-1-to-2"
+      ],
+      "label": "小学一升二衔接",
+      "maturity": "executable_ready",
+      "user": "已明确处于一年级升二年级阶段的孩子与家长",
+      "goal": "从既有一升二模块入口安排短时通用衔接、错题回看和家长观察",
+      "frequency": "short_daily_session_with_weekly_parent_review",
+      "inputs": [
+        "已确定的一升二阶段",
+        "既有内容包中的可用任务",
+        "完成和错题事实",
+        "家长选择的本机数据边界"
+      ],
+      "outputs": [
+        "一升二阶段入口",
+        "当次完成事实",
+        "错题回看队列",
+        "家长周度观察"
+      ],
+      "risk_class": "sensitive",
+      "risk_flags": [
+        "child-data"
+      ],
+      "recommended_module_ids": [
+        "education-language",
+        "education-math",
+        "education-english",
+        "education-reading",
+        "education-explore",
+        "education-movement",
+        "education-errors",
+        "education-rewards",
+        "education-parent"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "只选择既有一升二模块和已审内容"
+        ],
+        "out_of_scope": [
+          "新增儿童学习 atom",
+          "新增或改写题目",
+          "重复判断年级",
+          "把通用内容声称为指定教材同步"
+        ],
+        "data_rule": "默认合成数据；真实儿童数据需监护人明确授权、本机最小化、可导出和清空",
+        "external_handoffs": [
+          "指定教材、真题和照片文件由家长提供并保管"
+        ]
+      },
+      "clarification_policy": {
+        "resolved_without_question": [
+          "当前阶段=一升二",
+          "年级路线已由 scene_profile 确定",
+          "模块建议由该阶段 profile 提供"
+        ],
+        "prohibited_questions": [
+          "再次询问当前年级",
+          "把‘学习重点’作为教育固定问题",
+          "在用户未提出教材要求时追问教材版本"
+        ],
+        "allowed_conditions": [
+          "用户主动要求指定教材或真题",
+          "用户主动要求使用真实儿童数据",
+          "目标结果仍然含糊且会改变模块选择"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "用户主动要求对齐指定教材、真题或校内作业",
+          "ask": "请提供版本、地区、来源和版权边界；未提供时将保持通用内容。",
+          "skip_when": "使用既有通用内容"
+        },
+        {
+          "when": "用户主动要求录入真实儿童数据",
+          "ask": "监护人是否授权在当前设备记录这些最小字段，并同意导出与清空？",
+          "skip_when": "使用合成数据"
+        },
+        {
+          "when": "同为一升二但期望结果仍无法判断要保留哪些模块",
+          "ask": "这次最希望孩子完成的是日常短练、错题回看，还是家长周观察？",
+          "skip_when": "用户已给出结果；不得改问‘学习重点是什么’"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "重复追问年级",
+          "固定追问学习重点",
+          "误把冻结基准改写成当前源码已接受",
+          "奖励改写掌握或完成证据"
+        ],
+        "recovery": [
+          "直接采用一升二已知阶段并跳过问题",
+          "按具体期望结果条件化澄清",
+          "冻结 SHA 5b31d9fc 只读",
+          "奖励只改账本且需家长确认"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_education_learning",
+        "no_grade_question_for_primary_transition_1_to_2",
+        "no_fixed_learning_priority_question",
+        "no_new_child_content_atom",
+        "generic_reward_atoms_executable",
+        "dedicated_child_adapter_required",
+        "reset_today_not_clear_all",
+        "subject_learn_practice_library",
+        "fill_slots_original_order_current",
+        "fact_calendar_not_mastery",
+        "incentive_loop_first_class",
+        "companion_stake_visible",
+        "room_theme_switchable",
+        "room_claim_visible",
+        "warm_incorrect_visible",
+        "companion_growth_visible",
+        "garden_progress_visible",
+        "combo_and_badge_wall",
+        "parent_star_adjust"
+      ],
+      "executable_readiness": {
+        "version": "1.0.0",
+        "runtime_scope": "local_selected_scope_only",
+        "required_atom_ids": [
+          "atom.shared.post-reward-ledger-event",
+          "atom.shared.request-reward-redemption"
+        ],
+        "evidence_contract": "double6.v100.grade1-to-2-reward/v1"
+      }
+    },
+    {
+      "scene_profile_id": "scene.education-learning.primary-transition-2-to-3",
+      "domain_id": "education-learning",
+      "legacy_profile_ids": [
+        "primary-transition-2-to-3"
+      ],
+      "label": "小学二升三衔接",
+      "maturity": "executable_ready",
+      "user": "已明确处于二年级升三年级阶段的孩子与家长",
+      "goal": "用既有二升三通用题做今天三站，并沿用攒星、连击、小卖部和徽章墙",
+      "frequency": "short_daily_session_with_weekly_parent_review",
+      "inputs": [
+        "已确定的二升三阶段",
+        "既有内容包中的可用任务",
+        "完成和错题事实",
+        "家长选择的本机数据边界"
+      ],
+      "outputs": [
+        "二升三阶段入口",
+        "当次完成事实",
+        "错题回看队列",
+        "家长周度观察"
+      ],
+      "risk_class": "sensitive",
+      "risk_flags": [
+        "child-data"
+      ],
+      "recommended_module_ids": [
+        "education-language",
+        "education-math",
+        "education-english",
+        "education-reading",
+        "education-explore",
+        "education-movement",
+        "education-errors",
+        "education-rewards",
+        "education-parent"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "只选择既有二升三模块和已审内容"
+        ],
+        "out_of_scope": [
+          "新增儿童学习 atom",
+          "新增或改写题目",
+          "学习能力诊断",
+          "未经来源核验声称教材同步"
+        ],
+        "data_rule": "默认合成数据；真实儿童数据需监护人授权且仅本机最小化记录",
+        "external_handoffs": [
+          "指定教材、真题和多媒体文件由家长提供并保管"
+        ]
+      },
+      "clarification_policy": {
+        "resolved_without_question": [
+          "当前阶段=二升三",
+          "不把学习重点作为固定问题"
+        ],
+        "prohibited_questions": [
+          "重复询问当前年级",
+          "固定追问学习重点"
+        ],
+        "allowed_conditions": [
+          "指定教材或真题",
+          "真实儿童数据授权",
+          "结果含糊且会改变模块选择"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "主动要求指定教材、真题或真实儿童数据",
+          "ask": "请确认来源、版本、授权和当前设备保存边界。",
+          "skip_when": "使用既有通用内容与合成数据"
+        },
+        {
+          "when": "用户把人教版、PEP 或某地课本写成已经对齐",
+          "ask": "没有官方来源时只能用通用衔接题，不能用邻年级内容顶替。是否继续？",
+          "skip_when": "已接受通用内容边界"
+        },
+        {
+          "when": "期望结果不清且会改变模块",
+          "ask": "这次更需要日常短练、错题回看，还是家长周观察？",
+          "skip_when": "结果已明确；不得改问学习重点"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "固定追问学习重点",
+          "把教材标签当真值",
+          "用邻年级或未审游戏内容顶替",
+          "真实数据无授权"
+        ],
+        "recovery": [
+          "按期望结果决定是否澄清",
+          "回退到本阶段通用内容",
+          "拒绝跨年级和未审题库",
+          "切换合成数据并清除未授权字段"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_education_learning",
+        "no_fixed_learning_priority_question",
+        "no_new_child_atom_or_content_reference",
+        "no_adjacent_grade_fallback",
+        "no_textbook_alignment_claim",
+        "no_unreviewed_game_content",
+        "incentive_loop_first_class",
+        "companion_stake_visible",
+        "room_theme_switchable",
+        "room_claim_visible",
+        "warm_incorrect_visible",
+        "companion_growth_visible",
+        "garden_progress_visible",
+        "stage_playable_today_three",
+        "combo_and_badge_wall",
+        "parent_star_adjust",
+        "no_adjacent_grade_in_daily_pack"
+      ],
+      "executable_readiness": {
+        "version": "1.0.0",
+        "runtime_scope": "local_selected_scope_only",
+        "required_atom_ids": [
+          "atom.shared.post-reward-ledger-event",
+          "atom.shared.request-reward-redemption"
+        ],
+        "evidence_contract": "double6.v100.grade2-to-3-playable/v1"
+      }
+    },
+    {
+      "scene_profile_id": "scene.education-learning.primary-transition-3-to-4",
+      "domain_id": "education-learning",
+      "legacy_profile_ids": [
+        "primary-transition-3-to-4"
+      ],
+      "label": "小学三升四衔接",
+      "maturity": "executable_ready",
+      "user": "已明确处于三年级升四年级阶段的孩子与家长",
+      "goal": "用既有三升四通用题做今天三站，并沿用攒星、连击、小卖部和徽章墙",
+      "frequency": "short_daily_session_with_weekly_parent_review",
+      "inputs": [
+        "已确定的三升四阶段",
+        "既有内容包中的可用任务",
+        "完成和错题事实",
+        "家长选择的本机数据边界"
+      ],
+      "outputs": [
+        "三升四阶段入口",
+        "当次完成事实",
+        "错题回看队列",
+        "家长周度观察"
+      ],
+      "risk_class": "sensitive",
+      "risk_flags": [
+        "child-data"
+      ],
+      "recommended_module_ids": [
+        "education-language",
+        "education-math",
+        "education-english",
+        "education-reading",
+        "education-explore",
+        "education-movement",
+        "education-errors",
+        "education-rewards",
+        "education-parent"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "只选择既有三升四模块和已审内容"
+        ],
+        "out_of_scope": [
+          "新增儿童学习 atom",
+          "新增或改写题目",
+          "学习能力诊断",
+          "未经来源核验声称教材同步"
+        ],
+        "data_rule": "默认合成数据；真实儿童数据需监护人授权且仅本机最小化记录",
+        "external_handoffs": [
+          "指定教材、真题和多媒体文件由家长提供并保管"
+        ]
+      },
+      "clarification_policy": {
+        "resolved_without_question": [
+          "当前阶段=三升四",
+          "不把学习重点作为固定问题"
+        ],
+        "prohibited_questions": [
+          "重复询问当前年级",
+          "固定追问学习重点"
+        ],
+        "allowed_conditions": [
+          "指定教材或真题",
+          "真实儿童数据授权",
+          "结果含糊且会改变模块选择"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "主动要求指定教材、真题或真实儿童数据",
+          "ask": "请确认来源、版本、授权和当前设备保存边界。",
+          "skip_when": "使用既有通用内容与合成数据"
+        },
+        {
+          "when": "用户以为必须先自己填完全部内容",
+          "ask": "开箱内容可以直接练；家长只在需要时补自己的材料。是否先用开箱内容？",
+          "skip_when": "已理解开箱内容和空状态"
+        },
+        {
+          "when": "期望结果不清且会改变模块",
+          "ask": "这次更需要日常短练、错题回看，还是家长周观察？",
+          "skip_when": "结果已明确；不得改问学习重点"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "固定追问学习重点",
+          "把空台当成必须先录入",
+          "把惩罚、扣星或宠物饥饿当掌握",
+          "把静态图当可拖控件",
+          "真实数据无授权"
+        ],
+        "recovery": [
+          "按期望结果决定是否澄清",
+          "先展示开箱内容和空状态下一步",
+          "奖励与惩罚不得改掌握",
+          "控件必须真实可点",
+          "切换合成数据并清除未授权字段"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_education_learning",
+        "no_fixed_learning_priority_question",
+        "no_new_child_atom_or_content_reference",
+        "starter_and_empty_state_disclosed",
+        "no_punishment_or_pet_hunger_mastery",
+        "no_static_image_as_control",
+        "incentive_loop_first_class",
+        "companion_stake_visible",
+        "room_theme_switchable",
+        "room_claim_visible",
+        "warm_incorrect_visible",
+        "companion_growth_visible",
+        "garden_progress_visible",
+        "stage_playable_today_three",
+        "parent_star_adjust",
+        "combo_and_badge_wall",
+        "no_adjacent_grade_in_daily_pack"
+      ],
+      "executable_readiness": {
+        "version": "1.0.0",
+        "runtime_scope": "local_selected_scope_only",
+        "required_atom_ids": [
+          "atom.shared.post-reward-ledger-event",
+          "atom.shared.request-reward-redemption"
+        ],
+        "evidence_contract": "double6.v100.grade3-to-4-playable/v1"
+      }
+    },
+    {
+      "scene_profile_id": "scene.teaching-classroom.classroom-management",
+      "domain_id": "teaching-classroom",
+      "legacy_profile_ids": [
+        "teaching-classroom-management"
+      ],
+      "label": "班级日常管理",
+      "maturity": "executable_ready",
+      "user": "每天要同时盯班务、考勤和几个跟进的班主任",
+      "goal": "打开就看见今天的班务、考勤和待跟进，并能当场勾掉或记下；家校消息仍是人工发",
+      "frequency": "school_day_with_weekly_review",
+      "inputs": [
+        "合成或获授权的学生标识",
+        "班务事项",
+        "考勤事实",
+        "学情与跟进记录",
+        "周度观察"
+      ],
+      "outputs": [
+        "今日班务清单",
+        "学生跟进队列",
+        "考勤和学情事实记录",
+        "教学周报与下一步"
+      ],
+      "risk_class": "sensitive",
+      "risk_flags": [
+        "child-data",
+        "sensitive-data"
+      ],
+      "recommended_module_ids": [
+        "teaching-daily",
+        "teaching-progress",
+        "teaching-students",
+        "teaching-attendance",
+        "teaching-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "获授权事实的本地记录"
+        ],
+        "out_of_scope": [
+          "未授权学生名单、成绩或联系方式",
+          "自动发送家校消息",
+          "给学生贴能力标签",
+          "真名、真校、真学籍开箱"
+        ],
+        "data_rule": "默认合成代号并跨班务/考勤/跟进共用；至少一条今晚例外；真实学生数据需有权控制者授权、本机最小化、可清除",
+        "external_handoffs": [
+          "家校消息和打印在外部工具完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "请求录入真实学生数据",
+          "ask": "是否已获学校或有权控制者授权，并确认最小字段、当前设备保存与清除方式？",
+          "skip_when": "使用合成或脱敏数据"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "学生数据无授权",
+          "事实和评价混写",
+          "消息状态虚假"
+        ],
+        "recovery": [
+          "切换为合成标识",
+          "把评价回退为待人工复核",
+          "状态回退为待外部发送"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_teaching_classroom",
+        "no_real_student_data_without_authorization",
+        "no_message_sent_claim"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.teaching-classroom.single-lesson-preparation",
+      "domain_id": "teaching-classroom",
+      "legacy_profile_ids": [
+        "teaching-lesson-preparation"
+      ],
+      "label": "单节课备课与复盘",
+      "maturity": "catalog_only",
+      "user": "需要从教材分析推进到单节课交付与课后复盘的教师",
+      "goal": "明确一节课的目标、材料、活动、学情依据和复盘动作",
+      "frequency": "per_lesson",
+      "inputs": [
+        "课程目标",
+        "教材或材料版本与来源",
+        "合成或获授权的学情事实",
+        "课堂活动",
+        "课后观察"
+      ],
+      "outputs": [
+        "备课阶段清单",
+        "教学材料来源记录",
+        "课堂行动项",
+        "教学复盘与下一次调整"
+      ],
+      "risk_class": "sensitive",
+      "risk_flags": [
+        "child-data",
+        "sensitive-data"
+      ],
+      "recommended_module_ids": [
+        "teaching-prep",
+        "teaching-daily",
+        "teaching-progress",
+        "teaching-research",
+        "teaching-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "备课与教学事实整理"
+        ],
+        "out_of_scope": [
+          "复制受版权保护教材长文",
+          "无来源教学结论",
+          "未授权学生数据"
+        ],
+        "data_rule": "教学材料记录版本、地区、来源和版权边界",
+        "external_handoffs": [
+          "正式教案发送与打印由教师完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "课程材料来源或适用年级会改变教案",
+          "ask": "这节课使用哪个版本、地区和来源的材料？",
+          "skip_when": "材料版本和来源已明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "材料版本错配",
+          "学情无依据",
+          "版权边界不清"
+        ],
+        "recovery": [
+          "保持通用教学结构并标记待确认",
+          "使用合成学情",
+          "只保留来源引用与自编摘要"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_teaching_classroom",
+        "every_teaching_source_has_version_or_general_status",
+        "no_unauthorized_student_data"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.exam-preparation.civil-service-exam",
+      "domain_id": "exam-preparation",
+      "legacy_profile_ids": [
+        "civil-service-exam"
+      ],
+      "label": "公务员考试备考",
+      "maturity": "executable_ready",
+      "user": "准备国考或省考、要对着行测申论面试练的人",
+      "goal": "打开就选行测、申论或面试。先搭三科框架，默认题不多，打判还没接上。不是真题，不保证上岸",
+      "frequency": "daily_with_weekly_review",
+      "inputs": [
+        "考试体系、地区、年份与日期",
+        "有来源的题目或大纲",
+        "练习结果",
+        "错题原因",
+        "复习素材"
+      ],
+      "outputs": [
+        "倒计时与阶段计划",
+        "今日科目清单",
+        "练习和错题记录",
+        "素材复习队列",
+        "周度调整"
+      ],
+      "risk_class": "low",
+      "risk_flags": [],
+      "recommended_module_ids": [
+        "exam-goal",
+        "exam-today",
+        "exam-practice",
+        "exam-errors",
+        "exam-materials"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "计划和用户练习事实管理"
+        ],
+        "out_of_scope": [
+          "把示例冒充真题",
+          "伪造当前时政",
+          "自动报名",
+          "保证考试结果"
+        ],
+        "data_rule": "真题、大纲、公告和时政记录官方来源、年份、地区及核验时间",
+        "external_handoffs": [
+          "真题获取、时政更新和报名在外部可信来源完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "考试体系、地区或年份会改变计划",
+          "ask": "准备的是哪类考试、哪个地区和年份，考试日期是否确定？",
+          "skip_when": "四项已明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "来源或年份缺失",
+          "练习结果口径不一",
+          "计划落后"
+        ],
+        "recovery": [
+          "题目保持待核验",
+          "分开保存不同口径",
+          "按剩余时间重排而不虚构进度"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_exam_preparation",
+        "every_exam_source_has_year_region_and_source",
+        "no_registration_or_result_guarantee_claim"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.exam-preparation.certification-study-cycle",
+      "domain_id": "exam-preparation",
+      "label": "四级冲刺工作台",
+      "maturity": "executable_ready",
+      "user": "准备大学英语四级、希望把日期、练习、错题、套卷与专注时段放在一个本地入口的学习者",
+      "goal": "用自编练习、保留原错题事实的回炉队列和可恢复计时推进四级备考",
+      "frequency": "daily_with_mock_exam_cycles",
+      "inputs": [
+        "考试日期与官方范围",
+        "章节或科目",
+        "练习与套卷结果",
+        "错题考点",
+        "可用学习时段"
+      ],
+      "outputs": [
+        "阶段目标",
+        "今日任务",
+        "套卷与错题分析记录",
+        "专注时段事实",
+        "下一轮复习计划"
+      ],
+      "risk_class": "low",
+      "risk_flags": [],
+      "recommended_module_ids": [
+        "exam-goal",
+        "exam-today",
+        "exam-practice",
+        "exam-errors",
+        "exam-materials",
+        "exam-mock",
+        "exam-pomodoro",
+        "exam-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "学习计划与练习事实"
+        ],
+        "out_of_scope": [
+          "复制或冒充真题",
+          "自动评分写作与翻译",
+          "保证通过",
+          "自动报名或缴费"
+        ],
+        "data_rule": "官方考试结构记录来源与核验日期；全部练习自编，写作与翻译只保存人工复核状态",
+        "external_handoffs": [
+          "正式报名、缴费和题库授权在外部完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "考试范围或截止日未给出",
+          "ask": "考试日期和官方范围是什么，现有材料来自哪里？",
+          "skip_when": "日期、范围和来源已明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "范围版本过期",
+          "练习记录缺失",
+          "计划不可执行"
+        ],
+        "recovery": [
+          "标记待官方核验",
+          "从下一次真实练习开始",
+          "缩减为当日一项可完成任务"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "exact_eight_module_composition",
+        "eighteen_original_auto_graded_items",
+        "six_manual_review_items",
+        "mistake_fact_retained",
+        "timestamp_timer_resume",
+        "official_structure_sources_only",
+        "no_pass_guarantee_claim"
+      ],
+      "legacy_profile_ids": [
+        "cet4-sprint"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.hr-employment.recruiting-to-onboarding",
+      "domain_id": "hr-employment",
+      "label": "招聘到入职交接",
+      "maturity": "catalog_only",
+      "user": "需要维护候选人阶段和入职准备的人力资源人员",
+      "goal": "把脱敏候选人从招聘阶段推进到入职清单与人工外部操作",
+      "frequency": "event_driven_with_daily_review",
+      "inputs": [
+        "合成或脱敏候选人标识",
+        "招聘阶段",
+        "面试事实",
+        "Offer 与入职待办",
+        "制度来源"
+      ],
+      "outputs": [
+        "招聘管道",
+        "下一次面试或确认动作",
+        "入职准备清单",
+        "待外部发送与人事操作项"
+      ],
+      "risk_class": "high_stakes",
+      "risk_flags": [
+        "sensitive-data"
+      ],
+      "recommended_module_ids": [
+        "hr-recruitment",
+        "hr-onboarding",
+        "hr-events",
+        "hr-policies"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "脱敏招聘和入职状态管理"
+        ],
+        "out_of_scope": [
+          "自动筛选受保护属性",
+          "自动发送 Offer",
+          "正式人事变更",
+          "无来源劳动规则"
+        ],
+        "data_rule": "默认使用合成或脱敏数据；不得记录不必要的受保护属性",
+        "external_handoffs": [
+          "Offer 发送和正式入职操作由外部系统完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "请求使用真实候选人资料",
+          "ask": "是否已获授权，并确认用途、最小字段、保存设备和清除时间？",
+          "skip_when": "使用合成或脱敏数据"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "敏感字段越界",
+          "制度来源过期",
+          "Offer 状态虚假"
+        ],
+        "recovery": [
+          "删除非必要字段",
+          "标记规则待核验",
+          "回退为待外部发送"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_hr_employment",
+        "no_protected_attribute_screening",
+        "no_offer_sent_claim"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.hr-employment.employee-cycle-records",
+      "domain_id": "hr-employment",
+      "label": "员工周期事实记录",
+      "maturity": "catalog_only",
+      "user": "需要记录员工事项、1:1、制度与组织变动的人力资源负责人",
+      "goal": "把事实、反馈、制度依据和下一步分开记录，避免无依据评价",
+      "frequency": "event_driven_with_monthly_review",
+      "inputs": [
+        "经授权的员工事项",
+        "1:1 事实和反馈",
+        "制度版本与地区",
+        "组织变动状态",
+        "最小化薪酬事项"
+      ],
+      "outputs": [
+        "员工事件台账",
+        "1:1 下一步",
+        "制度来源记录",
+        "组织变动状态",
+        "待专业或外部处理项"
+      ],
+      "risk_class": "high_stakes",
+      "risk_flags": [
+        "sensitive-data"
+      ],
+      "recommended_module_ids": [
+        "hr-events",
+        "hr-one-on-one",
+        "hr-policies",
+        "hr-organization",
+        "hr-compensation"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "获授权事实和人工反馈记录"
+        ],
+        "out_of_scope": [
+          "自动绩效判定",
+          "歧视性推断",
+          "薪资发放",
+          "劳动法律意见"
+        ],
+        "data_rule": "员工和薪酬数据默认合成或脱敏；真实数据需授权并最小化",
+        "external_handoffs": [
+          "正式人事操作、薪资发放和法律判断在外部完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "真实员工数据用途或权限不清",
+          "ask": "谁有权提供和查看这些字段，何时应清除？",
+          "skip_when": "使用合成数据或授权、用途、清除边界明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "事实和评价混淆",
+          "薪酬字段暴露",
+          "规则版本缺失"
+        ],
+        "recovery": [
+          "评价回退为待人工复核",
+          "删除非必要字段并限制本机",
+          "标记待核验并保留来源"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_hr_employment",
+        "every_policy_has_region_and_version",
+        "no_automatic_performance_or_payroll_claim"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.fitness-nutrition.fat-loss-routine",
+      "domain_id": "fitness-nutrition",
+      "legacy_profile_ids": [
+        "fitness-fat-loss"
+      ],
+      "label": "减脂日常执行",
+      "maturity": "executable_ready",
+      "user": "想每天记下体重、三餐和有没有练的成年人",
+      "goal": "打开就记下今天的体重、三餐和有没有练；热量是自己填的估计，不保证减重",
+      "frequency": "daily_with_weekly_review",
+      "inputs": [
+        "今天的体重",
+        "今天吃了什么和自己填的估计热量",
+        "今天练了、休息或不适停止",
+        "近七日有没有留下记录"
+      ],
+      "outputs": [
+        "今日体重记录",
+        "今日三餐和自己合计的热量",
+        "今日运动打卡",
+        "近七日事实日历"
+      ],
+      "risk_class": "sensitive",
+      "risk_flags": [
+        "health-data"
+      ],
+      "recommended_module_ids": [
+        "fitness-today",
+        "fitness-log",
+        "fitness-food",
+        "fitness-metrics",
+        "fitness-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "用户自定计划和真实完成事实记录"
+        ],
+        "out_of_scope": [
+          "诊断",
+          "训练或营养处方",
+          "替代康复意见",
+          "保证减重效果"
+        ],
+        "data_rule": "真实健康和训练数据需明确授权、仅本机最小化记录并可清除",
+        "external_handoffs": [
+          "疼痛、异常或康复需求转交专业人员"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "请求记录真实健康数据",
+          "ask": "是否同意这些最小字段只在当前设备保存，并可随时导出和清空？",
+          "skip_when": "使用合成数据"
+        },
+        {
+          "when": "出现疼痛、疾病或康复目标",
+          "ask": "是否已有医生或专业人员给出的限制，需要工作台只做记录？",
+          "skip_when": "只记录低风险一般活动且无不适"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "把记录写成处方",
+          "出现不适仍继续",
+          "指标趋势被当作诊断"
+        ],
+        "recovery": [
+          "删除建议性结论并只留事实",
+          "立即停止并提示联系专业人员",
+          "趋势标记为用户记录"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_fitness_nutrition",
+        "no_diagnosis_or_prescription_claim",
+        "every_stop_event_remains_visible"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.fitness-nutrition.training-consistency",
+      "domain_id": "fitness-nutrition",
+      "label": "训练连续性与恢复记录",
+      "maturity": "catalog_only",
+      "user": "已有训练内容、希望提高执行连续性和回看恢复事实的成年人",
+      "goal": "记录训练完成、身体感受、课程装备条件和需要外部设置的提醒",
+      "frequency": "per_training_session_with_weekly_review",
+      "inputs": [
+        "用户已有训练安排",
+        "每次完成与停止状态",
+        "主观感受和恢复指标",
+        "课程装备事项",
+        "外部提醒需求"
+      ],
+      "outputs": [
+        "训练执行记录",
+        "恢复快照",
+        "课程装备清单",
+        "待外部设置的提醒",
+        "周度连续性复盘"
+      ],
+      "risk_class": "sensitive",
+      "risk_flags": [
+        "health-data"
+      ],
+      "recommended_module_ids": [
+        "fitness-today",
+        "fitness-log",
+        "fitness-metrics",
+        "fitness-courses",
+        "fitness-reminders",
+        "fitness-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "既有训练安排和用户事实记录"
+        ],
+        "out_of_scope": [
+          "自动制定个体训练处方",
+          "系统通知伪装",
+          "医疗或康复判断"
+        ],
+        "data_rule": "健康数据仅在授权后本机保存；提醒内容不得含敏感详情",
+        "external_handoffs": [
+          "系统通知由设备外部提醒工具设置"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "用户没有已有训练安排且期待个体处方",
+          "ask": "是否只需要通用记录模板，还是已有专业计划可供记录？",
+          "skip_when": "已有明确训练计划"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "没有可记录计划",
+          "提醒未设置却显示成功",
+          "疼痛信号被忽略"
+        ],
+        "recovery": [
+          "停在记录模板并要求用户提供计划",
+          "状态回退为待外部设置",
+          "停止并转交专业人员"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_fitness_nutrition",
+        "no_notification_success_without_external_receipt",
+        "no_medical_claim"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.health-pregnancy.pregnancy-management",
+      "domain_id": "health-pregnancy",
+      "legacy_profile_ids": [
+        "pregnancy-management"
+      ],
+      "label": "孕期时间线与生活管理",
+      "maturity": "catalog_only",
+      "user": "需要整理孕周、产检、生活安排和待问医生事项的孕期用户或照护者",
+      "goal": "把孕期事实和医生原话整理为时间线与就诊准备，不作医疗判断",
+      "frequency": "weekly_with_event_driven_updates",
+      "inputs": [
+        "孕周与用户提供的日期",
+        "产检安排",
+        "报告来源和医生原话",
+        "生活事项",
+        "待问医生的问题"
+      ],
+      "outputs": [
+        "孕周节点",
+        "产检准备清单",
+        "报告与医嘱事实记录",
+        "生活安排",
+        "就诊问题清单"
+      ],
+      "risk_class": "high_stakes",
+      "risk_flags": [
+        "health-data",
+        "sensitive-data"
+      ],
+      "recommended_module_ids": [
+        "health-timeline",
+        "health-checkups",
+        "health-reports",
+        "health-life",
+        "health-questions"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "健康事实和医疗交接准备"
+        ],
+        "out_of_scope": [
+          "诊断",
+          "推荐或调整用药",
+          "解释检查结果",
+          "紧急医疗替代建议"
+        ],
+        "data_rule": "真实健康数据需明确授权、本机最小化、可导出和清空；医学来源记录地区和核验时间",
+        "external_handoffs": [
+          "预约、问诊和紧急处理由医疗系统或专业人员完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "请求录入真实健康资料",
+          "ask": "是否授权在当前设备记录这些最小字段，并确认导出和清空边界？",
+          "skip_when": "使用合成数据"
+        },
+        {
+          "when": "出现异常、紧急或用药问题",
+          "ask": "请立即联系医疗机构或专业人员；工作台只记录待沟通事实。",
+          "skip_when": "仅整理一般事项"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "把报告整理当诊断",
+          "紧急情况仍继续问答",
+          "来源过期"
+        ],
+        "recovery": [
+          "删除解释并保留医生原话",
+          "停止流程并提示及时求助",
+          "标记待专业核验"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_health_pregnancy",
+        "no_diagnosis_drug_or_emergency_substitute_claim",
+        "every_medical_source_has_region_and_review_time"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.health-pregnancy.prenatal-visit-preparation",
+      "domain_id": "health-pregnancy",
+      "label": "产检前后事实交接",
+      "maturity": "catalog_only",
+      "user": "希望在产检前整理问题、产检后保留医生原话与待办的孕期用户",
+      "goal": "形成一次产检可带走的问题清单、资料清单和后续人工确认事项",
+      "frequency": "per_prenatal_visit",
+      "inputs": [
+        "医疗机构通知",
+        "检查准备事项",
+        "用户描述的症状时间线",
+        "待问医生问题",
+        "医生回答和后续安排"
+      ],
+      "outputs": [
+        "产检前清单",
+        "症状事实摘要",
+        "待问医生列表",
+        "医生原话记录",
+        "下一次检查与待确认事项"
+      ],
+      "risk_class": "high_stakes",
+      "risk_flags": [
+        "health-data",
+        "sensitive-data"
+      ],
+      "recommended_module_ids": [
+        "health-checkups",
+        "health-reports",
+        "health-questions",
+        "health-symptoms",
+        "health-sources"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "就诊准备和事实记录"
+        ],
+        "out_of_scope": [
+          "症状诊断",
+          "检查结果解释",
+          "用药建议",
+          "替代医疗机构通知"
+        ],
+        "data_rule": "症状、报告和联系方式只在明确授权后记录最小字段",
+        "external_handoffs": [
+          "检查要求和紧急处理以医疗机构为准"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "医疗机构、检查项目或日期不清",
+          "ask": "请以医疗机构通知为准，补充本次检查名称、日期和准备要求来源。",
+          "skip_when": "通知内容和来源已明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "症状被自动解释",
+          "机构要求未核验",
+          "报告含过量个人信息"
+        ],
+        "recovery": [
+          "只保留用户原始描述",
+          "标记待机构确认",
+          "删除非必要字段并提示本机边界"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_health_pregnancy",
+        "symptoms_are_factual_not_diagnostic",
+        "no_medical_action_without_external_confirmation"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.travel-planning.weekend-trip",
+      "domain_id": "travel-planning",
+      "label": "周末短途旅行",
+      "maturity": "catalog_only",
+      "user": "计划一至三天短途出行的个人、伴侣或小家庭",
+      "goal": "在预算、日期和偏好约束下形成逐日行程、备选与出发清单",
+      "frequency": "per_trip",
+      "inputs": [
+        "人数、日期、预算和偏好",
+        "人工核验的交通住宿候选",
+        "路线假设",
+        "天气或变更风险",
+        "出发物品"
+      ],
+      "outputs": [
+        "确认后的旅行条件",
+        "逐日行程",
+        "雨天或变更备选",
+        "预订快照",
+        "出发清单"
+      ],
+      "risk_class": "moderate",
+      "risk_flags": [
+        "external-side-effect"
+      ],
+      "recommended_module_ids": [
+        "travel-conditions",
+        "travel-itinerary",
+        "travel-bookings",
+        "travel-backups",
+        "travel-packing"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "旅行约束、计划和人工确认快照"
+        ],
+        "out_of_scope": [
+          "实时价格或余量保证",
+          "自动预订",
+          "签证结论",
+          "实时路况保证"
+        ],
+        "data_rule": "实时信息必须记录来源和查询时间",
+        "external_handoffs": [
+          "天气、价格、余量、签证和下单在外部可信服务确认"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "人员、日期、预算或硬约束缺失",
+          "ask": "出行人数、日期、总预算和一个不能妥协的条件分别是什么？",
+          "skip_when": "四项已明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "候选价格过期",
+          "路线假设不可行",
+          "预订状态无回执"
+        ],
+        "recovery": [
+          "标记待重新核价",
+          "启用备选路线",
+          "回退为待外部预订"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_travel_planning",
+        "every_realtime_fact_has_source_and_time",
+        "no_booking_success_without_external_receipt"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.travel-planning.multi-day-trip",
+      "domain_id": "travel-planning",
+      "label": "多日行程与预算控制",
+      "maturity": "catalog_only",
+      "user": "需要管理多日路线、预订快照和旅行预算的出行者",
+      "goal": "让每日路线、外部确认项、预算和旅途记录在变化时可恢复",
+      "frequency": "planning_then_daily_during_trip",
+      "inputs": [
+        "旅行条件",
+        "逐日地点与移动方式",
+        "人工确认的预订",
+        "预算和实际支出",
+        "变更与旅途记录"
+      ],
+      "outputs": [
+        "逐日路线",
+        "预订状态快照",
+        "预算差异",
+        "变更备选",
+        "旅行档案"
+      ],
+      "risk_class": "moderate",
+      "risk_flags": [
+        "external-side-effect"
+      ],
+      "recommended_module_ids": [
+        "travel-conditions",
+        "travel-itinerary",
+        "travel-bookings",
+        "travel-backups",
+        "travel-budget",
+        "travel-journal"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "多日计划、人工快照和支出记录"
+        ],
+        "out_of_scope": [
+          "自动重新订票",
+          "实时地图保证",
+          "跨设备同步承诺",
+          "支付执行"
+        ],
+        "data_rule": "预订和价格快照保留来源、时间和外部确认状态",
+        "external_handoffs": [
+          "改签、退款、预订和导航由外部服务完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "日程密度和优先级不清",
+          "ask": "每天最重要的一个地点是什么，哪些行程可以在变化时放弃？",
+          "skip_when": "每日锚点和可放弃项已明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "日程冲突",
+          "预算口径变化",
+          "外部预订变更未同步"
+        ],
+        "recovery": [
+          "保留每日锚点并移除低优先项",
+          "冻结旧预算版本",
+          "以外部服务为准并更新快照"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_travel_planning",
+        "every_day_has_anchor_or_empty_status",
+        "no_external_booking_or_refund_claim"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.professional-services.client-delivery",
+      "domain_id": "professional-services",
+      "label": "客户项目与专业交付",
+      "maturity": "catalog_only",
+      "user": "咨询、法律、会计或其他专业服务的项目负责人",
+      "goal": "让客户项目、合同节点、交付物、投入时间和人工复核责任可追踪",
+      "frequency": "project_based_with_daily_updates",
+      "inputs": [
+        "合成或脱敏客户项目",
+        "范围和里程碑",
+        "合同与报价节点",
+        "交付物版本",
+        "投入时间和复核证据"
+      ],
+      "outputs": [
+        "客户项目管道",
+        "交付清单",
+        "合同与确认节点",
+        "时间成本记录",
+        "人工复核结论与责任边界"
+      ],
+      "risk_class": "high_stakes",
+      "risk_flags": [
+        "customer-data",
+        "sensitive-data"
+      ],
+      "recommended_module_ids": [
+        "professional-projects",
+        "professional-deliverables",
+        "professional-contracts",
+        "professional-time",
+        "professional-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "脱敏项目和交付过程管理"
+        ],
+        "out_of_scope": [
+          "自动给出承担责任的专业结论",
+          "正式签署",
+          "自动发送客户材料",
+          "法律或审计意见替代"
+        ],
+        "data_rule": "客户和案件资料默认合成或脱敏；真实资料需授权并最小化",
+        "external_handoffs": [
+          "专业意见、正式签署和客户发送由责任人完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "交付范围、责任人或验收证据不清",
+          "ask": "本次交付的范围、最终复核人和可验收证据分别是什么？",
+          "skip_when": "三项已明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "范围漂移",
+          "版本错发",
+          "专业结论未复核"
+        ],
+        "recovery": [
+          "恢复到确认范围并登记变更",
+          "恢复最后确认版本",
+          "状态保持待责任人复核"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_professional_services",
+        "every_delivery_has_version_and_reviewer",
+        "no_professional_conclusion_or_send_success_without_human_confirmation"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.professional-services.creative-service-project",
+      "domain_id": "professional-services",
+      "label": "创作型服务项目",
+      "maturity": "catalog_only",
+      "user": "按简报、草稿、反馈和定稿交付作品的自由职业者或小团队",
+      "goal": "把客户需求、素材来源、作品版本、反馈和时间成本串成可交付流程",
+      "frequency": "project_milestone_driven",
+      "inputs": [
+        "脱敏客户简报",
+        "素材及权利状态",
+        "作品版本",
+        "客户反馈",
+        "时间与成本事实"
+      ],
+      "outputs": [
+        "项目阶段",
+        "素材来源清单",
+        "作品版本链",
+        "待确认反馈",
+        "交付与时间复盘"
+      ],
+      "risk_class": "sensitive",
+      "risk_flags": [
+        "customer-data",
+        "sensitive-data"
+      ],
+      "recommended_module_ids": [
+        "professional-projects",
+        "professional-materials",
+        "professional-deliverables",
+        "professional-time",
+        "professional-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "创作流程、素材来源和反馈状态"
+        ],
+        "out_of_scope": [
+          "伪造版权授权",
+          "自动公开发布",
+          "自动发送定稿",
+          "客户隐私扩散"
+        ],
+        "data_rule": "客户资料默认脱敏；每项外部素材保留来源和使用状态",
+        "external_handoffs": [
+          "版权许可确认、公开发布和正式交付由责任人完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "素材权利或最终交付格式不清",
+          "ask": "哪些素材已获何种使用授权，最终需要交付什么格式？",
+          "skip_when": "权利状态和格式已明确"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "素材权利不明",
+          "反馈未绑定版本",
+          "交付状态无回执"
+        ],
+        "recovery": [
+          "阻断素材进入定稿",
+          "反馈重新绑定具体版本",
+          "回退为待人工交付"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_professional_services",
+        "every_external_asset_has_rights_status",
+        "no_publish_or_delivery_success_without_human_confirmation"
+      ]
+    },
+    {
+      "scene_profile_id": "scene.research-knowledge.reading-desk",
+      "domain_id": "research-knowledge",
+      "label": "研究阅读书桌",
+      "maturity": "contract_ready",
+      "user": "跟踪论文或书籍阅读并积累可引用笔记的个人",
+      "goal": "把阅读进度、证据与写作连接起来",
+      "frequency": "daily_log_with_weekly_review",
+      "inputs": [
+        "当前研究问题",
+        "实验步骤与版本",
+        "结果和异常",
+        "人工确认的数据指标",
+        "组会或周报截止时间"
+      ],
+      "outputs": [
+        "阅读清单",
+        "读书卡",
+        "可核对证据",
+        "写作提纲",
+        "阅读复盘"
+      ],
+      "risk_class": "low",
+      "risk_flags": [],
+      "recommended_module_ids": [
+        "research-reading",
+        "research-evidence",
+        "research-questions",
+        "research-writing",
+        "research-review"
+      ],
+      "boundaries": {
+        "in_scope": [
+          "人工记录研究过程与指标"
+        ],
+        "out_of_scope": [
+          "自动执行实验",
+          "伪造统计显著性",
+          "从日志直接推导确定性结论"
+        ],
+        "data_rule": "指标保留采集方法、版本和人工确认状态",
+        "external_handoffs": [
+          "实验运行和正式统计分析在相应工具完成"
+        ]
+      },
+      "clarification_conditions": [
+        {
+          "when": "同一周有多个实验但评价标准不同",
+          "ask": "本周哪个实验的哪项可观察结果决定下一步？",
+          "skip_when": "优先实验和判定标准已给出"
+        }
+      ],
+      "failure_and_recovery_contract": {
+        "failure_modes": [
+          "日志缺版本",
+          "指标口径不一致",
+          "异常被当成有效结果"
+        ],
+        "recovery": [
+          "补录环境或版本后再纳入比较",
+          "冻结旧口径并创建新快照",
+          "把异常结果标记为待复核"
+        ]
+      },
+      "machine_checkable_acceptance": [
+        "recommended_module_count_between_4_and_15",
+        "all_modules_exist_in_research_knowledge",
+        "every_metric_has_method_or_manual_confirmation",
+        "every_failure_has_recovery_status"
+      ]
+    }
+  ],
+  "capability_graph_seed": {
+    "schema_version": 1,
+    "contract_version": "double6_scene_module_capability_seed_v1",
+    "status": "scene_module_capability_edges_compilable",
+    "binding_scope": [
+      "scene_profile_id",
+      "module_id",
+      "capability_id"
+    ],
+    "source_of_capability_ids": "domain-content-packs.json#packs[].modules[].evidence_refs",
+    "explicitly_deferred_bindings": [
+      "atomic_capability_ids",
+      "surface_primitive_ids",
+      "policy_pack_ids"
+    ],
+    "deferred_reason": "这些 ID 由并行权威注册表定义；本文件不预造 atom、surface 或 policy。后续编译器应按 scene_profile_id + module_id + capability_id 合并权威注册表。",
+    "vertical_count": 3,
+    "domain_count": 8,
+    "scene_profile_count": 16,
+    "path_count": 86,
+    "capability_edge_count": 109,
+    "verticals": [
+      {
+        "vertical_id": "vertical.personal-household",
+        "domain_ids": [
+          "personal-execution",
+          "household-collaboration"
+        ],
+        "scene_paths": [
+          {
+            "scene_profile_id": "scene.personal-execution.weekly-personal-control",
+            "modules": [
+              {
+                "module_id": "personal-inbox",
+                "capability_ids": [
+                  "CAP-01-01"
+                ]
+              },
+              {
+                "module_id": "personal-week-plan",
+                "capability_ids": [
+                  "CAP-01-01",
+                  "CAP-01-04"
+                ]
+              },
+              {
+                "module_id": "personal-today",
+                "capability_ids": [
+                  "CAP-01-01"
+                ]
+              },
+              {
+                "module_id": "personal-projects",
+                "capability_ids": [
+                  "CAP-01-01",
+                  "CAP-01-02"
+                ]
+              },
+              {
+                "module_id": "personal-habits",
+                "capability_ids": [
+                  "CAP-01-01"
+                ]
+              },
+              {
+                "module_id": "personal-life-log",
+                "capability_ids": [
+                  "CAP-01-03"
+                ]
+              },
+              {
+                "module_id": "personal-review",
+                "capability_ids": [
+                  "CAP-01-04"
+                ]
+              }
+            ]
+          },
+          {
+            "scene_profile_id": "scene.personal-execution.personal-life-dashboard",
+            "modules": [
+              {
+                "module_id": "life-inspiration",
+                "capability_ids": [
+                  "CAP-01-02"
+                ]
+              },
+              {
+                "module_id": "life-mood",
+                "capability_ids": [
+                  "CAP-01-01"
+                ]
+              },
+              {
+                "module_id": "life-finance",
+                "capability_ids": [
+                  "CAP-01-03"
+                ]
+              },
+              {
+                "module_id": "life-food",
+                "capability_ids": [
+                  "CAP-01-03"
+                ]
+              },
+              {
+                "module_id": "life-movement",
+                "capability_ids": [
+                  "CAP-01-01",
+                  "CAP-01-03"
+                ]
+              },
+              {
+                "module_id": "life-reading",
+                "capability_ids": [
+                  "CAP-01-02",
+                  "CAP-01-04"
+                ]
+              },
+              {
+                "module_id": "life-vocabulary",
+                "capability_ids": [
+                  "CAP-01-05"
+                ]
+              }
+            ]
+          },
+          {
+            "scene_profile_id": "scene.household-collaboration.weekly-household-handoff",
+            "modules": [
+              {
+                "module_id": "household-chores",
+                "capability_ids": [
+                  "CAP-13-02"
+                ]
+              },
+              {
+                "module_id": "household-shopping",
+                "capability_ids": [
+                  "CAP-13-03"
+                ]
+              },
+              {
+                "module_id": "household-handoff",
+                "capability_ids": [
+                  "CAP-13-02",
+                  "CAP-13-05"
+                ]
+              },
+              {
+                "module_id": "household-review",
+                "capability_ids": [
+                  "CAP-13-02"
+                ]
+              },
+              {
+                "module_id": "household-room",
+                "capability_ids": [
+                  "CAP-13-01",
+                  "CAP-13-05"
+                ]
+              }
+            ]
+          },
+          {
+            "scene_profile_id": "scene.household-collaboration.shared-household-budget",
+            "modules": [
+              {
+                "module_id": "household-shopping",
+                "capability_ids": [
+                  "CAP-13-03"
+                ]
+              },
+              {
+                "module_id": "household-expenses",
+                "capability_ids": [
+                  "CAP-13-03"
+                ]
+              },
+              {
+                "module_id": "household-handoff",
+                "capability_ids": [
+                  "CAP-13-02",
+                  "CAP-13-05"
+                ]
+              },
+              {
+                "module_id": "household-review",
+                "capability_ids": [
+                  "CAP-13-02"
+                ]
+              },
+              {
+                "module_id": "household-room",
+                "capability_ids": [
+                  "CAP-13-01",
+                  "CAP-13-05"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "vertical_id": "vertical.content-research",
+        "domain_ids": [
+          "content-operations",
+          "research-knowledge"
+        ],
+        "scene_paths": [
+          {
+            "scene_profile_id": "scene.content-operations.idea-to-publish",
+            "modules": [
+              {
+                "module_id": "content-input",
+                "capability_ids": [
+                  "CAP-06-01"
+                ]
+              },
+              {
+                "module_id": "content-topics",
+                "capability_ids": [
+                  "CAP-06-02"
+                ]
+              },
+              {
+                "module_id": "content-briefs",
+                "capability_ids": [
+                  "CAP-06-02"
+                ]
+              },
+              {
+                "module_id": "content-production",
+                "capability_ids": [
+                  "CAP-06-02"
+                ]
+              },
+              {
+                "module_id": "content-schedule",
+                "capability_ids": [
+                  "CAP-06-03"
+                ]
+              },
+              {
+                "module_id": "content-review",
+                "capability_ids": [
+                  "CAP-06-04"
+                ]
+              }
+            ]
+          },
+          {
+            "scene_profile_id": "scene.content-operations.multi-account-editorial-calendar",
+            "modules": [
+              {
+                "module_id": "content-accounts",
+                "capability_ids": [
+                  "CAP-06-03"
+                ]
+              },
+              {
+                "module_id": "content-input",
+                "capability_ids": [
+                  "CAP-06-01"
+                ]
+              },
+              {
+                "module_id": "content-topics",
+                "capability_ids": [
+                  "CAP-06-02"
+                ]
+              },
+              {
+                "module_id": "content-production",
+                "capability_ids": [
+                  "CAP-06-02"
+                ]
+              },
+              {
+                "module_id": "content-schedule",
+                "capability_ids": [
+                  "CAP-06-03"
+                ]
+              },
+              {
+                "module_id": "content-review",
+                "capability_ids": [
+                  "CAP-06-04"
+                ]
+              }
+            ]
+          },
+          {
+            "scene_profile_id": "scene.research-knowledge.evidence-to-report",
+            "modules": [
+              {
+                "module_id": "research-questions",
+                "capability_ids": [
+                  "CAP-09-01"
+                ]
+              },
+              {
+                "module_id": "research-evidence",
+                "capability_ids": [
+                  "CAP-09-02"
+                ]
+              },
+              {
+                "module_id": "research-writing",
+                "capability_ids": [
+                  "CAP-09-03"
+                ]
+              },
+              {
+                "module_id": "research-review",
+                "capability_ids": [
+                  "CAP-09-03"
+                ]
+              },
+              {
+                "module_id": "research-log",
+                "capability_ids": [
+                  "CAP-09-01"
+                ]
+              }
+            ]
+          },
+          {
+            "scene_profile_id": "scene.research-knowledge.experiment-weekly-control",
+            "modules": [
+              {
+                "module_id": "research-questions",
+                "capability_ids": [
+                  "CAP-09-01"
+                ]
+              },
+              {
+                "module_id": "research-log",
+                "capability_ids": [
+                  "CAP-09-01"
+                ]
+              },
+              {
+                "module_id": "research-metrics",
+                "capability_ids": [
+                  "CAP-09-04"
+                ]
+              },
+              {
+                "module_id": "research-writing",
+                "capability_ids": [
+                  "CAP-09-03"
+                ]
+              },
+              {
+                "module_id": "research-review",
+                "capability_ids": [
+                  "CAP-09-03"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "vertical_id": "vertical.small-business",
+        "domain_ids": [
+          "sales-trade",
+          "finance-tax-contract",
+          "ecommerce-operations",
+          "local-service-store"
+        ],
+        "scene_paths": [
+          {
+            "scene_profile_id": "scene.sales-trade.lead-to-followup",
+            "modules": [
+              {
+                "module_id": "sales-leads",
+                "capability_ids": [
+                  "CAP-05-05"
+                ]
+              },
+              {
+                "module_id": "sales-clients",
+                "capability_ids": [
+                  "CAP-05-01"
+                ]
+              },
+              {
+                "module_id": "sales-followups",
+                "capability_ids": [
+                  "CAP-05-04"
+                ]
+              },
+              {
+                "module_id": "sales-orders",
+                "capability_ids": [
+                  "CAP-05-02"
+                ]
+              },
+              {
+                "module_id": "sales-quotes",
+                "capability_ids": [
+                  "CAP-05-03"
+                ]
+              },
+              {
+                "module_id": "sales-review",
+                "capability_ids": [
+                  "CAP-05-05"
+                ]
+              }
+            ]
+          },
+          {
+            "scene_profile_id": "scene.sales-trade.inquiry-to-quote",
+            "modules": [
+              {
+                "module_id": "sales-clients",
+                "capability_ids": [
+                  "CAP-05-01"
+                ]
+              },
+              {
+                "module_id": "sales-orders",
+                "capability_ids": [
+                  "CAP-05-02"
+                ]
+              },
+              {
+                "module_id": "sales-quotes",
+                "capability_ids": [
+                  "CAP-05-03"
+                ]
+              },
+              {
+                "module_id": "sales-followups",
+                "capability_ids": [
+                  "CAP-05-04"
+                ]
+              },
+              {
+                "module_id": "sales-review",
+                "capability_ids": [
+                  "CAP-05-05"
+                ]
+              }
+            ]
+          },
+          {
+            "scene_profile_id": "scene.finance-tax-contract.monthly-bookkeeping",
+            "modules": [
+              {
+                "module_id": "finance-transactions",
+                "capability_ids": [
+                  "CAP-07-01"
+                ]
+              },
+              {
+                "module_id": "finance-vouchers",
+                "capability_ids": [
+                  "CAP-07-01",
+                  "CAP-07-04"
+                ]
+              },
+              {
+                "module_id": "finance-tax",
+                "capability_ids": [
+                  "CAP-07-02"
+                ]
+              },
+              {
+                "module_id": "finance-review",
+                "capability_ids": [
+                  "CAP-07-05"
+                ]
+              },
+              {
+                "module_id": "finance-audit",
+                "capability_ids": [
+                  "CAP-07-05"
+                ]
+              }
+            ]
+          },
+          {
+            "scene_profile_id": "scene.finance-tax-contract.project-budget-contract",
+            "modules": [
+              {
+                "module_id": "finance-projects",
+                "capability_ids": [
+                  "CAP-07-03"
+                ]
+              },
+              {
+                "module_id": "finance-budget",
+                "capability_ids": [
+                  "CAP-07-03"
+                ]
+              },
+              {
+                "module_id": "finance-transactions",
+                "capability_ids": [
+                  "CAP-07-01"
+                ]
+              },
+              {
+                "module_id": "finance-vouchers",
+                "capability_ids": [
+                  "CAP-07-01",
+                  "CAP-07-04"
+                ]
+              },
+              {
+                "module_id": "finance-review",
+                "capability_ids": [
+                  "CAP-07-05"
+                ]
+              }
+            ]
+          },
+          {
+            "scene_profile_id": "scene.ecommerce-operations.product-order-ops",
+            "modules": [
+              {
+                "module_id": "commerce-products",
+                "capability_ids": [
+                  "CAP-06-05",
+                  "CAP-05-02"
+                ]
+              },
+              {
+                "module_id": "commerce-inventory",
+                "capability_ids": [
+                  "CAP-06-05"
+                ]
+              },
+              {
+                "module_id": "commerce-orders",
+                "capability_ids": [
+                  "CAP-05-02",
+                  "CAP-06-05"
+                ]
+              },
+              {
+                "module_id": "commerce-service",
+                "capability_ids": [
+                  "CAP-06-05"
+                ]
+              },
+              {
+                "module_id": "commerce-metrics",
+                "capability_ids": [
+                  "CAP-06-04",
+                  "CAP-06-05"
+                ]
+              }
+            ]
+          },
+          {
+            "scene_profile_id": "scene.ecommerce-operations.campaign-content-ops",
+            "modules": [
+              {
+                "module_id": "commerce-products",
+                "capability_ids": [
+                  "CAP-06-05",
+                  "CAP-05-02"
+                ]
+              },
+              {
+                "module_id": "commerce-content",
+                "capability_ids": [
+                  "CAP-06-02",
+                  "CAP-06-05"
+                ]
+              },
+              {
+                "module_id": "commerce-campaigns",
+                "capability_ids": [
+                  "CAP-06-05"
+                ]
+              },
+              {
+                "module_id": "commerce-inventory",
+                "capability_ids": [
+                  "CAP-06-05"
+                ]
+              },
+              {
+                "module_id": "commerce-metrics",
+                "capability_ids": [
+                  "CAP-06-04",
+                  "CAP-06-05"
+                ]
+              }
+            ]
+          },
+          {
+            "scene_profile_id": "scene.local-service-store.daily-booking-service",
+            "modules": [
+              {
+                "module_id": "store-bookings",
+                "capability_ids": [
+                  "CAP-14-04",
+                  "CAP-14-01"
+                ]
+              },
+              {
+                "module_id": "store-shifts",
+                "capability_ids": [
+                  "CAP-14-04"
+                ]
+              },
+              {
+                "module_id": "store-services",
+                "capability_ids": [
+                  "CAP-14-04",
+                  "CAP-14-05"
+                ]
+              },
+              {
+                "module_id": "store-followups",
+                "capability_ids": [
+                  "CAP-14-01",
+                  "CAP-14-04"
+                ]
+              },
+              {
+                "module_id": "store-metrics",
+                "capability_ids": [
+                  "CAP-14-04"
+                ]
+              }
+            ]
+          },
+          {
+            "scene_profile_id": "scene.local-service-store.member-inventory-review",
+            "modules": [
+              {
+                "module_id": "store-members",
+                "capability_ids": [
+                  "CAP-14-04",
+                  "CAP-14-05"
+                ]
+              },
+              {
+                "module_id": "store-inventory",
+                "capability_ids": [
+                  "CAP-14-04"
+                ]
+              },
+              {
+                "module_id": "store-services",
+                "capability_ids": [
+                  "CAP-14-04",
+                  "CAP-14-05"
+                ]
+              },
+              {
+                "module_id": "store-followups",
+                "capability_ids": [
+                  "CAP-14-01",
+                  "CAP-14-04"
+                ]
+              },
+              {
+                "module_id": "store-metrics",
+                "capability_ids": [
+                  "CAP-14-04"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "audit": {
+    "audited_at": "2026-08-14",
+    "catalog_domain_count": 16,
+    "catalog_module_count": 123,
+    "legacy_profile_count": 10,
+    "migrated_legacy_profile_count": 10,
+    "source_files": [
+      "capability-supply-contract.json",
+      "domain-content-packs.json",
+      "clarification-policies.json",
+      "risk-packs.json",
+      "scene-capability-starters.json"
+    ],
+    "coverage": {
+      "domain_ids": [
+        "personal-execution",
+        "education-learning",
+        "teaching-classroom",
+        "exam-preparation",
+        "sales-trade",
+        "content-operations",
+        "ecommerce-operations",
+        "finance-tax-contract",
+        "hr-employment",
+        "research-knowledge",
+        "fitness-nutrition",
+        "health-pregnancy",
+        "travel-planning",
+        "household-collaboration",
+        "professional-services",
+        "local-service-store"
+      ],
+      "profiles_per_domain": {
+        "personal-execution": 2,
+        "education-learning": 4,
+        "teaching-classroom": 2,
+        "exam-preparation": 2,
+        "sales-trade": 2,
+        "content-operations": 2,
+        "ecommerce-operations": 2,
+        "finance-tax-contract": 2,
+        "hr-employment": 2,
+        "research-knowledge": 2,
+        "fitness-nutrition": 2,
+        "health-pregnancy": 2,
+        "travel-planning": 2,
+        "household-collaboration": 2,
+        "professional-services": 2,
+        "local-service-store": 2
+      }
+    },
+    "existing_profile_migration": [
+      {
+        "legacy_profile_id": "personal-life-dashboard",
+        "scene_profile_id": "scene.personal-execution.personal-life-dashboard"
+      },
+      {
+        "legacy_profile_id": "baby-growth-explorer",
+        "scene_profile_id": "scene.education-learning.baby-growth-explorer"
+      },
+      {
+        "legacy_profile_id": "primary-transition-1-to-2",
+        "scene_profile_id": "scene.education-learning.primary-transition-1-to-2"
+      },
+      {
+        "legacy_profile_id": "primary-transition-2-to-3",
+        "scene_profile_id": "scene.education-learning.primary-transition-2-to-3"
+      },
+      {
+        "legacy_profile_id": "primary-transition-3-to-4",
+        "scene_profile_id": "scene.education-learning.primary-transition-3-to-4"
+      },
+      {
+        "legacy_profile_id": "teaching-classroom-management",
+        "scene_profile_id": "scene.teaching-classroom.classroom-management"
+      },
+      {
+        "legacy_profile_id": "teaching-lesson-preparation",
+        "scene_profile_id": "scene.teaching-classroom.single-lesson-preparation"
+      },
+      {
+        "legacy_profile_id": "civil-service-exam",
+        "scene_profile_id": "scene.exam-preparation.civil-service-exam"
+      },
+      {
+        "legacy_profile_id": "fitness-fat-loss",
+        "scene_profile_id": "scene.fitness-nutrition.fat-loss-routine"
+      },
+      {
+        "legacy_profile_id": "pregnancy-management",
+        "scene_profile_id": "scene.health-pregnancy.pregnancy-management"
+      },
+      {
+        "legacy_profile_id": "reading-desk",
+        "scene_profile_id": "scene.research-knowledge.reading-desk"
+      }
+    ],
+    "education_clarification_invariants": [
+      "scene.education-learning.primary-transition-1-to-2 已知阶段为一升二，不得重复追问当前年级",
+      "学习重点不是教育领域固定问题；仅在期望结果含糊且确实会改变模块时，用具体结果选项澄清",
+      "指定教材、真题和真实儿童数据只在用户主动提出相关需求时触发来源或授权问题",
+      "本文件未新增儿童学习 atom、题目或内容"
+    ],
+    "validation_intent": [
+      "16 个权威 domain_id 全覆盖",
+      "每个领域 2 至 4 个 scene_profile",
+      "scene_profile_id 唯一且符合 scene.<domain>.<slug>",
+      "recommended_module_ids 仅引用所属领域当前模块且符合当前 4–15 个核心模块合同；旧 profile 保持既有推荐集合",
+      "首批三个纵向样例的图种子只引用模块 evidence_refs 中的既有 CAP",
+      "图种子覆盖所有 16 个 contract_ready scene_profile"
+    ],
+    "honest_gaps": [
+      "所有 34 个场景走同一条 compile_composition 入口。已登记 pack 保持精确范围，其余按已选模块派生。成熟度只约束深度，不另开架构",
+      "executable_ready 现为三个成人代表场景、减脂日常、班主任班务日常、考公刷题、家庭今晚家务、月度记账今晚、店铺今晚订单、研究今晚结论，以及宝宝、一升二、二升三、三升四",
+      "executable_ready 仅代表本地 selected-scope 运行时和自动化证据成立，不代表宿主安装或公开发布",
+      "不能借统一编译或社媒投影把其余 catalog_only / contract_ready 场景写成已可执行"
+    ]
+  }
+}

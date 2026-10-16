@@ -10,6 +10,7 @@ from typing import Any
 
 from .core import (
     ContractError,
+    REFERENCES,
     canonical,
     commit,
     digest_bytes,
@@ -22,8 +23,13 @@ from .core import (
     schema,
     transition,
 )
-from .routing import critical_decisions, route_options, route_request, safe_defaults
-from .recommendations import recommendation_snapshot, validate_surface
+from .routing import BOUNDARY_DECISION_IDS, critical_decisions, route_options, route_request, safe_defaults
+from .recommendations import clarification_catalog, recommendation_snapshot, validate_surface
+from .recommendation_compiler import compile_selection
+from .policy_engine import run_policy_test_vectors, validate_policy_registry
+from .child_playground import learning_content_selection
+from .composition import compile_composition
+from .theme_system import compile_theme_contract
 
 
 EVENT_INTENTS = {
@@ -34,6 +40,7 @@ RESPONSIVE_DEVICE_TARGET = "responsive_both"
 RESPONSIVE_DEVICE_LABEL = "手机、平板与电脑自适应（含横竖屏）"
 SENSITIVE_DATA_POLICIES = {"synthetic_or_redacted", "real_data_local_only_with_explicit_consent"}
 CONTENT_SOURCE_MODES = {"generic_non_claimed", "user_provided_or_official_verified"}
+QUESTION_LIMIT_PER_SCENE = 5
 
 
 def _new_events(request: str) -> dict[str, Any]:
@@ -118,14 +125,31 @@ def _visual_preferences(raw: str, normalized: Any) -> dict[str, Any]:
     if selected_template:
         preferences["template_id"] = selected_template
         dimensions.add("color")
-    for key in ["token_id", "template_id", "visual_requirements"]:
+    adult_theme_markers = [
+        (["暖阳生活小屋", "暖阳小屋"], "life_sunlit_cottage"),
+        (["安静城市工作室", "城市工作室"], "life_quiet_studio"),
+        (["生活经典版"], "life_classic"),
+        (["涂鸦成长伙伴", "涂鸦伙伴"], "study_doodle_sprout"),
+        (["纸片学习机器人", "纸片机器人"], "study_paper_robot"),
+        (["学习经典版"], "study_classic"),
+    ]
+    selected_adult_theme = next(
+        (theme_id for markers, theme_id in adult_theme_markers if any(marker in raw for marker in markers)),
+        None,
+    )
+    if selected_adult_theme:
+        preferences["adult_theme_id"] = selected_adult_theme
+        dimensions.add("color")
+    for key in ["token_id", "template_id", "adult_theme_id", "visual_requirements"]:
         if supplied.get(key) not in (None, ""):
             preferences[key] = supplied[key]
     supplied_dimensions = supplied.get("feedback_dimensions")
     if isinstance(supplied_dimensions, list):
         dimensions.update(str(row) for row in supplied_dimensions)
     preferences["feedback_dimensions"] = sorted(dimensions)
-    preferences["automatic_rebuild_supported"] = dimensions == {"color"} and bool(preferences.get("template_id"))
+    preferences["automatic_rebuild_supported"] = dimensions == {"color"} and bool(
+        preferences.get("template_id") or preferences.get("adult_theme_id")
+    )
     return preferences
 
 
@@ -133,6 +157,13 @@ def _next(run: dict[str, Any], requirements: dict[str, Any] | None = None) -> st
     state = run["state"]
     if state == "clarifying":
         missing = [row for row in (requirements or {}).get("critical_decisions", []) if row["status"] == "missing"]
+        session = (requirements or {}).get("scene_session", requirements or {})
+        if int(session.get("question_count", 0)) >= int(session.get("question_limit", QUESTION_LIMIT_PER_SCENE)):
+            required = [row for row in missing if row["decision_id"] in BOUNDARY_DECISION_IDS]
+            if required:
+                return "\n".join(row["question"] for row in required)
+            if missing:
+                return "普通澄清已达上限；核对已展示且适用的低风险默认值，必要授权不得默认通过。"
         return missing[0]["question"] if missing else "propose"
     return {
         "intake": "propose",
@@ -168,7 +199,31 @@ def _base_run(run_dir: Path, request: str, request_event: dict[str, Any]) -> dic
     }
 
 
-def _new_requirements(request: str, route: dict[str, Any]) -> dict[str, Any]:
+def _scene_session(
+    request: str,
+    *,
+    route_status: str,
+    question_count: int = 0,
+    session_id: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "session_id": session_id or f"scene-{uuid.uuid4().hex}",
+        "request_text": request,
+        "route_status": route_status,
+        "question_count": question_count,
+        "question_limit": QUESTION_LIMIT_PER_SCENE,
+        "authorization_question_count": 0,
+        "question_budget_policy": "preferences_only_v1",
+    }
+
+
+def _new_requirements(
+    request: str,
+    route: dict[str, Any],
+    *,
+    session_id: str | None = None,
+    question_count: int = 0,
+) -> dict[str, Any]:
     decisions = critical_decisions(request, route)
     decision_ids = {row["decision_id"] for row in decisions}
     return {
@@ -179,10 +234,59 @@ def _new_requirements(request: str, route: dict[str, Any]) -> dict[str, Any]:
         "recommendation_snapshot": recommendation_snapshot(request, route),
         "critical_decisions": decisions,
         "safe_defaults": [row for row in safe_defaults(request, route) if row["decision_id"] not in decision_ids],
-        "question_count": 0,
-        "question_limit": 3,
+        "scene_session": _scene_session(
+            request,
+            route_status="selected",
+            question_count=question_count,
+            session_id=session_id,
+        ),
+        "question_count": question_count,
+        "question_limit": QUESTION_LIMIT_PER_SCENE,
         "updated_at": now(),
     }
+
+
+def _discovery_requirements(request: str, *, session_id: str | None = None) -> dict[str, Any]:
+    catalog = clarification_catalog()
+    discovery = dict(catalog["scene_discovery"])
+    discovery.update({
+        "impact": "high",
+        "status": "missing",
+        "value": None,
+        "risk_tags": ["scene-definition"],
+        "evidence_refs": [],
+        "recommended_value": None,
+        "recommendation_reason": "先确认真实场景，再生成领域推荐；系统不会按关键词静默猜测。",
+        "scene_scope": {"primary_domain": None, "profile_id": None},
+    })
+    return {
+        "schema_version": schema("requirements"),
+        "request_text": request,
+        "request_sha256": digest_bytes(request.encode("utf-8")),
+        "route": None,
+        "recommendation_snapshot": None,
+        "critical_decisions": [discovery],
+        "safe_defaults": [],
+        "scene_session": _scene_session(request, route_status="needs_discovery", session_id=session_id),
+        "question_count": 0,
+        "question_limit": QUESTION_LIMIT_PER_SCENE,
+        "updated_at": now(),
+    }
+
+
+def _ensure_scene_session(requirements: dict[str, Any]) -> dict[str, Any]:
+    """读取旧 run 时补兼容视图，不追溯改写旧问题或旧限制。"""
+    if isinstance(requirements.get("scene_session"), dict):
+        return requirements
+    legacy_limit = int(requirements.get("question_limit", 3))
+    requirements["scene_session"] = {
+        "session_id": f"legacy-{requirements.get('request_sha256', 'unknown')[:16]}",
+        "request_text": str(requirements.get("request_text") or ""),
+        "route_status": "selected" if requirements.get("route") else "needs_discovery",
+        "question_count": int(requirements.get("question_count", 0)),
+        "question_limit": legacy_limit,
+    }
+    return requirements
 
 
 def _validated_sources(value: dict[str, Any]) -> dict[str, Any]:
@@ -205,28 +309,41 @@ def start_run(
 ) -> dict[str, Any]:
     if run_dir.exists() and any(run_dir.iterdir()):
         raise ContractError("run 目录必须不存在或为空")
-    if route_assessment is None:
-        return {
-            "status": "route_selection_required",
-            "message": "请由宿主 Agent 从 route_options 中选择主场景、可选子场景，并提供用户原话证据后重新调用 start。",
-            "route_options": route_options(),
-            "selection_contract": {
-                "required": ["primary_domain", "evidence_spans"],
-                "optional": ["profile_id", "auxiliary_domains", "classifier"],
-            },
-        }
     run_dir.mkdir(parents=True, exist_ok=True)
     events = _new_events(request)
     run = _base_run(run_dir, request, events["events"][0])
-    route = route_request(request, route_assessment)
-    requirements = _new_requirements(request, route)
+    if route_assessment is None:
+        route = None
+        requirements = _discovery_requirements(request)
+    else:
+        route = route_request(request, route_assessment)
+        requirements = _new_requirements(request, route)
     writes: dict[str, dict[str, Any] | str] = {"events.json": events, "requirements.json": requirements}
     state = "clarifying" if requirements["critical_decisions"] else "intake"
     status = "needs_answer" if state == "clarifying" else "ready_to_propose"
-    run = transition(run, state, status, "run_started", {"primary_domain": route["primary_domain"]})
+    run = transition(run, state, status, "run_started", {
+        "primary_domain": route["primary_domain"] if route else None,
+        "route_status": requirements["scene_session"]["route_status"],
+        "scene_session_id": requirements["scene_session"]["session_id"],
+    })
     writes["run.json"] = run
     commit(run_dir, writes)
-    return {"status": run["status"], "state": run["state"], "next": _next(run, requirements), "risk_pack_ids": route["risk_pack_ids"]}
+    result = {
+        "status": run["status"],
+        "state": run["state"],
+        "next": _next(run, requirements),
+        "scene_session": requirements["scene_session"],
+        "risk_pack_ids": route["risk_pack_ids"] if route else [],
+    }
+    if route is None:
+        result.update({
+            "route_options": route_options(),
+            "selection_contract": {
+                "required_after_discovery": ["primary_domain", "evidence_spans"],
+                "optional": ["profile_id", "auxiliary_domains", "classifier"],
+            },
+        })
+    return result
 
 
 def clone_confirmed_run(source_dir: Path, run_dir: Path) -> dict[str, Any]:
@@ -311,6 +428,96 @@ def _resolved_decision_value(decision: dict[str, Any], supplied: Any) -> Any:
     return deepcopy(decision["recommended_value"])
 
 
+def _capabilities_for_modules(snapshot: dict[str, Any], module_ids: list[str]) -> list[str]:
+    mapping = snapshot.get("capabilities_by_module", {})
+    return sorted({
+        capability_id
+        for module_id in module_ids
+        for capability_id in mapping.get(module_id, [])
+    })
+
+
+def _validate_capability_selection(snapshot: dict[str, Any], module_ids: list[str], supplied: Any) -> list[str]:
+    if not isinstance(supplied, list) or not supplied or len(supplied) != len(set(supplied)):
+        raise ContractError("能力项选择必须是非空且不重复的能力 ID 列表")
+    allowed = set(_capabilities_for_modules(snapshot, module_ids))
+    if not set(supplied) <= allowed:
+        raise ContractError("能力项选择包含未选模块或当前场景之外的能力")
+    mapping = snapshot.get("capabilities_by_module", {})
+    uncovered = [module_id for module_id in module_ids if not set(mapping.get(module_id, [])) & set(supplied)]
+    if uncovered:
+        raise ContractError(f"每个已选模块至少保留一项能力：{','.join(uncovered)}")
+    return list(supplied)
+
+
+def _compiled_selected_supply(
+    snapshot: dict[str, Any],
+    selected_module_ids: list[str],
+    selected_capability_ids: list[str],
+) -> dict[str, Any]:
+    """把产品选择重新编译为 selected-only 供给快照，不携带完整图谱。"""
+    supply = snapshot.get("capability_supply")
+    if not isinstance(supply, dict):
+        raise ContractError("推荐快照缺少全领域 capability supply")
+    scene = supply.get("scene_profile")
+    if not isinstance(scene, dict) or not scene.get("scene_profile_id"):
+        raise ContractError("capability supply 缺少 scene_profile")
+    domain_id = str(snapshot.get("domain_id") or "")
+    known_modules = {
+        row["module_id"]: row
+        for row in [*snapshot.get("core_modules", []), *snapshot.get("optional_modules", [])]
+        if isinstance(row, dict) and row.get("module_id")
+    }
+    primary_modules = [
+        module_id for module_id in selected_module_ids
+        if known_modules.get(module_id, {}).get("origin_domain") == domain_id
+    ]
+    primary_capabilities = sorted({
+        capability_id
+        for module_id in primary_modules
+        for capability_id in snapshot.get("capabilities_by_module", {}).get(module_id, [])
+        if capability_id in selected_capability_ids
+    })
+    return compile_selection(
+        domain_id,
+        {"scene_profile_id": scene["scene_profile_id"]},
+        primary_modules,
+        primary_capabilities,
+    )
+
+
+def _policy_engine_binding(capability_supply: dict[str, Any]) -> dict[str, Any]:
+    """验证策略注册表，并只绑定当前 selected-scope 实际引用的策略。"""
+    registry = read_json(REFERENCES / "policy-packs.json")
+    validation = validate_policy_registry(registry)
+    vectors = run_policy_test_vectors(registry)
+    if validation.get("ok") is not True or vectors.get("ok") is not True:
+        raise ContractError("policy pack 注册表或可执行向量未通过")
+    selected_policy_ids = sorted({
+        str(policy_id)
+        for module in capability_supply.get("module_paths", [])
+        if isinstance(module, dict)
+        for capability in module.get("capability_paths", [])
+        if isinstance(capability, dict)
+        for policy_id in capability.get("policy_pack_ids", [])
+        if policy_id
+    })
+    known_policy_ids = set(validation.get("policy_pack_ids", []))
+    if not set(selected_policy_ids) <= known_policy_ids:
+        raise ContractError("selected-scope 引用了未登记 policy pack")
+    return {
+        "engine_version": validation["engine_version"],
+        "registry_sha256": validation["registry_sha256"],
+        "maturity": "executable_ready",
+        "selected_scope_only": True,
+        "selected_policy_ids": selected_policy_ids,
+        "test_vector_count": vectors["test_vector_count"],
+        "test_vectors_passed": vectors["passed"],
+        "truth_isolation": "policy_state_never_overwrites_mastery_business_truth_or_completion_evidence",
+        "external_operation_boundary": "manual_handoff_until_independent_host_receipt",
+    }
+
+
 def respond(run_dir: Path, event: dict[str, Any], supplied_sources: dict[str, Any] | None = None) -> dict[str, Any]:
     run = load_run(run_dir)
     events = read_json(run_dir / "events.json")
@@ -324,7 +531,7 @@ def respond(run_dir: Path, event: dict[str, Any], supplied_sources: dict[str, An
     if supplied_sources is not None:
         writes["sources.json"] = _validated_sources(supplied_sources)
 
-    requirements = read_json(run_dir / "requirements.json")
+    requirements = _ensure_scene_session(read_json(run_dir / "requirements.json"))
     if intent == "answer":
         require_state(run, "clarifying")
         decision_id = recorded.get("decision_id")
@@ -337,6 +544,49 @@ def respond(run_dir: Path, event: dict[str, Any], supplied_sources: dict[str, An
         resolution = recorded.get("resolution_status") or "confirmed"
         if resolution not in {"confirmed", "blocked"}:
             raise ContractError("resolution_status 只能是 confirmed/blocked")
+        if decision_id == "scene-discovery":
+            supplied_discovery = recorded.get("normalized_value")
+            if not isinstance(supplied_discovery, dict) or not isinstance(supplied_discovery.get("route"), dict):
+                raise ContractError("场景厘清回答必须由宿主提供 request 与语义 route")
+            new_request = str(supplied_discovery.get("request") or recorded["raw_text"]).strip()
+            route = route_request(new_request, supplied_discovery["route"])
+            session = requirements["scene_session"]
+            question_count = int(session.get("question_count", 0)) + 1
+            if question_count > int(session.get("question_limit", QUESTION_LIMIT_PER_SCENE)):
+                raise ContractError("每个场景的关键问题不得超过五轮")
+            requirements = _new_requirements(
+                new_request,
+                route,
+                session_id=str(session["session_id"]),
+                question_count=question_count,
+            )
+            requirements["scene_discovery"] = {
+                "status": "confirmed",
+                "value": {"request": new_request, "route": route},
+                "evidence_refs": [recorded["event_id"]],
+            }
+            run["active_request"] = new_request
+            run["request_binding"] = {
+                "request_sha256": digest_bytes(new_request.encode("utf-8")),
+                "request_event_id": recorded["event_id"],
+            }
+            missing = [row for row in requirements["critical_decisions"] if row["status"] == "missing"]
+            run = transition(
+                run,
+                "clarifying" if missing else "intake",
+                "needs_answer" if missing else "ready_to_propose",
+                "scene_discovered",
+                {"primary_domain": route["primary_domain"], "scene_session_id": session["session_id"]},
+            )
+            writes["requirements.json"] = requirements
+            writes["run.json"] = run
+            commit(run_dir, writes)
+            return {
+                "status": run["status"],
+                "state": run["state"],
+                "next": _next(run, requirements),
+                "scene_session": requirements["scene_session"],
+            }
         decision_value = _resolved_decision_value(decision, recorded["normalized_value"])
         decision.update({"status": resolution, "value": decision_value, "evidence_refs": [recorded["event_id"]]})
         requirements["critical_decisions"] = decisions
@@ -355,15 +605,51 @@ def respond(run_dir: Path, event: dict[str, Any], supplied_sources: dict[str, An
             snapshot["core_modules"] = [available[module_id] for module_id in selected_module_ids]
             snapshot["optional_modules"] = [row for module_id, row in available.items() if module_id not in selected_module_ids]
             snapshot["selection_reason"] = "用户在澄清阶段确认的学习内容范围"
+            snapshot["recommended_capability_ids"] = _capabilities_for_modules(snapshot, selected_module_ids)
+            snapshot["capability_supply"] = _compiled_selected_supply(
+                snapshot,
+                selected_module_ids,
+                list(snapshot["recommended_capability_ids"]),
+            )
+            capability_decision = next(
+                (row for row in decisions if row.get("decision_id") == "learning-capabilities" and row.get("status") == "missing"),
+                None,
+            )
+            if capability_decision:
+                capability_decision["recommended_value"] = list(snapshot["recommended_capability_ids"])
             snapshot.pop("recommendation_sha256", None)
             snapshot["recommendation_sha256"] = digest_bytes(canonical(snapshot))
             requirements["recommendation_snapshot"] = snapshot
-        requirements["question_count"] = int(requirements.get("question_count", 0)) + 1
+        if decision_id == "learning-capabilities" and resolution == "confirmed":
+            snapshot = dict(requirements["recommendation_snapshot"])
+            selected_module_ids = [row["module_id"] for row in snapshot.get("core_modules", [])]
+            selected_capability_ids = _validate_capability_selection(snapshot, selected_module_ids, decision_value)
+            snapshot["selected_capability_ids"] = selected_capability_ids
+            snapshot["capability_supply"] = _compiled_selected_supply(
+                snapshot,
+                selected_module_ids,
+                selected_capability_ids,
+            )
+            snapshot.pop("recommendation_sha256", None)
+            snapshot["recommendation_sha256"] = digest_bytes(canonical(snapshot))
+            requirements["recommendation_snapshot"] = snapshot
+        session = requirements["scene_session"]
+        # 分类来自运行时已知的边界 ID，不接受宿主自报类型绕过普通澄清上限。
+        is_authorization = decision_id in BOUNDARY_DECISION_IDS
+        counter = "authorization_question_count" if is_authorization else "question_count"
+        session[counter] = int(session.get(counter, 0)) + 1
+        requirements["question_count"] = session["question_count"]
+        requirements["authorization_question_count"] = int(session.get("authorization_question_count", 0))
         requirements["updated_at"] = now()
-        if requirements["question_count"] > requirements["question_limit"]:
-            raise ContractError("关键问题不得超过三轮")
+        if not is_authorization and session["question_count"] > int(session.get("question_limit", requirements.get("question_limit", QUESTION_LIMIT_PER_SCENE))):
+            raise ContractError("每个场景的普通需求和偏好澄清不得超过五轮")
         missing = [row for row in decisions if row["status"] == "missing"]
-        run = transition(run, "clarifying" if missing else "intake", "needs_answer" if missing else "ready_to_propose", "decision_recorded", {"decision_id": decision_id})
+        run = transition(run, "clarifying" if missing else "intake", "needs_answer" if missing else "ready_to_propose", "decision_recorded", {
+            "decision_id": decision_id,
+            "scene_session_id": session["session_id"],
+            "question_count": session["question_count"],
+            "authorization_question_count": int(session.get("authorization_question_count", 0)),
+        })
         writes["requirements.json"] = requirements
     elif intent == "approve_product":
         require_state(run, "awaiting_product_confirmation")
@@ -391,13 +677,45 @@ def respond(run_dir: Path, event: dict[str, Any], supplied_sources: dict[str, An
         writes["design.json"] = design
         run = transition(run, "candidate_built", "visual_approved", "candidate_visual_approved", {"event_id": recorded["event_id"], "build_id": lock["build_id"]})
     elif intent == "revise_product":
-        require_state(run, "awaiting_product_confirmation")
+        require_state(
+            run,
+            "awaiting_product_confirmation",
+            "ready_to_build",
+            "candidate_built",
+            "evaluation_failed",
+            "local_delivered",
+        )
         product = read_json(run_dir / "product.json")
-        product.setdefault("revisions", []).append({"event_id": recorded["event_id"], "raw_text": recorded["raw_text"], "recorded_at": now()})
+        previous_candidate_sha256 = None
+        if (run_dir / "candidate-lock.json").is_file():
+            previous_candidate_sha256 = read_json(run_dir / "candidate-lock.json").get("candidate_sha256")
+        product.setdefault("revisions", []).append({
+            "event_id": recorded["event_id"],
+            "raw_text": recorded["raw_text"],
+            "recorded_at": now(),
+            "previous_state": run["state"],
+            "previous_candidate_sha256": previous_candidate_sha256,
+        })
         product["confirmation"] = {"status": "revision_requested", "event_id": recorded["event_id"]}
         product["updated_at"] = now()
         writes["product.json"] = product
-        run = transition(run, "intake", "needs_reproposal", "product_revision_requested", {"event_id": recorded["event_id"]})
+        if (run_dir / "delivery.json").is_file():
+            delivery = read_json(run_dir / "delivery.json")
+            delivery.setdefault("local", {})["state"] = "superseded_by_product_revision"
+            delivery["local"]["superseded_candidate_sha256"] = previous_candidate_sha256
+            delivery["local"]["updated_at"] = now()
+            delivery["updated_at"] = now()
+            writes["delivery.json"] = delivery
+        if (run_dir / "evidence.json").is_file():
+            evidence = read_json(run_dir / "evidence.json")
+            evidence["status"] = "superseded_by_product_revision"
+            evidence["updated_at"] = now()
+            writes["evidence.json"] = evidence
+        run = transition(run, "intake", "needs_reproposal", "product_revision_requested", {
+            "event_id": recorded["event_id"],
+            "previous_candidate_sha256": previous_candidate_sha256,
+            "storage_continuity": "same_product_id_required",
+        })
     elif intent == "reject_visual":
         _require_current_candidate_binding(run_dir, recorded)
         require_state(run, "candidate_built", "evaluation_failed", "local_delivered")
@@ -430,24 +748,42 @@ def respond(run_dir: Path, event: dict[str, Any], supplied_sources: dict[str, An
             )
     elif intent == "renderer_revised":
         require_state(run, "candidate_built")
-        if run.get("status") != "renderer_revision_required":
-            raise ContractError("只有等待 renderer 修订的候选可以恢复构建")
-        run = transition(run, "ready_to_build", "renderer_revision_ready", "renderer_revised", {"event_id": recorded["event_id"]})
+        previous_status = run.get("status")
+        if previous_status not in {"renderer_revision_required", "needs_visual_confirmation"}:
+            raise ContractError("只有等待视觉确认或 renderer 修订的候选可以恢复构建")
+        run = transition(run, "ready_to_build", "renderer_revision_ready", "renderer_revised", {
+            "event_id": recorded["event_id"],
+            "previous_status": previous_status,
+            "visual_confirmation_required_for_new_candidate": True,
+        })
     elif intent == "switch_scene":
         supplied_switch = recorded.get("normalized_value")
         if isinstance(supplied_switch, dict):
             new_request = str(supplied_switch.get("request") or recorded["raw_text"]).strip()
-            route = route_request(new_request, supplied_switch.get("route"))
+            supplied_route = supplied_switch.get("route")
         else:
-            raise ContractError("切换场景必须由宿主 Agent 提供新的 route 选择，不能按关键词猜测")
-        requirements = _new_requirements(new_request, route)
+            new_request = recorded["raw_text"]
+            supplied_route = None
+        if supplied_route is None:
+            route = None
+            requirements = _discovery_requirements(new_request)
+        elif isinstance(supplied_route, dict):
+            route = route_request(new_request, supplied_route)
+            requirements = _new_requirements(new_request, route)
+        else:
+            raise ContractError("切换场景的 route 必须是对象或省略以进入场景厘清")
         run["active_request"] = new_request
         run["request_binding"] = {
             "request_sha256": digest_bytes(new_request.encode("utf-8")),
             "request_event_id": recorded["event_id"],
         }
         state = "clarifying" if requirements["critical_decisions"] else "intake"
-        run = transition(run, state, "needs_answer" if state == "clarifying" else "ready_to_propose", "scene_switched", {"primary_domain": route["primary_domain"]})
+        run = transition(run, state, "needs_answer" if state == "clarifying" else "ready_to_propose", "scene_switched", {
+            "primary_domain": route["primary_domain"] if route else None,
+            "route_status": requirements["scene_session"]["route_status"],
+            "scene_session_id": requirements["scene_session"]["session_id"],
+            "question_count": 0,
+        })
         writes["requirements.json"] = requirements
         if (run_dir / "product.json").is_file():
             old_product = read_json(run_dir / "product.json")
@@ -457,7 +793,12 @@ def respond(run_dir: Path, event: dict[str, Any], supplied_sources: dict[str, An
 
     writes["run.json"] = run
     commit(run_dir, writes)
-    return {"status": run["status"], "state": run["state"], "next": _next(run, requirements)}
+    return {
+        "status": run["status"],
+        "state": run["state"],
+        "next": _next(run, requirements),
+        "scene_session": requirements.get("scene_session"),
+    }
 
 
 def _validate_product(value: dict[str, Any], requirements: dict[str, Any], events: dict[str, Any], sources: dict[str, Any]) -> dict[str, Any]:
@@ -522,6 +863,10 @@ def _validate_product(value: dict[str, Any], requirements: dict[str, Any], event
             "profile_id": recommendation.get("profile_id"),
             "recommendation_sha256": recommendation["recommendation_sha256"],
             "selected_core_module_ids": [row["module_id"] for row in recommendation["core_modules"]],
+            "selected_capability_ids": list(
+                recommendation.get("selected_capability_ids")
+                or recommendation.get("recommended_capability_ids", [])
+            ),
             "optional_module_ids": [row["module_id"] for row in recommendation["optional_modules"]],
             "user_changes": [],
         }
@@ -535,6 +880,16 @@ def _validate_product(value: dict[str, Any], requirements: dict[str, Any], event
         raise ContractError("产品必须从内容包选择 4–15 个不重复的核心模块")
     if not set(selected_module_ids) <= set(known_modules):
         raise ContractError("产品选择了内容包之外的模块")
+    supplied_capability_ids = supplied_plan.get("selected_capability_ids")
+    if supplied_capability_ids is None:
+        supplied_capability_ids = recommendation.get("selected_capability_ids") or _capabilities_for_modules(
+            recommendation, selected_module_ids,
+        )
+    selected_capability_ids = _validate_capability_selection(
+        recommendation,
+        selected_module_ids,
+        supplied_capability_ids,
+    )
     optional_module_ids = supplied_plan.get("optional_module_ids", [])
     if not isinstance(optional_module_ids, list) or not set(optional_module_ids) <= set(known_modules) or set(optional_module_ids) & set(selected_module_ids):
         raise ContractError("可选模块库无效或与核心模块重复")
@@ -695,6 +1050,17 @@ def _validate_product(value: dict[str, Any], requirements: dict[str, Any], event
     result["capabilities"] = normalized_capabilities
     result["module_extensions"] = extensions
     result["design_brief"] = brief
+    capability_supply_snapshot = _compiled_selected_supply(
+        recommendation,
+        list(selected_module_ids),
+        selected_capability_ids,
+    )
+    compiled_scene = capability_supply_snapshot.get("scene_profile", {})
+    composition_contract = compile_composition(
+        str(compiled_scene.get("scene_profile_id") or ""),
+        list(selected_module_ids),
+    )
+    theme_contract = compile_theme_contract(str(compiled_scene.get("scene_profile_id") or ""))
     result["recommendation_plan"] = {
         "catalog_id": supplied_plan["catalog_id"],
         "pack_id": supplied_plan["pack_id"],
@@ -702,11 +1068,30 @@ def _validate_product(value: dict[str, Any], requirements: dict[str, Any], event
         "learning_stage": dict(recommendation.get("learning_stage") or {}),
         "recommendation_sha256": supplied_plan["recommendation_sha256"],
         "selected_core_module_ids": list(selected_module_ids),
+        "selected_capability_ids": selected_capability_ids,
+        "selected_capabilities_by_module": {
+            module_id: [
+                capability_id
+                for capability_id in recommendation.get("capabilities_by_module", {}).get(module_id, [])
+                if capability_id in selected_capability_ids
+            ]
+            for module_id in selected_module_ids
+        },
         "optional_module_ids": list(optional_module_ids),
         "user_changes": list(supplied_plan.get("user_changes", [])),
         "surface_registry_version": recommendation["surface_registry_version"],
         "starter_contract_version": recommendation["starter_contract_version"],
+        "capability_supply_snapshot": capability_supply_snapshot,
+        "composition_contract": composition_contract,
+        "theme_contract": theme_contract,
     }
+    result["recommendation_plan"]["policy_engine_binding"] = _policy_engine_binding(
+        result["recommendation_plan"]["capability_supply_snapshot"]
+    )
+    if recommendation.get("domain_id") == "education-learning":
+        supplied_selection = supplied_plan.get("learning_content_selection")
+        selected_atoms = supplied_selection.get("selected_atom_ids") if isinstance(supplied_selection, dict) else None
+        result["recommendation_plan"]["learning_content_selection"] = learning_content_selection(selected_atoms)
     result["recommendation_options"] = [
         {
             "module_id": module_id,
@@ -718,6 +1103,14 @@ def _validate_product(value: dict[str, Any], requirements: dict[str, Any], event
             "implementation_status": "available_before_confirmation",
         }
         for module_id in optional_module_ids
+    ]
+    capability_by_id = {
+        row["capability_id"]: row for row in recommendation.get("capability_options", [])
+    }
+    result["selected_capability_options"] = [
+        capability_by_id[capability_id]
+        for capability_id in selected_capability_ids
+        if capability_id in capability_by_id
     ]
     if recommendation.get("domain_id") == "education-learning":
         priority = next(
@@ -771,6 +1164,12 @@ def _product_summary(product: dict[str, Any]) -> str:
                 f"练习方式为{'、'.join(feature['modes'])}；完成后{feature['completion']}；"
                 f"{feature['review_trigger']} 边界：{feature['guardrail']}"
             )
+        selection = product.get("recommendation_plan", {}).get("learning_content_selection", {})
+        lines.append(
+            f"- 正式内容：v{selection.get('source_product_version', '1.7.2')}；"
+            f"已选择 {len(selection.get('selected_atom_ids', []))} 个学习 atom，"
+            f"装配 {len(selection.get('eligible_item_ids', []))} 条正式内容。"
+        )
     plan = product.get("recommendation_plan", {})
     selected_ids = set(plan.get("selected_core_module_ids", []))
     capability_by_module = {row.get("recommendation_module_id"): row for row in product["capabilities"]}
@@ -784,6 +1183,13 @@ def _product_summary(product: dict[str, Any]) -> str:
                 weekday_labels = {1: "周一", 2: "周二", 3: "周三", 4: "周四", 5: "周五", 6: "周六", 7: "周日"}
                 schedule = "、".join(weekday_labels[day] for day in extension.get("weekdays", []))
                 lines.append(f"  - 用户周期事项：{extension.get('title')}（每周 {schedule}）")
+    selected_capabilities = product.get("selected_capability_options", [])
+    if selected_capabilities:
+        lines.extend(["", "## 已确定的能力项"])
+        lines.extend(
+            f"- **{row.get('title')}**：{row.get('primary_action')}；完成后{row.get('result_contract')}"
+            for row in selected_capabilities
+        )
     lines.extend(["", "## 还可以加入"])
     optional_rows = product.get("recommendation_options", [])
     if optional_rows:
@@ -802,45 +1208,230 @@ def _product_summary(product: dict[str, Any]) -> str:
     data_line = "- 个人数据只保存在当前设备；支持导出、清空和导入恢复。"
     if policy.get("sensitive_data") == "real_data_local_only_with_explicit_consent":
         data_line = "- 你已明确授权录入真实数据：仅保存在当前设备；请勿在共享设备使用，可随时导出或清空。"
-    lines.extend(["", "## 数据与交付边界", f"- 设备：{RESPONSIVE_DEVICE_LABEL}", data_line])
+    lines.extend(["", "## 数据与交付边界", f"- 设备：{RESPONSIVE_DEVICE_LABEL}", data_line, "- 页面会标明本机保存、导入导出、剪贴板和本地提醒是否还能用；关掉某项可选能力不算失败。", "- 第一次打开会看到短说明：先做一件事、数据只在这台设备、换电脑前先导出；电脑 Chrome 可用应用窗口打开，但不表示已经安装或已经上线。"])
     source_policy = policy.get("content_source")
     if isinstance(source_policy, dict):
         if source_policy.get("mode") == "user_provided_or_official_verified":
             lines.append(f"- 学习内容：使用你提供或官方可核验的材料（{source_policy.get('version_or_region')}）；仅在 {source_policy.get('scope')} 内使用。")
         else:
             lines.append("- 学习内容：使用通用内容，不宣称与特定教材、真题或考试大纲对齐。")
-    lines.extend(["- 联网、多人协作、账号操作、支付与自动发布不在当前本地版本内；如需发布，在本地交付后进入独立宿主发布流程，并以真实链接和内容校验回执为准。", "", "你可以自然回复同意开始制作，或直接指出需要修改的内容。", ""])
+    lines.extend(["- 联网、多人协作、账号操作、支付与自动发布不在当前本地版本内；如需发布，在本地交付后进入独立宿主发布流程，并以真实链接和内容校验回执为准。"])
+    diff = product.get("revision_diff") if isinstance(product.get("revision_diff"), dict) else None
+    if diff and diff.get("has_changes"):
+        lines.extend(["", "## 相对上一版的变化"])
+        if diff.get("pack_changed"):
+            lines.append(f"- 组合包：{diff.get('previous_pack_id') or '无'} → {diff.get('current_pack_id') or '无'}")
+        if diff.get("added_module_ids"):
+            lines.append("- 新加入模块：" + "、".join(diff["added_module_ids"]))
+        if diff.get("removed_module_ids"):
+            lines.append("- 拿掉的模块：" + "、".join(diff["removed_module_ids"]) + "。这些模块里已有的本机记录会进未映射区，加回来时还能恢复。")
+        for row in diff.get("field_changes") or []:
+            lost = "、".join(row.get("lost_fields") or [])
+            gained = "、".join(row.get("gained_fields") or [])
+            bits = [part for part in (f"少了 {lost}" if lost else "", f"多了 {gained}" if gained else "") if part]
+            if bits:
+                lines.append(f"- {row.get('module_id')}：" + "；".join(bits))
+    lines.extend(["", "你可以自然回复同意开始制作，或直接指出需要修改的内容。", ""])
     return "\n".join(lines)
+
+
+def _slug_product_id(title: str, fallback: str) -> str:
+    ascii_slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    if re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", ascii_slug or ""):
+        return ascii_slug[:48]
+    return fallback
+
+
+def draft_product_from_snapshot(
+    requirements: dict[str, Any],
+    events: dict[str, Any],
+    *,
+    product_id: str | None = None,
+    title: str | None = None,
+    sources: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """按当前推荐快照生成可提案的产品合同，供宿主 Agent 不必手写全部字段。"""
+    snapshot = requirements.get("recommendation_snapshot")
+    if not isinstance(snapshot, dict) or not snapshot.get("recommendation_sha256"):
+        raise ContractError("还没有推荐快照，不能按快照提案")
+    selected = [row for row in snapshot.get("core_modules", []) if isinstance(row, dict) and row.get("module_id")]
+    if not 4 <= len(selected) <= 15:
+        raise ContractError("推荐快照的核心模块必须是 4–15 个")
+    request_events = [row for row in events.get("events", []) if isinstance(row, dict) and row.get("event_id")]
+    if not request_events:
+        raise ContractError("run 缺少原始请求事件")
+    request_event_id = str(request_events[0]["event_id"])
+    request_text = str(requirements.get("request_text") or "").strip()
+    scene = (snapshot.get("capability_supply") or {}).get("scene_profile") or {}
+    scene_label = str(scene.get("label") or snapshot.get("pack_label") or "本地工作台")
+    resolved_title = (title or scene_label).strip()
+    if not resolved_title:
+        raise ContractError("产品标题不能为空")
+    fallback_id = f"wb-{digest_bytes(f'{request_event_id}:{resolved_title}'.encode('utf-8'))[:12]}"
+    resolved_id = (product_id or "").strip() or _slug_product_id(resolved_title, fallback_id)
+    work_objects = []
+    capabilities = []
+    for module in selected:
+        module_id = str(module["module_id"])
+        object_id = f"obj-{module_id}"
+        work_objects.append({"work_object_id": object_id, "name": module.get("name") or module_id})
+        capabilities.append({
+            "capability_id": f"cap-{module_id}",
+            "recommendation_module_id": module_id,
+            "name": module.get("name") or module_id,
+            "description": module.get("description") or module.get("name") or module_id,
+            "mode": "in_page",
+            "surface": module["surface"],
+            "work_object_ids": [object_id],
+            "oracle": {"input_value": f"{module.get('name') or module_id}：完成本模块一次真实操作并保存"},
+        })
+    privacy = next(
+        (
+            row for row in requirements.get("critical_decisions", [])
+            if row.get("decision_id") == "privacy-boundary" and row.get("status") == "confirmed"
+        ),
+        None,
+    )
+    privacy_default = next(
+        (row for row in requirements.get("safe_defaults", []) if row.get("decision_id") == "privacy-boundary"),
+        None,
+    )
+    sensitive = (privacy or privacy_default or {}).get("value") or "synthetic_or_redacted"
+    data_policy: dict[str, Any] = {
+        "storage": "local_only",
+        "sensitive_data": sensitive,
+        "export_import": True,
+    }
+    if sensitive == "real_data_local_only_with_explicit_consent":
+        data_policy.update({
+            "explicit_consent": True,
+            "authorized_data_controller": "user_or_authorized_controller",
+            "shared_device_warning_acknowledged": True,
+            "retention": "until_user_clears_or_replaces_local_data",
+        })
+    content = next(
+        (
+            row for row in requirements.get("critical_decisions", [])
+            if row.get("decision_id") == "content-source-boundary" and row.get("status") == "confirmed"
+        ),
+        None,
+    )
+    content_default = next(
+        (row for row in requirements.get("safe_defaults", []) if row.get("decision_id") == "content-source-boundary"),
+        None,
+    )
+    if content or content_default:
+        data_policy["content_source"] = {"mode": (content or content_default).get("value") or "generic_non_claimed"}
+        if data_policy["content_source"]["mode"] == "user_provided_or_official_verified":
+            source_rows = [row for row in (sources or {}).get("sources", []) if isinstance(row, dict) and row.get("source_id")]
+            if not source_rows:
+                raise ContractError("采用用户提供或官方来源时，快照提案需要已登记来源")
+            data_policy["content_source"].update({
+                "source_refs": [str(row["source_id"]) for row in source_rows],
+                "version_or_region": "；".join(dict.fromkeys(str(row.get("version_or_region") or "") for row in source_rows)),
+                "scope": "；".join(dict.fromkeys(str(row.get("scope") or "") for row in source_rows)),
+                "copyright_boundary": "；".join(dict.fromkeys(str(row.get("copyright_boundary") or "") for row in source_rows)),
+            })
+    boundaries = [
+        {
+            "boundary_id": row["decision_id"],
+            "mode": "unsupported",
+            "reason": str(row.get("question") or "当前场景不支持该决策"),
+        }
+        for row in requirements.get("critical_decisions", [])
+        if row.get("status") == "blocked" and row.get("decision_id")
+    ]
+    work_mode = snapshot.get("default_work_mode")
+    if work_mode not in {"orient", "execute", "review", "manage"}:
+        work_mode = "execute"
+    return {
+        "product_id": resolved_id,
+        "title": resolved_title,
+        "facts": [{
+            "fact_id": "fact-request",
+            "text": request_text or scene_label,
+            "evidence_refs": [request_event_id],
+        }],
+        "outcomes": [{
+            "outcome_id": "outcome-main",
+            "text": scene_label if scene_label != resolved_title else f"用当前设备完成{resolved_title}并保存",
+        }],
+        "work_objects": work_objects,
+        "core_flow": [f"打开{row.get('name') or row['module_id']}" for row in selected[:4]] + ["保存到当前设备"],
+        "capabilities": capabilities,
+        "data_policy": data_policy,
+        "device_target": RESPONSIVE_DEVICE_TARGET,
+        "design_brief": {
+            "primary_capability_id": capabilities[0]["capability_id"],
+            "shortcut_capability_ids": [row["capability_id"] for row in capabilities[1:4]],
+            "first_use_state": "empty",
+            "work_mode": work_mode,
+        },
+        "boundaries": boundaries,
+    }
+
+
+def propose_from_snapshot(
+    run_dir: Path,
+    *,
+    product_id: str | None = None,
+    title: str | None = None,
+) -> dict[str, Any]:
+    """宿主默认提案入口：按当前快照生成产品合同再走同一条 propose。"""
+    requirements = _ensure_scene_session(read_json(run_dir / "requirements.json"))
+    events = read_json(run_dir / "events.json")
+    sources = read_json(run_dir / "sources.json") if (run_dir / "sources.json").is_file() else {"sources": []}
+    return propose(
+        run_dir,
+        draft_product_from_snapshot(requirements, events, product_id=product_id, title=title, sources=sources),
+    )
 
 
 def propose(run_dir: Path, supplied: dict[str, Any]) -> dict[str, Any]:
     run = load_run(run_dir)
     require_state(run, "intake")
-    requirements = read_json(run_dir / "requirements.json")
+    requirements = _ensure_scene_session(read_json(run_dir / "requirements.json"))
     events = read_json(run_dir / "events.json")
     sources = read_json(run_dir / "sources.json") if (run_dir / "sources.json").is_file() else {"sources": []}
     previous_revisions = []
+    previous_product_id = None
     if (run_dir / "product.json").is_file():
-        previous_revisions = read_json(run_dir / "product.json").get("revisions", [])
+        previous_product = read_json(run_dir / "product.json")
+        previous_revisions = previous_product.get("revisions", [])
+        if previous_product.get("confirmation", {}).get("status") == "revision_requested":
+            previous_product_id = previous_product.get("product_id")
     value = dict(supplied)
+    if previous_product_id and value.get("product_id") != previous_product_id:
+        raise ContractError("同一工作台的 Vibe 调整必须保留 product_id，以延续本机数据；需要新产品时请新建或切换任务")
     value["revisions"] = previous_revisions
     product = _validate_product(value, requirements, events, sources)
+    revision_diff = None
+    writes: dict[str, Any] = {}
+    if (run_dir / "product.json").is_file():
+        from .atomic_engine import product_revision_diff
+
+        previous_product = read_json(run_dir / "product.json")
+        revision_diff = product_revision_diff(previous_product, product)
+        product["revision_diff"] = revision_diff
+        writes["revision_diff.json"] = {"schema_version": 1, **revision_diff, "updated_at": now()}
     product["presentation"] = {"conversation_text": _product_summary(product), "content_sha256": ""}
     product["presentation"]["content_sha256"] = digest_bytes(product["presentation"]["conversation_text"].encode("utf-8"))
     run = transition(run, "awaiting_product_confirmation", "needs_confirmation", "product_proposed", {"product_id": product["product_id"]})
-    commit(run_dir, {"product.json": product, "run.json": run})
+    writes.update({"product.json": product, "run.json": run})
+    commit(run_dir, writes)
     return {"status": run["status"], "state": run["state"], "conversation_text": product["presentation"]["conversation_text"], "next": "respond"}
 
 
 def status(run_dir: Path, verbose: bool = False) -> dict[str, Any]:
     run = load_run(run_dir)
-    requirements = read_json(run_dir / "requirements.json")
+    requirements = _ensure_scene_session(read_json(run_dir / "requirements.json"))
     result: dict[str, Any] = {
         "status": "pass", "state": run["state"], "run_status": run["status"],
         "release": run["release"], "next": _next(run, requirements),
     }
     if verbose:
         result["run"] = run
+        result["scene_session"] = requirements.get("scene_session")
         result["critical_decisions"] = requirements.get("critical_decisions", [])
         result["artifacts"] = sorted(path.name for path in run_dir.iterdir() if path.is_file() and not path.name.startswith("."))
         if (run_dir / "delivery.json").is_file():

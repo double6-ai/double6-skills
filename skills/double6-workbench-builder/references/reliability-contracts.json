@@ -1,0 +1,247 @@
+{
+  "schema_version": 1,
+  "contract_version": "double6_reliability_envelope_v1",
+  "skill_version": "1.1.0",
+  "guard_count": 13,
+  "guards": [
+    {
+      "guard_id": "reliability.selected-scope",
+      "label": "只编译已选范围",
+      "maturity": "executable_ready",
+      "activation": {
+        "type": "always"
+      },
+      "compiler_invariant": "selected_scope_only",
+      "required_policy_pack_ids": [],
+      "required_atomic_capability_ids": [],
+      "failure_state": "blocked_selected_scope_missing",
+      "claim_boundary": "只证明编译快照不携带未选模块，不证明上游选择正确",
+      "source_mechanism_family": "general.selected-scope-contract",
+      "adoption_decision": "adopt"
+    },
+    {
+      "guard_id": "reliability.preview-confirm-undo",
+      "label": "导入前预览、确认与可撤销",
+      "maturity": "executable_ready",
+      "activation": {
+        "type": "always"
+      },
+      "required_policy_pack_ids": [
+        "policy.reversible-constraint"
+      ],
+      "required_atomic_capability_ids": [
+        "atom.shared.import-backup-preview"
+      ],
+      "failure_state": "blocked_preview_confirmation_missing",
+      "claim_boundary": "只约束本地导入事务，不声称外部系统可回滚",
+      "source_mechanism_family": "interaction.preview-confirm-undo",
+      "adoption_decision": "adopt"
+    },
+    {
+      "guard_id": "reliability.import-recovery",
+      "label": "导入失败保持原状态",
+      "maturity": "executable_ready",
+      "activation": {
+        "type": "always"
+      },
+      "required_policy_pack_ids": [
+        "policy.local-sensitive-data-consent",
+        "policy.reversible-constraint"
+      ],
+      "required_atomic_capability_ids": [
+        "atom.shared.import-backup-preview"
+      ],
+      "failure_state": "blocked_recovery_contract_missing",
+      "claim_boundary": "只证明 selected-scope 本地导入具备预览和陈旧状态拒绝，不证明设备级灾备",
+      "source_mechanism_family": "data.migration-recovery",
+      "adoption_decision": "adopt"
+    },
+    {
+      "guard_id": "reliability.sensitive-consent",
+      "label": "敏感数据显式同意",
+      "maturity": "executable_ready",
+      "activation": {
+        "type": "always"
+      },
+      "required_policy_pack_ids": [
+        "policy.local-sensitive-data-consent"
+      ],
+      "required_atomic_capability_ids": [
+        "atom.shared.import-backup-preview"
+      ],
+      "failure_state": "blocked_sensitive_consent_missing",
+      "claim_boundary": "同意仅限本地选定字段，不等于外发授权",
+      "source_mechanism_family": "data.privacy-consent",
+      "adoption_decision": "adopt"
+    },
+    {
+      "guard_id": "reliability.truth-provenance",
+      "label": "来源、时效与真值状态可见",
+      "maturity": "contract_ready",
+      "activation": {
+        "type": "when_any_atom_selected",
+        "ids": [
+          "atom.shared.retrieve-library-item",
+          "atom.shared.generate-review-draft",
+          "atom.shared.record-metric",
+          "atom.shared.summarize-metrics"
+        ]
+      },
+      "required_policy_pack_ids": [],
+      "required_atomic_capability_ids": [],
+      "failure_state": "contract_only_provenance_not_independently_verified",
+      "claim_boundary": "可显示来源缺口与核验状态，但不生成独立来源或事实回执",
+      "source_mechanism_family": "truth.provenance-receipt",
+      "adoption_decision": "adapt"
+    },
+    {
+      "guard_id": "reliability.external-manual-handoff",
+      "label": "外部操作只到人工交接",
+      "maturity": "executable_ready",
+      "activation": {
+        "type": "when_any_atom_selected",
+        "ids": [
+          "atom.shared.confirm-external-operation",
+          "atom.shared.schedule-reminder"
+        ]
+      },
+      "required_policy_pack_ids": [
+        "policy.external-operation-confirmation"
+      ],
+      "required_atomic_capability_ids": [],
+      "failure_state": "blocked_external_confirmation_missing",
+      "claim_boundary": "确认后仍是 manual_handoff/not_executed，绝不声称外部成功",
+      "source_mechanism_family": "external.manual-handoff",
+      "adoption_decision": "adopt"
+    },
+    {
+      "guard_id": "reliability.reward-truth-isolation",
+      "label": "奖励与完成、掌握和业务真值隔离",
+      "maturity": "executable_ready",
+      "activation": {
+        "type": "when_any_policy_selected",
+        "ids": [
+          "policy.reward-truth-isolation"
+        ]
+      },
+      "required_policy_pack_ids": [
+        "policy.reward-truth-isolation"
+      ],
+      "required_atomic_capability_ids": [],
+      "failure_state": "blocked_reward_truth_policy_missing",
+      "claim_boundary": "奖励事件不得改变完成、掌握或业务事实",
+      "source_mechanism_family": "motivation.reward-truth-isolation",
+      "adoption_decision": "adopt"
+    },
+    {
+      "guard_id": "reliability.synthetic-data-default",
+      "label": "高敏领域默认合成或脱敏数据",
+      "maturity": "executable_ready",
+      "activation": {
+        "type": "when_any_policy_selected",
+        "ids": [
+          "policy.synthetic-data-default"
+        ]
+      },
+      "required_policy_pack_ids": [
+        "policy.synthetic-data-default"
+      ],
+      "required_atomic_capability_ids": [],
+      "failure_state": "blocked_synthetic_default_missing",
+      "claim_boundary": "缺少真实数据授权时回退合成示例，不推断真实性",
+      "source_mechanism_family": "starter.synthetic-data",
+      "adoption_decision": "adopt"
+    },
+    {
+      "guard_id": "reliability.state-feedback",
+      "label": "状态、空态、失败与恢复反馈",
+      "maturity": "contract_ready",
+      "activation": {
+        "type": "always"
+      },
+      "required_policy_pack_ids": [],
+      "required_atomic_capability_ids": [],
+      "failure_state": "contract_only_state_feedback_not_fully_evidenced",
+      "claim_boundary": "作为交付合同检查项，不升级为全场景运行成功",
+      "source_mechanism_family": "interaction.state-feedback",
+      "adoption_decision": "adapt"
+    },
+    {
+      "guard_id": "reliability.mobile-a11y",
+      "label": "移动端与可访问性交付门",
+      "maturity": "contract_ready",
+      "activation": {
+        "type": "always"
+      },
+      "required_policy_pack_ids": [],
+      "required_atomic_capability_ids": [],
+      "failure_state": "contract_only_device_acceptance_required",
+      "claim_boundary": "需要真实视口和交互证据，静态移动外观不等于移动端通过",
+      "source_mechanism_family": "interaction.mobile-a11y",
+      "adoption_decision": "adapt"
+    },
+    {
+      "guard_id": "reliability.delivery-identity",
+      "label": "版本、来源、许可证与安装身份",
+      "maturity": "contract_ready",
+      "activation": {
+        "type": "always"
+      },
+      "required_policy_pack_ids": [],
+      "required_atomic_capability_ids": [],
+      "failure_state": "contract_only_delivery_receipt_required",
+      "claim_boundary": "源码通过不等于打包、宿主同步、部署或公开发布成功",
+      "source_mechanism_family": "delivery.version-license-install",
+      "adoption_decision": "adapt"
+    },
+    {
+      "guard_id": "reliability.content-rights",
+      "label": "内容、图片、字体与品牌权利人工复核",
+      "maturity": "contract_ready",
+      "activation": {
+        "type": "domain_in",
+        "ids": [
+          "content-operations",
+          "professional-services",
+          "travel-planning"
+        ]
+      },
+      "required_policy_pack_ids": [],
+      "required_atomic_capability_ids": [],
+      "failure_state": "contract_only_rights_review_required",
+      "claim_boundary": "来源或静态画面不能替代许可证、肖像、字体和发布权利回执",
+      "source_mechanism_family": "content.rights-review",
+      "adoption_decision": "adapt"
+    },
+    {
+      "guard_id": "reliability.child-safety",
+      "label": "儿童内容、数据与家长边界保持",
+      "maturity": "contract_ready",
+      "activation": {
+        "type": "domain_in",
+        "ids": [
+          "education-learning",
+          "teaching-classroom",
+          "exam-preparation"
+        ]
+      },
+      "required_policy_pack_ids": [
+        "policy.guided-practice-safety",
+        "policy.reward-truth-isolation"
+      ],
+      "required_atomic_capability_ids": [],
+      "failure_state": "contract_only_child_review_required",
+      "claim_boundary": "只保持既有安全合同；不新增儿童内容、atom，不升级学习效果或家长同意声称",
+      "source_mechanism_family": "education.child-safety",
+      "adoption_decision": "adopt"
+    }
+  ],
+  "audit": {
+    "source": "189-source coverage-saturation synthesis checkpoint",
+    "full_466_absorption_claimed": false,
+    "raw_social_content_copied": false,
+    "new_scene_profile_count": 0,
+    "new_child_atom_count": 0,
+    "package_or_deploy_performed": false
+  }
+}

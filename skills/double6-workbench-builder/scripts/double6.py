@@ -29,6 +29,7 @@ from double6_runtime import (  # noqa: E402
     evaluate,
     manifest,
     propose,
+    propose_from_snapshot,
     read_json,
     read_text_arg,
     respond,
@@ -55,7 +56,10 @@ def parser() -> argparse.ArgumentParser:
 
     proposal = commands.add_parser("propose", help="提交紧凑产品合同并展示理解稿")
     proposal.add_argument("--run", required=True)
-    proposal.add_argument("--product-file", required=True)
+    proposal.add_argument("--product-file", help="自定义产品合同；默认请用 --from-snapshot")
+    proposal.add_argument("--from-snapshot", action="store_true", help="按当前推荐快照生成产品合同")
+    proposal.add_argument("--title", help="仅与 --from-snapshot 连用，覆盖默认标题")
+    proposal.add_argument("--product-id", help="仅与 --from-snapshot 连用，覆盖自动生成的产品 ID")
 
     build_command = commands.add_parser("build", help="构建一个推荐方向的单文件候选")
     build_command.add_argument("--run", required=True)
@@ -108,7 +112,16 @@ def main(argv: list[str] | None = None) -> int:
                 read_json(Path(args.sources_file)) if args.sources_file else None,
             )
         elif args.command == "propose":
-            result = propose(Path(args.run), read_json(Path(args.product_file)))
+            if args.from_snapshot:
+                if args.product_file:
+                    raise ContractError("--from-snapshot 不能与 --product-file 同时使用")
+                result = propose_from_snapshot(Path(args.run), product_id=args.product_id, title=args.title)
+            else:
+                if not args.product_file:
+                    raise ContractError("propose 需要 --from-snapshot，或提供 --product-file")
+                if args.title or args.product_id:
+                    raise ContractError("--title / --product-id 只能与 --from-snapshot 一起使用")
+                result = propose(Path(args.run), read_json(Path(args.product_file)))
         elif args.command == "build":
             result = build(Path(args.run))
         elif args.command == "evaluate":

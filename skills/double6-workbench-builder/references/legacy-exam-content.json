@@ -1,0 +1,150 @@
+{
+  "contract_version": "legacy_exam_content_v1",
+  "source_version": "1.1.0",
+  "active_by_default": false,
+  "usage": "用于旧题号核对与经用户选择的自定义练习；框架台保持后续本地优化的少量默认题，专用考公继续使用三科 overlay。",
+  "items": [
+    {
+      "kind": "question",
+      "item_id": "exam-q06",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "判断 6",
+      "prompt": "如果今天下雨，那么活动改到室内。今天活动没有改到室内。可推出？",
+      "options": [
+        "今天没有下雨",
+        "今天一定下雨",
+        "活动取消",
+        "无法判断"
+      ],
+      "answer": "今天没有下雨",
+      "explanation": "根据逆否命题：未改到室内可推出没有下雨。",
+      "knowledge_point": "充分条件",
+      "topic": "判断",
+      "difficulty": "进阶",
+      "source_label": "Double6 自编通用题"
+    },
+    {
+      "kind": "question",
+      "item_id": "exam-q07",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "常识 7",
+      "prompt": "关于公文，下列说法正确的是：",
+      "options": [
+        "请示可以一文多事，方便一次批完",
+        "报告可以夹带请示事项",
+        "请示应当一文一事",
+        "通知不能发给下级机关"
+      ],
+      "answer": "请示应当一文一事",
+      "explanation": "请示须一文一事；报告不得夹带请示。这是自编练习，不是某年真题。",
+      "knowledge_point": "公文常识",
+      "topic": "常识",
+      "difficulty": "基础",
+      "source_label": "Double6 自编通用题"
+    },
+    {
+      "kind": "question",
+      "item_id": "exam-q08",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "阅读 8",
+      "prompt": "有评论认为，把“可评估”写进政策还不够。如果评估只看办件量，窗口就会把能快速办完的事项往前排，难办的事项往后拖。作者接下来最可能强调的是：",
+      "options": [
+        "办件量越高说明政策越好",
+        "评估指标会反过来塑造窗口的实际行为",
+        "难办事项应当从统计中剔除",
+        "政策文本写得越长越有效"
+      ],
+      "answer": "评估指标会反过来塑造窗口的实际行为",
+      "explanation": "材料指出指标若只看数量，窗口会挑选好办的事。强调的是评估口径对行为的塑造。",
+      "knowledge_point": "意图推断",
+      "topic": "言语",
+      "difficulty": "进阶",
+      "source_label": "Double6 自编通用题"
+    },
+    {
+      "kind": "question",
+      "item_id": "exam-q09",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "排序 9",
+      "prompt": "按合理顺序排列：①形成结论 ②收集证据 ③提出问题 ④核对来源",
+      "options": [
+        "③②④①",
+        "②③①④",
+        "③④②①",
+        "①②③④"
+      ],
+      "answer": "③②④①",
+      "explanation": "先提出问题，再收集并核对证据，最后形成结论。",
+      "knowledge_point": "流程排序",
+      "topic": "判断",
+      "difficulty": "基础",
+      "source_label": "Double6 自编通用题"
+    },
+    {
+      "kind": "question",
+      "item_id": "exam-q10",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "计算 10",
+      "prompt": "5 人完成同样工作需要 12 天，效率不变时 10 人需要多少天？",
+      "input_type": "number",
+      "answer": "6",
+      "explanation": "总工作量为 5×12=60 人天，60÷10=6 天。",
+      "knowledge_point": "工程问题",
+      "topic": "数量",
+      "difficulty": "进阶",
+      "source_label": "Double6 自编通用题"
+    },
+    {
+      "kind": "question",
+      "item_id": "exam-q11",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "定义 11",
+      "prompt": "“只有完成登记，才能领取材料。”若小李领取了材料，可推出？",
+      "options": [
+        "小李完成了登记",
+        "小李没有登记",
+        "材料不用登记",
+        "无法推出"
+      ],
+      "answer": "小李完成了登记",
+      "explanation": "领取材料以完成登记为必要条件。",
+      "knowledge_point": "必要条件",
+      "topic": "判断",
+      "difficulty": "进阶",
+      "source_label": "Double6 自编通用题"
+    },
+    {
+      "kind": "question",
+      "item_id": "exam-q12",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "表达 12",
+      "prompt": "下面哪句话最简洁？",
+      "options": [
+        "我们必须要认真地加以分析研究。",
+        "我们必须认真分析。",
+        "我们要必须认真进行分析。",
+        "必须我们认真分析研究一下。"
+      ],
+      "answer": "我们必须认真分析。",
+      "explanation": "该句删去了“必须要、加以、研究”等重复成分。",
+      "knowledge_point": "语病与简洁表达",
+      "topic": "言语",
+      "difficulty": "基础",
+      "source_label": "Double6 自编通用题"
+    }
+  ]
+}

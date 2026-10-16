@@ -1,0 +1,524 @@
+{
+  "schema_version": "double6-cet4-original-content/v1",
+  "content_status": "original_non_official_practice",
+  "disclaimer": "全部题目为项目自编练习，非真题，不构成通过保证。写作与翻译只支持人工复核。",
+  "source_contract": {
+    "observed_at": "2026-08-31",
+    "sources": [
+      {
+        "source_id": "cet4-official-syllabus",
+        "publisher": "教育部教育考试院",
+        "title": "全国大学英语四、六级考试大纲",
+        "url": "https://cet.neea.edu.cn/xhtml1/folder/16113/1588-1.htm",
+        "version": "页面所列现行版本，核验于 2026-08-31",
+        "scope": "考试大纲入口与能力范围",
+        "copyright_boundary": "只引用考试结构与范围，不复制或再分发受版权保护的试题"
+      },
+      {
+        "source_id": "cet4-official-assessment-content",
+        "publisher": "教育部教育考试院",
+        "title": "CET4考核内容",
+        "url": "https://cet.neea.edu.cn/xhtml1/report/16123/196-1.htm",
+        "version": "页面内容核验于 2026-08-31",
+        "scope": "写作、听力、阅读、翻译的结构参考",
+        "copyright_boundary": "只采用官方公布的结构信息，练习文本和答案全部自编"
+      }
+    ]
+  },
+  "auto_graded_items": [
+    {
+      "kind": "question",
+      "item_id": "cet4-listen-01",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "听辨 1",
+      "topic": "听辨",
+      "knowledge_point": "地点信息",
+      "prompt": "先点朗读，再选择对话发生在哪里。",
+      "speech_text": "Could you return these books before the library closes at six?",
+      "options": [
+        "At a library",
+        "At a restaurant",
+        "At a station",
+        "At a hospital"
+      ],
+      "answer": "At a library",
+      "explanation": "books、return 和 library closes 指向图书馆场景。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-listen-02",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "听辨 2",
+      "topic": "听辨",
+      "knowledge_point": "时间信息",
+      "prompt": "先点朗读，再选择会议开始时间。",
+      "speech_text": "The meeting was moved from nine thirty to ten fifteen this morning.",
+      "options": [
+        "9:15",
+        "9:30",
+        "10:00",
+        "10:15"
+      ],
+      "answer": "10:15",
+      "explanation": "moved from ... to ... 表示改到 10:15。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-listen-03",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "听辨 3",
+      "topic": "听辨",
+      "knowledge_point": "意图判断",
+      "prompt": "先点朗读，再判断说话人下一步最可能做什么。",
+      "speech_text": "I have finished the slides, but I still need to check the numbers before sending them.",
+      "options": [
+        "Send the slides immediately",
+        "Check the numbers",
+        "Delete the slides",
+        "Ask someone to design them"
+      ],
+      "answer": "Check the numbers",
+      "explanation": "still need to check 明确指出下一步。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-listen-04",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "听辨 4",
+      "topic": "听辨",
+      "knowledge_point": "原因信息",
+      "prompt": "先点朗读，再选择航班延误原因。",
+      "speech_text": "The flight is delayed because heavy fog has reduced visibility near the airport.",
+      "options": [
+        "A technical check",
+        "Heavy fog",
+        "A late passenger",
+        "Strong heat"
+      ],
+      "answer": "Heavy fog",
+      "explanation": "because 后直接给出原因 heavy fog。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-listen-05",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "听辨 5",
+      "topic": "听辨",
+      "knowledge_point": "态度判断",
+      "prompt": "先点朗读，再判断说话人的态度。",
+      "speech_text": "The plan is ambitious, but with a smaller first step, I think it can work.",
+      "options": [
+        "Completely opposed",
+        "Cautiously supportive",
+        "Uninterested",
+        "Certain of failure"
+      ],
+      "answer": "Cautiously supportive",
+      "explanation": "承认 ambitious，同时认为缩小第一步后可行，属于谨慎支持。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-listen-06",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "听辨 6",
+      "topic": "听辨",
+      "knowledge_point": "数字信息",
+      "prompt": "先点朗读，再选择学生最后借了几本书。",
+      "speech_text": "I planned to borrow four books, but one was unavailable, so I took the other three.",
+      "options": [
+        "One",
+        "Two",
+        "Three",
+        "Four"
+      ],
+      "answer": "Three",
+      "explanation": "四本中一本不可借，最后拿了其余三本。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-read-01",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "阅读 1",
+      "topic": "阅读",
+      "knowledge_point": "主旨",
+      "prompt": "A community garden gives residents a place to grow vegetables, but its larger value may be social. People who once passed without speaking now exchange tools, advice, and news. What is the main idea?",
+      "options": [
+        "Gardens only reduce food prices",
+        "The garden also strengthens neighborhood connections",
+        "Residents dislike sharing tools",
+        "Growing vegetables requires professional training"
+      ],
+      "answer": "The garden also strengthens neighborhood connections",
+      "explanation": "转折后的 larger value may be social 是主旨。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-read-02",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "阅读 2",
+      "topic": "阅读",
+      "knowledge_point": "指代",
+      "prompt": "The new bus route is longer than the old one, yet it reaches two hospitals and a college. This makes it more useful to many residents. What does “This” refer to?",
+      "options": [
+        "The old route being shorter",
+        "The route reaching important places",
+        "Residents buying cars",
+        "The college closing"
+      ],
+      "answer": "The route reaching important places",
+      "explanation": "This 指前句中覆盖两所医院和一所大学这一事实。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-read-03",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "阅读 3",
+      "topic": "阅读",
+      "knowledge_point": "推断",
+      "prompt": "Mina keeps her phone in another room while writing. She says the first ten minutes feel uncomfortable, but then she can work for nearly an hour without checking messages. What can be inferred?",
+      "options": [
+        "Her phone is broken",
+        "Removing the phone helps her sustain attention",
+        "She writes only ten minutes",
+        "Messages improve her writing"
+      ],
+      "answer": "Removing the phone helps her sustain attention",
+      "explanation": "移开手机后能持续工作近一小时，支持该推断。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-read-04",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "阅读 4",
+      "topic": "阅读",
+      "knowledge_point": "细节",
+      "prompt": "The museum offers free entry on the first Sunday of each month, but visitors must reserve a time online. Which statement is correct?",
+      "options": [
+        "Entry is free every Sunday",
+        "No reservation is needed",
+        "Free entry requires an online time reservation",
+        "The museum closes on Sundays"
+      ],
+      "answer": "Free entry requires an online time reservation",
+      "explanation": "免费日仍需在线预约时间。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-read-05",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "词汇 1",
+      "topic": "词汇",
+      "knowledge_point": "语境词义",
+      "prompt": "In “The team adopted a flexible schedule,” adopted is closest in meaning to:",
+      "options": [
+        "rejected",
+        "started to use",
+        "forgot",
+        "measured"
+      ],
+      "answer": "started to use",
+      "explanation": "adopt a schedule 表示采用一种安排。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-read-06",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "词汇 2",
+      "topic": "词汇",
+      "knowledge_point": "搭配",
+      "prompt": "Choose the best word: Regular feedback can help students ___ their writing.",
+      "options": [
+        "improve",
+        "borrow",
+        "cancel",
+        "divide"
+      ],
+      "answer": "improve",
+      "explanation": "improve writing 是符合语义的搭配。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-read-07",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "词汇 3",
+      "topic": "词汇",
+      "knowledge_point": "近义辨析",
+      "prompt": "The word “brief” in “a brief conversation” is closest to:",
+      "options": [
+        "short",
+        "angry",
+        "private",
+        "formal"
+      ],
+      "answer": "short",
+      "explanation": "brief 在此表示短暂的。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-read-08",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "词汇 4",
+      "topic": "词汇",
+      "knowledge_point": "连接词",
+      "prompt": "Choose the best connector: The room was small; ___, it was bright and comfortable.",
+      "options": [
+        "however",
+        "therefore",
+        "unless",
+        "because"
+      ],
+      "answer": "however",
+      "explanation": "前后是转折关系。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-read-09",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "阅读 5",
+      "topic": "阅读",
+      "knowledge_point": "作者目的",
+      "prompt": "A notice explains how to separate glass, paper, food waste, and batteries before collection day. What is the notice mainly designed to do?",
+      "options": [
+        "Advertise new products",
+        "Give sorting instructions",
+        "Compare city populations",
+        "Report a sports result"
+      ],
+      "answer": "Give sorting instructions",
+      "explanation": "内容围绕分类方法，目的是提供操作说明。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-read-10",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "阅读 6",
+      "topic": "阅读",
+      "knowledge_point": "逻辑关系",
+      "prompt": "The café reduced disposable cups after offering a small discount to customers who brought their own. Which relationship is described?",
+      "options": [
+        "A policy and its observed result",
+        "A rumor and a denial",
+        "A problem without action",
+        "Two unrelated events"
+      ],
+      "answer": "A policy and its observed result",
+      "explanation": "优惠措施之后一次性杯子减少，是措施与观察结果。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-read-11",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "词汇 5",
+      "topic": "词汇",
+      "knowledge_point": "派生词",
+      "prompt": "Choose the best form: The instructions were clear and easy to ___.",
+      "options": [
+        "follow",
+        "follower",
+        "following",
+        "followed"
+      ],
+      "answer": "follow",
+      "explanation": "to 后接动词原形。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    },
+    {
+      "kind": "question",
+      "item_id": "cet4-read-12",
+      "module_ids": [
+        "exam-practice"
+      ],
+      "title": "词汇 6",
+      "topic": "词汇",
+      "knowledge_point": "语境选择",
+      "prompt": "Choose the best word: Please ___ enough time for the security check before departure.",
+      "options": [
+        "allow",
+        "hide",
+        "waste",
+        "refuse"
+      ],
+      "answer": "allow",
+      "explanation": "allow enough time 表示预留足够时间。",
+      "source_label": "项目自编 · 非真题",
+      "difficulty": "四级基础"
+    }
+  ],
+  "manual_review_items": [
+    {
+      "kind": "manual_review",
+      "item_id": "cet4-write-01",
+      "module_ids": [
+        "exam-materials"
+      ],
+      "title": "写作练习 1",
+      "topic": "写作",
+      "prompt": "Write 120–180 words about one practical way your campus could reduce waste.",
+      "review_checklist": [
+        "观点明确",
+        "至少一个具体做法",
+        "段落衔接可读",
+        "自行检查语法与拼写"
+      ],
+      "source_label": "项目自编 · 需人工复核 · 非真题",
+      "result": "保存草稿后由本人或老师人工复核；页面不自动评分"
+    },
+    {
+      "kind": "manual_review",
+      "item_id": "cet4-write-02",
+      "module_ids": [
+        "exam-materials"
+      ],
+      "title": "写作练习 2",
+      "topic": "写作",
+      "prompt": "Write 120–180 words explaining how students can protect focused study time.",
+      "review_checklist": [
+        "回应题目",
+        "论据具体",
+        "结尾回扣观点",
+        "人工复核表达"
+      ],
+      "source_label": "项目自编 · 需人工复核 · 非真题",
+      "result": "保存草稿后由本人或老师人工复核；页面不自动评分"
+    },
+    {
+      "kind": "manual_review",
+      "item_id": "cet4-write-03",
+      "module_ids": [
+        "exam-materials"
+      ],
+      "title": "写作练习 3",
+      "topic": "写作",
+      "prompt": "Write 120–180 words describing a useful change in your community.",
+      "review_checklist": [
+        "交代变化",
+        "说明影响",
+        "使用具体例子",
+        "人工复核表达"
+      ],
+      "source_label": "项目自编 · 需人工复核 · 非真题",
+      "result": "保存草稿后由本人或老师人工复核；页面不自动评分"
+    },
+    {
+      "kind": "manual_review",
+      "item_id": "cet4-translate-01",
+      "module_ids": [
+        "exam-materials"
+      ],
+      "title": "翻译练习 1",
+      "topic": "翻译",
+      "prompt": "近年来，越来越多的城市图书馆延长开放时间，为读者提供更灵活的学习空间。",
+      "review_checklist": [
+        "信息完整",
+        "时态与主谓一致",
+        "专名和数字核对",
+        "由本人或老师复核"
+      ],
+      "source_label": "项目自编 · 需人工复核 · 非真题",
+      "result": "保存草稿后由本人或老师人工复核；页面不自动评分"
+    },
+    {
+      "kind": "manual_review",
+      "item_id": "cet4-translate-02",
+      "module_ids": [
+        "exam-materials"
+      ],
+      "title": "翻译练习 2",
+      "topic": "翻译",
+      "prompt": "社区花园不仅让居民种植蔬菜，也为邻里交流创造了机会。",
+      "review_checklist": [
+        "not only / also 关系准确",
+        "语义无遗漏",
+        "搭配自然",
+        "由本人或老师复核"
+      ],
+      "source_label": "项目自编 · 需人工复核 · 非真题",
+      "result": "保存草稿后由本人或老师人工复核；页面不自动评分"
+    },
+    {
+      "kind": "manual_review",
+      "item_id": "cet4-translate-03",
+      "module_ids": [
+        "exam-materials"
+      ],
+      "title": "翻译练习 3",
+      "topic": "翻译",
+      "prompt": "通过使用可重复利用的杯子，人们可以减少一次性垃圾，并逐渐形成更环保的习惯。",
+      "review_checklist": [
+        "方式与结果关系准确",
+        "并列结构清楚",
+        "不擅自增加信息",
+        "由本人或老师复核"
+      ],
+      "source_label": "项目自编 · 需人工复核 · 非真题",
+      "result": "保存草稿后由本人或老师人工复核；页面不自动评分"
+    }
+  ]
+}

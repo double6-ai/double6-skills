@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "contract_version": "double6_surface_templates_v1",
+  "kernel_version": "1.1.0",
+  "templates": {
+    "personal-inbox-triage-v1": {
+      "module_id": "personal-inbox",
+      "html": "<section class='personal-special-surface inbox-triage' data-personal-special='personal-inbox' data-personal-surface-signature='personal-inbox-triage-v1'><div class='personal-special-heading'><div><span class='eyebrow'>分诊队列</span><h3>收下、判断、再承诺</h3><p>每条想法只有四个去向：本周、以后、保留、删除。</p></div><strong data-personal-special-count>0 条待整理</strong></div><div class='personal-queue' data-personal-inbox-queue></div></section>"
+    },
+    "personal-week-capacity-v1": {
+      "module_id": "personal-week-plan",
+      "platform_cards_module": "personal-week-plan",
+      "html": "<section class='personal-special-surface week-capacity-board' data-personal-special='personal-week-plan' data-personal-surface-signature='personal-week-capacity-v1'><div class='personal-special-heading'><div><span class='eyebrow'>这周先排</span><h3>写下三件，拖到某天</h3><p>在格子里写结果和怎样算做完，再拖到七天里。空白就是容量。下面的表单只是补记。</p></div><strong data-personal-week-capacity>0/3 个结果</strong></div><div class='week-outcome-lanes' data-personal-module-week-outcomes></div><div class='week-grid' data-personal-module-week-days></div>{platform_cards}</section>"
+    },
+    "personal-today-focus-v1": {
+      "module_id": "personal-today",
+      "platform_cards_module": "personal-today",
+      "html": "<section class='personal-special-surface today-focus-room' data-personal-special='personal-today' data-personal-surface-signature='personal-today-focus-v1'><div class='personal-special-heading'><div><span class='eyebrow'>专注室</span><h3>Top 1 先做，Top 2/3 排队</h3><p>候补不算承诺；完成、改期和顺延都保留事实。</p></div><strong data-personal-today-capacity>0/3</strong></div><div data-personal-module-today></div>{platform_cards}</section>"
+    },
+    "personal-project-cockpit-v1": {
+      "module_id": "personal-projects",
+      "platform_cards_module": "personal-projects",
+      "html": "<section class='personal-special-surface project-cockpit' data-personal-special='personal-projects' data-personal-surface-signature='personal-project-cockpit-v1'><div class='personal-special-heading'><div><span class='eyebrow'>项目驾驶舱</span><h3>里程碑、唯一下一步、阻塞</h3><p>项目不是任务清单：每个项目只暴露一个当前下一步。</p></div><strong data-personal-project-count>0 个活跃项目</strong></div><div class='personal-project-board' data-personal-project-board></div>{platform_cards}</section>"
+    },
+    "personal-habit-week-grid-v1": {
+      "module_id": "personal-habits",
+      "html": "<section class='personal-special-surface habit-week-grid' data-personal-special='personal-habits' data-personal-surface-signature='personal-habit-week-grid-v1'><div class='personal-special-heading'><div><span class='eyebrow'>最低版本</span><h3>一周七格，只记录做到没有</h3><p>连续天数不是评价；先把最小动作做小到能开始。</p></div><strong data-personal-habit-summary>0 次完成</strong></div><div data-personal-habit-grid></div></section>"
+    },
+    "personal-life-timeline-v1": {
+      "module_id": "personal-life-log",
+      "html": "<section class='personal-special-surface life-timeline' data-personal-special='personal-life-log' data-personal-surface-signature='personal-life-timeline-v1'><div class='personal-special-heading'><div><span class='eyebrow'>事实时间线</span><h3>今天发生了什么</h3><p>只记事件、感受和备注，不自动诊断、不替你下结论。</p></div><strong data-personal-life-count>0 条事实</strong></div><div data-personal-life-timeline></div></section>"
+    },
+    "personal-review-workbench-v1": {
+      "module_id": "personal-review",
+      "platform_cards_module": "personal-review",
+      "html": "<section class='personal-special-surface review-workbench' data-personal-special='personal-review' data-personal-surface-signature='personal-review-workbench-v1'><div class='personal-special-heading'><div><span class='eyebrow'>四步复盘</span><h3>事实 → 卡点 → 决定 → 下周第一步</h3><p>草稿只使用当前设备里的事实，保存前由你确认。</p></div><strong>每周更新一次</strong></div><ol class='review-stepper'><li>完成事实</li><li>未完成与阻塞</li><li>停止 / 顺延 / 继续</li><li>下周唯一行动</li></ol><details class='personal-review-studio' open><summary>事实复盘工作区</summary><div class='review-actions'><button type='button' data-personal-review-draft>生成事实草稿</button><button type='button' class='secondary' data-personal-review-save hidden>确认并保存</button></div><pre data-personal-review-output aria-live='polite'>还没有生成复盘草稿。</pre></details>{platform_cards}</section>"
+    },
+    "content-source-inbox-v1": {
+      "module_id": "content-input",
+      "html": "<section class='content-special-surface content-source-inbox' data-content-special='content-input' data-content-surface-signature='content-source-inbox-v1'><div class='content-special-heading'><div><span class='eyebrow'>来源收件箱</span><h3>先保留出处，再决定是否采用</h3><p>每条素材都显示来源状态、待核问题和进入哪个选题。</p></div><strong data-content-count>0 条素材</strong></div><form class='content-quick-form' data-content-source-capture><input required maxlength='160' aria-label='素材标题或观察' data-content-source-title placeholder='素材标题或观察'><input maxlength='240' aria-label='来源与待核问题' data-content-source-note placeholder='来源 URL / 路径、日期与待核问题'><button type='submit'>收下素材</button></form><div class='content-card-list' data-content-source-list></div></section>"
+    },
+    "content-topic-decision-board-v1": {
+      "module_id": "content-topics",
+      "html": "<section class='content-special-surface content-topic-board' data-content-special='content-topics' data-content-surface-signature='content-topic-decision-board-v1'><div class='content-special-heading'><div><span class='eyebrow'>选题决策台</span><h3>待判断 → 补证 → 写任务书 → 制作中</h3><p>不用虚构评分；只写为什么做、缺什么证据、唯一下一步。</p></div><strong data-content-count>0 个选题</strong></div><div class='content-stage-board' data-content-topic-board></div></section>"
+    },
+    "content-brief-canvas-v1": {
+      "module_id": "content-briefs",
+      "html": "<section class='content-special-surface content-brief-canvas' data-content-special='content-briefs' data-content-surface-signature='content-brief-canvas-v1'><div class='content-special-heading'><div><span class='eyebrow'>制作前合同</span><h3>读者、问题、证据、形态、验收</h3><p>五项不齐，不把选题推进到制作。</p></div><strong data-content-count>0 份任务书</strong></div><div class='content-card-list content-brief-list' data-content-brief-list></div></section>"
+    },
+    "content-production-room-v1": {
+      "module_id": "content-production",
+      "html": "<section class='content-special-surface content-production-room' data-content-special='content-production' data-content-surface-signature='content-production-room-v1'><div class='content-special-heading'><div><span class='eyebrow'>制作工作间</span><h3>稿件、素材、事实、版权与审核</h3><p>每个作品只暴露当前缺口和下一项可完成动作。</p></div><strong data-content-count>0 项制作</strong></div><div class='content-production-grid' data-content-production-list></div></section>"
+    },
+    "content-manual-publish-queue-v1": {
+      "module_id": "content-schedule",
+      "html": "<section class='content-special-surface content-publish-queue' data-content-special='content-schedule' data-content-surface-signature='content-manual-publish-queue-v1'><div class='content-special-heading'><div><span class='eyebrow'>人工发布队列</span><h3>计划、已复制、已打开、人工确认</h3><p>排期和复制不等于发布成功；最终状态只能由你确认。</p></div><strong data-content-count>0 项排期</strong></div><div class='content-card-list' data-content-schedule-list></div></section>"
+    },
+    "content-review-lab-v1": {
+      "module_id": "content-review",
+      "html": "<section class='content-special-surface content-review-lab' data-content-special='content-review' data-content-surface-signature='content-review-lab-v1'><div class='content-special-heading'><div><span class='eyebrow'>数据复盘实验台</span><h3>事实指标 → 观察 → 下一轮决定</h3><p>只汇总手工录入且带日期的数据，不推测平台因果。</p></div><strong data-content-count>0 条指标</strong></div><div class='content-review-summary' data-content-review-summary></div><div class='content-card-list' data-content-review-list></div></section>"
+    },
+    "sales-lead-qualification-v1": {
+      "module_id": "sales-leads",
+      "html": "<section class='sales-special-surface sales-lead-qualification' data-sales-special='sales-leads' data-sales-surface-signature='sales-lead-qualification-v1'><div class='sales-special-heading'><div><span class='eyebrow'>线索核验台</span><h3>来源、需求、负责人、下一步</h3><p>没有来源和唯一下一步的线索不进入客户管道。</p></div><strong data-sales-count>0 条线索</strong></div><div class='sales-card-list' data-sales-lead-list></div></section>"
+    },
+    "sales-client-pipeline-v1": {
+      "module_id": "sales-clients",
+      "html": "<section class='sales-special-surface sales-client-pipeline' data-sales-special='sales-clients' data-sales-surface-signature='sales-client-pipeline-v1'><div class='sales-special-heading'><div><span class='eyebrow'>客户推进管道</span><h3>最近事实 + 唯一下一步 + 日期</h3><p>阶段只由事实推进；暂缓和结束也保留原因。</p></div><strong data-sales-count>0 个客户</strong></div><div class='sales-stage-board' data-sales-client-board></div></section>"
+    },
+    "sales-followup-queue-v1": {
+      "module_id": "sales-followups",
+      "html": "<section class='sales-special-surface sales-followup-queue' data-sales-special='sales-followups' data-sales-surface-signature='sales-followup-queue-v1'><div class='sales-special-heading'><div><span class='eyebrow'>今日与逾期</span><h3>准备 → 人工沟通 → 记录结果 → 下一动作</h3><p>提醒、复制话术和打开渠道都不等于消息已发送。</p></div><strong data-sales-count>0 项跟进</strong></div><div class='sales-card-list' data-sales-followup-list></div></section>"
+    },
+    "sales-inquiry-order-chain-v1": {
+      "module_id": "sales-orders",
+      "html": "<section class='sales-special-surface sales-object-chain' data-sales-special='sales-orders' data-sales-surface-signature='sales-inquiry-order-chain-v1'><div class='sales-special-heading'><div><span class='eyebrow'>业务对象链</span><h3>询盘、样品与订单分开推进</h3><p>每个节点保留需求事实和下一动作，不把口头意向写成订单。</p></div><strong data-sales-count>0 个对象</strong></div><div class='sales-stage-board' data-sales-order-board></div></section>"
+    },
+    "sales-quote-version-workspace-v1": {
+      "module_id": "sales-quotes",
+      "html": "<section class='sales-special-surface sales-quote-workspace' data-sales-special='sales-quotes' data-sales-surface-signature='sales-quote-version-workspace-v1'><div class='sales-special-heading'><div><span class='eyebrow'>报价版本工作区</span><h3>核价、版本、待确认项与人工交接</h3><p>金额只作人工录入；复制、打开渠道和人工确认发送分开记录。</p></div><strong data-sales-count>0 个版本</strong></div><div class='sales-card-list' data-sales-quote-list></div></section>"
+    },
+    "sales-pipeline-review-v1": {
+      "module_id": "sales-review",
+      "html": "<section class='sales-special-surface sales-review-room' data-sales-special='sales-review' data-sales-surface-signature='sales-pipeline-review-v1'><div class='sales-special-heading'><div><span class='eyebrow'>管道事实复盘</span><h3>推进、停滞、风险与下周动作</h3><p>草稿只汇总当前设备里的脱敏事实，不预测成交。</p></div><strong data-sales-count>0 次复盘</strong></div><div class='review-actions'><button type='button' data-sales-review-draft>生成事实草稿</button><button type='button' class='secondary' data-sales-review-save hidden>确认并保存</button></div><pre data-sales-review-output>还没有生成复盘草稿。</pre><div class='sales-card-list' data-sales-review-list></div></section>"
+    },
+    "research-question-board-v1": {
+      "module_id": "research-questions",
+      "html": "<section class='content-special-surface' data-research-special='research-questions' data-research-surface-signature='research-question-board-v1'><div class='content-special-heading'><div><span class='eyebrow'>问题看板</span><h3>一个决策问题，一个下一步</h3><p>没有范围和时间边界的问题，不进入证据表。</p></div><strong data-composition-count='research-questions'>0 条</strong></div><div class='content-card-list' data-composition-surface-list='research-questions'></div></section>"
+    },
+    "research-evidence-ledger-v1": {
+      "module_id": "research-evidence",
+      "html": "<section class='content-special-surface' data-research-special='research-evidence' data-research-surface-signature='research-evidence-ledger-v1'><div class='content-special-heading'><div><span class='eyebrow'>证据台账</span><h3>来源、摘录、核验时间</h3><p>没有来源和核验时间的摘录，不能支持写作主张。</p></div><strong data-composition-count='research-evidence'>0 条</strong></div><div class='content-card-list' data-composition-surface-list='research-evidence'></div></section>"
+    },
+    "research-writing-checklist-v1": {
+      "module_id": "research-writing",
+      "html": "<section class='content-special-surface' data-research-special='research-writing' data-research-surface-signature='research-writing-checklist-v1'><div class='content-special-heading'><div><span class='eyebrow'>写作清单</span><h3>主张必须绑到证据或缺口</h3><p>未核验摘录只能标为待验证，不能写成结论。</p></div><strong data-composition-count='research-writing'>0 条</strong></div><div class='content-card-list' data-composition-surface-list='research-writing'></div></section>"
+    },
+    "research-review-journal-v1": {
+      "module_id": "research-review",
+      "html": "<section class='content-special-surface' data-research-special='research-review' data-research-surface-signature='research-review-journal-v1'><div class='content-special-heading'><div><span class='eyebrow'>覆盖复盘</span><h3>缺口、反证与下一周动作</h3><p>复盘只汇总本机已保存事实，不补造未读文献。</p></div><strong data-composition-count='research-review'>0 条</strong></div><div class='content-card-list' data-composition-surface-list='research-review'></div></section>"
+    },
+    "research-process-log-v1": {
+      "module_id": "research-log",
+      "html": "<section class='content-special-surface' data-research-special='research-log' data-research-surface-signature='research-process-log-v1'><div class='content-special-heading'><div><span class='eyebrow'>过程日志</span><h3>检索、阅读、异常与恢复</h3><p>只记录做过的步骤，不把日志写成已证明的结论。</p></div><strong data-composition-count='research-log'>0 条</strong></div><div class='content-card-list' data-composition-surface-list='research-log'></div></section>"
+    },
+    "fitness-tonight-set-v1": {
+      "module_id": "fitness-today",
+      "html": "<section class='fitness-special-surface fitness-tonight-set' data-fitness-tonight-set data-fitness-surface-signature='fitness-tonight-set-v1'><div class='fitness-special-heading'><div><span class='eyebrow'>今晚动作</span><h3>勾组次，不适就停</h3><p>点一组就算这一组完成。一组做不了就停，不诊断、不加练。</p></div><strong data-fitness-set-summary>今晚 0/0 组</strong></div><div class='fitness-move-list' data-fitness-move-list><button type='button' class='tiny' data-fitness-set hidden>第 1 组</button><button type='button' class='tiny secondary' data-fitness-stop hidden>不适就停</button></div></section>"
+    },
+    "generic-module-surface-v1": {
+      "module_id": "*",
+      "html": "<section class='derived-surface' hidden data-derived-surface data-composition-surface-signature='generic-module-surface-v1' aria-hidden='true'></section>"
+    }
+  }
+}

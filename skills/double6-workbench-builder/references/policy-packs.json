@@ -1,0 +1,574 @@
+{
+  "schema_version": 2,
+  "contract_version": "double6_policy_pack_v2",
+  "supply_contract_version": "double6_capability_supply_v1",
+  "policy_pack_count": 6,
+  "policy_packs": [
+    {
+      "policy_pack_id": "policy.synthetic-data-default",
+      "label": "合成或脱敏数据默认",
+      "maturity": "executable_ready",
+      "reward_rules": [
+        "奖励只引用已确认事件的稳定 ID，不复制事实载荷",
+        "使用合成数据不增加或减少奖励"
+      ],
+      "constraint_rules": [
+        "没有明确授权时不接受真实敏感数据",
+        "授权缺失不是惩罚场景，必须回退合成示例"
+      ],
+      "privacy_rules": [
+        "儿童、学生、客户、财务、HR、健身与孕期默认使用合成或脱敏数据",
+        "本地导出不得自动包含未选字段",
+        "禁止保存 token、密码、Cookie 或会话密钥"
+      ],
+      "real_data_rules": [
+        "真实数据需要明确授权、本地保护条件、最小字段范围和可撤销记录",
+        "授权缺失、过期或撤销时回退到合成示例"
+      ],
+      "external_operation_rules": [
+        "不因导入、奖励或约束自动触发任何外部操作"
+      ],
+      "failure_recovery": [
+        "检测到未授权敏感字段时拒绝写入并返回字段级提示",
+        "保留原本地状态，不覆盖已确认记录",
+        "切换到合成示例后允许继续完成本地流程"
+      ],
+      "acceptance": [
+        "未授权敏感数据反例被拒绝",
+        "合成数据流程可完成",
+        "导出仅含选定字段",
+        "拒绝路径不改变调用方事实"
+      ],
+      "state_contract": {
+        "owned_state": [],
+        "referenced_state": ["active consent status", "selected field scope"],
+        "forbidden_state": ["raw sensitive payload", "identity media", "secret material"]
+      },
+      "error_contract": [
+        "explicit_revocable_consent_required",
+        "data_controller_authority_missing",
+        "sensitive_data_storage_must_be_local_only"
+      ],
+      "audit_contract": [
+        "record policy decision and consent ID only",
+        "never copy the sensitive field value into the policy ledger"
+      ]
+    },
+    {
+      "policy_pack_id": "policy.local-sensitive-data-consent",
+      "label": "本地敏感数据显式同意",
+      "maturity": "executable_ready",
+      "reward_rules": [
+        "敏感数据授权不得兑换奖励或提升积分",
+        "撤销授权不得倒扣星星"
+      ],
+      "constraint_rules": [
+        "授权必须绑定用途、字段范围、local_only 保存位置、控制权和撤销方式",
+        "默认不跨设备同步"
+      ],
+      "privacy_rules": [
+        "local_only",
+        "data_minimization",
+        "explicit_consent",
+        "export_import_review",
+        "revocable"
+      ],
+      "real_data_rules": [
+        "只有 explicit、revocable、subject_or_controller_authorized、purpose、field_scope 和 local_only 全部有效才登记同意",
+        "撤销后停止新增处理并提示用户导出或删除；不静默删改历史证据"
+      ],
+      "external_operation_rules": [
+        "数据授权不等于外发授权，任何外发仍需独立确认"
+      ],
+      "failure_recovery": [
+        "授权不完整时回退到 policy.synthetic-data-default",
+        "撤销后把 consent 标记 revoked，保留可审计边界但不保留真实载荷",
+        "撤销命令缺成人或所有者确认时保持 active"
+      ],
+      "acceptance": [
+        "缺一项授权字段即拒绝",
+        "撤销后真实数据入口关闭",
+        "本地保存与字段范围可审计",
+        "奖励账本不因授权变化而改变"
+      ],
+      "state_contract": {
+        "owned_state": ["consent_id", "purpose", "field_scope", "storage", "status", "timestamps"],
+        "transitions": ["absent_to_active", "active_to_revoked"],
+        "forbidden_state": ["raw sensitive data", "cross-device sync credential"]
+      },
+      "error_contract": [
+        "explicit_revocable_consent_required",
+        "sensitive_data_scope_missing",
+        "data_controller_authority_missing",
+        "sensitive_data_storage_must_be_local_only",
+        "active_consent_missing",
+        "adult_confirmation_missing"
+      ],
+      "audit_contract": [
+        "grant and revoke commands are append-audited by command ID and consent ID",
+        "raw sensitive values are never stored"
+      ]
+    },
+    {
+      "policy_pack_id": "policy.external-operation-confirmation",
+      "label": "外部操作逐次确认",
+      "maturity": "executable_ready",
+      "reward_rules": [
+        "奖励不得自动触发发送、发布、预约、通知、购买或付款",
+        "成人确认兑换也只产生本地 manual_pending 履约状态"
+      ],
+      "constraint_rules": [
+        "外部操作默认 manual_handoff",
+        "先登记目标摘要与 payload SHA，再逐次成人或所有者确认",
+        "禁止把一次确认复用于不同载荷"
+      ],
+      "privacy_rules": [
+        "确认状态只保存必要摘要和 payload SHA",
+        "外部目标不得从未选模块泄漏"
+      ],
+      "real_data_rules": [
+        "真实载荷必须先满足对应数据政策才可进入确认页"
+      ],
+      "external_operation_rules": [
+        "没有显式确认只生成本地预览",
+        "确认结果只到 manual_handoff_authorized，engine 永不执行外部操作",
+        "付费、购买、商户结账、可交易资产和自动外部履约直接拒绝",
+        "外部成功必须由独立宿主真实回执证明，policy engine 不产生成功回执"
+      ],
+      "failure_recovery": [
+        "宿主不可用时保留本地预览并标记 not_executed",
+        "确认缺失或载荷漂移时拒绝授权",
+        "幂等冲突要求使用新 key 或完全重放原载荷"
+      ],
+      "acceptance": [
+        "无确认反例不产生外部副作用",
+        "确认后仍为 not_executed",
+        "付费和可交易资产反例被拒绝",
+        "重复命令不重复产生授权"
+      ],
+      "state_contract": {
+        "owned_state": ["operation_id", "operation_type", "target_summary", "payload_sha256", "confirmation status"],
+        "transitions": ["absent_to_confirmation_pending", "confirmation_pending_to_manual_handoff_authorized"],
+        "terminal_engine_execution_status": "not_executed"
+      },
+      "error_contract": [
+        "paid_or_transferable_operation_forbidden",
+        "external_operation_not_pending",
+        "adult_confirmation_missing",
+        "idempotency_conflict"
+      ],
+      "audit_contract": [
+        "request and confirm use separate command IDs and idempotency keys",
+        "audit records no raw payload and never claims external success"
+      ]
+    },
+    {
+      "policy_pack_id": "policy.reward-truth-isolation",
+      "label": "奖励与真值隔离",
+      "maturity": "executable_ready",
+      "reward_rules": [
+        "默认每个已确认且未计分的完成证据追加 1 颗星；可配置值必须为 1–100 整数",
+        "同一幂等键和同一载荷只计分一次，不同载荷复用 key 必须拒绝",
+        "目标是展示层本地状态；付费、商户、可交易资产或自动外部履约目标禁止登记",
+        "兑换先创建 adult_confirmation_pending 请求且不扣分，再由成人确认追加一次负向账本事件",
+        "连续完成只从 completion_award 的 completed_on 日期确定性派生",
+        "阶段庆祝只追加 display_only、points_delta=0 事件；如需星星必须另有完成证据",
+        "账本只追加；冲正必须是新事件，不删除历史"
+      ],
+      "constraint_rules": [
+        "奖励余额不能修改学习掌握、业务真值或完成证据",
+        "约束、暂停或未完成不得倒扣事实或既有星星",
+        "阶段庆祝不能绕过成人确认或外部操作门"
+      ],
+      "privacy_rules": [
+        "奖励账本只引用稳定完成证据 ID",
+        "不保存身份、声音、照片、视频或完成证据载荷"
+      ],
+      "real_data_rules": [
+        "奖励事件不得复制敏感业务数值或学习作答内容"
+      ],
+      "external_operation_rules": [
+        "家庭实物奖励只记录 manual_pending，不自动兑现",
+        "付款、购买、商户消费和可交易资产始终禁止"
+      ],
+      "failure_recovery": [
+        "重复事件返回 idempotent_replay 并保持账本条数不变",
+        "余额不足时不创建请求、不扣减并返回 insufficient_reward_balance",
+        "成人确认缺失时保留 pending 请求和余额",
+        "冲突时以调用方完成证据为事实源，policy state 不尝试修正事实"
+      ],
+      "acceptance": [
+        "奖励变化不改变掌握状态、业务数值或完成证据 SHA",
+        "默认星星、目标、连续完成、阶段庆祝均有确定性向量",
+        "兑换请求扣减 0、成人确认扣减恰好一次",
+        "重复计分和幂等冲突反例被拒绝或复用",
+        "付费奖励目标被拒绝"
+      ],
+      "state_contract": {
+        "owned_state": ["append-only reward ledger", "goal projection", "redemption requests", "display-only celebrations"],
+        "derived_state": ["balance", "earned_total", "spent_total", "current streak", "longest streak"],
+        "forbidden_state": ["mastery", "business truth", "completion evidence payload", "payment credential"]
+      },
+      "error_contract": [
+        "completion_evidence_not_confirmed",
+        "insufficient_reward_balance",
+        "adult_confirmation_missing",
+        "forbidden_reward_fulfillment",
+        "idempotency_conflict"
+      ],
+      "audit_contract": [
+        "each applied command records command ID, idempotency key, effect type and policy IDs",
+        "receipts bind protected truth SHA before and after",
+        "rejected commands return a machine receipt for caller retention without mutating state"
+      ]
+    },
+    {
+      "policy_pack_id": "policy.reversible-constraint",
+      "label": "可逆约束优先",
+      "maturity": "executable_ready",
+      "reward_rules": [
+        "未完成、冷却或配额触发不倒扣业务真值、学习掌握或星星",
+        "阶段庆祝不可绕过约束"
+      ],
+      "constraint_rules": [
+        "允许类型仅为 reminder、quota、cooldown、adult_confirmation",
+        "默认顺序为提醒、可逆配额、冷却、人工确认",
+        "所有约束必须 reversible=true 并具有成人或所有者撤销路径",
+        "禁止羞辱、永久锁定、永久损失、付费解锁和不可解释惩罚",
+        "cooldown 必须有明确晚于开始时间的 cooldown_until"
+      ],
+      "privacy_rules": [
+        "约束原因只保存 reason_code，不复制真实内容",
+        "约束范围不得暴露未选模块或敏感详情"
+      ],
+      "real_data_rules": [
+        "约束事件只保存必要范围、原因码与时间"
+      ],
+      "external_operation_rules": [
+        "解除涉及外部风险的门仍只允许人工确认，不自动执行外部操作"
+      ],
+      "failure_recovery": [
+        "错误约束可由成人设置立即撤销",
+        "冷却到期由显式 expire_constraints 评估移除并留下审计事件",
+        "永久、羞辱或无撤销路径的请求不改变状态",
+        "约束误触发不得修改受保护真值"
+      ],
+      "acceptance": [
+        "所有活动约束均有撤销路径",
+        "冷却到期恢复",
+        "人工确认可追踪",
+        "永久与羞辱反例被拒绝",
+        "解除命令缺成人确认时保持约束活动"
+      ],
+      "state_contract": {
+        "owned_state": ["active reversible constraints", "append-only constraint events"],
+        "transitions": ["inactive_to_active", "active_to_expired", "active_to_manually_removed"],
+        "forbidden_state": ["permanent lock", "shaming copy", "permanent loss", "paid unlock"]
+      },
+      "error_contract": [
+        "permanent_or_unknown_constraint_forbidden",
+        "constraint_must_be_reversible",
+        "harmful_constraint_forbidden",
+        "cooldown_must_end_after_start",
+        "adult_confirmation_missing"
+      ],
+      "audit_contract": [
+        "activation, expiry and adult removal are separate immutable events",
+        "events retain reason code but not sensitive content"
+      ]
+    },
+    {
+      "policy_pack_id": "policy.guided-practice-safety",
+      "label": "引导练习安全边界",
+      "maturity": "executable_ready",
+      "reward_rules": [
+        "只有提交并生成可解释反馈且存在已确认完成证据的练习才可另行触发奖励",
+        "提示、查看答案、练习尝试或阶段庆祝本身不改变掌握且不自动得星"
+      ],
+      "constraint_rules": [
+        "引导练习不替代教师、医生、律师、会计或其他专业判断",
+        "高风险内容进入人工确认或停止路径",
+        "禁止通过奖励诱导提供敏感数据或完成危险屏外行动"
+      ],
+      "privacy_rules": [
+        "默认不采集身份、声音、照片或视频",
+        "练习记录使用本地合成标识"
+      ],
+      "real_data_rules": [
+        "儿童与家庭真实试用不在当前授权范围",
+        "专业高风险数据默认合成或脱敏"
+      ],
+      "external_operation_rules": [
+        "练习结果不自动发送给学校、家长、医生或雇主"
+      ],
+      "failure_recovery": [
+        "高风险信号触发停止提示与人工求助建议",
+        "内容来源不足时标记不可核验并停止评分",
+        "没有已确认完成证据时不写奖励账本"
+      ],
+      "acceptance": [
+        "高风险反例停止而非自动处置",
+        "无真实儿童数据",
+        "无未经确认的结果外发",
+        "练习状态与奖励、掌握三者隔离"
+      ],
+      "state_contract": {
+        "owned_state": [],
+        "referenced_state": ["confirmed completion evidence ID", "risk stop state"],
+        "forbidden_state": ["professional judgement claim", "identity media", "automatic external result"]
+      },
+      "error_contract": [
+        "completion_evidence_not_confirmed",
+        "adult_confirmation_missing"
+      ],
+      "audit_contract": [
+        "reward ledger receives only the confirmed evidence ID",
+        "practice answer and sensitive payload stay outside policy state"
+      ]
+    }
+  ],
+  "invariants": [
+    "rewards_do_not_change_mastery",
+    "rewards_do_not_change_business_truth",
+    "rewards_do_not_change_completion_evidence",
+    "stage_celebrations_do_not_award_without_completion_evidence",
+    "redemption_requests_do_not_deduct_before_adult_confirmation",
+    "duplicate_events_are_idempotent",
+    "punishments_are_reversible_by_default",
+    "shaming_permanent_loss_and_paid_unlock_are_forbidden",
+    "sensitive_real_data_requires_explicit_local_revocable_consent",
+    "external_operations_require_explicit_authorization_and_remain_not_executed",
+    "payment_purchase_and_transferable_assets_are_forbidden"
+  ],
+  "engine_contract": {
+    "engine_version": "double6_policy_engine_v1",
+    "module": "scripts/double6_runtime/policy_engine.py",
+    "public_api": [
+      "validate_policy_registry(registry)",
+      "initial_policy_state()",
+      "validate_policy_state(state)",
+      "apply_policy_event(state, event, context=None)",
+      "reward_projection(state, as_of_date=YYYY-MM-DD)",
+      "run_policy_test_vector(vector)",
+      "run_policy_test_vectors(registry)"
+    ],
+    "purity": {
+      "reads_wall_clock": false,
+      "performs_io": false,
+      "mutates_input_state": false,
+      "executes_external_operation": false,
+      "stores_protected_truth": false,
+      "timestamps_are_explicit_inputs": true
+    },
+    "event_common_fields": {
+      "required": ["command_type", "command_id", "idempotency_key", "effective_at"],
+      "effective_at": "ISO-8601 timezone-aware",
+      "idempotency": "same key plus same canonical payload returns idempotent_replay; same key plus different payload returns idempotency_conflict"
+    },
+    "event_types": {
+      "completion_confirmed": ["completion_evidence_id", "evidence_confirmed", "completed_on", "stars optional default 1"],
+      "set_reward_goal": ["goal_id", "title", "cost", "fulfillment_mode"],
+      "request_redemption": ["request_id", "goal_id"],
+      "confirm_redemption": ["request_id", "adult_confirmation"],
+      "record_stage_celebration": ["celebration_id", "stage_evidence_id", "stage_evidence_confirmed", "label"],
+      "apply_constraint": ["constraint_id", "constraint_type", "scope", "reason_code", "reversible", "quota or cooldown_until when applicable"],
+      "remove_constraint": ["constraint_id", "reason_code", "adult_confirmation"],
+      "expire_constraints": [],
+      "grant_sensitive_data_consent": ["consent_id", "purpose", "field_scope", "storage=local_only", "explicit", "revocable", "subject_or_controller_authorized"],
+      "revoke_sensitive_data_consent": ["consent_id", "adult_confirmation"],
+      "request_external_operation": ["operation_id", "operation_type", "target_summary", "payload_sha256"],
+      "confirm_external_operation": ["operation_id", "adult_confirmation"]
+    },
+    "result_contract": {
+      "fields": ["ok", "status", "state", "receipt", "error"],
+      "success_status": ["applied", "idempotent_replay"],
+      "failure_status": "rejected",
+      "receipt_invariants": ["mastery_unchanged", "business_truth_unchanged", "completion_evidence_unchanged", "external_side_effect=false"],
+      "error_fields": ["code", "message", "recovery", "state_mutated=false"]
+    }
+  },
+  "test_vectors": [
+    {
+      "vector_id": "reward.completion.default-star",
+      "event": {"command_type": "completion_confirmed", "command_id": "cmd.reward.001", "idempotency_key": "idem.reward.001", "effective_at": "2026-08-14T08:00:00Z", "completion_evidence_id": "completion.001", "evidence_confirmed": true, "completed_on": "2026-08-14"},
+      "expected": {"ok": true, "status": "applied", "effect_type": "completion_reward_posted", "projection_as_of": "2026-08-14", "balance": 1, "earned_total": 1, "ledger_event_count": 1, "input_unchanged": true, "protected_truth_unchanged": true}
+    },
+    {
+      "vector_id": "reward.completion.idempotent-replay",
+      "event": {"command_type": "completion_confirmed", "command_id": "cmd.reward.002", "idempotency_key": "idem.reward.002", "effective_at": "2026-08-14T08:01:00Z", "completion_evidence_id": "completion.002", "evidence_confirmed": true, "completed_on": "2026-08-14"},
+      "repeat_event": true,
+      "expected": {"ok": true, "status": "idempotent_replay", "effect_type": "completion_reward_posted", "projection_as_of": "2026-08-14", "balance": 1, "ledger_event_count": 1, "input_unchanged": true, "protected_truth_unchanged": true}
+    },
+    {
+      "vector_id": "reward.completion.unconfirmed-rejected",
+      "event": {"command_type": "completion_confirmed", "command_id": "cmd.reward.003", "idempotency_key": "idem.reward.003", "effective_at": "2026-08-14T08:02:00Z", "completion_evidence_id": "completion.003", "evidence_confirmed": false, "completed_on": "2026-08-14"},
+      "expected": {"ok": false, "status": "rejected", "error_code": "completion_evidence_not_confirmed", "ledger_event_count": 0, "input_unchanged": true, "protected_truth_unchanged": true}
+    },
+    {
+      "vector_id": "reward.streak.three-days",
+      "setup_events": [
+        {"command_type": "completion_confirmed", "command_id": "cmd.streak.001", "idempotency_key": "idem.streak.001", "effective_at": "2026-08-12T08:00:00Z", "completion_evidence_id": "completion.streak.001", "evidence_confirmed": true, "completed_on": "2026-08-12"},
+        {"command_type": "completion_confirmed", "command_id": "cmd.streak.002", "idempotency_key": "idem.streak.002", "effective_at": "2026-08-13T08:00:00Z", "completion_evidence_id": "completion.streak.002", "evidence_confirmed": true, "completed_on": "2026-08-13"}
+      ],
+      "event": {"command_type": "completion_confirmed", "command_id": "cmd.streak.003", "idempotency_key": "idem.streak.003", "effective_at": "2026-08-14T08:00:00Z", "completion_evidence_id": "completion.streak.003", "evidence_confirmed": true, "completed_on": "2026-08-14"},
+      "expected": {"ok": true, "projection_as_of": "2026-08-14", "balance": 3, "current_streak_days": 3, "longest_streak_days": 3, "ledger_event_count": 3, "protected_truth_unchanged": true}
+    },
+    {
+      "vector_id": "reward.goal.local-family-manual",
+      "event": {"command_type": "set_reward_goal", "command_id": "cmd.goal.001", "idempotency_key": "idem.goal.001", "effective_at": "2026-08-14T08:10:00Z", "goal_id": "goal.family.001", "title": "一起做手工", "cost": 2, "fulfillment_mode": "family_manual"},
+      "expected": {"ok": true, "effect_type": "reward_goal_set", "path_equals": {"state.reward.goals.goal.family.001.status": "active"}, "input_unchanged": true}
+    },
+    {
+      "vector_id": "reward.goal.paid-forbidden",
+      "event": {"command_type": "set_reward_goal", "command_id": "cmd.goal.002", "idempotency_key": "idem.goal.002", "effective_at": "2026-08-14T08:11:00Z", "goal_id": "goal.paid.001", "title": "自动购买礼物", "cost": 2, "fulfillment_mode": "paid"},
+      "expected": {"ok": false, "error_code": "forbidden_reward_fulfillment", "ledger_event_count": 0, "input_unchanged": true}
+    },
+    {
+      "vector_id": "reward.redemption.request-no-deduction",
+      "setup_events": [
+        {"command_type": "completion_confirmed", "command_id": "cmd.redeem.setup.001", "idempotency_key": "idem.redeem.setup.001", "effective_at": "2026-08-13T08:00:00Z", "completion_evidence_id": "completion.redeem.001", "evidence_confirmed": true, "completed_on": "2026-08-13", "stars": 2},
+        {"command_type": "set_reward_goal", "command_id": "cmd.redeem.setup.002", "idempotency_key": "idem.redeem.setup.002", "effective_at": "2026-08-14T08:00:00Z", "goal_id": "goal.redeem.001", "title": "家庭游戏时间", "cost": 2, "fulfillment_mode": "family_manual"}
+      ],
+      "event": {"command_type": "request_redemption", "command_id": "cmd.redeem.001", "idempotency_key": "idem.redeem.001", "effective_at": "2026-08-14T08:01:00Z", "request_id": "request.redeem.001", "goal_id": "goal.redeem.001"},
+      "expected": {"ok": true, "effect_type": "redemption_requested_without_deduction", "projection_as_of": "2026-08-14", "balance": 2, "ledger_event_count": 1, "path_equals": {"state.reward.redemption_requests.request.redeem.001.status": "adult_confirmation_pending"}, "protected_truth_unchanged": true}
+    },
+    {
+      "vector_id": "reward.redemption.insufficient",
+      "setup_events": [
+        {"command_type": "set_reward_goal", "command_id": "cmd.redeem.setup.003", "idempotency_key": "idem.redeem.setup.003", "effective_at": "2026-08-14T08:00:00Z", "goal_id": "goal.redeem.002", "title": "家庭游戏时间", "cost": 2, "fulfillment_mode": "family_manual"}
+      ],
+      "event": {"command_type": "request_redemption", "command_id": "cmd.redeem.002", "idempotency_key": "idem.redeem.002", "effective_at": "2026-08-14T08:01:00Z", "request_id": "request.redeem.002", "goal_id": "goal.redeem.002"},
+      "expected": {"ok": false, "error_code": "insufficient_reward_balance", "ledger_event_count": 0, "input_unchanged": true}
+    },
+    {
+      "vector_id": "reward.redemption.adult-confirm-once",
+      "setup_events": [
+        {"command_type": "completion_confirmed", "command_id": "cmd.confirm.setup.001", "idempotency_key": "idem.confirm.setup.001", "effective_at": "2026-08-13T08:00:00Z", "completion_evidence_id": "completion.confirm.001", "evidence_confirmed": true, "completed_on": "2026-08-13", "stars": 2},
+        {"command_type": "set_reward_goal", "command_id": "cmd.confirm.setup.002", "idempotency_key": "idem.confirm.setup.002", "effective_at": "2026-08-14T08:00:00Z", "goal_id": "goal.confirm.001", "title": "一起散步", "cost": 2, "fulfillment_mode": "family_manual"},
+        {"command_type": "request_redemption", "command_id": "cmd.confirm.setup.003", "idempotency_key": "idem.confirm.setup.003", "effective_at": "2026-08-14T08:01:00Z", "request_id": "request.confirm.001", "goal_id": "goal.confirm.001"}
+      ],
+      "event": {"command_type": "confirm_redemption", "command_id": "cmd.confirm.001", "idempotency_key": "idem.confirm.001", "effective_at": "2026-08-14T08:02:00Z", "request_id": "request.confirm.001", "adult_confirmation": {"confirmation_id": "adult.confirm.001", "actor_role": "guardian", "explicit": true, "confirmed_at": "2026-08-14T08:02:00Z"}},
+      "repeat_event": true,
+      "expected": {"ok": true, "status": "idempotent_replay", "effect_type": "redemption_confirmed_once", "projection_as_of": "2026-08-14", "balance": 0, "spent_total": 2, "ledger_event_count": 2, "path_equals": {"state.reward.redemption_requests.request.confirm.001.fulfillment_status": "manual_pending"}, "protected_truth_unchanged": true}
+    },
+    {
+      "vector_id": "reward.redemption.adult-missing",
+      "setup_events": [
+        {"command_type": "completion_confirmed", "command_id": "cmd.confirm.setup.004", "idempotency_key": "idem.confirm.setup.004", "effective_at": "2026-08-13T08:00:00Z", "completion_evidence_id": "completion.confirm.002", "evidence_confirmed": true, "completed_on": "2026-08-13", "stars": 2},
+        {"command_type": "set_reward_goal", "command_id": "cmd.confirm.setup.005", "idempotency_key": "idem.confirm.setup.005", "effective_at": "2026-08-14T08:00:00Z", "goal_id": "goal.confirm.002", "title": "一起散步", "cost": 2, "fulfillment_mode": "family_manual"},
+        {"command_type": "request_redemption", "command_id": "cmd.confirm.setup.006", "idempotency_key": "idem.confirm.setup.006", "effective_at": "2026-08-14T08:01:00Z", "request_id": "request.confirm.002", "goal_id": "goal.confirm.002"}
+      ],
+      "event": {"command_type": "confirm_redemption", "command_id": "cmd.confirm.002", "idempotency_key": "idem.confirm.002", "effective_at": "2026-08-14T08:02:00Z", "request_id": "request.confirm.002"},
+      "expected": {"ok": false, "error_code": "adult_confirmation_missing", "projection_as_of": "2026-08-14", "balance": 2, "ledger_event_count": 1, "path_equals": {"state.reward.redemption_requests.request.confirm.002.status": "adult_confirmation_pending"}, "input_unchanged": true}
+    },
+    {
+      "vector_id": "reward.celebration.display-only",
+      "event": {"command_type": "record_stage_celebration", "command_id": "cmd.celebration.001", "idempotency_key": "idem.celebration.001", "effective_at": "2026-08-14T09:00:00Z", "celebration_id": "celebration.stage.001", "stage_evidence_id": "stage.evidence.001", "stage_evidence_confirmed": true, "label": "完成本阶段"},
+      "expected": {"ok": true, "effect_type": "stage_celebration_recorded_without_reward", "projection_as_of": "2026-08-14", "balance": 0, "ledger_event_count": 0, "celebration_count": 1, "protected_truth_unchanged": true}
+    },
+    {
+      "vector_id": "constraint.reminder.reversible",
+      "event": {"command_type": "apply_constraint", "command_id": "cmd.constraint.001", "idempotency_key": "idem.constraint.001", "effective_at": "2026-08-14T09:10:00Z", "constraint_id": "constraint.reminder.001", "constraint_type": "reminder", "scope": "selected-module", "reason_code": "quota.near-limit", "reversible": true},
+      "expected": {"ok": true, "effect_type": "reversible_constraint_applied", "active_constraint_count": 1, "path_equals": {"state.constraints.active.constraint.reminder.001.removal_path": "adult_or_owner_confirmation"}, "protected_truth_unchanged": true}
+    },
+    {
+      "vector_id": "constraint.cooldown.expiry",
+      "setup_events": [
+        {"command_type": "apply_constraint", "command_id": "cmd.cooldown.001", "idempotency_key": "idem.cooldown.001", "effective_at": "2026-08-14T09:00:00Z", "constraint_id": "constraint.cooldown.001", "constraint_type": "cooldown", "scope": "selected-module", "reason_code": "repeat.too-fast", "reversible": true, "cooldown_until": "2026-08-14T10:00:00Z"}
+      ],
+      "event": {"command_type": "expire_constraints", "command_id": "cmd.cooldown.002", "idempotency_key": "idem.cooldown.002", "effective_at": "2026-08-14T10:01:00Z"},
+      "expected": {"ok": true, "effect_type": "constraint_expiry_evaluated", "active_constraint_count": 0, "path_equals": {"receipt.effect.expired_constraint_ids": ["constraint.cooldown.001"]}, "protected_truth_unchanged": true}
+    },
+    {
+      "vector_id": "constraint.permanent.forbidden",
+      "event": {"command_type": "apply_constraint", "command_id": "cmd.constraint.002", "idempotency_key": "idem.constraint.002", "effective_at": "2026-08-14T09:20:00Z", "constraint_id": "constraint.permanent.001", "constraint_type": "permanent_lock", "scope": "selected-module", "reason_code": "missed.once", "reversible": false},
+      "expected": {"ok": false, "error_code": "permanent_or_unknown_constraint_forbidden", "active_constraint_count": 0, "input_unchanged": true}
+    },
+    {
+      "vector_id": "constraint.shaming.forbidden",
+      "event": {"command_type": "apply_constraint", "command_id": "cmd.constraint.003", "idempotency_key": "idem.constraint.003", "effective_at": "2026-08-14T09:21:00Z", "constraint_id": "constraint.shaming.001", "constraint_type": "reminder", "scope": "selected-module", "reason_code": "missed.once", "reversible": true, "shaming": true},
+      "expected": {"ok": false, "error_code": "harmful_constraint_forbidden", "active_constraint_count": 0, "input_unchanged": true}
+    },
+    {
+      "vector_id": "constraint.remove.adult-confirmed",
+      "setup_events": [
+        {"command_type": "apply_constraint", "command_id": "cmd.remove.setup.001", "idempotency_key": "idem.remove.setup.001", "effective_at": "2026-08-14T09:00:00Z", "constraint_id": "constraint.remove.001", "constraint_type": "quota", "scope": "selected-module", "reason_code": "daily.limit", "reversible": true, "quota": 3}
+      ],
+      "event": {"command_type": "remove_constraint", "command_id": "cmd.remove.001", "idempotency_key": "idem.remove.001", "effective_at": "2026-08-14T09:30:00Z", "constraint_id": "constraint.remove.001", "reason_code": "adult.override", "adult_confirmation": {"confirmation_id": "adult.remove.001", "actor_role": "owner", "explicit": true, "confirmed_at": "2026-08-14T09:30:00Z"}},
+      "expected": {"ok": true, "effect_type": "constraint_removed", "active_constraint_count": 0, "protected_truth_unchanged": true}
+    },
+    {
+      "vector_id": "constraint.remove.adult-missing",
+      "setup_events": [
+        {"command_type": "apply_constraint", "command_id": "cmd.remove.setup.002", "idempotency_key": "idem.remove.setup.002", "effective_at": "2026-08-14T09:00:00Z", "constraint_id": "constraint.remove.002", "constraint_type": "quota", "scope": "selected-module", "reason_code": "daily.limit", "reversible": true, "quota": 3}
+      ],
+      "event": {"command_type": "remove_constraint", "command_id": "cmd.remove.002", "idempotency_key": "idem.remove.002", "effective_at": "2026-08-14T09:30:00Z", "constraint_id": "constraint.remove.002", "reason_code": "missing.confirmation"},
+      "expected": {"ok": false, "error_code": "adult_confirmation_missing", "active_constraint_count": 1, "input_unchanged": true}
+    },
+    {
+      "vector_id": "privacy.consent.explicit-local",
+      "event": {"command_type": "grant_sensitive_data_consent", "command_id": "cmd.consent.001", "idempotency_key": "idem.consent.001", "effective_at": "2026-08-14T10:00:00Z", "consent_id": "consent.local.001", "purpose": "保存本机健康记录", "field_scope": ["date", "value"], "storage": "local_only", "explicit": true, "revocable": true, "subject_or_controller_authorized": true},
+      "expected": {"ok": true, "effect_type": "sensitive_data_consent_granted", "path_equals": {"state.authorizations.sensitive_data_consents.consent.local.001.status": "active", "state.authorizations.sensitive_data_consents.consent.local.001.raw_sensitive_data_stored": false}, "protected_truth_unchanged": true}
+    },
+    {
+      "vector_id": "privacy.consent.incomplete-rejected",
+      "event": {"command_type": "grant_sensitive_data_consent", "command_id": "cmd.consent.002", "idempotency_key": "idem.consent.002", "effective_at": "2026-08-14T10:01:00Z", "consent_id": "consent.local.002", "purpose": "保存本机记录", "field_scope": ["value"], "storage": "local_only", "explicit": false, "revocable": true, "subject_or_controller_authorized": true},
+      "expected": {"ok": false, "error_code": "explicit_revocable_consent_required", "input_unchanged": true}
+    },
+    {
+      "vector_id": "privacy.consent.revoke",
+      "setup_events": [
+        {"command_type": "grant_sensitive_data_consent", "command_id": "cmd.consent.setup.001", "idempotency_key": "idem.consent.setup.001", "effective_at": "2026-08-14T10:00:00Z", "consent_id": "consent.local.003", "purpose": "保存本机记录", "field_scope": ["value"], "storage": "local_only", "explicit": true, "revocable": true, "subject_or_controller_authorized": true}
+      ],
+      "event": {"command_type": "revoke_sensitive_data_consent", "command_id": "cmd.consent.003", "idempotency_key": "idem.consent.003", "effective_at": "2026-08-14T10:02:00Z", "consent_id": "consent.local.003", "adult_confirmation": {"confirmation_id": "adult.consent.003", "actor_role": "owner", "explicit": true, "confirmed_at": "2026-08-14T10:02:00Z"}},
+      "expected": {"ok": true, "effect_type": "sensitive_data_consent_revoked", "path_equals": {"state.authorizations.sensitive_data_consents.consent.local.003.status": "revoked", "state.authorizations.sensitive_data_consents.consent.local.003.new_processing_allowed": false}, "protected_truth_unchanged": true}
+    },
+    {
+      "vector_id": "external.preview.no-side-effect",
+      "event": {"command_type": "request_external_operation", "command_id": "cmd.external.001", "idempotency_key": "idem.external.001", "effective_at": "2026-08-14T11:00:00Z", "operation_id": "external.operation.001", "operation_type": "send_message", "target_summary": "已确认收件人摘要", "payload_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+      "expected": {"ok": true, "effect_type": "external_operation_preview_requested", "path_equals": {"state.authorizations.external_operations.external.operation.001.status": "confirmation_pending", "state.authorizations.external_operations.external.operation.001.execution_status": "not_executed", "receipt.invariant_checks.external_side_effect": false}, "protected_truth_unchanged": true}
+    },
+    {
+      "vector_id": "external.confirm.manual-only",
+      "setup_events": [
+        {"command_type": "request_external_operation", "command_id": "cmd.external.setup.001", "idempotency_key": "idem.external.setup.001", "effective_at": "2026-08-14T11:00:00Z", "operation_id": "external.operation.002", "operation_type": "publish_draft", "target_summary": "已确认发布目标摘要", "payload_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+      ],
+      "event": {"command_type": "confirm_external_operation", "command_id": "cmd.external.002", "idempotency_key": "idem.external.002", "effective_at": "2026-08-14T11:01:00Z", "operation_id": "external.operation.002", "adult_confirmation": {"confirmation_id": "adult.external.002", "actor_role": "owner", "explicit": true, "confirmed_at": "2026-08-14T11:01:00Z"}},
+      "expected": {"ok": true, "effect_type": "external_manual_handoff_confirmed", "path_equals": {"state.authorizations.external_operations.external.operation.002.status": "manual_handoff_authorized", "state.authorizations.external_operations.external.operation.002.execution_status": "not_executed", "receipt.effect.external_side_effect": false}, "protected_truth_unchanged": true}
+    },
+    {
+      "vector_id": "external.payment.forbidden",
+      "event": {"command_type": "request_external_operation", "command_id": "cmd.external.003", "idempotency_key": "idem.external.003", "effective_at": "2026-08-14T11:02:00Z", "operation_id": "external.operation.003", "operation_type": "payment", "target_summary": "付款目标", "payload_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+      "expected": {"ok": false, "error_code": "paid_or_transferable_operation_forbidden", "input_unchanged": true}
+    },
+    {
+      "vector_id": "idempotency.payload-conflict",
+      "setup_events": [
+        {"command_type": "completion_confirmed", "command_id": "cmd.idem.001", "idempotency_key": "idem.shared.001", "effective_at": "2026-08-14T12:00:00Z", "completion_evidence_id": "completion.idem.001", "evidence_confirmed": true, "completed_on": "2026-08-14", "stars": 1}
+      ],
+      "event": {"command_type": "completion_confirmed", "command_id": "cmd.idem.002", "idempotency_key": "idem.shared.001", "effective_at": "2026-08-14T12:01:00Z", "completion_evidence_id": "completion.idem.001", "evidence_confirmed": true, "completed_on": "2026-08-14", "stars": 2},
+      "expected": {"ok": false, "error_code": "idempotency_conflict", "projection_as_of": "2026-08-14", "balance": 1, "ledger_event_count": 1, "input_unchanged": true, "protected_truth_unchanged": true}
+    }
+  ],
+  "audit": {
+    "status": "executable_ready_selected_scope_bound",
+    "engine_vector_count": 24,
+    "product_runtime_binding": "recommendation_plan.policy_engine_binding plus build and evidence receipts",
+    "maturity_note": "六个 policy pack 已由纯函数 engine、24 条向量、selected-scope 产品绑定和 v0.52 组合门达到 executable_ready；仍不标 release_ready",
+    "source_runtime_reviewed": [
+      "scripts/double6_runtime/builder.py reward ledger and reward_economy surface",
+      "scripts/double6_runtime/child_playground.py parent-confirmed reward projection and affects_mastery=false events"
+    ],
+    "frozen_child_source_modified": false,
+    "real_user_trial": false,
+    "identity_voice_photo_video_collected": false,
+    "host_or_publication_changes": false,
+    "honest_gaps": [
+      "通用 renderer 只携带 selected policy registry binding；页面内奖励交互继续由既有本地账本实现",
+      "冻结儿童候选和儿童运行时未改；儿童路径继续使用显式 legacy binding",
+      "外部操作只产生 manual_handoff 授权，不执行、不生成成功回执",
+      "拒绝命令回执由调用方负责持久化，engine 保持失败时输入 state 不变",
+      "没有 policy pack 达到 release_ready"
+    ]
+  }
+}

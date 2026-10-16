@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "contract_version": "double6_dashboard_templates_v1",
+  "kernel_version": "1.1.0",
+  "templates": {
+    "personal-week-home-v4": {
+      "renderer_id": "personal_week_dashboard",
+      "now_fallback_module_id": "personal-today",
+      "capture_fallback_module_id": "personal-inbox",
+      "attention_link_module_id": "personal-week-plan",
+      "attention_link_label": "查看完整周计划",
+      "required_hooks": [
+        "records",
+        "active",
+        "completion",
+        "progress-label"
+      ],
+      "hero_eyebrow": "个人一周执行 · 几件真事都在",
+      "hero_title": "先看见这几件到哪了",
+      "hero_body": "今天有动作的动手，没有动作的也留在视野里。不是每天只推一件。",
+      "capture_label_fallback": "现在想到什么？",
+      "attention_label_fallback": "只显示会影响执行的事",
+      "html": "<section id='dashboard' class='app-view dashboard-view personal-week-dashboard is-active' data-view-id='dashboard' data-dashboard-signature='personal-week-execution-v4'>{hero}<section class='personal-now-panel dashboard-panel' data-first-screen-slot='primary_surface' data-personal-now-panel data-composition-region='now'><div data-personal-now-content></div></section><section class='personal-today-focus dashboard-panel today-workboard' data-first-screen-slot='progress' data-today-workboard data-composition-region='flow' aria-label='今日 Top 3'><div class='panel-heading'><div><span class='eyebrow'>今天</span><h2>Top 3 与候补</h2></div>{now_link}</div><div data-personal-today-focus></div><span class='hidden' data-dashboard-metric='records'>0</span><span class='hidden' data-dashboard-metric='active'>0</span><span class='hidden' data-dashboard-metric='completion'>0%</span><span class='hidden' data-double6-hook='progress-label'>已保存 0 条记录</span></section><form class='personal-quick-capture dashboard-panel' data-personal-quick-capture data-composition-region='capture'><label><span>{capture_label}</span><input type='text' required maxlength='240' data-personal-capture-title placeholder='先收进来，不等于承诺本周完成'></label><button type='submit'>收进{capture_name}</button><p data-personal-capture-feedback aria-live='polite'>只保存在当前设备；稍后再决定排进本周、以后再看或删除。</p></form><section class='personal-attention-panel dashboard-panel' data-first-screen-slot='supporting_panel' data-composition-region='attention'><div class='panel-heading'><div><span class='eyebrow'>需要关注</span><h2>{attention_label}</h2></div>{attention_link}</div><div data-personal-attention></div><details class='personal-workspace-switcher'><summary>打开其他工作区</summary><div class='mini-action-grid'>{workspace_links}</div></details><div class='personal-data-safety'><span>本地数据</span><div class='today-actions'><button type='button' class='secondary' data-double6-hook='quick-export'>导出备份</button><label class='secondary today-import'><span>导入恢复</span><input class='hidden' data-double6-hook='quick-import' type='file' accept='application/json,text/plain,.json,.txt'></label></div><p class='backup-reminder' data-double6-hook='backup-reminder' hidden></p></div></section></section>"
+    },
+    "content-production-home-v2": {
+      "renderer_id": "creator_production_dashboard",
+      "now_fallback_module_id": "content-production",
+      "capture_fallback_module_id": "content-input",
+      "attention_link_module_id": "",
+      "attention_link_label": "",
+      "required_hooks": [],
+      "hero_eyebrow": "内容生产 · 从来源到下一轮",
+      "hero_title": "今天只推进一个关键缺口",
+      "hero_body": "首页根据本机记录指出现在做什么；来源、任务书、制作、人工发布与复盘各有独立工作面。",
+      "flow_eyebrow_fallback": "活跃作品链",
+      "flow_title_fallback": "来源 → 选题 → 任务书 → 制作 → 人工发布 → 复盘",
+      "capture_label_fallback": "刚发现什么？",
+      "attention_label_fallback": "只显示会阻塞交付的缺口",
+      "html": "<section id='dashboard' class='app-view dashboard-view creator-dashboard is-active' data-view-id='dashboard' data-dashboard-signature='creator-production-pipeline-v2'>{hero}<section class='content-now-panel dashboard-panel' data-first-screen-slot='primary_surface' data-content-now-panel data-composition-region='now' data-today-workboard><div data-content-now-content></div><div class='content-due-strip'><p data-today-summary>正在读取当前设备上的到期制作事项。</p><div class='today-items' data-today-items></div></div></section><section class='content-flow-panel dashboard-panel' data-first-screen-slot='progress' data-composition-region='flow'><div class='panel-heading'><div><span class='eyebrow'>{flow_eyebrow}</span><h2>{flow_title}</h2></div><strong data-content-flow-summary>0 条对象</strong></div><div data-content-home-flow></div></section><form class='content-home-capture dashboard-panel' data-content-home-capture data-composition-region='capture'><label><span>{capture_label}</span><input required maxlength='160' data-content-home-title placeholder='写下素材、观察或问题'></label><label><span>出处与待核问题</span><input maxlength='240' data-content-home-note placeholder='URL / 文件路径 / 日期；不知道可写待补'></label><button type='submit'>收进{capture_name}</button><p data-content-home-feedback aria-live='polite'>只保存在当前设备；没有来源的外部事实不会自动进入成稿。</p></form><section class='content-attention-panel dashboard-panel' data-first-screen-slot='supporting_panel' data-composition-region='attention'><div class='panel-heading'><div><span class='eyebrow'>需要关注</span><h2>{attention_label}</h2></div>{now_link}</div><div data-content-attention></div><details class='personal-workspace-switcher'><summary>打开完整生产工作区</summary><div class='mini-action-grid'>{workspace_links}</div></details><div class='personal-data-safety'><span>本地记录 · 外部发布未执行</span><div class='today-actions'><button type='button' class='secondary' data-double6-hook='quick-export'>导出备份</button><label class='secondary today-import'><span>导入恢复</span><input class='hidden' data-double6-hook='quick-import' type='file' accept='application/json,text/plain,.json,.txt'></label></div></div></section></section>"
+    },
+    "sales-followup-home-v3": {
+      "renderer_id": "sales_followup_dashboard",
+      "now_fallback_module_id": "sales-followups",
+      "capture_fallback_module_id": "sales-leads",
+      "attention_link_module_id": "",
+      "attention_link_label": "",
+      "required_hooks": [],
+      "hero_eyebrow": "销售推进 · 客户数据默认脱敏",
+      "hero_title": "今天只推进一个明确动作",
+      "hero_body": "首页只暴露现在该跟进谁、为什么、通过什么渠道；线索、客户、询盘、报价和复盘在各自工作面。",
+      "flow_eyebrow_fallback": "活跃业务链",
+      "flow_title_fallback": "线索 → 客户 → 跟进 → 询盘/订单 → 报价 → 复盘",
+      "capture_label_fallback": "新增线索",
+      "attention_label_fallback": "逾期、无下一步和待人工发送",
+      "html": "<section id='dashboard' class='app-view dashboard-view sales-followup-dashboard is-active' data-view-id='dashboard' data-dashboard-signature='sales-followup-pipeline-v3'>{hero}<section class='sales-now-panel dashboard-panel' data-first-screen-slot='primary_surface' data-sales-now-panel data-composition-region='now' data-today-workboard><div data-sales-now-content></div><div class='sales-due-strip'><p data-today-summary>正在读取当前设备上的到期跟进。</p><div class='today-items' data-today-items></div></div></section><section class='sales-flow-panel dashboard-panel' data-first-screen-slot='progress' data-composition-region='flow'><div class='panel-heading'><div><span class='eyebrow'>{flow_eyebrow}</span><h2>{flow_title}</h2></div><strong data-sales-flow-summary>0 条对象</strong></div><div class='sales-home-flow' data-sales-home-flow></div></section><form class='sales-home-capture dashboard-panel' data-sales-home-capture data-composition-region='capture'><label><span>线索代号</span><input required maxlength='80' data-sales-home-alias placeholder='例如：华东-A17（不要填真实姓名）'></label><label><span>来源</span><input required maxlength='160' data-sales-home-source placeholder='展会名 / 公开入口 / 转介绍代号'></label><label><span>唯一下一步</span><input required maxlength='160' data-sales-home-action placeholder='例如：确认采购周期与规格'></label><button type='submit'>收进{capture_name}</button><p data-sales-home-feedback aria-live='polite'>只保存脱敏代号；页面不会联系客户或抓取私人联系方式。</p></form><section class='sales-attention-panel dashboard-panel' data-first-screen-slot='supporting_panel' data-composition-region='attention'><div class='panel-heading'><div><span class='eyebrow'>需要关注</span><h2>{attention_label}</h2></div>{now_link}</div><div data-sales-attention></div><details class='personal-workspace-switcher'><summary>打开完整销售工作区</summary><div class='mini-action-grid'>{workspace_links}</div></details><div class='personal-data-safety'><span>脱敏本地数据 · 消息/报价未自动发送</span><div class='today-actions'><button type='button' class='secondary' data-double6-hook='quick-export'>导出备份</button><label class='secondary today-import'><span>导入恢复</span><input class='hidden' data-double6-hook='quick-import' type='file' accept='application/json,text/plain,.json,.txt'></label></div></div></section></section>"
+    }
+  }
+}

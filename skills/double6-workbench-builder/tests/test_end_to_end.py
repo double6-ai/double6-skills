@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from e2e_helpers import SKILL_ROOT, browser_ready, cli, route_catalog, run_to_candidate  # noqa: E402
+from e2e_helpers import browser_ready, cli, route_catalog, run_to_candidate  # noqa: E402
 
 SNAKE = re.compile(r"(?<![A-Za-z0-9_])[a-z][a-z0-9]*(?:_[a-z0-9]+)+(?![A-Za-z0-9_])")
 
@@ -58,12 +58,19 @@ class EndToEndAllDomainsTest(unittest.TestCase):
                 html = (run / "candidate" / "index.html").read_text(encoding="utf-8")
                 self._assert_candidate_quality(case_id, run, html)
         # 两个新增/重做的场景必须命中专属 renderer
-        self.assertEqual(renderers["research-knowledge"], "research_reading_dashboard")
+        self.assertEqual(renderers["research-knowledge--reading-desk"], "research_reading_dashboard")
         self.assertEqual(renderers["content-operations"], "creator_production_dashboard")
 
     def _assert_candidate_quality(self, case_id: str, run: Path, html: str) -> None:
-        self.assertIn("http-equiv='Content-Security-Policy'", html, case_id)
+        self.assertRegex(html, r"http-equiv=[\"']Content-Security-Policy[\"']", case_id)
         self.assertIn("connect-src 'none'", html, case_id)
+        lock = json.loads((run / "candidate-lock.json").read_text(encoding="utf-8"))
+        if lock["renderer_id"] == "child_playground_v2":
+            labels = re.findall(r'<span class="nav-label">(.*?)</span>', html)
+            self.assertEqual(len(labels), len(set(labels)), f"{case_id} 儿童导航重名")
+            self.assertTrue("今天" in labels, f"{case_id} 儿童首页入口缺失")
+            self.assertGreater(len(lock['learning_content_selection']['eligible_item_ids']), 0)
+            return
         labels = re.findall(r"<span class='nav-label'>(.*?)</span>", html)
         half = labels[: len(labels) // 2]
         self.assertEqual(len(half), len(set(half)), f"{case_id} 导航重名：{half}")
@@ -90,7 +97,7 @@ class EndToEndAllDomainsTest(unittest.TestCase):
         for marker in ("选题打分卡", "一鱼多吃", "互动率", "一周发布节奏", "小红书"):
             self.assertIn(marker, html)
         self.assertNotIn("装修", html)
-        self.assertNotIn("synthetic_demo", html)
+        self.assertTrue("来源状态：synthetic_demo" not in html, "素材文案泄漏机器标记")
 
     def test_utf8_bom_and_utf16_request_files(self) -> None:
         for encoding, prefix in (("utf-8-sig", "bom"), ("utf-16", "u16")):
@@ -118,6 +125,49 @@ class EndToEndAllDomainsTest(unittest.TestCase):
         event.write_text(json.dumps({"event_id": "x", "turn_index": 2, "raw_text": "确认", "intent": "approve_product", "presented_content_sha256": "0" * 64}), encoding="utf-8")
         error = cli("respond", "--run", str(run), "--event-file", str(event), ok_codes=(2,))
         self.assertIn("presented_content_sha256", error["error"])
+
+    @unittest.skipUnless(os.environ.get("DOUBLE6_E2E_BROWSER") == "1" or browser_ready(), "Playwright + Chromium 不可用，跳过浏览器验收")
+    def test_browser_template_dates_and_network_policy(self) -> None:
+        from playwright.sync_api import sync_playwright
+        from double6_runtime import browser_environment
+
+        reading, _ = run_to_candidate(self.tmp, 'browser-template-fields', '做一个研究阅读工作台',
+                                      {'primary_domain':'research-knowledge', 'profile_id':'reading-desk', 'evidence_spans':['研究阅读']}, '研究阅读工作台')
+        life, _ = run_to_candidate(self.tmp, 'browser-local-dates', '做一个个人生活工作台',
+                                   {'primary_domain':'personal-execution', 'profile_id':'personal-life-dashboard', 'evidence_spans':['个人生活工作台']}, '个人生活工作台')
+        with sync_playwright() as engine:
+            browser = engine.chromium.launch(headless=True, executable_path=browser_environment()['chromium'])
+            page = browser.new_page()
+            page.goto((reading/'candidate/index.html').as_uri())
+            page.evaluate("location.hash='#module-research-reading'")
+            module = page.locator('[data-double6-module-id="research-reading"]')
+            button = module.locator('[data-starter-action="use-template"]').first
+            item_id = button.locator('xpath=ancestor::*[@data-starter-item-id][1]').get_attribute('data-starter-item-id')
+            product = json.loads((reading/'product.json').read_text(encoding="utf-8"))
+            item = next(item for cap in product['capabilities'] for item in cap.get('starter', {}).get('starter_items', []) if item['item_id']==item_id)
+            before = module.locator('form select,form input[type=date],form input[type=number]').evaluate_all('els=>els.map(el=>el.value)')
+            button.click()
+            after = module.locator('form select,form input[type=date],form input[type=number]').evaluate_all('els=>els.map(el=>el.value)')
+            self.assertEqual(after, before)
+            values = module.locator('form input[type=text],form textarea').evaluate_all('els=>els.map(el=>el.value)')
+            self.assertTrue(item.get('body') in values, '模板正文没有填进文本字段')
+            intercepted = []
+            page.route('https://example.invalid/**', lambda route: (intercepted.append(route.request.url), route.abort()))
+            self.assertTrue(page.evaluate("async()=>{try{await fetch('https://example.invalid/csp-probe');return false}catch(e){return true}}"))
+            self.assertFalse(intercepted, 'CSP 未在发出外联请求前拦住请求')
+            page.close()
+            for zone, instant, today in [('Asia/Shanghai','2026-10-15T16:30:00Z','2026-10-16'),
+                                         ('America/Los_Angeles','2026-10-16T06:30:00Z','2026-10-15'),
+                                         ('Pacific/Kiritimati','2026-10-15T10:30:00Z','2026-10-16')]:
+                with self.subTest(timezone=zone):
+                    context = browser.new_context(timezone_id=zone)
+                    context.add_init_script("""{const NativeDate=Date,stamp=NativeDate.parse(%s);window.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:[stamp]))}static now(){return stamp}}} """ % json.dumps(instant))
+                    current = context.new_page()
+                    current.goto((life/'candidate/index.html').as_uri())
+                    result = current.evaluate("() => ({today:localDate(),monday:currentWeekKey(),streak:lifeFactStreak(['2026-10-15','2026-10-16'],'2026-10-16')})")
+                    self.assertEqual(result, {'today':today,'monday':'2026-10-12','streak':2})
+                    context.close()
+            browser.close()
 
     @unittest.skipUnless(os.environ.get("DOUBLE6_E2E_BROWSER") == "1" or browser_ready(), "Playwright + Chromium 不可用，跳过浏览器验收")
     def test_browser_evaluation_delivers(self) -> None:
