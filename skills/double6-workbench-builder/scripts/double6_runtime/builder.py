@@ -573,7 +573,8 @@ def _surface_label(surface_type: str, module_id: str = "") -> str:
         "research-evidence": "挂上的出处",
         "fitness-today": "今天练不练",
         "fitness-food": "今日三餐",
-        "fitness-log": "今日体重",
+        "fitness-log": "今天练了什么",
+        "fitness-metrics": "今日体重",
         "teaching-daily": "今日班务",
         "teaching-attendance": "今日考勤",
         "teaching-students": "待跟进",
@@ -1510,7 +1511,7 @@ def _html(product: dict[str, Any], design: dict[str, Any], token: dict[str, Any]
 	<section id='detail-view' class='app-view detail-view' data-view-id='detail-view' data-layout-level='detail' data-detail-view hidden><a class='back-dashboard' data-detail-back href='#dashboard'>← 返回所属模块</a><article class='detail-card'><span class='eyebrow'>当前对象详情</span><h2 data-detail-title>选择一个已选模块中的条目</h2><p data-detail-body>从所属模块打开详情后，这里只显示当前对象和下一步。</p><p data-detail-status>当前状态：尚未开始</p><a class='primary-cta' data-detail-back href='#dashboard'>返回并继续</a></article></section>
 	<section id='data-tools' class='app-view data-tools' data-view-id='data-tools' data-layout-level='adult_settings' data-adult-settings hidden>
 	<a class='back-dashboard' href='#dashboard'>← 返回首页</a><span class='eyebrow'>成人设置 · 本地保存与恢复</span>
-	<div class='reliability-grid' data-reliability-public-layer><article><strong>入口</strong><p>本地单文件；当前候选不是永久链接或原生 App。</p></article><article><strong>数据位置</strong><p>当前设备、当前浏览器；未接入云备份或跨设备同步。</p></article><article><strong>外部数据</strong><p>内置内容为合成或自编；天气、价格、余量、账号和支付均未接入。</p></article><article data-reliability-receipt><strong>本地恢复能力</strong><p>保存、刷新恢复、导出、导入预览、撤销导入、清空和本机恢复点均进入验收。</p></article></div>
+	<div class='reliability-grid' data-reliability-public-layer><article><strong>入口</strong><p>本地单文件；当前候选不是永久链接或原生 App。</p></article><article><strong>数据位置</strong><p>当前设备、当前浏览器；未接入云备份或跨设备同步。</p></article><article><strong>外部数据</strong><p>开箱内容为合成或自编；天气、价格、余量、账号和支付均未接入。</p></article><article data-reliability-receipt><strong>本地恢复能力</strong><p>保存、刷新恢复、导出、导入预览、撤销导入、清空和本机恢复点均进入验收。</p></article></div>
 	<div class='tool-actions'><button class='secondary' data-double6-hook='export'>导出备份</button><button type='button' class='secondary' data-double6-hook='copy-backup'>复制备份到剪贴板</button>{finance_csv_control}<label><span class='hidden'>导入备份</span><input data-double6-hook='import' type='file' accept='application/json,text/plain,.json,.txt'></label><button class='secondary' data-double6-hook='undo-import' hidden>撤销最近导入</button><button class='secondary' data-double6-hook='clear'>清空本地数据</button></div>
 	<p class='feedback' data-double6-hook='data-feedback' aria-live='polite'></p>
 	<section class='atomic-tool import-preview' data-atomic-tool='atom.shared.import-backup-preview' data-import-preview hidden><span class='eyebrow'>导入预览</span><h3>还没有改动当前数据</h3><div class='atomic-output' data-import-preview-summary></div><div class='form-actions'><button type='button' data-import-confirm>确认导入</button><button type='button' class='secondary' data-import-cancel>取消</button></div></section>

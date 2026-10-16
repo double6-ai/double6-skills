@@ -104,7 +104,7 @@ python scripts/double6.py evaluate --run <run_dir> --preflight
 python scripts/double6.py build --run <run_dir>
 ```
 
-环境没就绪先修，不要先让用户做视觉确认。把候选路径交给用户自己打开。Agent 自己点页面、截图或回归时，用无头 Playwright / `evaluate`，不要接管用户正在用的 Chrome。截图之后必须把 PNG 当图像打开并写出视觉 finding，见 `references/visual-self-review.md`；只报 Playwright 字号、可点和 `data-*` 不算视觉检查。默认仍把候选路径交给用户自己打开。用户已经明确把视觉判断交给当前会话（「你觉得可通过就通过」「不要总是让我看」）时，监督会话必须自己截图、打开 PNG、按 `references/good-workbench.md` 五问判定；五问都是「是」才可用**这一次** `build` 返回的 `candidate_sha256` 写视觉确认，并留下 `agent-as-user` 回执。五问有「否」或「说不清」就不能过，不要再把同一页丢回用户。未获这项授权时，仍只有用户看过当前页才能确认：
+环境没就绪先修，不要先让用户做视觉确认。把候选路径交给用户自己打开。Agent 自己点页面、截图或回归时，用无头 Playwright / `evaluate`，不要接管用户正在用的 Chrome。截图之后必须把 PNG 当图像打开并写出视觉 finding，见 `references/visual-self-review.md`；只报 Playwright 字号、可点和 `data-*` 不算视觉检查。默认仍把候选路径交给用户自己打开。用户已经明确把视觉判断交给当前会话（「你觉得可通过就通过」「不要总是让我看」）时，监督会话必须自己截图、打开 PNG、按 `references/good-workbench.md` 七个判定问题判定；七问都是「是」才可用**这一次** `build` 返回的 `candidate_sha256` 写视觉确认，并留下 `agent-as-user` 回执。七问有「否」或「说不清」就不能过，不要再把同一页丢回用户。未获这项授权时，仍只有用户看过当前页才能确认：
 
 ```json
 {
@@ -150,13 +150,9 @@ python scripts/double6.py build --run <run_dir>
 
 儿童学习的奖励、题量、口算和家长回顾见 `references/education-rules.md`。用户已经指出过的入口、题量、题图、房间和内容雷见 `references/review-invariants.md`，改完必须跑 `python -B scripts/check_child_review_invariants.py`。题目排雷不限于儿童：备考、生活词汇、HR、孕期等场景的选择题也会犯标题泄题、答案总在第一项。方法见 `references/content-mines.md`，改题后跑 `python -B scripts/check_content_mines.py`。不要再靠人工一题一题扫。改减脂日常后另跑 `python -B scripts/check_fitness_tonight.py`：首页必须是今天的体重、三餐和打卡，不能把小学勾组当这个场景的主活动。改班主任后另跑 `python -B scripts/check_teacher_class.py`：首页必须是今天的班务、考勤和待跟进，开箱代号必须共用且带例外，不能套今晚一件、小学三站或真名花名册。改家庭今晚后另跑 `python -B scripts/check_household_tonight.py`：首页必须是今晚谁做什么、能勾掉、待当面说，不能是周历空表或假装已发送。改月度记账后另跑 `python -B scripts/check_finance_tonight.py`：首页必须是记今晚这笔、今日合计、凭证可勾、税待专业处理，不能是空月结台、银行余额、已申报或预填晚饭流水。改店铺订单后另跑 `python -B scripts/check_commerce_tonight.py`：首页必须是今天这几单、库存快照、待在平台回，不能是空经营台、实时库存或已发货。改研究结论后另跑 `python -B scripts/check_research_tonight.py`：首页必须能写下今晚这条带出处的结论，缺出处就标缺口，不能是空资料库或无来源已证实。改考公后另跑 `python -B scripts/check_exam_practice.py`：首页必须是行测、申论、面试三扇纸面，主动作是去做行测；三扇门要一眼分得出行测卷、申论稿纸、面试计时，不能是三颗同色按钮。接入题库后，三扇门必须进独立房间，错题再做一次必须打开同一道行测原题；打判要写明不是官方分。未接入时默认题要少，并写明打判还没接上。申论能写，面试能计时贴转写；导入必须先声明有权使用。不能冒充真题。给人看的页禁止写成走查工作台，门牌必须是考公工作台。改导入、备份或跨场景文案后再跑 `python -B scripts/check_domain_remnants.py`。版式、真值、PWA 图标、三视口和构建器强制项见 `references/content-truth-review.md`、`references/product.schema.json` 与运行时；宿主不要在入口复述这些实现细节。
 
-## 必守边界
+## 发布与授权
 
-发布门由维护者治理包执行，不随本 Skill 分发：
-
-## 按需读取
-
-打包、安装目录覆盖、SMB 上传、重启、共享晋升和外部发布都需要用户另行授权。
+发布门由维护者治理包执行，不随本 Skill 分发。打包、安装目录覆盖、SMB 上传、重启、共享晋升和外部发布都需要用户另行授权。
 
 ## 合并后的补充能力
 

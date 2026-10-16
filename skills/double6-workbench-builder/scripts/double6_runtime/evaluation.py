@@ -41,6 +41,8 @@ FAKE_HISTORY = re.compile(r"(?:\b[1-9][0-9]?%|连续\s*[1-9][0-9]*\s*天|累计\
 INTERNAL_UI_TERMS = {
     "starter", "unsupported", "manual_handoff", "action_checklist", "record_ledger",
     "stage_board", "metric_log", "review_journal", "reward_economy", "能力与交接",
+    # runtime-contract：使用者看得见的文案不能是「内置内容 / 自有记录」。
+    "内置内容", "自有记录",
 }
 INTERNAL_ID_PATTERNS = [
     re.compile(r"\bCAP-\d{2}-\d{2}\b"),
