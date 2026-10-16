@@ -65,8 +65,8 @@ class RestoredRuntimeTests(unittest.TestCase):
                     raise AssertionError('tampered bundled content accepted')
                 print('isolated child build and integrity guard pass')
             ''')
-            result = subprocess.run([sys.executable, '-B', '-c', code, str(copied), str(Path(temp)/'runs')],
-                                    capture_output=True, text=True, cwd=temp)
+            result = subprocess.run([sys.executable, '-X', 'utf8', '-B', '-c', code, str(copied), str(Path(temp)/'runs')],
+                                    capture_output=True, encoding='utf-8', cwd=temp)
             self.assertEqual(result.returncode, 0, (result.stdout+result.stderr)[-2500:])
 
     def test_all_scenes_compile_and_keep_maturity_boundaries(self):
@@ -74,7 +74,7 @@ class RestoredRuntimeTests(unittest.TestCase):
         self.assertEqual(result['scene_profile_count'], 35)
         self.assertEqual(result['domain_count'], 16)
         self.assertEqual(result['scene_maturity_counts'], {'catalog_only': 10, 'contract_ready': 9, 'executable_ready': 16, 'release_ready': 0})
-        scenes = json.loads((ROOT / 'references/scene-profiles.json').read_text())['scene_profiles']
+        scenes = json.loads((ROOT / 'references/scene-profiles.json').read_text(encoding='utf-8'))['scene_profiles']
         for scene in scenes:
             with self.subTest(scene=scene['scene_profile_id']):
                 scope = compile_selected_scope(scene['scene_profile_id'])
@@ -130,8 +130,8 @@ class RestoredRuntimeTests(unittest.TestCase):
                      'check_content_tonight', 'check_sales_tonight', 'check_child_review_invariants'):
             with self.subTest(checker=name):
                 # 专项脚本使用公开 CLI 输出；跨平台不依赖可执行位或 shebang。
-                completed = subprocess.run([sys.executable, '-B', str(ROOT/'scripts'/f'{name}.py')],
-                                           capture_output=True, text=True, cwd=ROOT)
+                completed = subprocess.run([sys.executable, '-X', 'utf8', '-B', str(ROOT/'scripts'/f'{name}.py')],
+                                           capture_output=True, encoding='utf-8', cwd=ROOT)
                 self.assertEqual(completed.returncode, 0, f'{name}: {(completed.stdout + completed.stderr)[-1800:]}')
 
 

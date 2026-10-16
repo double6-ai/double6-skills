@@ -82,7 +82,7 @@ class BrowserDiscoveryTests(unittest.TestCase):
             with self.subTest(layout=layout), tempfile.TemporaryDirectory() as temp:
                 target = Path(temp) / layout
                 target.parent.mkdir(parents=True)
-                target.write_text("")
+                target.write_text("", encoding="utf-8")
                 with mock.patch.dict(os.environ, {"PLAYWRIGHT_BROWSERS_PATH": temp}):
                     self.assertIn(target, evaluation._playwright_cache_browsers())
 

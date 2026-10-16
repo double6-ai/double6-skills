@@ -1152,6 +1152,7 @@ def _composition_pipeline(product: dict[str, Any], template: dict[str, Any], cap
     now = _region_module(regions, "now", by_id, rows[0])
     workspace_links = _workspace_links(by_id, list(pack.get("exact_module_ids") or by_id))
     flow_label = _flow_title(pack, by_id, "模块工作链")
+    attention_link = _link(now, "打开" + now["name"], "text-link")
     dashboard = (
         "<section id='dashboard' class='app-view dashboard-view composition-dashboard is-active' data-view-id='dashboard' "
         "data-dashboard-signature='composition-object-pipeline-v1' data-composition-dashboard>"
@@ -1160,7 +1161,7 @@ def _composition_pipeline(product: dict[str, Any], template: dict[str, Any], cap
         + f"<section class='content-flow-panel dashboard-panel' data-first-screen-slot='progress' data-composition-region='flow'><div class='panel-heading'><div><span class='eyebrow'>{_e(_region_label(regions, 'flow', '对象链'))}</span><h2>{_e(flow_label)}</h2></div><strong data-composition-flow-summary>0 条对象</strong></div><div class='content-home-flow' data-composition-home-flow></div></section>"
         + f"<form class='content-home-capture dashboard-panel' data-composition-home-capture data-composition-region='capture'><label><span>{_e(_region_label(regions, 'capture', '先记下什么？'))}</span><input required maxlength='160' data-composition-capture-title placeholder='一条问题、来源或观察'></label><button type='submit'>收进{_e(capture['name'])}</button><p data-composition-home-feedback aria-live='polite'>只保存在当前设备；不自动生成无来源结论。</p></form>"
         + f"<section class='content-attention-panel dashboard-panel' data-first-screen-slot='supporting_panel' data-composition-region='attention'><div class='panel-heading'><div><span class='eyebrow'>需要关注</span><h2>{_e(_region_label(regions, 'attention', '只显示会阻塞推进的缺口'))}</h2></div>"
-        f"{_link(now, f'打开{now['name']}', 'text-link')}</div><div data-composition-attention></div>"
+        f"{attention_link}</div><div data-composition-attention></div>"
         f"<details class='personal-workspace-switcher'><summary>打开完整工作区</summary><div class='mini-action-grid'>{workspace_links}</div></details>"
         "<div class='personal-data-safety'><span>本地记录 · 外部动作未执行</span><div class='today-actions'><button type='button' class='secondary' data-double6-hook='quick-export'>导出备份</button>"
         "<label class='secondary today-import'><span>导入恢复</span><input class='hidden' data-double6-hook='quick-import' type='file' accept='application/json,text/plain,.json,.txt'></label></div></div></section>"
