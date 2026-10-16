@@ -2,7 +2,7 @@
 name: double6-workbench-builder
 description: 把普通用户反复要做的真实事情构建成离线优先、严格单文件、个人数据留在当前设备的本地工作台（index.html）。用户提到个人工作台、学习台、备考台、任务面板、内容/社媒运营台、阅读或研究追踪、记录与复盘工具，或想把重复流程做成可保存恢复的页面时应使用。Use when the user asks for a personal workbench, dashboard, tracker, planner, habit/reading/research tracker, content or social-media ops board, study or exam desk, or wants a repeated workflow turned into an offline single-file local web app. 联网、多人协作、账号、支付和发布属于独立外部流程（network, multi-user, accounts, payments and publishing are out of scope）.
 metadata:
-  version: 1.2.1
+  version: 1.3.0
   openclaw:
     homepage: https://github.com/double6-ai/double6-skills/tree/main/skills/double6-workbench-builder
     emoji: "🧰"
@@ -43,7 +43,7 @@ python scripts/double6.py evaluate --run <run_dir>
 ## 必守边界
 
 - 交付严格为单个离线 HTML；个人数据仅留在当前设备，并提供导入、导出和恢复。
-- 儿童、学生、客户、财务、医疗和健康场景默认只用合成或脱敏数据；不得保存 token、密码、Cookie 或会话密钥。
+- 儿童、学生、客户、财务、医疗和健康场景默认只用合成或脱敏数据（本人自用的减脂/训练记录除外，直接记真实数据且只存本机）；不得保存 token、密码、Cookie 或会话密钥。
 - 联网数据、多人协作、账号、消息、支付、下单和公开发布只能标为人工交接或暂不支持，页面不得自行执行。
 - 每个核心模块必须同时有可立即操作的内置内容和真实交互表面，不能用空表、占位卡或纯说明冒充能力。
 - 内部 ID、schema 字段和治理术语不得进入用户可见文案；外部导入内容必须限量、转义、可撤销。
@@ -56,4 +56,4 @@ python scripts/double6.py evaluate --run <run_dir>
 - Windows、受限宿主、浏览器预检或本机部署：`references/host-integration-playbook.md`。
 - 产品字段：`references/product.schema.json`；领域、starter、视觉与风险规则使用 `references/` 中对应 JSON 合同。
 
-公开命令与 schema 版本以 `manifest.json` 为准；恢复合并的回归入口为 `tests/`，安装后检查见 `evals/release_sandbox_cases.json`。打包、覆盖安装、共享晋升和外部发布必须由宿主在用户授权后执行。
+公开命令与 schema 版本以 `manifest.json` 为准；恢复合并的回归入口为 `tests/`，安装后检查见 `evals/release_sandbox_cases.json`。本机安装（打包、覆盖本机安装目录、本机部署）无需另行授权；上传、共享晋升、公开发布或把数据发出本机必须由用户另行授权。

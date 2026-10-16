@@ -448,6 +448,9 @@ def static_scan(run_dir: Path) -> dict[str, Any]:
     snake_hits = sorted(set(SNAKE_CASE_TOKEN.findall(visible_copy_raw)) | set(_starter_snake_tokens(product)))
     if snake_hits:
         errors.append(f"候选可见文案或内置内容泄漏机器标记：{snake_hits[:8]}")
+    from .first_card import check_first_card
+
+    errors.extend(check_first_card(product, text))
     nav_labels = re.findall(r"<span class='nav-label'>(.*?)</span>", text)
     if nav_labels:
         counts = {label: nav_labels.count(label) for label in nav_labels}

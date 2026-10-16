@@ -2617,18 +2617,7 @@
         "log_today_meal",
         "checkin_today"
       ],
-      "tonight_seeds": [
-        {
-          "id": "r-seed-fitness-meal-1",
-          "module_id": "fitness-food",
-          "values": {
-            "title": "早餐 燕麦牛奶",
-            "date": "{{today}}",
-            "calories": 320,
-            "notes": "合成开箱。热量是自己填的估计。"
-          }
-        }
-      ],
+      "tonight_seeds": [],
       "execution_projection": {
         "projection_version": "double6_execution_projection_v1",
         "today_module_ids": [
