@@ -12,7 +12,20 @@
   "selection_policy": {
     "automatic_non_default_selection": true,
     "rule": "仅当场景命中已登记的场景模板时，自动选择其默认模板；用户明确的模板选择或颜色反馈始终覆盖。未登记场景继续使用珊瑚小芽，不把旧候选配色按职业或身份自动套用。",
-    "pilot_scope": ["child_learning_quest", "creator_production_room", "teacher_lesson_studio", "freelance_delivery_studio", "travel_departure_atlas", "finance_month_close", "household_week_coordination", "fitness_week_sprint", "research_reading_desk"]
+    "pilot_scope": [
+      "child_learning_quest",
+      "creator_production_room",
+      "teacher_lesson_studio",
+      "freelance_delivery_studio",
+      "travel_departure_atlas",
+      "finance_month_close",
+      "household_week_coordination",
+      "fitness_week_sprint",
+      "personal_week_command",
+      "sales_followup_pipeline",
+      "research_evidence_pipeline",
+      "research_reading_desk"
+    ]
   },
   "common_kernel": {
     "product_shape": {
@@ -97,16 +110,19 @@
         "sidebar": "#ffe4eb",
         "card": "#ffffff",
         "ink": "#322c43",
-        "muted": "#857e96",
+        "muted": "#655d70",
         "line": "#eee8f1",
-        "primary": "#ff5f83",
-        "primary_strong": "#ed4269",
+        "primary": "#b52c51",
+        "primary_strong": "#9f2347",
         "accent": "#46d8ad",
         "category_1": "#fff4c8",
         "category_2": "#e4f3ff",
         "category_3": "#eee6ff",
         "category_4": "#dffaf2",
-        "hero_gradient": ["#ff547b", "#ff9c7e"]
+        "hero_gradient": [
+          "#b52c51",
+          "#a7433d"
+        ]
       }
     },
     {
@@ -128,7 +144,10 @@
         "category_2": "#dcecff",
         "category_3": "#e4c8ff",
         "category_4": "#d5f4e8",
-        "hero_gradient": ["#6d1aaa", "#d12fbb"]
+        "hero_gradient": [
+          "#6d1aaa",
+          "#d12fbb"
+        ]
       }
     },
     {
@@ -150,7 +169,10 @@
         "category_2": "#e4ecff",
         "category_3": "#eee7ff",
         "category_4": "#ddf5ef",
-        "hero_gradient": ["#4263e6", "#7894ff"]
+        "hero_gradient": [
+          "#4263e6",
+          "#7894ff"
+        ]
       }
     },
     {
@@ -172,7 +194,10 @@
         "category_2": "#dff4ff",
         "category_3": "#e9e2ff",
         "category_4": "#dff5ed",
-        "hero_gradient": ["#1767d6", "#6ebeff"]
+        "hero_gradient": [
+          "#1767d6",
+          "#6ebeff"
+        ]
       }
     },
     {
@@ -185,16 +210,19 @@
         "sidebar": "#ffe5cf",
         "card": "#fffdfa",
         "ink": "#3d2b2b",
-        "muted": "#856f68",
+        "muted": "#7f675f",
         "line": "#f0dfd4",
-        "primary": "#e45f3c",
-        "primary_strong": "#bc3f25",
+        "primary": "#bc3f25",
+        "primary_strong": "#a9361f",
         "accent": "#2c9b89",
         "category_1": "#ffe0b2",
         "category_2": "#dff4ed",
         "category_3": "#ede3ff",
         "category_4": "#ffe3dd",
-        "hero_gradient": ["#dc5938", "#ff9a69"]
+        "hero_gradient": [
+          "#bc3f25",
+          "#a95634"
+        ]
       }
     },
     {
@@ -216,7 +244,10 @@
         "category_2": "#dbece7",
         "category_3": "#e9e1f3",
         "category_4": "#f5ddd3",
-        "hero_gradient": ["#245e54", "#4c8378"]
+        "hero_gradient": [
+          "#245e54",
+          "#356c62"
+        ]
       }
     },
     {
@@ -225,9 +256,23 @@
       "motif": "🧾",
       "palette_status": "candidate_scene_template_needs_user_review",
       "palette": {
-        "canvas": "#f3faf7", "sidebar": "#d8eee5", "card": "#ffffff", "ink": "#20372f", "muted": "#6e8179", "line": "#d8e7e0",
-        "primary": "#1f7a5b", "primary_strong": "#145640", "accent": "#d49b3d", "category_1": "#f7e9bd", "category_2": "#dcefe8",
-        "category_3": "#e6e2f5", "category_4": "#dcecf4", "hero_gradient": ["#185f48", "#49a37e"]
+        "canvas": "#f3faf7",
+        "sidebar": "#d8eee5",
+        "card": "#ffffff",
+        "ink": "#20372f",
+        "muted": "#6e8179",
+        "line": "#d8e7e0",
+        "primary": "#1f7a5b",
+        "primary_strong": "#145640",
+        "accent": "#d49b3d",
+        "category_1": "#f7e9bd",
+        "category_2": "#dcefe8",
+        "category_3": "#e6e2f5",
+        "category_4": "#dcecf4",
+        "hero_gradient": [
+          "#185f48",
+          "#49a37e"
+        ]
       }
     },
     {
@@ -236,9 +281,23 @@
       "motif": "🏠",
       "palette_status": "candidate_scene_template_needs_user_review",
       "palette": {
-        "canvas": "#fffaf1", "sidebar": "#ffe8c9", "card": "#ffffff", "ink": "#48372f", "muted": "#8a756a", "line": "#eee0d2",
-        "primary": "#e8784d", "primary_strong": "#bb4f2d", "accent": "#4d9f83", "category_1": "#fff0bd", "category_2": "#deefff",
-        "category_3": "#f1e3ff", "category_4": "#dff5e9", "hero_gradient": ["#e36c43", "#f5b46e"]
+        "canvas": "#fffaf1",
+        "sidebar": "#ffe8c9",
+        "card": "#ffffff",
+        "ink": "#48372f",
+        "muted": "#8a756a",
+        "line": "#eee0d2",
+        "primary": "#e8784d",
+        "primary_strong": "#bb4f2d",
+        "accent": "#4d9f83",
+        "category_1": "#fff0bd",
+        "category_2": "#deefff",
+        "category_3": "#f1e3ff",
+        "category_4": "#dff5e9",
+        "hero_gradient": [
+          "#e36c43",
+          "#f5b46e"
+        ]
       }
     },
     {
@@ -247,9 +306,23 @@
       "motif": "🏃",
       "palette_status": "candidate_scene_template_needs_user_review",
       "palette": {
-        "canvas": "#f5f8f2", "sidebar": "#dfeccd", "card": "#ffffff", "ink": "#26342a", "muted": "#718076", "line": "#dfe7dc",
-        "primary": "#5f8f2f", "primary_strong": "#416b1c", "accent": "#f38a3f", "category_1": "#f4e7ad", "category_2": "#dcecf5",
-        "category_3": "#e8e1f4", "category_4": "#dcedd4", "hero_gradient": ["#537f29", "#9fbd56"]
+        "canvas": "#f5f8f2",
+        "sidebar": "#dfeccd",
+        "card": "#ffffff",
+        "ink": "#26342a",
+        "muted": "#718076",
+        "line": "#dfe7dc",
+        "primary": "#5f8f2f",
+        "primary_strong": "#416b1c",
+        "accent": "#f38a3f",
+        "category_1": "#f4e7ad",
+        "category_2": "#dcecf5",
+        "category_3": "#e8e1f4",
+        "category_4": "#dcedd4",
+        "hero_gradient": [
+          "#537f29",
+          "#9fbd56"
+        ]
       }
     }
   ],
@@ -257,152 +330,497 @@
     {
       "scene_template_id": "child_learning_quest",
       "name": "儿童每日学习闯关",
-      "domain_ids": ["education-learning"],
-      "match": {"profile_ids": ["baby-growth-explorer", "primary-transition-1-to-2", "primary-transition-2-to-3", "primary-transition-3-to-4"]},
+      "domain_ids": [
+        "education-learning"
+      ],
+      "match": {
+        "profile_ids": [
+          "baby-growth-explorer",
+          "primary-transition-1-to-2",
+          "primary-transition-2-to-3",
+          "primary-transition-3-to-4"
+        ]
+      },
       "template_id": "coral_sprout",
       "token_id": "playful-growth",
-      "renderer_id": "child_learning_dashboard",
-      "visual_contract_version": "scene_dashboard_v1",
-      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "renderer_id": "child_playground_v2",
+      "visual_contract_version": "child_playground_v2",
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
       "detail_mode": "single_active_view",
       "quality_reference": "04_iterations/2026-08-03_xiaoxue-2s3-vivid-social-preview/index.html",
       "visual_status": "candidate_needs_user_review",
-      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+      "forbidden_fallbacks": [
+        "continuous_crud_forms_on_dashboard"
+      ]
     },
     {
       "scene_template_id": "teacher_lesson_studio",
       "name": "教师单节备课工作台",
-      "domain_ids": ["teaching-classroom"],
-      "match": {"profile_ids": ["teaching-lesson-preparation"]},
+      "domain_ids": [
+        "teaching-classroom"
+      ],
+      "match": {
+        "profile_ids": [
+          "teaching-lesson-preparation"
+        ]
+      },
       "template_id": "lesson_bloom",
       "token_id": "professional-trust",
       "renderer_id": "teacher_lesson_dashboard",
       "visual_contract_version": "scene_dashboard_v1",
-      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
       "detail_mode": "single_active_view",
       "quality_reference": "child_learning_quest",
       "visual_status": "candidate_needs_user_review",
-      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+      "forbidden_fallbacks": [
+        "continuous_crud_forms_on_dashboard"
+      ]
     },
     {
       "scene_template_id": "freelance_delivery_studio",
       "name": "自由职业项目交付工作台",
-      "domain_ids": ["professional-services"],
-      "match": {"request_any": ["自由职业", "客户项目", "项目交付", "插画交付"]},
+      "domain_ids": [
+        "professional-services"
+      ],
+      "match": {
+        "request_any": [
+          "自由职业",
+          "客户项目",
+          "项目交付",
+          "插画交付"
+        ]
+      },
       "template_id": "ink_parchment",
       "token_id": "professional-trust",
       "renderer_id": "freelance_delivery_dashboard",
       "visual_contract_version": "scene_dashboard_v1",
-      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
       "detail_mode": "single_active_view",
       "quality_reference": "child_learning_quest",
       "visual_status": "candidate_needs_user_review",
-      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+      "forbidden_fallbacks": [
+        "continuous_crud_forms_on_dashboard"
+      ]
     },
     {
       "scene_template_id": "travel_departure_atlas",
       "name": "周末出发行程台",
-      "domain_ids": ["travel-planning"],
-      "match": {"request_any": ["周末出发", "行程", "旅行计划"], "request_none": ["不做行程", "不是出发"]},
+      "domain_ids": [
+        "travel-planning"
+      ],
+      "match": {
+        "request_any": [
+          "周末出发",
+          "行程",
+          "旅行计划"
+        ],
+        "request_none": [
+          "不做行程",
+          "不是出发"
+        ]
+      },
       "template_id": "sky_postcard",
       "token_id": "general-focus",
       "renderer_id": "travel_departure_dashboard",
       "visual_contract_version": "scene_dashboard_v1",
-      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
       "detail_mode": "single_active_view",
       "quality_reference": "child_learning_quest",
       "visual_status": "candidate_needs_user_review",
-      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+      "forbidden_fallbacks": [
+        "continuous_crud_forms_on_dashboard"
+      ]
     },
     {
       "scene_template_id": "creator_production_room",
       "name": "内容选题制作台",
-      "domain_ids": ["content-operations"],
-      "match": {"request_any": ["选题", "内容制作", "脚本制作", "发布排期", "社媒", "自媒体", "小红书", "公众号", "视频号", "内容运营", "多平台"]},
+      "domain_ids": [
+        "content-operations"
+      ],
+      "match": {
+        "request_any": [
+          "选题",
+          "内容制作",
+          "脚本制作",
+          "发布排期",
+          "社媒",
+          "自媒体",
+          "小红书",
+          "公众号",
+          "视频号",
+          "内容运营",
+          "多平台"
+        ]
+      },
       "template_id": "studio_sunset",
       "token_id": "editorial-story",
       "renderer_id": "creator_production_dashboard",
       "visual_contract_version": "scene_dashboard_v1",
-      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
       "detail_mode": "single_active_view",
       "quality_reference": "child_learning_quest",
       "visual_status": "candidate_needs_user_review",
-      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+      "forbidden_fallbacks": [
+        "continuous_crud_forms_on_dashboard"
+      ]
     },
     {
       "scene_template_id": "finance_month_close",
       "name": "本地财务月结工作台",
-      "domain_ids": ["finance-tax-contract"],
-      "match": {"request_any": ["月结", "对账", "凭证整理"]},
+      "domain_ids": [
+        "finance-tax-contract"
+      ],
+      "match": {
+        "request_any": [
+          "月结",
+          "对账",
+          "凭证整理"
+        ]
+      },
       "template_id": "ledger_jade",
       "token_id": "professional-trust",
       "renderer_id": "finance_month_close_dashboard",
       "visual_contract_version": "scene_dashboard_v1",
-      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
       "detail_mode": "single_active_view",
       "quality_reference": "child_learning_quest",
       "visual_status": "candidate_needs_user_review",
-      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+      "forbidden_fallbacks": [
+        "continuous_crud_forms_on_dashboard"
+      ]
     },
     {
       "scene_template_id": "household_week_coordination",
       "name": "家庭一周协作工作台",
-      "domain_ids": ["household-collaboration"],
-      "match": {"request_any": ["家庭一周", "家务协作", "一周采购"]},
+      "domain_ids": [
+        "household-collaboration"
+      ],
+      "match": {
+        "request_any": [
+          "家庭一周",
+          "家务协作",
+          "一周采购"
+        ]
+      },
       "template_id": "home_sunrise",
       "token_id": "general-focus",
       "renderer_id": "household_week_dashboard",
       "visual_contract_version": "scene_dashboard_v1",
-      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
       "detail_mode": "single_active_view",
       "quality_reference": "child_learning_quest",
       "visual_status": "candidate_needs_user_review",
-      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+      "forbidden_fallbacks": [
+        "continuous_crud_forms_on_dashboard"
+      ]
     },
     {
       "scene_template_id": "fitness_week_sprint",
       "name": "一周训练冲刺工作台",
-      "domain_ids": ["fitness-nutrition"],
-      "match": {"request_any": ["一周训练", "训练冲刺", "一周减脂"], "request_none": ["不做一周", "不要冲刺"]},
+      "domain_ids": [
+        "fitness-nutrition"
+      ],
+      "match": {
+        "request_any": [
+          "一周训练",
+          "训练冲刺",
+          "一周减脂"
+        ],
+        "request_none": [
+          "不做一周",
+          "不要冲刺"
+        ]
+      },
       "template_id": "energy_sprint",
       "token_id": "high-contrast-execution",
       "renderer_id": "fitness_sprint_dashboard",
       "visual_contract_version": "scene_dashboard_v1",
-      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
       "detail_mode": "single_active_view",
       "quality_reference": "child_learning_quest",
       "visual_status": "candidate_needs_user_review",
-      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+      "forbidden_fallbacks": [
+        "continuous_crud_forms_on_dashboard"
+      ]
+    },
+    {
+      "scene_template_id": "personal_week_command",
+      "name": "个人一周执行指挥台",
+      "domain_ids": [
+        "personal-execution"
+      ],
+      "match": {
+        "request_any": [
+          "个人一周执行台",
+          "一周执行",
+          "本周作战图",
+          "个人周计划"
+        ]
+      },
+      "template_id": "home_sunrise",
+      "token_id": "high-contrast-execution",
+      "renderer_id": "personal_week_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
+      "detail_mode": "single_active_view",
+      "quality_reference": "child_learning_quest",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": [
+        "generic_priority_board",
+        "continuous_crud_forms_on_dashboard"
+      ]
+    },
+    {
+      "scene_template_id": "sales_followup_pipeline",
+      "name": "线索跟进推进台",
+      "domain_ids": [
+        "sales-trade"
+      ],
+      "match": {
+        "request_any": [
+          "线索到下一次跟进",
+          "销售线索",
+          "客户跟进",
+          "跟进管道"
+        ]
+      },
+      "template_id": "ink_parchment",
+      "token_id": "professional-trust",
+      "renderer_id": "sales_followup_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
+      "detail_mode": "single_active_view",
+      "quality_reference": "child_learning_quest",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": [
+        "generic_priority_board",
+        "continuous_crud_forms_on_dashboard"
+      ]
     },
     {
       "scene_template_id": "personal_life_dashboard",
       "name": "个人生活驾驶舱",
-      "domain_ids": ["personal-execution"],
-      "match": {"profile_ids": ["personal-life-dashboard"]},
+      "domain_ids": [
+        "personal-execution"
+      ],
+      "match": {
+        "profile_ids": [
+          "personal-life-dashboard"
+        ]
+      },
       "template_id": "home_sunrise",
       "token_id": "general-focus",
       "renderer_id": "personal_life_dashboard",
       "visual_contract_version": "scene_dashboard_v1",
-      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
       "detail_mode": "single_active_view",
       "quality_reference": "04_iterations/2026-08-04_scene-capability-social-ui-reconstruction/scene_reports/scene-01-life-management-social-ui.md",
       "visual_status": "candidate_needs_user_review",
-      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+      "forbidden_fallbacks": [
+        "continuous_crud_forms_on_dashboard"
+      ]
+    },
+    {
+      "scene_template_id": "research_evidence_pipeline",
+      "name": "问题—证据—报告工作台",
+      "domain_ids": [
+        "research-knowledge"
+      ],
+      "match": {
+        "request_any": [
+          "研究报告",
+          "证据",
+          "研究问题",
+          "问题—证据",
+          "文献证据"
+        ]
+      },
+      "template_id": "ink_parchment",
+      "token_id": "editorial-story",
+      "renderer_id": "composition_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
+      "detail_mode": "single_active_view",
+      "quality_reference": "child_learning_quest",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": [
+        "continuous_crud_forms_on_dashboard"
+      ]
+    },
+    {
+      "scene_template_id": "fitness_fat_loss_execute",
+      "name": "今天的减脂日常",
+      "domain_ids": [
+        "fitness-nutrition"
+      ],
+      "match": {
+        "profile_ids": [
+          "fitness-fat-loss"
+        ]
+      },
+      "template_id": "energy_sprint",
+      "token_id": "high-contrast-execution",
+      "renderer_id": "fitness_sprint_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
+      "detail_mode": "single_active_view",
+      "quality_reference": "child_learning_quest",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": [
+        "continuous_crud_forms_on_dashboard"
+      ]
+    },
+    {
+      "scene_template_id": "teaching_classroom_daily",
+      "name": "今天班里这几件",
+      "domain_ids": [
+        "teaching-classroom"
+      ],
+      "match": {
+        "profile_ids": [
+          "teaching-classroom-management"
+        ]
+      },
+      "template_id": "lesson_bloom",
+      "token_id": "professional-trust",
+      "renderer_id": "teacher_class_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
+      "detail_mode": "single_active_view",
+      "quality_reference": "child_learning_quest",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": [
+        "continuous_crud_forms_on_dashboard"
+      ]
+    },
+    {
+      "scene_template_id": "exam_civil_service_practice",
+      "name": "今天先把这一组练完",
+      "domain_ids": [
+        "exam-preparation"
+      ],
+      "match": {
+        "profile_ids": [
+          "civil-service-exam"
+        ]
+      },
+      "template_id": "ink_parchment",
+      "token_id": "editorial-story",
+      "renderer_id": "exam_practice_dashboard",
+      "visual_contract_version": "scene_dashboard_v1",
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
+      "detail_mode": "single_active_view",
+      "quality_reference": "child_learning_quest",
+      "visual_status": "candidate_needs_user_review",
+      "forbidden_fallbacks": [
+        "continuous_crud_forms_on_dashboard"
+      ]
     },
     {
       "scene_template_id": "research_reading_desk",
       "name": "研究阅读书桌",
-      "domain_ids": ["research-knowledge"],
-      "match": {},
+      "domain_ids": [
+        "research-knowledge"
+      ],
+      "match": {
+        "profile_ids": [
+          "reading-desk"
+        ],
+        "required_module_ids": [
+          "research-reading"
+        ]
+      },
       "template_id": "lesson_bloom",
       "token_id": "professional-trust",
       "renderer_id": "research_reading_dashboard",
       "visual_contract_version": "scene_dashboard_v1",
-      "first_screen_slots": ["hero", "primary_surface", "progress", "supporting_panel"],
+      "first_screen_slots": [
+        "hero",
+        "primary_surface",
+        "progress",
+        "supporting_panel"
+      ],
       "detail_mode": "single_active_view",
       "quality_reference": "child_learning_quest",
       "visual_status": "candidate_needs_user_review",
-      "forbidden_fallbacks": ["continuous_crud_forms_on_dashboard"]
+      "forbidden_fallbacks": [
+        "continuous_crud_forms_on_dashboard"
+      ]
     }
   ]
 }

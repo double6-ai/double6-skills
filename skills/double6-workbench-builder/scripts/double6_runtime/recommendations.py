@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from .recommendation_compiler import compile_selection
 from .core import ContractError, REFERENCES, canonical, digest_bytes, read_json
-from .starter_content import education_stage_overrides, starter_for_module
+from .starter_content import capability_index, education_stage_overrides, starter_for_module
 
 
 SURFACE_FIELDS: dict[str, list[dict[str, Any]]] = {
@@ -54,6 +55,71 @@ ALLOWED_FIELD_TYPES = {"text", "textarea", "number", "date", "select", "boolean"
 BADGE_RULE_TYPES = {"stars_earned_total", "questions_correct_total", "generator_total", "streak_days", "redeems_total"}
 
 
+def clarification_catalog() -> dict[str, Any]:
+    """加载 16 领域的声明式澄清策略；问题语义不再硬编码在教育分支。"""
+    value = read_json(REFERENCES / "clarification-policies.json")
+    policies = value.get("domains", [])
+    packs = read_json(REFERENCES / "domain-content-packs.json").get("packs", [])
+    pack_profiles = {
+        row["domain_id"]: {profile["profile_id"] for profile in row.get("profiles", [])}
+        for row in packs
+    }
+    policy_by_domain = {
+        row.get("domain_id"): row for row in policies if isinstance(row, dict) and row.get("domain_id")
+    }
+    if value.get("schema_version") != 1 or value.get("question_limit_per_scene") != 5:
+        raise ContractError("clarification-policies 必须声明每场景最多 5 问")
+    if set(policy_by_domain) != set(pack_profiles) or len(policy_by_domain) != len(policies):
+        raise ContractError("clarification-policies 必须与 16 个领域一一对应")
+    for domain_id, expected_profiles in pack_profiles.items():
+        policy = policy_by_domain[domain_id]
+        overrides = policy.get("profile_overrides", {})
+        if not isinstance(overrides, dict) or set(overrides) != expected_profiles:
+            raise ContractError(f"澄清策略 profile 覆盖不完整：{domain_id}")
+        if policy.get("module_capability_selection") not in {"product_confirmation", "clarifying_adaptive"}:
+            raise ContractError(f"澄清策略选择模式无效：{domain_id}")
+    return value
+
+
+def clarification_policy(domain_id: str, profile_id: str | None = None) -> dict[str, Any]:
+    catalog = clarification_catalog()
+    base = next(row for row in catalog["domains"] if row["domain_id"] == domain_id)
+    value = {key: row for key, row in base.items() if key != "profile_overrides"}
+    if profile_id:
+        value.update(dict(base.get("profile_overrides", {}).get(profile_id, {})))
+    return value
+
+
+def _capability_recommendation(modules: list[dict[str, Any]], domain_id: str) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+    """从既有 evidence_refs 派生唯一模块—能力映射，不复制第二份事实源。"""
+    index = capability_index()
+    by_capability: dict[str, set[str]] = {}
+    by_module: dict[str, list[str]] = {}
+    for module in modules:
+        module_id = str(module["module_id"])
+        capability_ids = [
+            str(ref) for ref in module.get("evidence_refs", [])
+            if str(ref) in index and str(ref).startswith("CAP-")
+        ]
+        if not capability_ids:
+            raise ContractError(f"模块缺少能力项映射：{module_id}")
+        by_module[module_id] = capability_ids
+        for capability_id in capability_ids:
+            by_capability.setdefault(capability_id, set()).add(module_id)
+    options = [
+        {
+            "capability_id": capability_id,
+            "title": index[capability_id]["title"],
+            "primary_action": index[capability_id]["primary_action"],
+            "result_contract": index[capability_id]["result_contract"],
+            "module_ids": sorted(module_ids),
+            "domain_id": domain_id,
+        }
+        for capability_id, module_ids in sorted(by_capability.items())
+    ]
+    return options, by_module
+
+
 def _surface(surface_type: str) -> dict[str, Any]:
     if surface_type not in SURFACE_FIELDS:
         raise ContractError(f"未知交互表面：{surface_type}")
@@ -76,6 +142,7 @@ def content_catalog() -> dict[str, Any]:
         raise ContractError("domain-content-packs schema 或 surface registry 版本无效")
     if len(packs) != 16 or set(pack_ids) != risk_ids or len(pack_ids) != len(set(pack_ids)):
         raise ContractError("domain-content-packs 必须与 16 个 risk pack 一一对应")
+    clarification_catalog()
     for pack in packs:
         modules = pack.get("modules", [])
         by_id = {row.get("module_id"): row for row in modules}
@@ -93,9 +160,8 @@ def content_catalog() -> dict[str, Any]:
             if module.get("surface_type") == "reward_economy":
                 config = module.get("reward_economy")
                 shop = config.get("shop", []) if isinstance(config, dict) else []
-                badges = config.get("badges", []) if isinstance(config, dict) else []
-                if not isinstance(config, dict) or not 10 <= len(shop) <= 20 or not 15 <= len(badges) <= 30:
-                    raise ContractError(f"reward_economy 模块必须提供 10–20 项兑换奖励与 15–30 枚徽章：{module.get('module_id')}")
+                if not isinstance(config, dict) or not 10 <= len(shop) <= 20:
+                    raise ContractError(f"reward_economy 模块必须提供 10–20 项兑换奖励：{module.get('module_id')}")
                 if any(
                     not isinstance(item, dict)
                     or not str(item.get("item_id") or "").strip()
@@ -105,18 +171,6 @@ def content_catalog() -> dict[str, Any]:
                     for item in shop
                 ) or len({str(item.get("item_id")) for item in shop}) != len(shop):
                     raise ContractError(f"reward_economy 兑换奖励登记无效：{module.get('module_id')}")
-                if any(
-                    not isinstance(badge, dict)
-                    or not str(badge.get("badge_id") or "").strip()
-                    or not str(badge.get("title") or "").strip()
-                    or not str(badge.get("icon") or "").strip()
-                    or not str(badge.get("hint") or "").strip()
-                    or not isinstance(badge.get("rule"), dict)
-                    or badge["rule"].get("type") not in BADGE_RULE_TYPES
-                    or not isinstance(badge["rule"].get("threshold"), int) or badge["rule"]["threshold"] < 1
-                    for badge in badges
-                ) or len({str(badge.get("badge_id")) for badge in badges}) != len(badges):
-                    raise ContractError(f"reward_economy 徽章规则登记无效：{module.get('module_id')}")
             starter_for_module(module)
         for profile in pack.get("profiles", []):
             profile_core = profile.get("core_module_ids", [])
@@ -145,7 +199,24 @@ def content_catalog() -> dict[str, Any]:
     return value
 
 
-def _expanded(module: dict[str, Any], *, origin_domain: str, learning_stage_id: str | None = None) -> dict[str, Any]:
+def _expanded(
+    module: dict[str, Any], *, origin_domain: str, learning_stage_id: str | None = None,
+    starter_profile_id: str | None = None,
+) -> dict[str, Any]:
+    module = dict(module)
+    if starter_profile_id == "cet4-sprint":
+        cet4_copy = {
+            "exam-goal": ("考试日期与目标", "录入考试日期，按本机日期显示动态倒计时与当前目标。"),
+            "exam-today": ("今日科目", "从听辨、阅读、词汇、写作与翻译中确定今天要做的一项。"),
+            "exam-practice": ("自编判分练习", "完成 18 道项目自编练习，当场看正误、答案与解析；非真题。"),
+            "exam-errors": ("错题回炉", "答错自动进入回炉队列；重做后仍保留原始错误事实。"),
+            "exam-materials": ("写作与翻译人工复核", "完成 6 道项目自编写作/翻译练习，保存草稿后由本人或老师人工复核。"),
+            "exam-mock": ("套卷记录", "记录分项结果、易错点和下一轮计划，不冒充官方分数。"),
+            "exam-pomodoro": ("专注计时", "开始、暂停、恢复和完成专注时段；刷新后按时间戳恢复。"),
+            "exam-review": ("阶段复盘", "从作答、错题和专注事实写下阶段结论与下一步。"),
+        }
+        if module.get("module_id") in cet4_copy:
+            module["name"], module["description"] = cet4_copy[module["module_id"]]
     surface = _surface(str(module["surface_type"]))
     if "surface_fields" in module:
         fields = module["surface_fields"]
@@ -162,7 +233,9 @@ def _expanded(module: dict[str, Any], *, origin_domain: str, learning_stage_id: 
         **module,
         "origin_domain": origin_domain,
         "surface": surface,
-        "starter": starter_for_module(module, learning_stage_id=learning_stage_id),
+        "starter": starter_for_module(
+            module, learning_stage_id=learning_stage_id, starter_profile_id=starter_profile_id,
+        ),
     }
 
 
@@ -196,7 +269,12 @@ def recommendation_snapshot(text: str, route: dict[str, Any]) -> dict[str, Any]:
     learning_stage_id = learning_stage.get("stage_id") if learning_stage else None
     if learning_stage_id and learning_stage_id != "generic-primary-transition" and learning_stage_id not in education_stage_overrides():
         raise ContractError(f"stage_content_missing：{learning_stage_id} 缺少专属五类练习题，不能回退到通用题库")
-    default_core = list((profile or {}).get("core_module_ids") or pack["core_module_ids"])
+    capability_supply = compile_selection(domain_id, route)
+    default_core = list(
+        [row["module_id"] for row in capability_supply.get("module_paths", [])]
+        or (profile or {}).get("core_module_ids")
+        or pack["core_module_ids"]
+    )
     lowered_text = text.lower()
     explicit = [
         module_id for module_id in pack["optional_module_ids"]
@@ -221,9 +299,26 @@ def recommendation_snapshot(text: str, route: dict[str, Any]) -> dict[str, Any]:
                 break
         if len(auxiliary_modules) >= catalog["selection_policy"]["auxiliary_optional_max"]:
             break
-    core_modules = [_expanded(modules[module_id], origin_domain=domain_id, learning_stage_id=learning_stage_id) for module_id in ordered_core]
-    optional_modules = [_expanded(modules[module_id], origin_domain=domain_id, learning_stage_id=learning_stage_id) for module_id in optional_ids]
+    starter_profile_id = str((profile or {}).get("profile_id") or "") or None
+    scene_profile_id = str(
+        route.get("scene_profile_id")
+        or (capability_supply.get("scene_profile") or {}).get("scene_profile_id")
+        or ""
+    )
+    if scene_profile_id.endswith("certification-study-cycle"):
+        starter_profile_id = starter_profile_id or "cet4-sprint"
+    elif scene_profile_id.endswith("civil-service-exam"):
+        starter_profile_id = starter_profile_id or "civil-service-exam"
+    core_modules = [_expanded(modules[module_id], origin_domain=domain_id, learning_stage_id=learning_stage_id, starter_profile_id=starter_profile_id) for module_id in ordered_core]
+    optional_modules = [_expanded(modules[module_id], origin_domain=domain_id, learning_stage_id=learning_stage_id, starter_profile_id=starter_profile_id) for module_id in optional_ids]
     optional_modules.extend(row for row in auxiliary_modules if row["module_id"] not in {item["module_id"] for item in optional_modules})
+    all_modules = [*core_modules, *optional_modules]
+    capability_options, capabilities_by_module = _capability_recommendation(all_modules, domain_id)
+    recommended_capability_ids = sorted({
+        capability_id
+        for module in core_modules
+        for capability_id in capabilities_by_module[module["module_id"]]
+    })
     payload = {
         "schema_version": 1,
         "catalog_id": catalog["catalog_id"],
@@ -239,6 +334,10 @@ def recommendation_snapshot(text: str, route: dict[str, Any]) -> dict[str, Any]:
         "default_work_mode": pack["default_work_mode"],
         "core_modules": core_modules,
         "optional_modules": optional_modules,
+        "clarification_policy": clarification_policy(domain_id, profile.get("profile_id") if profile else None),
+        "capability_options": capability_options,
+        "capabilities_by_module": capabilities_by_module,
+        "recommended_capability_ids": recommended_capability_ids,
         "manual_handoffs": list(pack.get("manual_handoffs", [])),
         "prohibited": list(pack.get("prohibited", [])),
         "source_rules": list(pack.get("source_rules", [])),
@@ -250,6 +349,13 @@ def recommendation_snapshot(text: str, route: dict[str, Any]) -> dict[str, Any]:
         payload["decision_recommendations"] = {
             key: dict(value) for key, value in pack["decision_recommendations"].items()
         }
+        payload["decision_recommendations"]["learning-modules"]["value"] = list(ordered_core)
+        if profile and profile.get("profile_id") == "primary-transition-1-to-2":
+            payload["decision_recommendations"]["learning-modules"]["reason"] = (
+                "一升二基准采用九模块首发：四个正式学习世界、错题修理、跨学科观察、身体充电、"
+                "家长观察与家长已启用的星星兑换；奖励仍不改变学习真值或掌握状态。"
+            )
+    payload["capability_supply"] = capability_supply
     payload["recommendation_sha256"] = digest_bytes(canonical(payload))
     return payload
 

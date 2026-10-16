@@ -1,8 +1,8 @@
 ---
 name: double6-workbench-builder
-version: 0.42.0
 description: 把普通用户反复要做的真实事情构建成离线优先、严格单文件、个人数据留在当前设备的本地工作台（index.html）。用户提到个人工作台、学习台、备考台、任务面板、内容/社媒运营台、阅读或研究追踪、记录与复盘工具，或想把重复流程做成可保存恢复的页面时应使用。Use when the user asks for a personal workbench, dashboard, tracker, planner, habit/reading/research tracker, content or social-media ops board, study or exam desk, or wants a repeated workflow turned into an offline single-file local web app. 联网、多人协作、账号、支付和发布属于独立外部流程（network, multi-user, accounts, payments and publishing are out of scope）.
 metadata:
+  version: 1.2.0
   openclaw:
     homepage: https://github.com/double6-ai/double6-skills/tree/main/skills/double6-workbench-builder
     emoji: "🧰"
@@ -21,8 +21,8 @@ metadata:
 ## 核心流程
 
 1. 从 CLI 返回的 16 个领域中选择主场景和最多两个辅助场景；`evidence_spans` 必须逐字摘自用户原话。
-2. 用 `start` 建立 run；只询问会改变对象、核心动作、数据边界或验收结果的问题，最多三个，并给出推荐答案。
-3. 用 `propose` 展示包含 4–15 个核心模块、内置 starter 和可选模块的完整理解稿；用户确认必须绑定当前理解稿 SHA。
+2. 用 `start` 建立 run；只询问会改变对象、核心动作、数据边界或验收结果的问题，普通需求和偏好澄清最多五问，必要授权确认独立计数，并给出推荐答案。
+3. 默认用 `propose --from-snapshot` 展示包含 4–15 个核心模块、内置 starter 和可选模块的完整理解稿；用户确认必须绑定当前理解稿 SHA。
 4. 确认后用 `build` 只生成一个推荐候选，再运行 `evaluate --preflight`。环境未就绪时先修复环境。
 5. 让用户查看候选；视觉确认或拒绝必须绑定当前候选 SHA。需要改 renderer/CSS 时进入 `renderer_revision_required`，不得空跑重建。
 6. 用 `evaluate` 完成静态与浏览器验收；只有完整通过才交付。`--skip-browser` 只是预检，不能形成交付。
@@ -32,7 +32,7 @@ metadata:
 ```bash
 python scripts/double6.py start --run <run_dir> --request "<用户原话>" --route-file route.json
 python scripts/double6.py respond --run <run_dir> --event-file event.json
-python scripts/double6.py propose --run <run_dir> --product-file product.json
+python scripts/double6.py propose --run <run_dir> --from-snapshot
 python scripts/double6.py build --run <run_dir>
 python scripts/double6.py evaluate --run <run_dir> --preflight
 python scripts/double6.py evaluate --run <run_dir>
@@ -56,4 +56,4 @@ python scripts/double6.py evaluate --run <run_dir>
 - Windows、受限宿主、浏览器预检或本机部署：`references/host-integration-playbook.md`。
 - 产品字段：`references/product.schema.json`；领域、starter、视觉与风险规则使用 `references/` 中对应 JSON 合同。
 
-公开命令与 schema 版本以 `manifest.json` 为准；维护者的安装后发布检查见 `evals/release_sandbox_cases.json`。打包、覆盖安装、共享晋升和外部发布必须由宿主在用户授权后执行。
+公开命令与 schema 版本以 `manifest.json` 为准；恢复合并的回归入口为 `tests/`，安装后检查见 `evals/release_sandbox_cases.json`。打包、覆盖安装、共享晋升和外部发布必须由宿主在用户授权后执行。

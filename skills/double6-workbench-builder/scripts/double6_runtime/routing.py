@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .core import ContractError, REFERENCES, digest_bytes, now, read_json
-from .recommendations import recommendation_snapshot
+from .recommendations import clarification_catalog, recommendation_snapshot
 
 
 RISK_RULES = {
@@ -24,6 +24,9 @@ PRIMARY_ANCHORS = {
     "health-pregnancy": ["医疗", "孕期", "用药", "症状"],
     "finance-tax-contract": ["财务", "报税", "税务", "账务"],
 }
+BOUNDARY_DECISION_IDS = frozenset({
+    "privacy-boundary", "content-source-boundary", "participant-boundary", "external-action-boundary",
+})
 CONTENT_SOURCE_DOMAINS = {"education-learning", "teaching-classroom", "exam-preparation"}
 REAL_DATA_MARKERS = {
     "真实数据", "真实学生", "学生名单", "客户名单", "导入客户", "员工资料", "候选人简历",
@@ -122,10 +125,30 @@ def _validate_semantic_route(text: str, supplied: dict[str, Any], domain_ids: se
     allowed_profiles = {row["profile_id"] for row in options[primary].get("profiles", [])}
     if profile_id and profile_id not in allowed_profiles:
         raise ContractError("profile_id 不属于宿主选择的主场景")
+    scene_profile_id = supplied.get("scene_profile_id")
+    if scene_profile_id is not None and (not isinstance(scene_profile_id, str) or not scene_profile_id.strip()):
+        raise ContractError("scene_profile_id 必须是非空字符串或省略")
+    if scene_profile_id:
+        scene_rows = read_json(REFERENCES / "scene-profiles.json").get("scene_profiles", [])
+        scene = next(
+            (row for row in scene_rows if row.get("scene_profile_id") == scene_profile_id),
+            None,
+        )
+        if not isinstance(scene, dict) or scene.get("domain_id") != primary:
+            raise ContractError("scene_profile_id 不属于宿主选择的主领域")
+        migrations = read_json(REFERENCES / "scene-profiles.json").get("audit", {}).get("existing_profile_migration", [])
+        mapped = [row["legacy_profile_id"] for row in migrations
+                  if row.get("scene_profile_id") == scene_profile_id and row.get("legacy_profile_id") in allowed_profiles]
+        if profile_id and mapped and profile_id not in mapped:
+            raise ContractError("profile_id 与 scene_profile_id 指向不同子场景")
+        if not profile_id and len(mapped) == 1:
+            # 显式场景 ID 也必须带出学段和专用运行时使用的 profile；不按关键词推断。
+            profile_id = mapped[0]
     return {
         "primary_domain": primary,
         "auxiliary_domains": auxiliary,
         "profile_id": profile_id,
+        "scene_profile_id": scene_profile_id,
         "evidence_spans": spans,
         "classifier": supplied.get("classifier", "host_agent_selection"),
     }
@@ -156,6 +179,7 @@ def route_request(text: str, supplied: dict[str, Any] | None = None) -> dict[str
             "primary_domain": primary,
             "auxiliary_domains": [row["domain_id"] for row in candidates if row["domain_id"] != primary][:2],
             "profile_id": None,
+            "scene_profile_id": None,
             "evidence_spans": [next(trigger for trigger in LIFE_DASHBOARD_TRIGGERS if trigger in text)] if life_dashboard_requested else candidates[0]["anchor_hits"][:1] or candidates[0]["hits"][:1] if candidates else [text],
             "classifier": "compatibility_hint_only",
         }
@@ -167,6 +191,7 @@ def route_request(text: str, supplied: dict[str, Any] | None = None) -> dict[str
         "primary_domain": semantic["primary_domain"],
         "auxiliary_domains": semantic["auxiliary_domains"],
         "profile_id": semantic.get("profile_id"),
+        "scene_profile_id": semantic.get("scene_profile_id"),
         "selection_source": selection_source,
         "semantic_evidence_spans": semantic["evidence_spans"],
         "classifier": semantic["classifier"],
@@ -176,83 +201,146 @@ def route_request(text: str, supplied: dict[str, Any] | None = None) -> dict[str
     }
 
 
+def _decision(
+    *,
+    decision_id: str,
+    question: str,
+    reason: str,
+    recommended_value: Any,
+    recommendation_reason: str,
+    route: dict[str, Any],
+    risk_tags: list[str],
+    allowed_adjustments: list[str],
+) -> dict[str, Any]:
+    return {
+        "decision_id": decision_id,
+        "question_kind": "authorization" if decision_id in BOUNDARY_DECISION_IDS else "preference",
+        "question": question,
+        "question_reason": reason,
+        "allowed_adjustments": allowed_adjustments,
+        "scene_scope": {
+            "primary_domain": route.get("primary_domain"),
+            "profile_id": route.get("profile_id"),
+            "scene_profile_id": route.get("scene_profile_id"),
+        },
+        "impact": "high",
+        "status": "missing",
+        "value": None,
+        "risk_tags": risk_tags,
+        "evidence_refs": [],
+        "recommended_value": recommended_value,
+        "recommendation_reason": recommendation_reason,
+    }
+
+
 def critical_decisions(text: str, route: dict[str, Any]) -> list[dict[str, Any]]:
     risks = set(route.get("risk_pack_ids", []))
     decisions: list[dict[str, Any]] = []
-    learning_recommendations = {}
-    learning_snapshot = {}
-    if route.get("primary_domain") == "education-learning":
-        learning_snapshot = recommendation_snapshot(text, route)
-        learning_recommendations = learning_snapshot.get("decision_recommendations", {})
-    # “做一个工作台”只说明了容器，没有说明最优先要解决的真实结果。
-    # 对儿童学习这种多模块场景，先问一个能改变首页主动作和练习侧重的问题，
-    # 不再把“没有指定教材”误当成“无需了解用户目标”。
-    if route.get("primary_domain") == "education-learning":
+    snapshot = recommendation_snapshot(text, route)
+    policy = snapshot.get("clarification_policy", {})
+    learning_recommendations = snapshot.get("decision_recommendations", {})
+    # “学习重点”只属于目标仍含糊且没有明确子场景的教育请求，不再是教育固定问法。
+    if (
+        route.get("primary_domain") == "education-learning"
+        and policy.get("ask_learning_priority_when") == "goal_ambiguous_without_profile"
+        and not snapshot.get("profile_id")
+        and not any(marker in text for marker in ["重点", "薄弱", "最卡", "优先", "只要", "主要练"])
+    ):
         recommended = learning_recommendations["learning-priority"]
-        decisions.append({
-            "decision_id": "learning-priority",
-            "question": f"这套学习台，最想先帮孩子解决哪件事？推荐先按“{recommended['value']}”安排，因为{recommended['reason']}。你可以直接回复“按推荐”，或告诉我她最近最卡在哪里。",
-            "impact": "high", "status": "missing", "value": None,
-            "risk_tags": ["learning-goal"], "evidence_refs": [],
-            "recommended_value": recommended["value"], "recommendation_reason": recommended["reason"],
-        })
+        decisions.append(_decision(
+            decision_id="learning-priority",
+            question=f"这套学习台，最想先帮孩子解决哪件事？推荐先按“{recommended['value']}”安排，因为{recommended['reason']}。你可以直接回复“按推荐”，或告诉我最近最卡在哪里。",
+            reason="当前只确定了教育场景，学习结果仍可能显著改变首页主任务和内容侧重。",
+            recommended_value=recommended["value"],
+            recommendation_reason=recommended["reason"],
+            route=route,
+            risk_tags=["learning-goal"],
+            allowed_adjustments=["当前最卡的内容", "优先目标", "明确不需要的学习方向"],
+        ))
     if (
         risks & {"child-data", "customer-data", "financial-data", "health-data", "sensitive-data", "account-data"}
         and any(marker.lower() in text.lower() for marker in REAL_DATA_MARKERS)
     ):
         life_copy = any(trigger in text for trigger in LIFE_DASHBOARD_TRIGGERS)
-        decisions.append({
-            "decision_id": "privacy-boundary",
-            "question": "这次会录入真实的个人、学生、客户、财务或健康数据吗？" + ("推荐先用合成示例；若要记录真实流水、饮食、体重或训练，请明确授权并确认仅在当前受控设备本地保存。" if life_copy else "推荐继续使用合成或脱敏数据：不需要孩子真实信息也能完成当前学习台，风险更低。若要录入真实数据，请明确授权并确认仅在受控本机保存。"),
-            "impact": "high", "status": "missing", "value": None,
-            "risk_tags": sorted(risks & {"child-data", "customer-data", "financial-data", "health-data", "sensitive-data", "account-data"}),
-            "evidence_refs": [], "recommended_value": "synthetic_or_redacted",
-            "recommendation_reason": "默认不需要真实敏感数据即可完成当前任务。",
-        })
+        decisions.append(_decision(
+            decision_id="privacy-boundary",
+            question="这次会录入真实的个人、学生、客户、财务或健康数据吗？" + ("推荐先用合成示例；若要记录真实流水、饮食、体重或训练，请明确授权并确认仅在当前受控设备本地保存。" if life_copy else "推荐继续使用合成或脱敏数据；若要录入真实数据，请明确授权并确认仅在受控本机保存。"),
+            reason="真实敏感数据会改变数据保护合同，不能由系统代替用户授权。",
+            recommended_value="synthetic_or_redacted",
+            recommendation_reason="默认不需要真实敏感数据即可完成当前任务。",
+            route=route,
+            risk_tags=sorted(risks & {"child-data", "customer-data", "financial-data", "health-data", "sensitive-data", "account-data"}),
+            allowed_adjustments=["继续使用合成或脱敏数据", "明确授权真实数据仅在受控本机保存"],
+        ))
     if (
         set([route.get("primary_domain"), *route.get("auxiliary_domains", [])]) & CONTENT_SOURCE_DOMAINS
         and any(marker.lower() in text.lower() for marker in NAMED_CONTENT_MARKERS)
     ):
-        decisions.append({
-            "decision_id": "content-source-boundary",
-            "question": "学习内容使用什么来源？推荐先采用自编通用内容，不声称对齐教材；这样可以立即开始。只有要按人教版教材、真题或考纲生成时，才需要提供或确认来源、版本/年份或地区、范围与版权边界。",
-            "impact": "high", "status": "missing", "value": None,
-            "risk_tags": ["content-source"], "evidence_refs": [], "recommended_value": "generic_non_claimed",
-            "recommendation_reason": "没有可核验材料时，通用练习是唯一诚实且可立即执行的默认路径。",
-        })
+        decisions.append(_decision(
+            decision_id="content-source-boundary",
+            question="学习内容使用什么来源？推荐先采用自编通用内容，不声称对齐教材；只有要按指定教材、真题或考纲生成时，才需要确认来源、版本、范围与版权边界。",
+            reason="指定内容来源会改变题目真值依据与版权边界。",
+            recommended_value="generic_non_claimed",
+            recommendation_reason="没有可核验材料时，通用练习是唯一诚实且可立即执行的默认路径。",
+            route=route,
+            risk_tags=["content-source"],
+            allowed_adjustments=["自编通用内容", "用户提供或官方可核验来源"],
+        ))
     if "multi-user" in risks:
-        decisions.append({
-            "decision_id": "participant-boundary",
-            "question": "哪些人会使用它？推荐每个人在各自设备本地使用，必要时用导出文件人工交接；当前单文件没有多人实时同步。",
-            "impact": "high", "status": "missing", "value": None,
-            "risk_tags": ["multi-user"], "evidence_refs": [], "recommended_value": "separate_local_devices_manual_export",
-            "recommendation_reason": "符合当前离线单文件的真实保存边界。",
-        })
+        decisions.append(_decision(
+            decision_id="participant-boundary",
+            question="哪些人会使用它？推荐每个人在各自设备本地使用，必要时用导出文件人工交接；当前单文件没有多人实时同步。",
+            reason="参与者数量会改变同步、权限和数据交接边界。",
+            recommended_value="separate_local_devices_manual_export",
+            recommendation_reason="符合当前离线单文件的真实保存边界。",
+            route=route,
+            risk_tags=["multi-user"],
+            allowed_adjustments=["单人本机使用", "多人各自本机并人工导出交接"],
+        ))
     if "external-side-effect" in risks and any(marker.lower() in text.lower() for marker in AUTOMATIC_EXTERNAL_MARKERS):
-        decisions.append({
-            "decision_id": "external-action-boundary",
-            "question": "发布、发送、下单、支付或预约是否都只做人工交接，不由工作台自动执行？推荐只做人工交接，避免工作台代替你执行外部动作。",
-            "impact": "high", "status": "missing", "value": None,
-            "risk_tags": ["external-side-effect"], "evidence_refs": [], "recommended_value": "manual_handoff",
-            "recommendation_reason": "当前产品不应自动产生外部副作用。",
-        })
-    # 如果用户已提出真实数据或指定教材，优先保留相应的安全/来源确认，
-    # 不让模块选择挤掉这两类边界问题。
-    if route.get("primary_domain") == "education-learning" and len(decisions) < 3:
+        decisions.append(_decision(
+            decision_id="external-action-boundary",
+            question="发布、发送、下单、支付或预约是否都只做人工交接，不由工作台自动执行？推荐只做人工交接。",
+            reason="外部副作用必须由用户明确授权，当前单文件运行时不能代替用户执行。",
+            recommended_value="manual_handoff",
+            recommendation_reason="当前产品不应自动产生外部副作用。",
+            route=route,
+            risk_tags=["external-side-effect"],
+            allowed_adjustments=["仅人工交接", "标记为暂不支持"],
+        ))
+    # 教育内容范围在构建期确认；明确学段不再触发无关的“学习重点”问题。
+    if route.get("primary_domain") == "education-learning" and policy.get("module_capability_selection") == "clarifying_adaptive":
         recommended = learning_recommendations["learning-modules"]
         recommended_names = {
             row["module_id"]: row["name"]
-            for row in learning_snapshot.get("core_modules", []) + learning_snapshot.get("optional_modules", [])
+            for row in snapshot.get("core_modules", []) + snapshot.get("optional_modules", [])
         }
         labels = "、".join(recommended_names[module_id] for module_id in recommended["value"])
-        decisions.append({
-            "decision_id": "learning-modules",
-            "question": f"这次要保留哪些学习内容？推荐先用：{labels}。因为{recommended['reason']}。你可以直接回复“按推荐”，或删减、替换其中的内容。",
-            "impact": "high", "status": "missing", "value": None,
-            "risk_tags": ["learning-scope"], "evidence_refs": [],
-            "recommended_value": list(recommended["value"]), "recommendation_reason": recommended["reason"],
-        })
-    return decisions[:3]
+        decisions.append(_decision(
+            decision_id="learning-modules",
+            question=f"这次要保留哪些学习模块？推荐先用：{labels}。因为{recommended['reason']}。你可以直接回复“按推荐”，或删减、替换。",
+            reason="模块范围决定最终工作台出现哪些学习世界。",
+            recommended_value=list(recommended["value"]),
+            recommendation_reason=recommended["reason"],
+            route=route,
+            risk_tags=["learning-scope"],
+            allowed_adjustments=["采用全部推荐", "删除模块", "加入当前内容包中的可选模块"],
+        ))
+        capability_names = {row["capability_id"]: row["title"] for row in snapshot.get("capability_options", [])}
+        recommended_capability_ids = list(snapshot.get("recommended_capability_ids", []))
+        capability_labels = "、".join(capability_names[row] for row in recommended_capability_ids)
+        decisions.append(_decision(
+            decision_id="learning-capabilities",
+            question=f"这些模块里建议启用的能力项是：{capability_labels}。可以回复“按推荐”，或告诉我要删掉哪项；每个保留模块至少需要一项能力。",
+            reason="能力项决定模块内部真正支持哪些动作，不能只确认模块名称。",
+            recommended_value=recommended_capability_ids,
+            recommendation_reason="推荐能力项全部来自已选模块的现有能力合同，不新增能力。",
+            route=route,
+            risk_tags=["learning-capability-scope"],
+            allowed_adjustments=["采用全部推荐", "删除能力项", "恢复当前模块已有能力项"],
+        ))
+    question_limit = int(clarification_catalog()["question_limit_per_scene"])
+    return decisions[:question_limit]
 
 
 def safe_defaults(text: str, route: dict[str, Any]) -> list[dict[str, Any]]:

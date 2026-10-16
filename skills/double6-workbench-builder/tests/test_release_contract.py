@@ -39,7 +39,7 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
         self.assertIn("查看当前状态和下一步", result.stdout.decode("utf-8"))
 
-    def test_route_catalog_is_available_without_writing_a_run(self) -> None:
+    def test_scene_discovery_creates_a_resumable_run(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             run_dir = Path(temp_dir) / "run"
             result = subprocess.run(
@@ -59,9 +59,10 @@ class ReleaseContractTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             payload = json.loads(result.stdout)
-            self.assertEqual(payload["status"], "route_selection_required")
+            self.assertEqual(payload["status"], "needs_answer")
             self.assertEqual(len(payload["route_options"]), 16)
-            self.assertFalse(run_dir.exists())
+            self.assertTrue((run_dir / "run.json").exists())
+            self.assertEqual(payload["scene_session"]["route_status"], "needs_discovery")
 
 
 if __name__ == "__main__":

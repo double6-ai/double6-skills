@@ -1,29 +1,8 @@
 {
   "skill_id": "double6-workbench-builder",
   "name": "double6-workbench-builder",
-  "display_name": "Double6 工作台制作器",
-  "version": "0.42.0",
-  "owner": "double6-ai",
-  "updated_at": "2026-10-15",
-  "status": "active",
-  "maturity_tier": "production",
-  "lifecycle_stage": "production",
-  "context_budget_tier": "production",
-  "review_cadence": "per-release",
-  "skill_archetype": "workflow",
-  "target_platforms": [
-    "openai",
-    "claude",
-    "generic",
-    "agent-skills-compatible"
-  ],
-  "factory_components": [
-    "references",
-    "scripts",
-    "evals",
-    "security"
-  ],
-  "publication_status": "experimental_public",
+  "version": "1.2.0",
+  "status": "source_candidate",
   "workflow_mode": "public_runner_or_workflow",
   "skill_decision": "approved_public_shared",
   "product_scope": "offline_single_file_local_personal_workbench",
@@ -39,6 +18,8 @@
   ],
   "runtime": {
     "builder": "python_standard_library_only",
+    "atomic_engine": "pure_function_selected_scope_local_runtime",
+    "policy_engine": "pure_function_selected_scope_binding",
     "browser_evaluation": "playwright_chromium_discovered_at_runtime",
     "publication": "separate_host_workflow_with_real_receipt",
     "python": ">=3.10"
@@ -46,12 +27,12 @@
   "schemas": {
     "run": 3,
     "events": 7,
-    "requirements": 4,
+    "requirements": 5,
     "sources": 1,
-    "product": 7,
-    "design": 6,
-    "build": 7,
-    "candidate_lock": 9,
+    "product": 9,
+    "design": 7,
+    "build": 8,
+    "candidate_lock": 10,
     "evidence": 7,
     "delivery": 3
   },
@@ -67,6 +48,22 @@
   "references": {
     "risk_packs": "references/risk-packs.json",
     "domain_content_packs": "references/domain-content-packs.json",
+    "clarification_policies": "references/clarification-policies.json",
+    "capability_supply_contract": "references/capability-supply-contract.json",
+    "scene_profiles": "references/scene-profiles.json",
+    "capability_graph": "references/capability-graph.json",
+    "atomic_capabilities": "references/atomic-capabilities.json",
+    "surface_primitives": "references/surface-primitives.json",
+    "layout_system": "references/layout-system.json",
+    "policy_packs": "references/policy-packs.json",
+    "reliability_contracts": "references/reliability-contracts.json",
+    "workbench_composition_packs": "references/workbench-composition-packs.json",
+    "workbench_surface_templates": "references/workbench-surface-templates.json",
+    "workbench_dashboard_templates": "references/workbench-dashboard-templates.json",
+    "workbench_workspace_schema": "references/workbench-workspace-schema.json",
+    "workbench_runtime_capabilities": "references/workbench-runtime-capabilities.json",
+    "workbench_first_run": "references/workbench-first-run.json",
+    "personal_platform_bridge": "references/personal-platform-bridge.json",
     "scene_capability_starters": "references/scene-capability-starters.json",
     "education_stage_starters": "references/education-stage-starters.json",
     "product_schema": "references/product.schema.json",
@@ -74,18 +71,27 @@
     "vivid_social_template_system": "references/vivid-social-template-system.json",
     "page_icon": "references/page-icon.svg",
     "education_rules": "references/education-rules.md",
+    "review_invariants": "references/review-invariants.md",
+    "content_mines": "references/content-mines.md",
+    "teacher_tonight_content": "references/teacher-tonight-content.md",
+    "domain_remnants": "scripts/double6_runtime/domain_remnants.py",
+    "content_truth_review": "references/content-truth-review.md",
     "personal_life_content_sources": "references/personal-life-content-sources.md",
     "host_integration_playbook": "references/host-integration-playbook.md",
-    "runtime_contract": "references/runtime-contract.md"
+    "adult_theme_system": "references/adult-theme-system.json",
+    "adult_fact_projection": "scripts/double6_runtime/adult_fact_projection.py",
+    "cet4_original_content": "references/cet4-original-content.json",
+    "runtime_contract": "references/runtime-contract.md",
+    "child_learning_source": "references/child-learning-source/source-integrity.json"
   },
   "release_validation": {
     "active_test": "tests/",
     "command": "python -m pytest -q -p no:cacheprovider tests",
     "browser_test": "tests/test_end_to_end.py::EndToEndAllDomainsTest::test_browser_evaluation_delivers",
-    "governance_gate": "maintainer-only workflows/double6-workbench-governance (not distributed)",
-    "time_budget_seconds": 60,
+    "time_budget_seconds": 300,
     "comparison_tests": false,
-    "historical_full_regression": false
+    "historical_full_regression": false,
+    "governance_gate": "维护者的项目治理回执单独留存，不随技能运行依赖分发"
   },
   "packaging": {
     "clawhub_ignore": ".clawhubignore",
@@ -102,5 +108,41 @@
       "tests/",
       "evals/"
     ]
-  }
+  },
+  "updated_at": "2026-10-16",
+  "local_validation": {
+    "status": "passed_local_source_validation",
+    "validated_at": "2026-10-16",
+    "fixture": "synthetic_validation_only",
+    "scene_static_cases": 35,
+    "scene_browser_cases": 17,
+    "post_visual_child_browser_cases": 4,
+    "repository_tests": {
+      "passed": 30,
+      "subtests_passed": 104
+    },
+    "post_visual_affected_tests": {
+      "passed": 12,
+      "subtests_passed": 65
+    },
+    "historical_regression": "adapted_v110_harness_11_tests_with_v100_bridge_passed",
+    "environment": "macOS / Python 3.12 / headless Google Chrome",
+    "publication": "not_executed"
+  },
+  "owner": "double6-ai",
+  "display_name": "Double6 工作台制作器",
+  "skill_archetype": "workflow",
+  "target_platforms": [
+    "openai",
+    "claude",
+    "generic",
+    "agent-skills-compatible"
+  ],
+  "factory_components": [
+    "references",
+    "scripts",
+    "evals",
+    "security"
+  ],
+  "publication_status": "local_merged_candidate"
 }

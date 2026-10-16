@@ -1,0 +1,112 @@
+{
+  "schema_version": "double6-adult-theme-system/v2",
+  "registry_id": "double6-adult-themes-2026-08-31",
+  "runtime_network_requests": 0,
+  "selection_contract": {
+    "selection_stage": "design_time",
+    "themes_per_candidate": 1,
+    "runtime_switching": false,
+    "runtime_preference_storage": false,
+    "invalid_selection_behavior": "build_fails_closed",
+    "asset_failure_behavior": "build_fails_closed"
+  },
+  "scene_family_map": {
+    "scene.personal-execution.personal-life-dashboard": "life_rooms",
+    "scene.exam-preparation.certification-study-cycle": "study_companion",
+    "scene.exam-preparation.civil-service-exam": "study_companion"
+  },
+  "families": {
+    "life_rooms": {
+      "family_id": "life_rooms",
+      "label": "生活房间",
+      "default_theme": "life_sunlit_cottage",
+      "classic_fallback": "life_classic",
+      "semantic_state_mapping": {
+        "idle": "尚未记录",
+        "focusing": "正在完成今日一页",
+        "needs_revisit": "仍有未完成项",
+        "today_done": "今日一页已完成"
+      },
+      "room_groups": [
+        {"room_id": "entry", "label": "玄关", "module_ids": ["personal-today", "personal-habits"]},
+        {"room_id": "inspiration_study", "label": "灵感书房", "module_ids": ["life-inspiration"]},
+        {"room_id": "quiet_corner", "label": "安静角", "module_ids": ["life-mood"]},
+        {"room_id": "kitchen", "label": "餐厨", "module_ids": ["life-food"]},
+        {"room_id": "movement_corner", "label": "运动角", "module_ids": ["life-movement"]},
+        {"room_id": "reading_room", "label": "阅读室", "module_ids": ["life-reading", "life-vocabulary"]},
+        {"room_id": "finance_cabinet", "label": "财务柜", "module_ids": ["life-finance"]}
+      ],
+      "themes": [
+        {
+          "theme_id": "life_classic",
+          "family_id": "life_rooms",
+          "label": "经典版",
+          "tokens": {"canvas": "#fff9f6", "card": "#ffffff", "ink": "#2f2631", "muted": "#746774", "primary": "#e86f68", "accent": "#ffcf70", "sidebar": "#fff1ec", "line": "#eadbd8"},
+          "assets": []
+        },
+        {
+          "theme_id": "life_sunlit_cottage",
+          "family_id": "life_rooms",
+          "label": "暖阳生活小屋",
+          "tokens": {"canvas": "#fff8ea", "card": "#fffdf7", "ink": "#34291f", "muted": "#716458", "primary": "#b65e39", "accent": "#8eaa66", "sidebar": "#e9efd8", "line": "#dfd0ba"},
+          "assets": [{"role": "hero", "path": "assets/adult-themes-v1/life-sunlit-cottage-hero.jpg", "sha256": "a87221d7f1092a35a53731d595476f5d6df3870b4ea03433b3c741153054eabe", "max_bytes": 307200, "alt": "暖阳小屋中的玄关、书桌、餐厨、阅读和运动角"}]
+        },
+        {
+          "theme_id": "life_quiet_studio",
+          "family_id": "life_rooms",
+          "label": "安静城市工作室",
+          "tokens": {"canvas": "#e5edf2", "card": "#f8fafc", "ink": "#18263d", "muted": "#52657b", "primary": "#9f5f37", "accent": "#5f8f93", "sidebar": "#d3e0e8", "line": "#b9c9d5"},
+          "assets": [{"role": "hero", "path": "assets/adult-themes-v1/life-quiet-studio-hero.jpg", "sha256": "93e9fd6d27215120b938925f9b4decdd721787f8396696c0f68a55867ac16755", "max_bytes": 307200, "alt": "蓝调城市工作室中的玄关、书桌、阅读椅和运动角"}]
+        }
+      ]
+    },
+    "study_companion": {
+      "family_id": "study_companion",
+      "label": "学习伙伴",
+      "default_theme": "study_doodle_sprout",
+      "classic_fallback": "study_classic",
+      "semantic_state_mapping": {
+        "idle": "未开始计时且当前题未作答",
+        "focusing": "专注计时正在运行",
+        "needs_revisit": "存在待回炉错题",
+        "today_done": "今日计划中的练习已完成"
+      },
+      "themes": [
+        {
+          "theme_id": "study_classic",
+          "family_id": "study_companion",
+          "label": "经典版",
+          "tokens": {"canvas": "#f6f8fb", "card": "#ffffff", "ink": "#202b3d", "muted": "#667085", "primary": "#4269c7", "accent": "#f5b95f", "sidebar": "#eaf0fb", "line": "#d8dfec"},
+          "assets": []
+        },
+        {
+          "theme_id": "study_doodle_sprout",
+          "family_id": "study_companion",
+          "label": "涂鸦成长伙伴",
+          "tokens": {"canvas": "#fbf7ec", "card": "#fffdf6", "ink": "#26352d", "muted": "#647067", "primary": "#4f7f54", "accent": "#6f9ee8", "sidebar": "#eaf2dc", "line": "#d7dec8"},
+          "assets": [
+            {"role": "hero", "path": "assets/adult-themes-v1/study-doodle-sprout-hero.jpg", "sha256": "3f0e78eb0f479b8d964ef61969c90cb14232dcc1e46a9517efbd0e4bdcb4f02b", "max_bytes": 307200, "alt": "涂鸦幼苗伙伴与耳机、单词卡和计时器"},
+            {"role": "state_atlas", "path": "assets/adult-themes-v1/study-doodle-sprout-states.svg", "sha256": "e79f584cf165f2b3344e9f1e9e962a6f8dc763272a88d227b460335b40e1a59a", "max_bytes": 122880, "alt": "伙伴的待开始、专注、回炉和完成状态"}
+          ]
+        },
+        {
+          "theme_id": "study_paper_robot",
+          "family_id": "study_companion",
+          "label": "纸片学习机器人",
+          "tokens": {"canvas": "#f5f2e9", "card": "#fffefa", "ink": "#17335c", "muted": "#60718b", "primary": "#245a9c", "accent": "#ffc647", "sidebar": "#e5edf7", "line": "#cbd8e8"},
+          "assets": [
+            {"role": "hero", "path": "assets/adult-themes-v1/study-paper-robot-hero.jpg", "sha256": "9372ebd4e6d5e3d67618edd3edb92c66047ec7764077b9e7b4ac6ede688931c9", "max_bytes": 307200, "alt": "纸片机器人与耳机、阅读材料和计时器"},
+            {"role": "state_atlas", "path": "assets/adult-themes-v1/study-paper-robot-states.svg", "sha256": "afdc91d1c702b2f6ce03fa103f5d6977f1fe4f3d3a8d55a90be6ee6c1f452b3e", "max_bytes": 122880, "alt": "机器人的待开始、专注、回炉和完成状态"}
+          ]
+        }
+      ]
+    }
+  },
+  "boundaries": [
+    "主题只改变 CSS token、插画、空间布局和状态表达",
+    "多个主题只作为设计阶段候选；每个成品只编译一个已选主题",
+    "成品不提供主题切换，不创建 UI 偏好 localStorage 键",
+    "未知主题或资产 SHA 失效时构建失败，不把不完整主题带进成品",
+    "主题状态不改变掌握、健康、考试能力或业务结果"
+  ]
+}
