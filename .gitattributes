@@ -2,3 +2,5 @@ skills/double6-ppt-cli/vendor/ppt-master-core/** -text
 
 # 儿童冻结内容按原始字节分发，避免 Windows 换行转换破坏 SHA 校验。
 skills/double6-workbench-builder/references/child-learning-source/** -text
+# 主题注册表也校验 SVG 等素材的原始 SHA。
+skills/double6-workbench-builder/references/assets/** -text

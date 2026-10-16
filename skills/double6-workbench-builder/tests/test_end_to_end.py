@@ -143,7 +143,7 @@ class EndToEndAllDomainsTest(unittest.TestCase):
             module = page.locator('[data-double6-module-id="research-reading"]')
             button = module.locator('[data-starter-action="use-template"]').first
             item_id = button.locator('xpath=ancestor::*[@data-starter-item-id][1]').get_attribute('data-starter-item-id')
-            product = json.loads((reading/'product.json').read_text())
+            product = json.loads((reading/'product.json').read_text(encoding="utf-8"))
             item = next(item for cap in product['capabilities'] for item in cap.get('starter', {}).get('starter_items', []) if item['item_id']==item_id)
             before = module.locator('form select,form input[type=date],form input[type=number]').evaluate_all('els=>els.map(el=>el.value)')
             button.click()
