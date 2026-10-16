@@ -1,0 +1,508 @@
+{
+  "schema_version": 1,
+  "contract_version": "double6_layout_system_v1",
+  "status": "executable_ready_for_v0_52",
+  "scope": {
+    "parent_contract": "double6_capability_supply_v1",
+    "surface_contract": "double6_surface_primitives_v1",
+    "device_target": "responsive_both",
+    "selected_scope_only": true,
+    "single_file_local_candidate": true,
+    "runtime_integration_changed_by_this_contract": true
+  },
+  "counts": {
+    "hierarchy_levels": 4,
+    "executable_ready_hierarchy_levels": 4,
+    "contract_ready_hierarchy_levels": 0,
+    "canonical_viewports": 3,
+    "executable_ready_viewports": 3,
+    "contract_ready_viewports": 0,
+    "first_screen_slots": 4,
+    "legacy_runtime_view_mappings": 4,
+    "selected_scope_visibility_invariants": 7
+  },
+  "hierarchy": {
+    "ordered_level_ids": [
+      "home",
+      "module",
+      "detail",
+      "adult_settings"
+    ],
+    "levels": [
+      {
+        "level_id": "home",
+        "label": "首页",
+        "maturity": "executable_ready",
+        "purpose": "先给出今天要处理的真实行动，再显示进度与所选模块入口",
+        "required_content": [
+          "identity_or_scene_hero",
+          "surface.today-action_or_honest_empty_state",
+          "progress_from_selected_local_state",
+          "entry_for_every_selected_module"
+        ],
+        "forbidden_content": [
+          "full_capability_catalog",
+          "unselected_module_shortcuts",
+          "duplicate_complete_module_directory",
+          "continuous_crud_forms_for_all_modules",
+          "fabricated_streak_or_completion"
+        ],
+        "primary_action_rule": "exactly one primary action; it opens or completes the most relevant selected-scope work"
+      },
+      {
+        "level_id": "module",
+        "label": "模块",
+        "maturity": "executable_ready",
+        "purpose": "完成一个已确认模块的内置工作和自有记录操作",
+        "required_content": [
+          "selected_module_identity",
+          "one_or_more_bound_surface_primitives",
+          "starter_or_immediately_usable_content",
+          "visible_return_to_home",
+          "local_feedback_and_recovery"
+        ],
+        "forbidden_content": [
+          "different_module_records",
+          "unselected_capability_catalog",
+          "internal_identifier_as_user_copy",
+          "unsupported_external_operation_as_in_page"
+        ],
+        "primary_action_rule": "the module's real work action precedes history, analytics and settings"
+      },
+      {
+        "level_id": "detail",
+        "label": "详情",
+        "maturity": "executable_ready",
+        "purpose": "聚焦当前模块中的一个记录、资料、练习、阶段对象或回顾条目",
+        "required_content": [
+          "active_object_identity",
+          "object_specific_action",
+          "status_and_source_context",
+          "return_to_owning_module"
+        ],
+        "forbidden_content": [
+          "parallel_detail_views_visible_at_once",
+          "object_from_unselected_module",
+          "answer_or_sensitive_detail_disclosed_before_its_gate",
+          "detail_state_that_silently_overwrites_source_truth"
+        ],
+        "primary_action_rule": "only the active object's next valid action is primary",
+        "runtime_note": "generic runtime provides one independent selected-object detail hash view with an owning-module return; child runtime keeps its existing focused practice detail"
+      },
+      {
+        "level_id": "adult_settings",
+        "label": "成人设置",
+        "maturity": "executable_ready",
+        "purpose": "承载本地数据、导入导出、危险操作、来源边界以及成人专属规则",
+        "required_content": [
+          "local_data_location_and_boundary",
+          "export_and_confirmed_import",
+          "immediate_import_undo",
+          "confirmed_clear",
+          "selected_module_only_configuration",
+          "adult_context_for_minor_or_family_scenes"
+        ],
+        "forbidden_content": [
+          "child_editing_reward_or_safety_rules",
+          "hidden_automatic_publish_or_sync",
+          "token_password_cookie_or_session_secret_input",
+          "unselected_module_configuration",
+          "build_directory_or_host_filesystem_path"
+        ],
+        "primary_action_rule": "safe backup precedes import, clear, external handoff and rule changes",
+        "runtime_note": "data-tools is explicitly bound as adult_settings and contains selected-scope backup, confirmed import, immediate undo, confirmed clear, local workspace snapshots and boundary disclosure"
+      }
+    ],
+    "navigation_edges": [
+      {
+        "from": "home",
+        "to": "module",
+        "allowed": true,
+        "condition": "module_id is selected"
+      },
+      {
+        "from": "module",
+        "to": "detail",
+        "allowed": true,
+        "condition": "object belongs to the active selected module"
+      },
+      {
+        "from": "detail",
+        "to": "module",
+        "allowed": true,
+        "condition": "return restores owning module context"
+      },
+      {
+        "from": "module",
+        "to": "home",
+        "allowed": true,
+        "condition": "always"
+      },
+      {
+        "from": "home",
+        "to": "adult_settings",
+        "allowed": true,
+        "condition": "adult context is active when the scene distinguishes child and adult modes"
+      },
+      {
+        "from": "adult_settings",
+        "to": "home",
+        "allowed": true,
+        "condition": "always"
+      },
+      {
+        "from": "adult_settings",
+        "to": "detail",
+        "allowed": false,
+        "condition": "settings never bypass the owning selected module"
+      }
+    ],
+    "active_view_rule": "exactly one home, module, detail or adult-settings work view is active; navigation chrome is the only persistent parallel surface"
+  },
+  "mappings": {
+    "legacy_runtime_views": [
+      {
+        "runtime_selector": "[data-view-id='dashboard']",
+        "layout_level_id": "home",
+        "mapping_status": "exact",
+        "maturity": "executable_ready"
+      },
+      {
+        "runtime_selector": "[data-view-id='module-<selected_module_id>']",
+        "layout_level_id": "module",
+        "mapping_status": "exact",
+        "maturity": "executable_ready"
+      },
+      {
+        "runtime_selector": "[data-view-id='detail-view'][data-detail-view]",
+        "layout_level_id": "detail",
+        "mapping_status": "exact_selected_object",
+        "maturity": "executable_ready"
+      },
+      {
+        "runtime_selector": "[data-view-id='data-tools']",
+        "layout_level_id": "adult_settings",
+        "mapping_status": "exact_selected_scope_adult_settings",
+        "maturity": "executable_ready"
+      }
+    ],
+    "legacy_surface_types": {
+      "action_checklist": "surface.checklist",
+      "record_ledger": "surface.record-ledger",
+      "stage_board": "surface.stage-board",
+      "metric_log": "surface.metric",
+      "review_journal": "surface.review",
+      "reward_economy": "surface.reward-exchange"
+    },
+    "first_screen_slots": {
+      "hero": "identity and today's outcome",
+      "primary_surface": "surface.today-action or the selected primary module's real action",
+      "progress": "traceable progress from selected local state",
+      "supporting_panel": "at most one secondary context panel"
+    },
+    "compatibility_rule": "existing hashes, data-view-id values, legacy surface types and stored record shapes remain valid; stable layout and surface IDs are additive until runtime integration is separately authorized"
+  },
+  "selected_scope_visibility": {
+    "selection_source": [
+      "recommendation_plan.selected_core_module_ids",
+      "approved product capabilities with mode in_page",
+      "atomic capabilities reachable from the selected scene and module path"
+    ],
+    "compile_rule": "derive a minimal candidate payload from the approved selected path before rendering; do not render the full catalog and hide it with CSS",
+    "invariants": [
+      {
+        "invariant_id": "selected-scope.nav-only",
+        "rule": "navigation contains home, every selected module exactly once and the relevant local-data or adult-settings entry. Richness is each selected room having work, not fewer rooms",
+        "negative_rule": "an unselected module has no navigation entry; hiding a selected module from peer navigation to look clean is a failure"
+      },
+      {
+        "invariant_id": "selected-scope.dom-only",
+        "rule": "module and detail DOM nodes are created only for selected modules and selected content items",
+        "negative_rule": "hidden unselected DOM is a failure"
+      },
+      {
+        "invariant_id": "selected-scope.runtime-only",
+        "rule": "runtime MODULES, initial local state and import normalization contain selected module IDs only",
+        "negative_rule": "shipping unselected module data in script or storage defaults is a failure"
+      },
+      {
+        "invariant_id": "selected-scope.no-graph",
+        "rule": "the raw capability graph, atom registry and catalog are governance inputs and are not user-visible or serialized as a page directory",
+        "negative_rule": "minimal selected IDs used for deterministic bindings must not expose the raw graph or its descriptions"
+      },
+      {
+        "invariant_id": "selected-scope.no-build-directory",
+        "rule": "candidate copy, DOM, export and error messages never expose build directory, staging directory, repository path or host filesystem path",
+        "negative_rule": "a local absolute path or directory listing in the candidate is a failure"
+      },
+      {
+        "invariant_id": "selected-scope.no-internal-copy",
+        "rule": "surface IDs, capability IDs, atom IDs, module IDs, starter and internal action or question type names stay out of user-visible copy",
+        "negative_rule": "machine identifiers may exist only in non-visible binding attributes or governance receipts"
+      },
+      {
+        "invariant_id": "selected-scope.settings-only",
+        "rule": "adult settings and data operations enumerate and mutate only selected module state",
+        "negative_rule": "settings cannot become a back door to optional or catalog-only modules"
+      }
+    ],
+    "visibility_matrix": {
+      "selected_module": "visible_and_reachable",
+      "selected_detail": "visible_only_when_active",
+      "unselected_module": "not_serialized",
+      "full_capability_graph": "not_serialized_as_user_surface",
+      "atom_registry": "not_serialized_as_user_surface",
+      "build_or_staging_directory": "never_visible_or_exported"
+    }
+  },
+  "viewports": [
+    {
+      "viewport_id": "mobile",
+      "canonical_size": {
+        "width": 390,
+        "height": 844
+      },
+      "width_range": "360-759",
+      "maturity": "executable_ready",
+      "navigation": "fixed or sticky vertically scrollable left rail with colored emoji and visible short labels for home, all selected modules and data entry",
+      "composition": "single main content column; the left rail must not cover or truncate the content",
+      "primary_work": "today action or current module action appears in the first scroll viewport",
+      "forms": "single column; inputs use at least 16px text and semantic input modes",
+      "detail": "one active item or record flow, not a reduced desktop table or board",
+      "acceptance_metrics": {
+        "no_horizontal_overflow": true,
+        "minimum_touch_target_px": 44,
+        "navigation_labels_visible": true,
+        "all_selected_entries_reachable": true,
+        "content_unobscured": true
+      }
+    },
+    {
+      "viewport_id": "tablet",
+      "canonical_size": {
+        "width": 768,
+        "height": 1024
+      },
+      "width_range": "760-1023",
+      "maturity": "executable_ready",
+      "navigation": "96-112px vertically scrollable left rail with colored emoji and visible concise labels",
+      "composition": "main work uses one or two columns; navigation and active work remain simultaneously legible",
+      "primary_work": "real work remains before metrics, history and secondary panels",
+      "forms": "one or two columns according to field length; control order remains linear",
+      "detail": "active detail may sit beside context only when it retains a single logical reading order",
+      "acceptance_metrics": {
+        "no_horizontal_overflow": true,
+        "minimum_touch_target_px": 44,
+        "navigation_labels_visible": true,
+        "all_selected_entries_reachable": true,
+        "navigation_width_min_px": 96,
+        "navigation_width_max_px": 112
+      },
+      "runtime_binding": "760-899px uses a 104px vertically scrollable labeled rail; 900px and above switches to the desktop identity sidebar"
+    },
+    {
+      "viewport_id": "desktop",
+      "canonical_size": {
+        "width": 1280,
+        "height": 900
+      },
+      "width_range": "1024_and_above",
+      "maturity": "executable_ready",
+      "navigation": "180-220px identity sidebar with colored emoji and visible text",
+      "composition": "identity sidebar plus main work surface and at most one supporting column",
+      "primary_work": "main action occupies the dominant area; analytics and history remain secondary",
+      "forms": "one or two columns with labels adjacent in reading order; record actions stay with their record",
+      "detail": "detail and supporting context may be adjacent but only one detail is active",
+      "acceptance_metrics": {
+        "no_horizontal_overflow": true,
+        "minimum_pointer_target_px": 32,
+        "minimum_touch_capable_target_px": 44,
+        "navigation_labels_visible": true,
+        "all_selected_entries_reachable": true,
+        "navigation_width_min_px": 180,
+        "navigation_width_max_px": 220
+      }
+    }
+  ],
+  "interaction_rules": {
+    "touch": [
+      "all primary, destructive, answer, navigation and record controls have a minimum 44 by 44px target on touch viewports",
+      "controls do not require hover and labels remain visible",
+      "numeric practice uses an in-page keypad where the workflow requires the system keyboard not to displace content",
+      "gesture is never the only way to move, archive, reveal, undo or navigate"
+    ],
+    "keyboard": [
+      "tab order follows navigation, active heading, primary work, secondary work and recovery controls",
+      "Enter activates links and primary form submission; Space activates buttons and toggles according to native semantics",
+      "focus is visibly styled on every interactive element",
+      "hash or view navigation moves focus to the active view heading or first meaningful action",
+      "Escape closes a transient dialog or cancellation state without discarding persisted truth",
+      "no keyboard trap exists in rail, practice, detail, import or confirmation flows"
+    ],
+    "pointer": [
+      "click targets use the same accessible operation as keyboard activation",
+      "drag may enhance a stage board but a labeled move control remains available"
+    ],
+    "motion": [
+      "celebration and shake feedback never cover the active controls",
+      "transient animation is cleared before the next item",
+      "prefers-reduced-motion removes nonessential motion without removing feedback text"
+    ],
+    "dangerous_actions": [
+      "delete, clear, import replacement, irreversible constraint and external handoff require an explicit confirmation appropriate to their impact",
+      "import supports immediate undo after successful normalization",
+      "external publish, sync, message, payment or account actions remain manual handoff or unsupported"
+    ]
+  },
+  "accessibility_rules": {
+    "standard": "WCAG_2_2_AA_target",
+    "landmarks_and_headings": [
+      "navigation and active main work use distinct landmarks",
+      "each active view has one programmatically determinable primary heading",
+      "heading order does not skip solely for visual sizing"
+    ],
+    "names_and_states": [
+      "every control has a non-empty accessible name",
+      "selected navigation, expanded content, pressed answer and disabled reason expose programmatic state",
+      "emoji used only as decoration is aria-hidden; semantic meaning also appears in text",
+      "status, overdue, error, success and stage are never conveyed by color alone"
+    ],
+    "focus": [
+      "focus indicator remains visible at 200 percent zoom and against all template backgrounds",
+      "view changes and errors move or retain focus predictably",
+      "hidden and unselected surfaces cannot receive focus"
+    ],
+    "text_and_contrast": [
+      "body and input text is at least 16px on mobile",
+      "text and controls meet AA contrast; decorative category color is not sole meaning",
+      "content supports 200 percent zoom and reflow without two-dimensional scrolling"
+    ],
+    "feedback": [
+      "save, import, answer and recovery status uses a polite live region",
+      "blocking validation identifies the field or operation and gives a recovery action",
+      "charts, visual questions and progress graphics have equivalent text or accessible names"
+    ]
+  },
+  "error_and_recovery_rules": {
+    "storage_write_failure": {
+      "user_state": "all entered fields and the last persisted truth remain unchanged",
+      "message": "state that saving failed and offer retry or export",
+      "forbidden": "clearing the form, optimistic success or partial truth mutation"
+    },
+    "invalid_or_unknown_route": {
+      "user_state": "return to home without creating an unselected surface",
+      "message": "use a quiet recoverable navigation state unless user action is required",
+      "forbidden": "falling through to the full catalog or first optional module"
+    },
+    "import_failure": {
+      "user_state": "existing local data remains intact and the file input is reset for retry",
+      "message": "identify size, format, identity or record-limit failure without exposing a host path",
+      "forbidden": "partial replacement, unsafe external IDs or silent unknown-field loss"
+    },
+    "import_success": {
+      "user_state": "normalized selected-module state is persisted and the prior state is available for immediate undo",
+      "message": "announce completion, unknown-field preservation and undo availability",
+      "forbidden": "activating imported unselected modules"
+    },
+    "reload_restore": {
+      "user_state": "active selected view and persisted module data restore when safe; invalid detail returns to its owning module or home",
+      "message": "announce only a recovery failure that requires action",
+      "forbidden": "reconstructing state from wall clock, fabricated defaults or a stale full catalog"
+    },
+    "external_capability_failure": {
+      "user_state": "retain local input and show cached or declared fallback only when the capability contract permits it",
+      "message": "state that the external result is unavailable and what remains local",
+      "forbidden": "fabricating a live response, silently using stale data or exposing a secret"
+    },
+    "destructive_action": {
+      "user_state": "no mutation before confirmation; after success provide undo when the policy declares it reversible",
+      "message": "name the exact selected-scope data affected",
+      "forbidden": "broad confirmation that includes unselected modules or hidden data"
+    }
+  },
+  "acceptance": [
+    {
+      "acceptance_id": "layout.hierarchy.single-active-view",
+      "check": "one hierarchy work view is visible and focusable at a time; navigation chrome may persist",
+      "evidence": "DOM visibility and focusability inspection"
+    },
+    {
+      "acceptance_id": "layout.selected-scope.no-leakage",
+      "check": "navigation, DOM, script payload, initial storage and export contain no unselected module or catalog-only content",
+      "evidence": "approved selection versus candidate serialization diff"
+    },
+    {
+      "acceptance_id": "layout.selected-scope.no-governance-surface",
+      "check": "raw capability graph, atom registry, repository path, build directory and staging directory are absent from visible copy and exported user data",
+      "evidence": "static candidate and export scan"
+    },
+    {
+      "acceptance_id": "layout.three-viewports",
+      "check": "mobile 390x844, tablet 768x1024 and desktop 1280x900 each have no horizontal overflow, visible labeled navigation and all selected entries reachable",
+      "evidence": "three-viewport browser metrics and screenshots"
+    },
+    {
+      "acceptance_id": "layout.touch-keyboard",
+      "check": "complete primary work, detail, save, recovery and navigation paths succeed by touch/pointer and keyboard without a trap",
+      "evidence": "input-mode interaction matrix"
+    },
+    {
+      "acceptance_id": "layout.accessibility",
+      "check": "visible controls have names, focus indicators, textual state and AA contrast; hidden surfaces are not focusable",
+      "evidence": "automated scan plus keyboard and zoom inspection"
+    },
+    {
+      "acceptance_id": "layout.storage-failure",
+      "check": "forced storage failure preserves every required and optional field plus the previous persisted state",
+      "evidence": "full-form failure injection and field-by-field comparison"
+    },
+    {
+      "acceptance_id": "layout.import-recovery",
+      "check": "confirmed import, invalid import, unknown-field preservation, immediate undo and clear confirmation affect selected state only",
+      "evidence": "positive and negative browser recovery paths"
+    },
+    {
+      "acceptance_id": "layout.first-screen",
+      "check": "all four declared first-screen slots exist, exactly one primary action is present and module directories are not duplicated",
+      "evidence": "renderer structure fingerprint and first-viewport inspection"
+    }
+  ],
+  "audit": {
+    "audited_at": "2026-08-14",
+    "facts_read": [
+      "references/capability-supply-contract.json",
+      "references/design-system.json",
+      "references/vivid-social-template-system.json",
+      "scripts/double6_runtime/recommendations.py",
+      "scripts/double6_runtime/builder.py",
+      "scripts/double6_browser_collector.py"
+    ],
+    "requested_paths_missing": [
+      "references/design-system.md",
+      "references/templates.md"
+    ],
+    "requested_path_substitutions": {
+      "references/design-system.md": "references/design-system.json",
+      "references/templates.md": "references/vivid-social-template-system.json"
+    },
+    "current_runtime_evidence": [
+      "builder enforces four first-screen slots and a single active hash view",
+      "builder renders selected in-page modules plus local data tools",
+      "browser collector uses canonical mobile 390x844, tablet 768x1024 and desktop 1280x900 evidence for the generic renderer",
+      "browser collector checks overflow, navigation visibility, focus, touch controls, reload, import and forced storage failure"
+    ],
+    "maturity_notes": [
+      "home and module mappings are executable_ready",
+      "home, module, independent selected-object detail and adult_settings mappings are executable_ready",
+      "mobile, 104px compact-rail tablet and desktop are executable_ready at the current evidence boundary",
+      "this contract does not claim release_ready, packaged, host-synced, deployed, published or long-term effective"
+    ],
+    "known_gaps": [
+      "layout IDs are additive DOM bindings and stay out of visible copy",
+      "generic detail summarizes the selected object and returns to its owner; domain-specific rich editors remain inside module views",
+      "adult_settings is local-only and does not imply accounts, cloud sync or multi-user authorization",
+      "selected-only absence is governed by the v0.52 compiler and browser combination receipt",
+      "no layout level or viewport is release_ready or backed by long-term real-user evidence"
+    ]
+  }
+}

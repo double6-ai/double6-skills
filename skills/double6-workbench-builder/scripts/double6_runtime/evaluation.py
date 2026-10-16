@@ -13,6 +13,12 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
+from .composition import (
+    OBJECT_PIPELINE_RUNTIME,
+    compile_acceptance_program,
+    execute_object_pipeline_program,
+    scan_acceptance_program,
+)
 from .core import (
     ContractError,
     PACKAGE_ROOT,
@@ -26,6 +32,7 @@ from .core import (
     transition,
     tree_rows,
 )
+from .domain_remnants import audit_candidate_html
 
 
 NETWORK_CODE = re.compile(r"\b(?:fetch|XMLHttpRequest|WebSocket|EventSource)\s*\(|navigator\.serviceWorker|https?://", re.I)
@@ -94,7 +101,17 @@ class CandidateParser(HTMLParser):
         self.recommendation_hashes: set[str] = set()
         self.surface_registry_versions: set[str] = set()
         self.starter_contract_versions: set[str] = set()
+        self.composition_contract_versions: set[str] = set()
+        self.composition_ids: set[str] = set()
+        self.composition_hashes: set[str] = set()
+        self.composition_statuses: set[str] = set()
         self.reliability_contract_versions: set[str] = set()
+        self.reliability_envelope_versions: set[str] = set()
+        self.reliability_registry_hashes: set[str] = set()
+        self.reliability_envelope_hashes: set[str] = set()
+        self.reliability_envelope_statuses: set[str] = set()
+        self.reliability_guard_counts: list[int] = []
+        self.reliability_blocked_counts: list[int] = []
         self.reliability_public_layers = 0
         self.reliability_receipts = 0
         self.today_workboards = 0
@@ -102,6 +119,7 @@ class CandidateParser(HTMLParser):
         self.starter_surface_versions: list[str] = []
         self.starter_item_counts: list[int] = []
         self.module_surfaces: dict[str, str] = {}
+        self.composition_surfaces: dict[str, dict[str, str]] = {}
         self.module_forms = 0
         self.module_save_buttons = 0
         self.work_objects: set[str] = set()
@@ -147,7 +165,21 @@ class CandidateParser(HTMLParser):
             self.recommendation_hashes.add(values.get("data-double6-recommendation-sha256", ""))
             self.surface_registry_versions.add(values.get("data-double6-surface-registry-version", ""))
             self.starter_contract_versions.add(values.get("data-double6-starter-contract-version", ""))
+            self.composition_contract_versions.add(values.get("data-double6-composition-contract-version", ""))
+            self.composition_ids.add(values.get("data-double6-composition-id", ""))
+            self.composition_hashes.add(values.get("data-double6-composition-sha256", ""))
+            self.composition_statuses.add(values.get("data-double6-composition-status", ""))
             self.reliability_contract_versions.add(values.get("data-double6-reliability-contract-version", ""))
+            self.reliability_envelope_versions.add(values.get("data-double6-reliability-envelope-version", ""))
+            self.reliability_registry_hashes.add(values.get("data-double6-reliability-registry-sha256", ""))
+            self.reliability_envelope_hashes.add(values.get("data-double6-reliability-envelope-sha256", ""))
+            self.reliability_envelope_statuses.add(values.get("data-double6-reliability-envelope-status", ""))
+            try:
+                self.reliability_guard_counts.append(int(values.get("data-double6-reliability-guard-count", "0")))
+                self.reliability_blocked_counts.append(int(values.get("data-double6-reliability-blocked-count", "0")))
+            except ValueError:
+                self.reliability_guard_counts.append(0)
+                self.reliability_blocked_counts.append(-1)
         if values.get("data-reliability-public-layer") is not None:
             self.reliability_public_layers += 1
         if values.get("data-reliability-receipt") is not None:
@@ -163,7 +195,15 @@ class CandidateParser(HTMLParser):
             except ValueError:
                 self.starter_item_counts.append(0)
         if values.get("data-double6-module-id"):
-            self.module_surfaces[values["data-double6-module-id"]] = values.get("data-double6-surface-type", "")
+            module_id = values["data-double6-module-id"]
+            self.module_surfaces[module_id] = values.get("data-double6-surface-type", "")
+            if values.get("data-composition-surface-template"):
+                self.composition_surfaces[module_id] = {
+                    "surface_template_id": values.get("data-composition-surface-template", ""),
+                    "surface_signature": values.get("data-composition-surface-signature", ""),
+                    "object_type_id": values.get("data-composition-object-type", ""),
+                    "default_disclosure": values.get("data-composition-disclosure", ""),
+                }
         if values.get("data-module-form") is not None:
             self.module_forms += 1
         if values.get("data-module-save") is not None:
@@ -209,6 +249,63 @@ def static_scan(run_dir: Path) -> dict[str, Any]:
         errors.append("候选包含网络调用或远端地址")
     if re.search(r"\b(?:TODO|FIXME)\b|占位功能|demo\s*only", text, re.I):
         errors.append("候选包含未完成标记")
+    if 'data-feedback-collection="none"' not in text:
+        errors.append("候选未明确关闭首发反馈采集")
+    if re.search(r"data-(?:external-)?feedback-entry|mailto:|https?://[^\"']*(?:feedback|issue)", text, re.I):
+        errors.append("候选不应提供反馈问题提交入口")
+    if lock.get("renderer_id") == "child_playground_v2":
+        selection = lock.get("learning_content_selection", {})
+        expected_ids = set(selection.get("eligible_item_ids", []))
+        embedded_ids = set(re.findall(r'"item_id":"([^"]+)"', text))
+        if parser.build_ids != {lock["build_id"]}:
+            errors.append("儿童候选未继承当前 build")
+        if parser.renderer_ids != {"child_playground_v2"} or parser.visual_contract_versions != {"child_playground_v2"}:
+            errors.append("儿童候选 renderer 或视觉合同漂移")
+        child_slots = {
+            slot for slot, marker in {
+                "hero": ".playground-hero",
+                "primary_surface": ".today-board",
+                "progress": ".home-stats",
+                "supporting_panel": ".world-more",
+            }.items()
+            if marker in text
+        }
+        if child_slots != {"hero", "primary_surface", "progress", "supporting_panel"}:
+            errors.append("儿童候选首屏槽位不完整")
+        if len(parser.dashboard_signatures) != 1:
+            errors.append("儿童候选缺少唯一首页结构签名")
+        if not expected_ids or not expected_ids <= embedded_ids:
+            errors.append("儿童候选未完整内嵌当前选择的已审内容")
+        if f'data-double6-selection-sha256="{selection.get("selection_sha256", "")}"' not in text:
+            errors.append("儿童候选内容选择摘要与候选锁漂移")
+        if f'data-double6-formal-item-count="{len(expected_ids)}"' not in text or 'data-double6-learning-content-version="1.7.2"' not in text:
+            errors.append("儿童候选未锁定 v1.7.2 与当前选择的内容数量")
+        # 学段适配器会裁剪房间；核对选中模块对应的真实入口，不强制恢复已关闭的房间。
+        selected_modules = set(lock.get("module_ids", []))
+        required_views = {"home"}
+        for module_id, view in {"education-language": "语文", "education-math": "数学", "education-english": "英语", "education-reading": "阅读", "education-parent": "parent", "education-movement": "movement", "education-rewards": "collect"}.items():
+            if module_id in selected_modules:
+                required_views.add(view)
+        if "education-errors" in selected_modules:
+            required_views.add("repair")
+        actual_views = set(re.findall(r'<button[^>]*class="nav-btn"[^>]*data-view="([^"]+)"', text))
+        if not required_views <= actual_views:
+            errors.append(f"儿童候选主导航缺少选中房间：{sorted(required_views - actual_views)}")
+        if "child_learning_starter" in text or "starter-education" in text:
+            errors.append("旧 starter 内容误混入儿童正式候选")
+        if digest_file(path) != lock["candidate_sha256"]:
+            errors.append("候选 SHA 已漂移")
+        return {
+            "status": "pass" if not errors else "fail", "errors": errors,
+            "candidate_sha256": digest_file(path), "hooks": sorted(parser.hooks),
+            "renderer_id": next(iter(parser.renderer_ids), None),
+            "visual_contract_version": next(iter(parser.visual_contract_versions), None),
+            "first_screen_slots": sorted(child_slots),
+            "structure_fingerprint": hashlib.sha256(next(iter(parser.dashboard_signatures), "").encode("utf-8")).hexdigest(),
+            "formal_item_count": len(expected_ids), "embedded_formal_item_count": len(expected_ids & embedded_ids),
+            "selection_sha256": selection.get("selection_sha256"),
+            "page_icon_rels": sorted(parser.page_icon_rels), "theme_color": next(iter(parser.theme_colors), None),
+        }
     keys = set(STORAGE_KEY.findall(text))
     if keys != {lock["storage_key"]}:
         errors.append(f"存储命名空间不唯一：{sorted(keys)}")
@@ -270,6 +367,57 @@ def static_scan(run_dir: Path) -> dict[str, Any]:
         errors.append("核心模块缺少非空 starter 内容或 starter 合同与候选锁漂移")
     if parser.reliability_contract_versions != {lock.get("reliability_contract_version")} or parser.reliability_public_layers != 1 or parser.reliability_receipts != 1:
         errors.append("候选缺少入口、数据位置、外部来源与恢复能力的诚实交付公共层")
+    reliability_binding = lock.get("reliability_envelope_binding", {})
+    if (
+        not isinstance(reliability_binding, dict)
+        or parser.reliability_envelope_versions != {reliability_binding.get("contract_version")}
+        or parser.reliability_registry_hashes != {reliability_binding.get("registry_sha256")}
+        or parser.reliability_envelope_hashes != {reliability_binding.get("envelope_sha256")}
+        or parser.reliability_envelope_statuses != {reliability_binding.get("status")}
+        or parser.reliability_guard_counts != [reliability_binding.get("guard_count")]
+        or parser.reliability_blocked_counts != [0]
+        or reliability_binding.get("status_counts", {}).get("blocked") != 0
+    ):
+        errors.append("候选未绑定当前 selected-scope 可靠性信封或仍含阻断项")
+    composition_binding = lock.get("composition_binding", {})
+    composition_contract = plan.get("composition_contract")
+    acceptance_scan = None
+    if composition_binding.get("activation_status") == "compiled":
+        pack = (composition_contract or {}).get("pack", {})
+        expected_composition_surfaces = {
+            row["module_id"]: {
+                "surface_template_id": row["surface_template_id"],
+                "surface_signature": row["surface_signature"],
+                "object_type_id": row["object_type_id"],
+                "default_disclosure": row["default_disclosure"],
+            }
+            for row in pack.get("modules", [])
+        }
+        if (
+            parser.composition_contract_versions != {composition_binding.get("contract_version")}
+            or parser.composition_ids != {composition_binding.get("composition_id")}
+            or parser.composition_hashes != {composition_binding.get("composition_sha256")}
+            or parser.composition_statuses != {"compiled"}
+            or parser.composition_surfaces != expected_composition_surfaces
+        ):
+            errors.append("候选未完整绑定当前声明式 composition contract")
+        acceptance_program = compile_acceptance_program(pack)
+        acceptance_scan = scan_acceptance_program(acceptance_program, text)
+        if acceptance_scan["status"] != "pass":
+            errors.extend(acceptance_scan["errors"])
+        if pack.get("runtime_binding", {}).get("runtime_id") == OBJECT_PIPELINE_RUNTIME:
+            hop_scan = execute_object_pipeline_program(pack, text)
+            if hop_scan["status"] != "pass":
+                errors.extend(hop_scan["errors"])
+            acceptance_scan = {**acceptance_scan, "object_pipeline": hop_scan}
+    elif (
+        parser.composition_contract_versions != {"none"}
+        or parser.composition_ids != {"none"}
+        or parser.composition_hashes != {"none"}
+        or parser.composition_statuses != {"not_registered"}
+        or parser.composition_surfaces
+    ):
+        errors.append("未登记场景不应隐式激活 composition runtime")
     if parser.today_workboards != 1:
         errors.append("候选缺少唯一的今天要处理入口")
     if parser.deployment_guides != 1:
@@ -306,8 +454,10 @@ def static_scan(run_dir: Path) -> dict[str, Any]:
     leaked_module_ids = sorted(module_id for module_id in expected_modules if module_id.lower() in visible_copy)
     if leaked_module_ids:
         errors.append(f"候选可见文案泄漏模块内部 ID：{leaked_module_ids}")
+    errors.extend(audit_candidate_html(visible_copy_raw, str(lock.get("scene_id") or "")))
     if not any(module_id.startswith("life-") for module_id in expected_modules):
-        dead_markers = [marker for marker in LIFE_SCENE_MARKERS if marker in text]
+        allowed = {"calories"} if "fitness-food" in expected_modules else set()
+        dead_markers = [marker for marker in LIFE_SCENE_MARKERS if marker not in allowed and marker in text]
         if dead_markers:
             errors.append(f"非个人生活场景候选携带跨场景死代码：{dead_markers}")
     if digest_file(path) != lock["candidate_sha256"]:
@@ -318,6 +468,11 @@ def static_scan(run_dir: Path) -> dict[str, Any]:
         "representative_item_count": parser.representative_items,
         "dashboard_module_link_count": len(parser.dashboard_module_links),
         "dashboard_module_link_ids": sorted(parser.dashboard_module_links),
+        "composition_id": next(iter(parser.composition_ids), None),
+        "composition_sha256": next(iter(parser.composition_hashes), None),
+        "composition_status": next(iter(parser.composition_statuses), None),
+        "composition_surface_count": len(parser.composition_surfaces),
+        "acceptance_program": acceptance_scan,
         "renderer_id": next(iter(parser.renderer_ids), None),
         "visual_contract_version": next(iter(parser.visual_contract_versions), None),
         "first_screen_slots": sorted(parser.first_screen_slots),
@@ -334,6 +489,12 @@ def static_scan(run_dir: Path) -> dict[str, Any]:
         "starter_surface_count": len(parser.starter_surface_versions),
         "starter_item_counts": parser.starter_item_counts,
         "reliability_contract_version": next(iter(parser.reliability_contract_versions), None),
+        "reliability_envelope_version": next(iter(parser.reliability_envelope_versions), None),
+        "reliability_registry_sha256": next(iter(parser.reliability_registry_hashes), None),
+        "reliability_envelope_sha256": next(iter(parser.reliability_envelope_hashes), None),
+        "reliability_envelope_status": next(iter(parser.reliability_envelope_statuses), None),
+        "reliability_guard_count": parser.reliability_guard_counts[0] if parser.reliability_guard_counts else 0,
+        "reliability_blocked_count": parser.reliability_blocked_counts[0] if parser.reliability_blocked_counts else -1,
         "reliability_public_layer_count": parser.reliability_public_layers,
         "today_workboard_count": parser.today_workboards,
         "deployment_guide_count": parser.deployment_guides,
@@ -465,13 +626,56 @@ def browser_environment() -> dict[str, Any]:
 
 def _judge(browser: dict[str, Any], lock: dict[str, Any]) -> list[str]:
     failures: list[str] = []
+    if browser.get("visible_machine_markers"):
+        failures.append("visible_internal_markers_failed")
     if browser.get("status") == "blocked":
         return [f"browser_blocked:{browser.get('error')}"]
+    if lock.get("renderer_id") == "child_playground_v2":
+        if (
+            browser.get("build_id") != lock["build_id"]
+            or browser.get("candidate_sha256") != lock["candidate_sha256"]
+            or browser.get("build_id_matches") is not True
+        ):
+            failures.append("candidate_binding_failed")
+        if browser.get("child_playground_v2_pass") is not True or browser.get("reward_selection_pass") is not True:
+            failures.append("child_playground_flow_failed")
+        if not all(browser.get("navigation", {}).get(module_id) is True for module_id in lock.get("module_ids", [])):
+            failures.append("child_playground_navigation_failed")
+        responsive = browser.get("responsive", [])
+        if (
+            {row.get("name") for row in responsive} != {"mobile", "tablet", "desktop"}
+            or any(
+                row.get("no_overflow") is not True
+                or row.get("persistent_left_tabs_pass") is not True
+                or row.get("navigation_labels_visible") is not True
+                for row in responsive
+            )
+        ):
+            failures.append("child_playground_responsive_failed")
+        accessibility = browser.get("accessibility", {})
+        if accessibility.get("focus_visible") is not True or any(
+            row.get("width", 0) < 44
+            or row.get("height", 0) < 44
+            or not str(row.get("accessible_name", "")).strip()
+            for row in accessibility.get("touch_targets", [])
+        ):
+            failures.append("accessibility_failed")
+        if browser.get("console_errors") or browser.get("page_errors") or browser.get("unauthorized_requests"):
+            failures.append("runtime_error_or_network_detected")
+        if set(browser.get("runtime_storage_keys", [])) != {lock["storage_key"]} or set(browser.get("final_storage_keys", [])) != {lock["storage_key"]}:
+            failures.append("storage_namespace_failed")
+        alternate = browser.get("alternate_storage", {})
+        extra_idb = [name for name in (alternate.get("indexed_db_names") or []) if name and name != "double6-workspace-v1"]
+        if alternate.get("session_storage_keys") or alternate.get("cookie_count") or extra_idb:
+            failures.append("alternate_storage_detected")
+        return failures
     if browser.get("build_id") != lock["build_id"] or browser.get("candidate_sha256") != lock["candidate_sha256"] or browser.get("build_id_matches") is not True:
         failures.append("candidate_binding_failed")
     if browser.get("primary_action_count") != 1:
         failures.append("primary_action_failed")
     experience = browser.get("experience", {})
+    reliability_binding = lock.get("reliability_envelope_binding", {})
+    composition_binding = lock.get("composition_binding", {})
     if (
         experience.get("scene_id") != lock.get("scene_id")
         or experience.get("experience_signature") != lock.get("experience_signature")
@@ -481,6 +685,20 @@ def _judge(browser: dict[str, Any], lock: dict[str, Any]) -> list[str]:
         or experience.get("renderer_id") != lock.get("renderer_id")
         or experience.get("visual_contract_version") != lock.get("visual_contract_version")
         or experience.get("reliability_contract_version") != lock.get("reliability_contract_version")
+        or experience.get("reliability_envelope_version") != reliability_binding.get("contract_version")
+        or experience.get("reliability_registry_sha256") != reliability_binding.get("registry_sha256")
+        or experience.get("reliability_envelope_sha256") != reliability_binding.get("envelope_sha256")
+        or experience.get("reliability_envelope_status") != reliability_binding.get("status")
+        or experience.get("reliability_guard_count") != reliability_binding.get("guard_count")
+        or experience.get("reliability_blocked_count") != 0
+        or experience.get("composition_status") != composition_binding.get("activation_status")
+        or (
+            composition_binding.get("activation_status") == "compiled"
+            and (
+                experience.get("composition_id") != composition_binding.get("composition_id")
+                or experience.get("composition_sha256") != composition_binding.get("composition_sha256")
+            )
+        )
         or set(experience.get("dashboard_module_link_ids", [])) != set(lock.get("module_ids", []))
         or set(experience.get("first_screen_slots", [])) != {"hero", "primary_surface", "progress", "supporting_panel"}
         or experience.get("semantic_emoji_marker_count", 0) < 5
@@ -525,7 +743,8 @@ def _judge(browser: dict[str, Any], lock: dict[str, Any]) -> list[str]:
     if set(browser.get("runtime_storage_keys", [])) != {lock["storage_key"]} or set(browser.get("final_storage_keys", [])) != {lock["storage_key"]}:
         failures.append("storage_namespace_failed")
     alternate = browser.get("alternate_storage", {})
-    if alternate.get("session_storage_keys") or alternate.get("cookie_count") or alternate.get("indexed_db_names"):
+    extra_idb = [name for name in (alternate.get("indexed_db_names") or []) if name and name != "double6-workspace-v1"]
+    if alternate.get("session_storage_keys") or alternate.get("cookie_count") or extra_idb:
         failures.append("alternate_storage_detected")
     responsive = browser.get("responsive", [])
     navigation_failed = any(
@@ -533,7 +752,14 @@ def _judge(browser: dict[str, Any], lock: dict[str, Any]) -> list[str]:
         or (row.get("name") == "desktop" and (row.get("identity_navigation_visible") is not True or row.get("mobile_bottom_navigation_visible") is not False))
         for row in responsive
     )
-    if not responsive or navigation_failed or any(row.get("no_overflow") is not True or row.get("primary_action_count") != 1 for row in responsive):
+    navigation_reachability_failed = any(
+        row.get("navigation_labels_visible") is not True
+        or row.get("navigation_label_contrast_pass") is not True
+        or row.get("navigation_within_viewport") is not True
+        or row.get("navigation_scroll_reachable") is not True
+        for row in responsive
+    )
+    if not responsive or navigation_failed or navigation_reachability_failed or any(row.get("no_overflow") is not True or row.get("primary_action_count") != 1 for row in responsive):
         failures.append("responsive_failed")
     if any(row.get("name") == "mobile" and row.get("personal_life_mobile_unobscured") is False for row in responsive):
         failures.append("personal_life_mobile_navigation_failed")
@@ -549,8 +775,10 @@ def evaluate(run_dir: Path, *, preflight: bool = False, skip_browser: bool = Fal
         environment = browser_environment()
         return {"status": "environment_ready" if environment["status"] == "ready" else "evaluation_blocked", "state": run["state"], "environment": environment, "next": _next_for_preflight(run)}
     require_state(run, "candidate_built", "evaluation_failed")
-    retrying_environment_block = run.get("state") == "evaluation_failed"
-    if (not retrying_environment_block and run.get("status") != "visual_approved") or (retrying_environment_block and run.get("status") != "evaluation_blocked"):
+    retrying_evaluation = run.get("state") == "evaluation_failed"
+    if (not retrying_evaluation and run.get("status") != "visual_approved") or (
+        retrying_evaluation and run.get("status") not in {"evaluation_blocked", "candidate_failed"}
+    ):
         raise ContractError("候选必须经当前用户视觉确认后才能验收")
     lock = read_json(run_dir / "candidate-lock.json")
     design = read_json(run_dir / "design.json")
@@ -582,10 +810,14 @@ def evaluate(run_dir: Path, *, preflight: bool = False, skip_browser: bool = Fal
                     blockers.append("browser_collector_no_result")
                 else:
                     browser_result = read_json(result_path)
-                    if completed.returncode:
+                    collected = browser_result.get("build_id") == lock["build_id"] and browser_result.get("candidate_sha256") == lock["candidate_sha256"]
+                    if completed.returncode and not collected:
                         blockers.append(f"browser_collector_failed:{browser_result.get('error', completed.stderr.strip())}")
                     else:
-                        failures.extend(_judge(browser_result, lock))
+                        judged = _judge(browser_result, lock)
+                        failures.extend(judged)
+                        if browser_result.get("status") == "fail" and not judged:
+                            failures.append("browser_collector_quality_failed")
                         evidence_dir = run_dir / "evidence"
                         evidence_dir.mkdir(parents=True, exist_ok=True)
                         for row in browser_result.get("screenshots", []):
@@ -619,6 +851,8 @@ def evaluate(run_dir: Path, *, preflight: bool = False, skip_browser: bool = Fal
         "schema_version": schema("evidence"), "status": status, "build_id": lock["build_id"],
         "surface_registry_version": lock.get("surface_registry_version"), "surface_checks": surface_checks,
         "starter_contract_version": lock.get("starter_contract_version"), "starter_checks": starter_checks,
+        "reliability_envelope_binding": lock.get("reliability_envelope_binding"),
+        "composition_binding": lock.get("composition_binding"),
         "renderer_id": lock.get("renderer_id"), "visual_contract_version": lock.get("visual_contract_version"),
         "first_screen_slots": {slot: "pass" if slot in set(scan.get("first_screen_slots", [])) else "fail" for slot in ["hero", "primary_surface", "progress", "supporting_panel"]},
         "structure_fingerprint": scan.get("structure_fingerprint"),

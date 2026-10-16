@@ -1,3 +1,4 @@
-adapter: openai
-source: ../SKILL.md
-notes: "使用本地 CLI 构建离线单文件工作台；浏览器验收依赖本机 Playwright/Chromium，外部发布由独立宿主流程执行。"
+interface:
+  display_name: "Double6 工作台制作器"
+  short_description: "把重复的个人工作做成离线单文件工作台"
+  default_prompt: "使用 $double6-workbench-builder 把真实重复工作收敛成一个本地个人工作台。先读 SKILL.md 与 references/runtime-contract.md，用 scripts/double6.py 跑完 start → respond → propose --from-snapshot → build → evaluate。表达不足时先 scene-discovery，充分时提交带逐字 evidence_spans 的语义路由；不要手写整份 product.json，也不要按关键词静默选场景。每个场景普通澄清最多五问，必要授权单列，切换后两类计数重置。理解稿和候选都必须现读当前 SHA 再请用户确认，禁止伪造确认。教育请求命中后再读 education-rules.md；改题目或练习时执行 content-truth-review。默认合成/脱敏数据；联网、多人、账号、支付、消息发送和公开发布只做人工交接。"

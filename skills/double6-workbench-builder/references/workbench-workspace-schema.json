@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "contract_version": "double6_workspace_v1",
+  "workspace_schema_version": 4,
+  "accepted_legacy_schema_versions": [2, 3],
+  "max_snapshots": 5,
+  "purpose": "用户数据合同：与 composition pack 分离。pack 描述工作台能做什么；本文件描述本机已保存的数据如何版本化、迁移和恢复。",
+  "sources": [
+    {
+      "id": "onebench-workspace-contract",
+      "repo": "diyiwuyan/onebench",
+      "license": "MIT",
+      "adopted": "独立于渲染器的版本化 workspace，以及所有权/命名空间元数据"
+    },
+    {
+      "id": "qiang-z-snapshot-repository",
+      "repo": "Qiang-Z/personal-workbench",
+      "license": "unlicensed",
+      "adopted": "破坏性写入前的 snapshot / list / restore 机制；clean-room 重写，不复制实现"
+    },
+    {
+      "id": "yishu-migrate-entry",
+      "repo": "YiShu5/YiShu-Workbench",
+      "license": "unlicensed",
+      "adopted": "显式 migrate(data) 入口；clean-room 重写"
+    },
+    {
+      "id": "build-professional-workbench-import-rollback",
+      "repo": "cylqwe7855-alt/build-professional-workbench",
+      "license": "MIT",
+      "adopted": "坏备份拒绝、写入失败回滚到导入前字节；不复制实现，也不吸收每页仪表盘"
+    }
+  ],
+  "ownership": {
+    "kind": "device_local",
+    "sync": "not_connected",
+    "notes": "本地数据永远可独立使用。同步只保持合同，不在本版本实现。"
+  },
+  "snapshot_reasons": [
+    "before_import",
+    "before_clear",
+    "before_restore"
+  ],
+  "portable_export": {
+    "includes": [
+      "schemaVersion",
+      "contractVersion",
+      "productId",
+      "packId",
+      "compositionId",
+      "ownership",
+      "modules",
+      "rewards",
+      "workflowIntents",
+      "legacyImport",
+      "firstRunSeen",
+      "importLog",
+      "updatedAt"
+    ],
+    "excludes": [
+      "snapshots",
+      "runtimeCapabilities",
+      "storageBackend"
+    ],
+    "filename_suffix": "backup-v4.json"
+  },
+  "required_fields": [
+    "schemaVersion",
+    "contractVersion",
+    "productId",
+    "packId",
+    "ownership",
+    "modules",
+    "updatedAt"
+  ]
+}

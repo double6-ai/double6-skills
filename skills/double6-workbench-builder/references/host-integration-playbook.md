@@ -4,23 +4,26 @@
 
 ## 1. CLI 操作
 
+流程语义、事件字段和 SHA 读取以 `SKILL.md` 为准。这里只写命令怎么敲。
+
 ### 最小命令序列
 
 ```bash
-python scripts/double6.py start --run <run_dir> --request "<用户原话>" --route-file route.json
+python scripts/double6.py start --run <run_dir> --request-file request.txt
 python scripts/double6.py respond --run <run_dir> --event-file event.json
-python scripts/double6.py propose --run <run_dir> --product-file product.json
+python scripts/double6.py propose --run <run_dir> --from-snapshot
+python scripts/double6.py evaluate --run <run_dir> --preflight
 python scripts/double6.py build --run <run_dir>
-python scripts/double6.py evaluate --run <run_dir> --preflight   # 环境预检，不改状态
 python scripts/double6.py evaluate --run <run_dir>
 ```
 
-- `start` 必须同时带 `--request`（或 `--request-file`）和 `--route-file`；缺路由文件时只返回场景目录，不会创建 run。
-- 长文本或含特殊字符的原话优先用 `--request-file` 传文件，避免 shell 转义损耗。
+- `start` 必须有 `--request` 或 `--request-file`。`--route-file` 可选：场景明确时一起提交；缺路由也会创建 run，进入场景厘清。
+- 默认用 `propose --from-snapshot`。只有用户改了模块、能力、边界或主流程才写 `--product-file`。
+- 长文本或含特殊字符的原话用 `--request-file`，避免 shell 转义损耗。
 
 ### evidence_spans：逐字摘自原话
 
-`route.json` 中的 `evidence_spans` 必须是用户原话里**逐字存在**的片段，校验器做逐字包含比对（`span in 原文`）。概括、改写、同义替换、编造的片段都会以 ContractError 拒绝。拿不准就多抄少改：直接从原话中截取连续子串。
+`route.json` 中的 `evidence_spans` 必须是当前规范化请求里**逐字存在**的片段，校验器做逐字包含比对（`span in 原文`）。概括、改写、同义替换、编造的片段都会以 ContractError 拒绝。拿不准就多抄少改：直接从原话中截取连续子串。
 
 ### SHA 获取路径（拿错就 ContractError）
 

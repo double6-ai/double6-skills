@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "contract_version": "double6_adaptive_clarification_v1",
+  "question_limit_per_scene": 5,
+  "scene_discovery": {
+    "decision_id": "scene-discovery",
+    "question": "先说说你想把哪件反复发生的事情做成工作台：谁来用、主要要完成什么、完成后希望得到什么结果？",
+    "question_reason": "需要先确定真实使用场景，才能推荐合适的模块和能力项。",
+    "allowed_adjustments": [
+      "使用者",
+      "反复任务",
+      "期望结果",
+      "明确不需要的内容"
+    ]
+  },
+  "selection_thresholds": {
+    "combined_module_max": 6,
+    "combined_capability_max": 10
+  },
+  "domains": [
+    {
+      "domain_id": "personal-execution",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {
+        "personal-life-dashboard": {
+          "ask_goal_when": "outcome_ambiguous"
+        }
+      }
+    },
+    {
+      "domain_id": "education-learning",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "ask_learning_priority_when": "goal_ambiguous_without_profile",
+      "module_capability_selection": "clarifying_adaptive",
+      "profile_overrides": {
+        "baby-growth-explorer": {
+          "ask_learning_priority_when": "never"
+        },
+        "primary-transition-1-to-2": {
+          "ask_learning_priority_when": "never"
+        },
+        "primary-transition-2-to-3": {
+          "ask_learning_priority_when": "never"
+        },
+        "primary-transition-3-to-4": {
+          "ask_learning_priority_when": "never"
+        }
+      }
+    },
+    {
+      "domain_id": "teaching-classroom",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {
+        "teaching-classroom-management": {
+          "ask_goal_when": "outcome_ambiguous"
+        },
+        "teaching-lesson-preparation": {
+          "ask_goal_when": "outcome_ambiguous"
+        }
+      }
+    },
+    {
+      "domain_id": "exam-preparation",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {
+        "civil-service-exam": {
+          "ask_goal_when": "outcome_ambiguous"
+        },
+        "cet4-sprint": {
+          "ask_goal_when": "outcome_ambiguous"
+        }
+      }
+    },
+    {
+      "domain_id": "sales-trade",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {}
+    },
+    {
+      "domain_id": "content-operations",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {}
+    },
+    {
+      "domain_id": "ecommerce-operations",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {}
+    },
+    {
+      "domain_id": "finance-tax-contract",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {}
+    },
+    {
+      "domain_id": "hr-employment",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {}
+    },
+    {
+      "domain_id": "research-knowledge",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {
+        "reading-desk": {}
+      }
+    },
+    {
+      "domain_id": "fitness-nutrition",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {
+        "fitness-fat-loss": {
+          "ask_goal_when": "outcome_ambiguous"
+        }
+      }
+    },
+    {
+      "domain_id": "health-pregnancy",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {
+        "pregnancy-management": {
+          "ask_goal_when": "outcome_ambiguous"
+        }
+      }
+    },
+    {
+      "domain_id": "travel-planning",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {}
+    },
+    {
+      "domain_id": "household-collaboration",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {}
+    },
+    {
+      "domain_id": "professional-services",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {}
+    },
+    {
+      "domain_id": "local-service-store",
+      "ask_goal_when": "route_and_outcome_ambiguous",
+      "module_capability_selection": "product_confirmation",
+      "profile_overrides": {}
+    }
+  ],
+  "question_budget_scope": "preferences_only",
+  "authorization_questions_count_separately": true
+}

@@ -1,0 +1,898 @@
+{
+  "active_day_count": 14,
+  "adaptive_follow_up": {
+    "atom_role_items": {
+      "learn-add-make-ten-100-v1": {
+        "additional_transfer": [
+          "b2-add-transfer-27-plus-6"
+        ],
+        "constructed_response": [],
+        "misconception_repair": [
+          "b2-add-repair-split-seven",
+          "b2-add-repair-next-ten"
+        ],
+        "structured_offscreen_expression": [
+          "b2-hanzi-offscreen-water"
+        ]
+      },
+      "learn-count-one-to-one-20-v1": {
+        "additional_transfer": [
+          "b2-count-transfer-eleven"
+        ],
+        "constructed_response": [],
+        "misconception_repair": [
+          "b2-count-repair-touch",
+          "b2-count-repair-scattered",
+          "b2-count-repair-last-number"
+        ],
+        "structured_offscreen_expression": [
+          "b2-count-offscreen-spoons"
+        ]
+      },
+      "learn-english-word-meaning-v1": {
+        "additional_transfer": [
+          "b2-english-transfer-rain"
+        ],
+        "constructed_response": [
+          "b2-english-produce-apple"
+        ],
+        "misconception_repair": [
+          "b2-english-repair-cat",
+          "b2-english-repair-shirt"
+        ],
+        "structured_offscreen_expression": []
+      },
+      "learn-hanzi-shape-sound-meaning-v1": {
+        "additional_transfer": [
+          "b2-hanzi-transfer-sunny"
+        ],
+        "constructed_response": [
+          "b2-hanzi-produce-word"
+        ],
+        "misconception_repair": [
+          "b2-hanzi-repair-water",
+          "b2-hanzi-repair-mountain"
+        ],
+        "structured_offscreen_expression": []
+      },
+      "learn-read-aloud-phrase-retell-v1": {
+        "additional_transfer": [
+          "b2-retell-transfer-deer"
+        ],
+        "constructed_response": [
+          "b2-retell-produce-two-actions"
+        ],
+        "misconception_repair": [
+          "b2-retell-repair-pause",
+          "b2-retell-repair-two-points",
+          "b2-retell-repair-rubric"
+        ],
+        "structured_offscreen_expression": [
+          "b2-retell-offscreen-leaf"
+        ]
+      },
+      "learn-read-explicit-information-v1": {
+        "additional_transfer": [
+          "b2-reading-transfer-bottle"
+        ],
+        "constructed_response": [
+          "b2-reading-produce-order",
+          "b2-reading-produce-person"
+        ],
+        "misconception_repair": [
+          "b2-reading-repair-common-sense",
+          "b2-reading-repair-question-type"
+        ],
+        "structured_offscreen_expression": []
+      },
+      "learn-sentence-who-where-do-v1": {
+        "additional_transfer": [
+          "b2-sentence-transfer-kitchen"
+        ],
+        "constructed_response": [
+          "b2-sentence-produce-place"
+        ],
+        "misconception_repair": [
+          "b2-sentence-repair-order",
+          "b2-sentence-repair-place"
+        ],
+        "structured_offscreen_expression": [
+          "b2-english-offscreen-shirt"
+        ]
+      },
+      "learn-subtract-bridge-ten-100-v1": {
+        "additional_transfer": [
+          "b2-subtract-transfer-21-minus-3"
+        ],
+        "constructed_response": [],
+        "misconception_repair": [
+          "b2-subtract-repair-direction",
+          "b2-subtract-repair-split-nine"
+        ],
+        "structured_offscreen_expression": []
+      }
+    },
+    "daily_item_limit": 2,
+    "hint_dependency": {
+      "always_visible_cues_count_as_hint": false,
+      "evidence": "explicit_hint_action_on_correct_attempt",
+      "guided_practice_counts_as_hint": false,
+      "wrong_attempt_takes_priority": true
+    },
+    "mastery_effect": "none",
+    "minimum_transfer_delay_active_days": 2,
+    "reason_copy": {
+      "additional_transfer": "前面的纠正已经完成，隔几天换个情境再试。",
+      "constructed_response": "已经会选了，现在自己排、拼、写或说出来。",
+      "hint_to_constructed": "刚才点过提示并答对了，现在不用提示，自己写、拼、排或说一次。",
+      "hint_to_transfer_fallback": "刚才点过提示并答对了；这项暂时没有表达题，换一道题自己完成。",
+      "misconception_repair": "刚才这里容易出错，先用另一种方式练一遍。",
+      "stable_to_offscreen": "已经在两个学习日无提示完成，并做对了换情境题；现在把方法带到身边用一次。",
+      "stable_to_transfer_summary": "已经在两个学习日无提示完成，并做对了换情境题；用一道迁移小结收尾。",
+      "structured_offscreen_expression": "把刚学的方法带到身边做一次，请家长现场确认。"
+    },
+    "repair_by_misconception": {
+      "learn-add-make-ten-100-v1/misconception-01": "b2-add-repair-split-seven",
+      "learn-add-make-ten-100-v1/misconception-02": "b2-add-repair-next-ten",
+      "learn-count-one-to-one-20-v1/misconception-01": "b2-count-repair-touch",
+      "learn-count-one-to-one-20-v1/misconception-02": "b2-count-repair-scattered",
+      "learn-count-one-to-one-20-v1/misconception-03": "b2-count-repair-last-number",
+      "learn-english-word-meaning-v1/misconception-01": "b2-english-repair-cat",
+      "learn-english-word-meaning-v1/misconception-02": "b2-english-repair-shirt",
+      "learn-hanzi-shape-sound-meaning-v1/misconception-01": "b2-hanzi-repair-water",
+      "learn-hanzi-shape-sound-meaning-v1/misconception-02": "b2-hanzi-repair-mountain",
+      "learn-read-aloud-phrase-retell-v1/misconception-01": "b2-retell-repair-pause",
+      "learn-read-aloud-phrase-retell-v1/misconception-02": "b2-retell-repair-two-points",
+      "learn-read-aloud-phrase-retell-v1/misconception-03": "b2-retell-repair-rubric",
+      "learn-read-explicit-information-v1/misconception-01": "b2-reading-repair-common-sense",
+      "learn-read-explicit-information-v1/misconception-02": "b2-reading-repair-question-type",
+      "learn-sentence-who-where-do-v1/misconception-01": "b2-sentence-repair-order",
+      "learn-sentence-who-where-do-v1/misconception-02": "b2-sentence-repair-place",
+      "learn-subtract-bridge-ten-100-v1/misconception-01": "b2-subtract-repair-direction",
+      "learn-subtract-bridge-ten-100-v1/misconception-02": "b2-subtract-repair-split-nine"
+    },
+    "role_items": {
+      "additional_transfer": [
+        "b2-hanzi-transfer-sunny",
+        "b2-english-transfer-rain",
+        "b2-count-transfer-eleven",
+        "b2-add-transfer-27-plus-6",
+        "b2-subtract-transfer-21-minus-3",
+        "b2-sentence-transfer-kitchen",
+        "b2-reading-transfer-bottle",
+        "b2-retell-transfer-deer"
+      ],
+      "constructed_response": [
+        "b2-hanzi-produce-word",
+        "b2-english-produce-apple",
+        "b2-sentence-produce-place",
+        "b2-reading-produce-order",
+        "b2-reading-produce-person",
+        "b2-retell-produce-two-actions"
+      ],
+      "misconception_repair": [
+        "b2-hanzi-repair-water",
+        "b2-hanzi-repair-mountain",
+        "b2-english-repair-cat",
+        "b2-english-repair-shirt",
+        "b2-count-repair-touch",
+        "b2-count-repair-scattered",
+        "b2-count-repair-last-number",
+        "b2-add-repair-split-seven",
+        "b2-add-repair-next-ten",
+        "b2-subtract-repair-direction",
+        "b2-subtract-repair-split-nine",
+        "b2-sentence-repair-order",
+        "b2-sentence-repair-place",
+        "b2-reading-repair-common-sense",
+        "b2-reading-repair-question-type",
+        "b2-retell-repair-pause",
+        "b2-retell-repair-two-points",
+        "b2-retell-repair-rubric"
+      ],
+      "structured_offscreen_expression": [
+        "b2-hanzi-offscreen-water",
+        "b2-english-offscreen-shirt",
+        "b2-count-offscreen-spoons",
+        "b2-retell-offscreen-leaf"
+      ]
+    },
+    "role_order": [
+      "misconception_repair",
+      "additional_transfer",
+      "constructed_response",
+      "structured_offscreen_expression"
+    ],
+    "selection_rules": {
+      "additional_transfer": "after_error_repair_delay_or_hint_fallback_or_stable_summary",
+      "constructed_response": "explicit_hint_success_or_same_atom_additional_transfer_resolved",
+      "misconception_repair": "real_wrong_atom_only_or_existing_error_branch_progress",
+      "structured_offscreen_expression": "stable_clean_completion_or_finished_error_branch_guardian_required"
+    },
+    "stable_completion": {
+      "clean_success": "correct_without_explicit_hint",
+      "minimum_distinct_active_days": 2,
+      "requires_clean_transfer_success": true,
+      "same_day_repeats_count_once": true
+    },
+    "trigger_priority": [
+      "real_error",
+      "explicit_hint_dependency",
+      "stable_clean_completion",
+      "existing_branch_progress"
+    ],
+    "unique_atom_per_day": true
+  },
+  "adaptive_overlay_item_count": 9,
+  "adaptive_overlay_pack_id": "child-learning-v1-7-2-in-place-replacements",
+  "adaptive_overlay_sha256": "94eed9c7824c14a1fe7f987f7fdc2c2d889de7de0aa8e3298fcf04315195f6b6",
+  "adaptive_pack_id": "child-learning-expansion-batch2-36-v172-effective",
+  "adaptive_pack_sha256": "78c20f2aa2bc3f00c3a36225b9abf656c5677f1b095147dd3ad6ec9b1c8be8c1",
+  "advancement": "next_opened_local_day_no_calendar_skip",
+  "arcs": [
+    {
+      "arc_id": "arc-life-math-a",
+      "family_id": "family-life-math",
+      "family_name": "生活数学",
+      "steps": [
+        {
+          "day": 1,
+          "item_id": "math-foundation-apples-8-to-10",
+          "level": "foundation"
+        },
+        {
+          "day": 5,
+          "item_id": "math-guided-flowers-13-minus-5",
+          "level": "guided"
+        },
+        {
+          "day": 9,
+          "item_id": "math-transfer-flowers-9-to-15",
+          "level": "transfer"
+        }
+      ],
+      "variant": "a"
+    },
+    {
+      "arc_id": "arc-life-math-b",
+      "family_id": "family-life-math",
+      "family_name": "生活数学",
+      "steps": [
+        {
+          "day": 3,
+          "item_id": "math-foundation-candy-6-to-10",
+          "level": "foundation"
+        },
+        {
+          "day": 7,
+          "item_id": "math-guided-fish-14-minus-6",
+          "level": "guided"
+        },
+        {
+          "day": 11,
+          "item_id": "math-transfer-fish-12-to-20",
+          "level": "transfer"
+        }
+      ],
+      "variant": "b"
+    },
+    {
+      "arc_id": "arc-theme-english-a",
+      "family_id": "family-theme-english",
+      "family_name": "主题英语",
+      "steps": [
+        {
+          "day": 1,
+          "item_id": "english-foundation-cat",
+          "level": "foundation"
+        },
+        {
+          "day": 5,
+          "item_id": "english-guided-family",
+          "level": "guided"
+        },
+        {
+          "day": 9,
+          "item_id": "english-transfer-bus",
+          "level": "transfer"
+        }
+      ],
+      "variant": "a"
+    },
+    {
+      "arc_id": "arc-theme-english-b",
+      "family_id": "family-theme-english",
+      "family_name": "主题英语",
+      "steps": [
+        {
+          "day": 3,
+          "item_id": "english-foundation-apple",
+          "level": "foundation"
+        },
+        {
+          "day": 7,
+          "item_id": "english-guided-shirt",
+          "level": "guided"
+        },
+        {
+          "day": 11,
+          "item_id": "english-transfer-rain",
+          "level": "transfer"
+        }
+      ],
+      "variant": "b"
+    },
+    {
+      "arc_id": "arc-reading-poetry-a",
+      "family_id": "family-reading-poetry",
+      "family_name": "短阅读与古诗",
+      "steps": [
+        {
+          "day": 1,
+          "item_id": "reading-foundation-watering",
+          "level": "foundation"
+        },
+        {
+          "day": 5,
+          "item_id": "reading-guided-window",
+          "level": "guided"
+        },
+        {
+          "day": 9,
+          "item_id": "reading-transfer-raincoat",
+          "level": "transfer"
+        }
+      ],
+      "variant": "a"
+    },
+    {
+      "arc_id": "arc-reading-poetry-b",
+      "family_id": "family-reading-poetry",
+      "family_name": "短阅读与古诗",
+      "steps": [
+        {
+          "day": 3,
+          "item_id": "reading-foundation-red-ball",
+          "level": "foundation"
+        },
+        {
+          "day": 7,
+          "item_id": "reading-guided-library",
+          "level": "guided"
+        },
+        {
+          "day": 11,
+          "item_id": "reading-transfer-poem-moon",
+          "level": "transfer"
+        }
+      ],
+      "variant": "b"
+    },
+    {
+      "arc_id": "arc-image-hanzi-a",
+      "family_id": "family-image-hanzi",
+      "family_name": "图词识字",
+      "steps": [
+        {
+          "day": 2,
+          "item_id": "hanzi-foundation-water",
+          "level": "foundation"
+        },
+        {
+          "day": 6,
+          "item_id": "hanzi-guided-rest",
+          "level": "guided"
+        },
+        {
+          "day": 10,
+          "item_id": "hanzi-transfer-sunny",
+          "level": "transfer"
+        }
+      ],
+      "variant": "a"
+    },
+    {
+      "arc_id": "arc-image-hanzi-b",
+      "family_id": "family-image-hanzi",
+      "family_name": "图词识字",
+      "steps": [
+        {
+          "day": 4,
+          "item_id": "hanzi-foundation-mountain",
+          "level": "foundation"
+        },
+        {
+          "day": 8,
+          "item_id": "hanzi-guided-bright",
+          "level": "guided"
+        },
+        {
+          "day": 12,
+          "item_id": "hanzi-transfer-wood",
+          "level": "transfer"
+        }
+      ],
+      "variant": "b"
+    },
+    {
+      "arc_id": "arc-classification-reasoning-a",
+      "family_id": "family-classification-reasoning",
+      "family_name": "分类与推理",
+      "steps": [
+        {
+          "day": 2,
+          "item_id": "class-foundation-animal-outlier",
+          "level": "foundation"
+        },
+        {
+          "day": 6,
+          "item_id": "class-guided-school-things",
+          "level": "guided"
+        },
+        {
+          "day": 10,
+          "item_id": "sequence-transfer-apple-fish",
+          "level": "transfer"
+        }
+      ],
+      "variant": "a"
+    },
+    {
+      "arc_id": "arc-classification-reasoning-b",
+      "family_id": "family-classification-reasoning",
+      "family_name": "分类与推理",
+      "steps": [
+        {
+          "day": 4,
+          "item_id": "class-foundation-fruit-outlier",
+          "level": "foundation"
+        },
+        {
+          "day": 8,
+          "item_id": "class-guided-numbers",
+          "level": "guided"
+        },
+        {
+          "day": 12,
+          "item_id": "sequence-transfer-moon-star",
+          "level": "transfer"
+        }
+      ],
+      "variant": "b"
+    },
+    {
+      "arc_id": "arc-offscreen-action-a",
+      "family_id": "family-offscreen-action",
+      "family_name": "屏外行动",
+      "steps": [
+        {
+          "day": 2,
+          "item_id": "offscreen-foundation-read",
+          "level": "foundation"
+        },
+        {
+          "day": 6,
+          "item_id": "offscreen-guided-sort-books",
+          "level": "guided"
+        },
+        {
+          "day": 10,
+          "item_id": "offscreen-transfer-room-sounds",
+          "level": "transfer"
+        }
+      ],
+      "variant": "a"
+    },
+    {
+      "arc_id": "arc-offscreen-action-b",
+      "family_id": "family-offscreen-action",
+      "family_name": "屏外行动",
+      "steps": [
+        {
+          "day": 4,
+          "item_id": "offscreen-foundation-describe-toy",
+          "level": "foundation"
+        },
+        {
+          "day": 8,
+          "item_id": "offscreen-guided-fruit-count",
+          "level": "guided"
+        },
+        {
+          "day": 12,
+          "item_id": "offscreen-transfer-leaves",
+          "level": "transfer"
+        }
+      ],
+      "variant": "b"
+    }
+  ],
+  "claims": {
+    "atom_mastery_changed": false,
+    "content_truth_changed": false,
+    "curriculum_or_textbook_alignment": false,
+    "real_child_effect_validated": false
+  },
+  "cycle_policy": "after_day_14_repeat_as_spaced_review_cycle",
+  "daily_item_count": 3,
+  "days": [
+    {
+      "day": 1,
+      "description": "先用熟悉的图和短题找到方法。",
+      "phase": "foundation",
+      "phase_label": "先认识",
+      "slots": [
+        {
+          "arc_id": "arc-life-math-a",
+          "family_id": "family-life-math",
+          "item_id": "math-foundation-apples-8-to-10",
+          "level": "foundation"
+        },
+        {
+          "arc_id": "arc-theme-english-a",
+          "family_id": "family-theme-english",
+          "item_id": "english-foundation-cat",
+          "level": "foundation"
+        },
+        {
+          "arc_id": "arc-reading-poetry-a",
+          "family_id": "family-reading-poetry",
+          "item_id": "reading-foundation-watering",
+          "level": "foundation"
+        }
+      ],
+      "title": "第 1 天 · 先认识"
+    },
+    {
+      "day": 2,
+      "description": "先用熟悉的图和短题找到方法。",
+      "phase": "foundation",
+      "phase_label": "先认识",
+      "slots": [
+        {
+          "arc_id": "arc-image-hanzi-a",
+          "family_id": "family-image-hanzi",
+          "item_id": "hanzi-foundation-water",
+          "level": "foundation"
+        },
+        {
+          "arc_id": "arc-classification-reasoning-a",
+          "family_id": "family-classification-reasoning",
+          "item_id": "class-foundation-animal-outlier",
+          "level": "foundation"
+        },
+        {
+          "arc_id": "arc-offscreen-action-a",
+          "family_id": "family-offscreen-action",
+          "item_id": "offscreen-foundation-read",
+          "level": "foundation"
+        }
+      ],
+      "title": "第 2 天 · 先认识"
+    },
+    {
+      "day": 3,
+      "description": "先用熟悉的图和短题找到方法。",
+      "phase": "foundation",
+      "phase_label": "先认识",
+      "slots": [
+        {
+          "arc_id": "arc-life-math-b",
+          "family_id": "family-life-math",
+          "item_id": "math-foundation-candy-6-to-10",
+          "level": "foundation"
+        },
+        {
+          "arc_id": "arc-theme-english-b",
+          "family_id": "family-theme-english",
+          "item_id": "english-foundation-apple",
+          "level": "foundation"
+        },
+        {
+          "arc_id": "arc-reading-poetry-b",
+          "family_id": "family-reading-poetry",
+          "item_id": "reading-foundation-red-ball",
+          "level": "foundation"
+        }
+      ],
+      "title": "第 3 天 · 先认识"
+    },
+    {
+      "day": 4,
+      "description": "先用熟悉的图和短题找到方法。",
+      "phase": "foundation",
+      "phase_label": "先认识",
+      "slots": [
+        {
+          "arc_id": "arc-image-hanzi-b",
+          "family_id": "family-image-hanzi",
+          "item_id": "hanzi-foundation-mountain",
+          "level": "foundation"
+        },
+        {
+          "arc_id": "arc-classification-reasoning-b",
+          "family_id": "family-classification-reasoning",
+          "item_id": "class-foundation-fruit-outlier",
+          "level": "foundation"
+        },
+        {
+          "arc_id": "arc-offscreen-action-b",
+          "family_id": "family-offscreen-action",
+          "item_id": "offscreen-foundation-describe-toy",
+          "level": "foundation"
+        }
+      ],
+      "title": "第 4 天 · 先认识"
+    },
+    {
+      "day": 5,
+      "description": "隔几天带着提示，把刚认识的方法再做一遍。",
+      "phase": "guided",
+      "phase_label": "带着做",
+      "slots": [
+        {
+          "arc_id": "arc-life-math-a",
+          "family_id": "family-life-math",
+          "item_id": "math-guided-flowers-13-minus-5",
+          "level": "guided"
+        },
+        {
+          "arc_id": "arc-theme-english-a",
+          "family_id": "family-theme-english",
+          "item_id": "english-guided-family",
+          "level": "guided"
+        },
+        {
+          "arc_id": "arc-reading-poetry-a",
+          "family_id": "family-reading-poetry",
+          "item_id": "reading-guided-window",
+          "level": "guided"
+        }
+      ],
+      "title": "第 5 天 · 带着做"
+    },
+    {
+      "day": 6,
+      "description": "隔几天带着提示，把刚认识的方法再做一遍。",
+      "phase": "guided",
+      "phase_label": "带着做",
+      "slots": [
+        {
+          "arc_id": "arc-image-hanzi-a",
+          "family_id": "family-image-hanzi",
+          "item_id": "hanzi-guided-rest",
+          "level": "guided"
+        },
+        {
+          "arc_id": "arc-classification-reasoning-a",
+          "family_id": "family-classification-reasoning",
+          "item_id": "class-guided-school-things",
+          "level": "guided"
+        },
+        {
+          "arc_id": "arc-offscreen-action-a",
+          "family_id": "family-offscreen-action",
+          "item_id": "offscreen-guided-sort-books",
+          "level": "guided"
+        }
+      ],
+      "title": "第 6 天 · 带着做"
+    },
+    {
+      "day": 7,
+      "description": "隔几天带着提示，把刚认识的方法再做一遍。",
+      "phase": "guided",
+      "phase_label": "带着做",
+      "slots": [
+        {
+          "arc_id": "arc-life-math-b",
+          "family_id": "family-life-math",
+          "item_id": "math-guided-fish-14-minus-6",
+          "level": "guided"
+        },
+        {
+          "arc_id": "arc-theme-english-b",
+          "family_id": "family-theme-english",
+          "item_id": "english-guided-shirt",
+          "level": "guided"
+        },
+        {
+          "arc_id": "arc-reading-poetry-b",
+          "family_id": "family-reading-poetry",
+          "item_id": "reading-guided-library",
+          "level": "guided"
+        }
+      ],
+      "title": "第 7 天 · 带着做"
+    },
+    {
+      "day": 8,
+      "description": "隔几天带着提示，把刚认识的方法再做一遍。",
+      "phase": "guided",
+      "phase_label": "带着做",
+      "slots": [
+        {
+          "arc_id": "arc-image-hanzi-b",
+          "family_id": "family-image-hanzi",
+          "item_id": "hanzi-guided-bright",
+          "level": "guided"
+        },
+        {
+          "arc_id": "arc-classification-reasoning-b",
+          "family_id": "family-classification-reasoning",
+          "item_id": "class-guided-numbers",
+          "level": "guided"
+        },
+        {
+          "arc_id": "arc-offscreen-action-b",
+          "family_id": "family-offscreen-action",
+          "item_id": "offscreen-guided-fruit-count",
+          "level": "guided"
+        }
+      ],
+      "title": "第 8 天 · 带着做"
+    },
+    {
+      "day": 9,
+      "description": "再隔几天换一个情境，试试能不能自己用出来。",
+      "phase": "transfer",
+      "phase_label": "换情境",
+      "slots": [
+        {
+          "arc_id": "arc-life-math-a",
+          "family_id": "family-life-math",
+          "item_id": "math-transfer-flowers-9-to-15",
+          "level": "transfer"
+        },
+        {
+          "arc_id": "arc-theme-english-a",
+          "family_id": "family-theme-english",
+          "item_id": "english-transfer-bus",
+          "level": "transfer"
+        },
+        {
+          "arc_id": "arc-reading-poetry-a",
+          "family_id": "family-reading-poetry",
+          "item_id": "reading-transfer-raincoat",
+          "level": "transfer"
+        }
+      ],
+      "title": "第 9 天 · 换情境"
+    },
+    {
+      "day": 10,
+      "description": "再隔几天换一个情境，试试能不能自己用出来。",
+      "phase": "transfer",
+      "phase_label": "换情境",
+      "slots": [
+        {
+          "arc_id": "arc-image-hanzi-a",
+          "family_id": "family-image-hanzi",
+          "item_id": "hanzi-transfer-sunny",
+          "level": "transfer"
+        },
+        {
+          "arc_id": "arc-classification-reasoning-a",
+          "family_id": "family-classification-reasoning",
+          "item_id": "sequence-transfer-apple-fish",
+          "level": "transfer"
+        },
+        {
+          "arc_id": "arc-offscreen-action-a",
+          "family_id": "family-offscreen-action",
+          "item_id": "offscreen-transfer-room-sounds",
+          "level": "transfer"
+        }
+      ],
+      "title": "第 10 天 · 换情境"
+    },
+    {
+      "day": 11,
+      "description": "再隔几天换一个情境，试试能不能自己用出来。",
+      "phase": "transfer",
+      "phase_label": "换情境",
+      "slots": [
+        {
+          "arc_id": "arc-life-math-b",
+          "family_id": "family-life-math",
+          "item_id": "math-transfer-fish-12-to-20",
+          "level": "transfer"
+        },
+        {
+          "arc_id": "arc-theme-english-b",
+          "family_id": "family-theme-english",
+          "item_id": "english-transfer-rain",
+          "level": "transfer"
+        },
+        {
+          "arc_id": "arc-reading-poetry-b",
+          "family_id": "family-reading-poetry",
+          "item_id": "reading-transfer-poem-moon",
+          "level": "transfer"
+        }
+      ],
+      "title": "第 11 天 · 换情境"
+    },
+    {
+      "day": 12,
+      "description": "再隔几天换一个情境，试试能不能自己用出来。",
+      "phase": "transfer",
+      "phase_label": "换情境",
+      "slots": [
+        {
+          "arc_id": "arc-image-hanzi-b",
+          "family_id": "family-image-hanzi",
+          "item_id": "hanzi-transfer-wood",
+          "level": "transfer"
+        },
+        {
+          "arc_id": "arc-classification-reasoning-b",
+          "family_id": "family-classification-reasoning",
+          "item_id": "sequence-transfer-moon-star",
+          "level": "transfer"
+        },
+        {
+          "arc_id": "arc-offscreen-action-b",
+          "family_id": "family-offscreen-action",
+          "item_id": "offscreen-transfer-leaves",
+          "level": "transfer"
+        }
+      ],
+      "title": "第 12 天 · 换情境"
+    },
+    {
+      "day": 13,
+      "description": "优先回看第一次答错、还没完成或距离上次练习最久的三项。",
+      "phase": "adaptive_review",
+      "phase_label": "回看线索",
+      "selection_rule": {
+        "item_count": 3,
+        "mastery_effect": "none",
+        "strategy": "wrong_unresolved_oldest",
+        "unique_family": true
+      },
+      "title": "第 13 天 · 回看线索"
+    },
+    {
+      "day": 14,
+      "description": "从换情境题中挑三项，优先回看尚未完成或第一次答错的内容。",
+      "phase": "adaptive_transfer",
+      "phase_label": "迁移小结",
+      "selection_rule": {
+        "item_count": 3,
+        "levels": [
+          "transfer"
+        ],
+        "mastery_effect": "none",
+        "strategy": "transfer_wrong_unresolved_oldest",
+        "unique_family": true
+      },
+      "title": "第 14 天 · 迁移小结"
+    }
+  ],
+  "family_cohorts": [
+    [
+      "family-life-math",
+      "family-theme-english",
+      "family-reading-poetry"
+    ],
+    [
+      "family-image-hanzi",
+      "family-classification-reasoning",
+      "family-offscreen-action"
+    ]
+  ],
+  "guided_practice_effect": "never_independent_mastery",
+  "mastery_effect": "none",
+  "new_content_days": 12,
+  "offscreen_guardian_confirmation": true,
+  "path_id": "small-garden-14-active-days-adaptive-v4",
+  "review_days": [
+    13,
+    14
+  ],
+  "schema_version": "child-learning-active-day-path/v4",
+  "source_pack_id": "child-learning-expansion-batch1-36",
+  "source_pack_sha256": "c308235a43337baddc5c8b893431a31714e1da4b8943b1b01e6149f99e574708",
+  "title": "小花园 14 个学习日与自适应下一步"
+}

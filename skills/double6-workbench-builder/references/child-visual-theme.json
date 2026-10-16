@@ -1,0 +1,228 @@
+{
+  "schema_version": "double6-child-visual-theme/v5",
+  "current_theme_id": "room-claim-v1",
+  "default_room": "garden",
+  "notes": "房间和伙伴皮绑定：家长换一间，颜色、房子、构图一起换。四档主图必须是不同构图，不能同一张女孩小屋换宠物。伙伴卡按心情换图：waiting/hopeful/almost 用在等图，well 用好了图。门牌能写称呼和一件自己的东西：没写名字是「我的小花园」，写了是「乐乐的小花园」。不是 Hello Kitty IP。暮光小屋是原创粘土勇士，可见文案用光之勇士。",
+  "composition_rule": "每个房间的 composition.id、camera、building、setting 必须互不相同。检查器核文件哈希，不能只核文件名。",
+  "companion_mood_rule": "四种皮各有 waiting / well 两极图，文件和哈希都必须不同。hopeful 与 almost 复用 waiting，不另出图。检查器核哈希，不能只核文件名。身份半身照 companion_art 只作缺心情图时的兜底。文案写怪兽在晃时，waiting 图必须是双人中景，怪兽占画面足够大，108px 卡片上能认出，不能只是勇士特写或地平线一个点。",
+  "room_claim_rule": "儿童首页的主活动是今晚三站，以及还在等他的伙伴。家长可写短称呼，只出现在门牌上。不要把摆放小物件做成儿童首页的主活动。",
+  "room_claim": {
+    "name_max": 6,
+    "belonging_count": 1,
+    "slots": {
+      "garden": {"id": "cottage-path", "x": 76, "y": 78, "w": 11},
+      "bamboo": {"id": "stone-path", "x": 30, "y": 84, "w": 12},
+      "greenhouse": {"id": "aisle-floor", "x": 50, "y": 93, "w": 10},
+      "dusk": {"id": "hut-doorstep", "x": 40, "y": 86, "w": 12}
+    },
+    "catalog": [
+      {"id": "flower", "label": "小花", "token": "flower", "prop": "props/flower.png", "prop_sha256": "5b5a110ac367991a3fa9ac83ad6aa42a442506892e984b6f0d52c28d4c429fe0", "rooms": ["garden", "greenhouse"]},
+      {"id": "leaf", "label": "竹叶", "token": "leaf", "prop": "props/leaf.png", "prop_sha256": "dc18bcb4856710edf6a4320ad97b455223914d1d855172b63544a840e799eb0b", "rooms": ["bamboo"]},
+      {"id": "lantern", "label": "红灯笼", "emoji": "🏮", "prop": "props/lantern.png", "prop_sha256": "722c9693629e112ab98b944ef0f48260d6ab87f9af5cc9e703b9058208f7c6b0", "rooms": ["bamboo"]},
+      {"id": "pot", "label": "小陶盆", "emoji": "🪴", "prop": "props/pot.png", "prop_sha256": "0fac927e85d62c1b7383ad5bb42d4af2ceae8e3ca2bb9618ad6dcdeb90fc946e", "rooms": ["greenhouse"]},
+      {"id": "star-lamp", "label": "星星灯", "emoji": "⭐", "prop": "props/star-lamp.png", "prop_sha256": "cfecaf1384152e9b2029e93d94442cf721d1d9a95dca9ada0046705d56a4e51f", "rooms": ["dusk"]},
+      {"id": "telescope", "label": "望远镜", "emoji": "🔭", "prop": "props/telescope.png", "prop_sha256": "16ce0d941e570c1221b211145b3482cf2df201414adf32f40a403431edac3f67", "rooms": ["dusk"]},
+      {"id": "ball", "label": "小球", "token": "ball", "prop": "props/ball.png", "prop_sha256": "3dc041696bea325e0386e750e2b64ec861813c0b05e3d539273ac7b085fb9944", "rooms": ["*"]},
+      {"id": "storybook", "label": "故事书", "token": "storybook", "prop": "props/storybook.png", "prop_sha256": "142f95c1e77829f415b6a1243ae74c93ec935e0af91583d8e894ef9bec325849", "rooms": ["*"]},
+      {"id": "pillow", "label": "小枕头", "emoji": "🧸", "prop": "props/pillow.png", "prop_sha256": "1a68fc8e2bc17deda860d908dc6d371d90de77e313b16854cffba5ac6a12816a", "rooms": ["*"]}
+    ]
+  },
+  "skin_to_room": {
+    "companion-puppy": "garden",
+    "companion-panda": "bamboo",
+    "companion-plants": "greenhouse",
+    "companion-ultraman": "dusk"
+  },
+  "companion_art": {
+    "companion-puppy": "companions/puppy.jpg",
+    "companion-panda": "companions/panda.jpg",
+    "companion-plants": "companions/plants.jpg",
+    "companion-ultraman": "companions/ultraman.jpg"
+  },
+  "companion_moods": {
+    "poles": ["waiting", "well"],
+    "reuse": {
+      "hopeful": "waiting",
+      "almost": "waiting"
+    },
+    "skins": {
+      "companion-puppy": {
+        "waiting": {
+          "file": "companions/puppy-waiting.jpg",
+          "sha256": "3cae31ebb0dececf6e1f05f9f5443583a43e26616fec694a53b72ae50bd134de"
+        },
+        "well": {
+          "file": "companions/puppy-well.jpg",
+          "sha256": "5a54693d8222a98343e0546005314052c6fb2f789b79af766870e3c4836ed45d"
+        }
+      },
+      "companion-panda": {
+        "waiting": {
+          "file": "companions/panda-waiting.jpg",
+          "sha256": "ff605d60aa5d9eb79441eb457cc3e9bebdb7a01e2f7e41ed180e8cdf45b16e3b"
+        },
+        "well": {
+          "file": "companions/panda-well.jpg",
+          "sha256": "293b3fa72af36a0222356174531c0cae5628de55872db7dcc45de459abcfe29f"
+        }
+      },
+      "companion-plants": {
+        "waiting": {
+          "file": "companions/plants-waiting.jpg",
+          "sha256": "302fef19ee30188b2819f7913309f6085187ffc8fba07965c5e00b3bcb84be16"
+        },
+        "well": {
+          "file": "companions/plants-well.jpg",
+          "sha256": "47c14bcfd2894475c97d2053b72df2e12059848409b8d8a97475c0dc755d80b4"
+        }
+      },
+      "companion-ultraman": {
+        "waiting": {
+          "file": "companions/ultraman-waiting.jpg",
+          "sha256": "39537dcdd04579d818f4699fc292c60608ced41b7b0942efac978d9713d79845",
+          "composition": {
+            "id": "ridge-two-figure",
+            "camera": "medium-two-shot",
+            "visible_cast": ["clay-ranger", "ridge-beast"],
+            "beast_role": "visible-on-card"
+          }
+        },
+        "well": {
+          "file": "companions/ultraman-well.jpg",
+          "sha256": "4159f6f9534e1c06e8943d85851795e0de2b0d37f38e76be61607978f57e607c",
+          "composition": {
+            "id": "ridge-ranger-alone",
+            "camera": "medium-two-shot",
+            "visible_cast": ["clay-ranger"]
+          }
+        }
+      }
+    }
+  },
+  "rooms": [
+    {
+      "room_id": "garden",
+      "label": "小花园",
+      "brand": "小花园",
+      "brand_sub": "我的房间",
+      "emoji": "🌱",
+      "companion_skin": "companion-puppy",
+      "hero": "hero-garden-v2.jpg",
+      "hero_sha256": "0ad6e2fa1f909213876a4795b0ebbdf392f022ba081e3230883d4d10691925fe",
+      "composition": {
+        "id": "front-yard-cottage",
+        "camera": "low-child-eye-yard",
+        "building": "gable-cottage",
+        "setting": "flower-garden",
+        "primary_figure": "girl-kneeling-with-puppy"
+      },
+      "decorations": ["花信箱", "鸟屋", "郁金香垄", "黄水壶"],
+      "palette": {
+        "paper": "#fffaf4",
+        "panel": "#fffefa",
+        "pink_rail": "#ffe7ef",
+        "green": "#247b63",
+        "green_2": "#d9f3e8",
+        "line": "#eadfe7",
+        "coral": "#b52c51",
+        "rail_line": "#f3d7e1",
+        "nav_active": "#ffd0dc",
+        "hero_sky": "#bfe9ff",
+        "brand_small": "#8c4860"
+      }
+    },
+    {
+      "room_id": "bamboo",
+      "label": "竹林小屋",
+      "brand": "竹林小屋",
+      "brand_sub": "我的房间",
+      "emoji": "🎋",
+      "companion_skin": "companion-panda",
+      "hero": "hero-bamboo-v2.jpg",
+      "hero_sha256": "d21f79f00d092b49d7e1b4e2c17cd43175efd5f489d5df99c858152822dbe081",
+      "composition": {
+        "id": "bamboo-stilt-teahouse",
+        "camera": "path-toward-pavilion",
+        "building": "wooden-stilt-teahouse",
+        "setting": "bamboo-forest-mist",
+        "primary_figure": "panda-at-stone-basin"
+      },
+      "decorations": ["红灯笼", "石板路", "青苔屋顶", "石盆"],
+      "palette": {
+        "paper": "#f4f8ef",
+        "panel": "#fbfef6",
+        "pink_rail": "#e4f0d8",
+        "green": "#3d6b3a",
+        "green_2": "#e4f3d8",
+        "line": "#d5e4c8",
+        "coral": "#5a7a3a",
+        "rail_line": "#c9ddb4",
+        "nav_active": "#c8e0a8",
+        "hero_sky": "#cfe8c4",
+        "brand_small": "#4a6b38"
+      }
+    },
+    {
+      "room_id": "greenhouse",
+      "label": "玻璃花房",
+      "brand": "玻璃花房",
+      "brand_sub": "我的房间",
+      "emoji": "🪴",
+      "companion_skin": "companion-plants",
+      "hero": "hero-greenhouse-v2.jpg",
+      "hero_sha256": "9716447a5973394a14f105894dce1fffd9dfb13e17ffcc61bf6c24232a691a3b",
+      "composition": {
+        "id": "glasshouse-aisle",
+        "camera": "interior-aisle-to-door",
+        "building": "glass-greenhouse",
+        "setting": "potting-shelves-interior",
+        "primary_figure": "plant-on-workbench"
+      },
+      "decorations": ["吊蕨", "陶盆架", "圆玻璃门", "木凳"],
+      "palette": {
+        "paper": "#f6fbf4",
+        "panel": "#fbfff8",
+        "pink_rail": "#e8f6e4",
+        "green": "#2d7a4a",
+        "green_2": "#e0f4d8",
+        "line": "#d4e8c8",
+        "coral": "#c46a3d",
+        "rail_line": "#c5ddb8",
+        "nav_active": "#c8e8b8",
+        "hero_sky": "#d4edc8",
+        "brand_small": "#3d6b3a"
+      }
+    },
+    {
+      "room_id": "dusk",
+      "label": "暮光小屋",
+      "brand": "暮光小屋",
+      "brand_sub": "我的房间",
+      "emoji": "🌟",
+      "companion_skin": "companion-ultraman",
+      "hero": "hero-dusk-v2.jpg",
+      "hero_sha256": "8503a9a7eee34dda1716bfac049fc206452bf99d021b9a551d73da85e712e925",
+      "composition": {
+        "id": "cliff-lantern-hut",
+        "camera": "terrace-against-dusk-sky",
+        "building": "round-lantern-hut",
+        "setting": "night-cliff-stars",
+        "primary_figure": "clay-ranger-with-telescope"
+      },
+      "decorations": ["星星灯", "望远镜", "穹顶窗", "悬崖台"],
+      "palette": {
+        "paper": "#fff6ef",
+        "panel": "#fffaf4",
+        "pink_rail": "#ffe4d0",
+        "green": "#c45d4a",
+        "green_2": "#ffe8d6",
+        "line": "#f0d4c0",
+        "coral": "#c43d5a",
+        "rail_line": "#f3d0b8",
+        "nav_active": "#ffd0b0",
+        "hero_sky": "#ffc89a",
+        "brand_small": "#8c4860"
+      }
+    }
+  ]
+}

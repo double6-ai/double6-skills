@@ -1,0 +1,985 @@
+{
+  "base_product_version": "1.7.1",
+  "generated_at": "2026-08-13T11:45:00+08:00",
+  "historical_batch_mutation": false,
+  "items": [
+    {
+      "content_role": "misconception_repair",
+      "cues": [
+        "看个位6",
+        "补到10"
+      ],
+      "duplicate_signature": "batch2:b2-add-repair-next-ten",
+      "error_mapping": {
+        "3": "learn-add-make-ten-100-v1/misconception-02",
+        "6": "learn-add-make-ten-100-v1/misconception-02"
+      },
+      "family_id": "family-life-math",
+      "family_name": "生活数学",
+      "interaction_contract": {
+        "custom_keypad_required": true,
+        "type": "number_input",
+        "wrong_answer_probe": "3"
+      },
+      "item_id": "b2-add-repair-next-ten",
+      "kind": "arithmetic",
+      "level": "repair",
+      "level_label": "错因纠正",
+      "misconception_refs": [
+        "learn-add-make-ten-100-v1/misconception-02"
+      ],
+      "mode": "guided_practice",
+      "objective": "纠正只会背步骤但不能主动求出补到下一个整十所需的数",
+      "oracle": {
+        "added_count": 4,
+        "answer": "4",
+        "explanation": "36 加 4 就是 40。",
+        "explanation_result": 4,
+        "initial_count": 36,
+        "operation": "add_missing",
+        "target_count": 40
+      },
+      "presentation": {
+        "hero": "🧺",
+        "stimulus_lines": [
+          "36 → 40",
+          "个位从 6 补到 10"
+        ]
+      },
+      "prompt": "36 再加几就是 40？请填数字。",
+      "provenance": {
+        "presentation_donors": [
+          "cls-xhs-6a69ddf6/ev-v09",
+          "cls-xhs-6a68df35/ev-013",
+          "cls-bili-bv1xt3t6here/EV-VID-02"
+        ],
+        "truth_basis": [
+          "deterministic_arithmetic:40-36=4"
+        ]
+      },
+      "remediation_next_action": "只看个位：6 还差 4 到 10。",
+      "render_contract": {
+        "expected_success_tokens": [
+          "36 加 4 就是 40。"
+        ],
+        "object_counts": [
+          36
+        ],
+        "object_token": "🟡",
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "36 → 40",
+          "个位从 6 补到 10",
+          "36 再加几就是 40？请填数字。"
+        ],
+        "required_semantics": [
+          "response_number_input",
+          "target_learn-add-make-ten-100-v1"
+        ]
+      },
+      "response_mode": "number_input",
+      "review": {
+        "independent_from_author": true,
+        "review_method": "separate_deterministic_truth_age_fit_guess_risk_and_interaction_recompute_v172",
+        "review_receipt_path": "replacement-independent-review-receipt.json",
+        "review_receipt_sha256": "79577067bf0aec8edfc7f670bb43d7a628b6aa64c8f4d5d100e94be750240f94",
+        "reviewer_id": "double6-deterministic-quality-reviewer-v172",
+        "status": "pass",
+        "unresolved_findings": []
+      },
+      "safety": {
+        "risk_level": "none"
+      },
+      "source_boundary": {
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "copyright": "原创短文本与系统 emoji；不复制教材，不采集儿童媒体。",
+        "origin": "agent_authored_generic",
+        "real_child_validation": false
+      },
+      "target_atom_ids": [
+        "learn-add-make-ten-100-v1"
+      ],
+      "title": "🧺 自己补到 40",
+      "variation_values": {
+        "number": "36",
+        "target_ten": 40
+      }
+    },
+    {
+      "content_role": "additional_transfer",
+      "cues": [
+        "逐组点数",
+        "最后一个数就是总数"
+      ],
+      "duplicate_signature": "batch2:b2-count-transfer-eleven",
+      "family_id": "family-classification-reasoning",
+      "family_name": "分类与推理",
+      "interaction_contract": {
+        "custom_keypad_required": true,
+        "type": "number_input",
+        "wrong_answer_probe": "12"
+      },
+      "item_id": "b2-count-transfer-eleven",
+      "kind": "counting",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "misconception_refs": [],
+      "mode": "assessment",
+      "objective": "逐组一一对应计数，并主动输入总数",
+      "oracle": {
+        "answer": "11",
+        "expected_count": 11,
+        "explanation": "逐个数完，最后一个数是 11，所以一共有 11 颗。"
+      },
+      "presentation": {
+        "hero": "🍬",
+        "stimulus_lines": [
+          "🍬🍬🍬🍬 🍬🍬🍬 🍬🍬🍬🍬"
+        ]
+      },
+      "prompt": "数一数这盒糖，一共有几颗？",
+      "provenance": {
+        "presentation_donors": [
+          "cls-dy-7667157388839232697/EV-IMG-05",
+          "cls-xhs-6a6ac3ac/ev-010"
+        ],
+        "truth_basis": [
+          "deterministic_arithmetic:visible_groups=9,11,12"
+        ]
+      },
+      "render_contract": {
+        "expected_success_tokens": [
+          "一共有 11 颗"
+        ],
+        "object_counts": [
+          11
+        ],
+        "object_token": "🍬",
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "🍬🍬🍬🍬 🍬🍬🍬 🍬🍬🍬🍬",
+          "数一数这盒糖，一共有几颗？"
+        ],
+        "required_semantics": [
+          "response_number_input",
+          "target_learn-count-one-to-one-20-v1"
+        ]
+      },
+      "response_mode": "number_input",
+      "review": {
+        "independent_from_author": true,
+        "review_method": "separate_deterministic_truth_age_fit_guess_risk_and_interaction_recompute_v172",
+        "review_receipt_path": "replacement-independent-review-receipt.json",
+        "review_receipt_sha256": "79577067bf0aec8edfc7f670bb43d7a628b6aa64c8f4d5d100e94be750240f94",
+        "reviewer_id": "double6-deterministic-quality-reviewer-v172",
+        "status": "pass",
+        "unresolved_findings": []
+      },
+      "safety": {
+        "risk_level": "none"
+      },
+      "source_boundary": {
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "copyright": "原创短文本与系统 emoji；不复制教材，不采集儿童媒体。",
+        "origin": "agent_authored_generic",
+        "real_child_validation": false
+      },
+      "target_atom_ids": [
+        "learn-count-one-to-one-20-v1"
+      ],
+      "title": "🍬 分组数出总数",
+      "transfer_axis": {
+        "context": "4加3加4的分组布局",
+        "object": "糖果分组",
+        "wording": "主动输入总数"
+      },
+      "variation_values": {
+        "layout": "grouped_boxes",
+        "target": 11
+      }
+    },
+    {
+      "content_role": "structured_offscreen_expression",
+      "cues": [
+        "家长先准备",
+        "说完就停"
+      ],
+      "duplicate_signature": "batch2:b2-english-offscreen-shirt",
+      "family_id": "family-offscreen-action",
+      "family_name": "屏外行动",
+      "interaction_contract": {
+        "observable_rubric": [
+          {
+            "criterion_id": "who",
+            "label": "孩子说到“小熊”"
+          },
+          {
+            "criterion_id": "where",
+            "label": "孩子说到“在桌边”"
+          },
+          {
+            "criterion_id": "action",
+            "label": "孩子说到“看书”"
+          }
+        ],
+        "type": "guardian_observation"
+      },
+      "item_id": "b2-english-offscreen-shirt",
+      "kind": "offscreen_action",
+      "level": "offscreen",
+      "level_label": "屏外表达",
+      "misconception_refs": [],
+      "mode": "offscreen_action",
+      "objective": "在家长现场观察下完整说出谁、在哪里、做什么",
+      "oracle": {
+        "completion_evidence": "孩子说出包含小熊、在桌边、看书的完整句子；家长只确认过程。",
+        "explanation": "家长已确认过程完成。"
+      },
+      "presentation": {
+        "hero": "🧸📖",
+        "stimulus_lines": [
+          "家长把小熊玩偶和一本书放在桌边。",
+          "孩子只观察和说话，不录音、不拍照。"
+        ]
+      },
+      "prompt": "看着桌边的场景，说一句“谁在哪里做什么”。",
+      "provenance": {
+        "presentation_donors": [
+          "cls-dy-7668115479056115301/EV-IMG-03",
+          "cls-dy-7667992178929278435/EV-IMG-08"
+        ],
+        "truth_basis": [
+          "self_contained_sentence_semantics:小熊在桌边看书",
+          "observable_completion_contract:guardian_observed",
+          "conservative_child_offscreen_safety_policy:no_media"
+        ]
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "家长把小熊玩偶和一本书放在桌边。",
+          "孩子只观察和说话，不录音、不拍照。",
+          "看着桌边的场景，说一句“谁在哪里做什么”。"
+        ],
+        "required_semantics": [
+          "child_report",
+          "guardian_confirmation",
+          "no_media",
+          "target_learn-sentence-who-where-do-v1"
+        ]
+      },
+      "response_mode": "guardian_observation",
+      "review": {
+        "independent_from_author": true,
+        "review_method": "separate_deterministic_truth_age_fit_guess_risk_and_interaction_recompute_v172",
+        "review_receipt_path": "replacement-independent-review-receipt.json",
+        "review_receipt_sha256": "79577067bf0aec8edfc7f670bb43d7a628b6aa64c8f4d5d100e94be750240f94",
+        "reviewer_id": "double6-deterministic-quality-reviewer-v172",
+        "status": "pass",
+        "unresolved_findings": []
+      },
+      "safety": {
+        "allowed_place": "家长在场、物品已由家长放好的室内安全位置",
+        "guardian_required": true,
+        "hazards": [
+          "child_fatigue",
+          "guardian_absent",
+          "unstable_object",
+          "coerced_performance"
+        ],
+        "no_media_collection": true,
+        "policy_id": "indoor_guardian_observed_no_media",
+        "risk_level": "low",
+        "stop_condition": "孩子不愿继续、疲劳、物品不稳或家长离开时立即停止"
+      },
+      "source_boundary": {
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "copyright": "原创短文本与系统 emoji；不复制教材，不采集儿童媒体。",
+        "origin": "agent_authored_generic",
+        "real_child_validation": false
+      },
+      "target_atom_ids": [
+        "learn-sentence-who-where-do-v1"
+      ],
+      "title": "🗣️ 说一句完整的话",
+      "variation_values": {
+        "expression": "who_where_do_sentence",
+        "setting": "home_table",
+        "subject": "小熊"
+      }
+    },
+    {
+      "content_role": "structured_offscreen_expression",
+      "cues": [
+        "家长先准备",
+        "说完就停"
+      ],
+      "duplicate_signature": "batch2:b2-hanzi-offscreen-water",
+      "family_id": "family-offscreen-action",
+      "family_name": "屏外行动",
+      "interaction_contract": {
+        "observable_rubric": [
+          {
+            "criterion_id": "seven",
+            "label": "孩子先摆出 7 块"
+          },
+          {
+            "criterion_id": "add_three",
+            "label": "孩子再添 3 块"
+          },
+          {
+            "criterion_id": "say_ten",
+            "label": "孩子说出“7 加 3 等于 10”"
+          }
+        ],
+        "type": "guardian_observation"
+      },
+      "item_id": "b2-hanzi-offscreen-water",
+      "kind": "offscreen_action",
+      "level": "offscreen",
+      "level_label": "屏外表达",
+      "misconception_refs": [],
+      "mode": "offscreen_action",
+      "objective": "把凑整策略迁移到家中安全、可观察的摆放动作",
+      "oracle": {
+        "completion_evidence": "孩子先摆 7 块，再添 3 块并说出 7 加 3 等于 10；家长只确认过程。",
+        "explanation": "家长已确认过程完成。"
+      },
+      "presentation": {
+        "hero": "🧱",
+        "stimulus_lines": [
+          "家长先把 10 块大积木稳稳放在桌面。",
+          "孩子只摆放和说算式，不拍照、不上传。"
+        ]
+      },
+      "prompt": "先摆 7 块，再添 3 块；说出“7 加 3 等于 10”。",
+      "provenance": {
+        "presentation_donors": [
+          "cls-dy-7668115479056115301/EV-IMG-03",
+          "cls-dy-7667992178929278435/EV-IMG-08"
+        ],
+        "truth_basis": [
+          "deterministic_arithmetic:7+3=10",
+          "observable_completion_contract:guardian_observed",
+          "conservative_child_offscreen_safety_policy:no_media"
+        ]
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "家长先把 10 块大积木稳稳放在桌面。",
+          "孩子只摆放和说算式，不拍照、不上传。",
+          "先摆 7 块，再添 3 块；说出“7 加 3 等于 10”。"
+        ],
+        "required_semantics": [
+          "child_report",
+          "guardian_confirmation",
+          "no_media",
+          "target_learn-add-make-ten-100-v1"
+        ]
+      },
+      "response_mode": "guardian_observation",
+      "review": {
+        "independent_from_author": true,
+        "review_method": "separate_deterministic_truth_age_fit_guess_risk_and_interaction_recompute_v172",
+        "review_receipt_path": "replacement-independent-review-receipt.json",
+        "review_receipt_sha256": "79577067bf0aec8edfc7f670bb43d7a628b6aa64c8f4d5d100e94be750240f94",
+        "reviewer_id": "double6-deterministic-quality-reviewer-v172",
+        "status": "pass",
+        "unresolved_findings": []
+      },
+      "safety": {
+        "allowed_place": "家长在场、物品已由家长放好的室内安全位置",
+        "guardian_required": true,
+        "hazards": [
+          "child_fatigue",
+          "guardian_absent",
+          "unstable_object",
+          "coerced_performance"
+        ],
+        "no_media_collection": true,
+        "policy_id": "indoor_guardian_observed_no_media",
+        "risk_level": "low",
+        "stop_condition": "孩子不愿继续、疲劳、物品不稳或家长离开时立即停止"
+      },
+      "source_boundary": {
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "copyright": "原创短文本与系统 emoji；不复制教材，不采集儿童媒体。",
+        "origin": "agent_authored_generic",
+        "real_child_validation": false
+      },
+      "target_atom_ids": [
+        "learn-add-make-ten-100-v1"
+      ],
+      "title": "🧱 摆一摆，凑成 10",
+      "variation_values": {
+        "expression": "make_ten_with_blocks",
+        "numbers": "7+3",
+        "setting": "home_table"
+      }
+    },
+    {
+      "content_role": "additional_transfer",
+      "cues": [
+        "先选动作词",
+        "再选和太阳有关的字"
+      ],
+      "duplicate_signature": "batch2:b2-hanzi-transfer-sunny",
+      "family_id": "family-image-hanzi",
+      "family_name": "图词识字",
+      "interaction_contract": {
+        "assembled_answer": "放晴",
+        "blocks": [
+          {
+            "id": "fang1",
+            "label": "放"
+          },
+          {
+            "id": "qing1",
+            "label": "晴"
+          },
+          {
+            "id": "jing1",
+            "label": "睛"
+          }
+        ],
+        "correct_block_ids": [
+          "fang1",
+          "qing1"
+        ],
+        "type": "phrase_blocks",
+        "wrong_block_ids": [
+          "fang1",
+          "jing1"
+        ]
+      },
+      "item_id": "b2-hanzi-transfer-sunny",
+      "kind": "short_response",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "misconception_refs": [],
+      "mode": "assessment",
+      "objective": "根据天气语境主动组成包含正确形近字的词",
+      "oracle": {
+        "accepted_answers": [
+          "放晴"
+        ],
+        "answer": "放晴",
+        "explanation": "“晴”有日字旁，和太阳、天气有关。"
+      },
+      "presentation": {
+        "hero": "☀️",
+        "stimulus_lines": [
+          "雨停了，乌云散开，太阳出来了。"
+        ]
+      },
+      "prompt": "雨停了，太阳出来了。用词块拼出这个变化。",
+      "provenance": {
+        "presentation_donors": [
+          "cls-xhs-6a68df35/ev-011",
+          "cls-xhs-6a6ac3ac/ev-007",
+          "cls-dy-7669034427246517883/EV-V-08"
+        ],
+        "truth_basis": [
+          "self_contained_sentence_semantics:天空放晴"
+        ]
+      },
+      "render_contract": {
+        "expected_success_tokens": [
+          "“晴”有日字旁"
+        ],
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "雨停了，乌云散开，太阳出来了。",
+          "用词块拼出这个变化。"
+        ],
+        "required_semantics": [
+          "response_phrase_blocks",
+          "target_learn-hanzi-shape-sound-meaning-v1"
+        ]
+      },
+      "response_mode": "phrase_blocks",
+      "review": {
+        "independent_from_author": true,
+        "review_method": "separate_deterministic_truth_age_fit_guess_risk_and_interaction_recompute_v172",
+        "review_receipt_path": "replacement-independent-review-receipt.json",
+        "review_receipt_sha256": "79577067bf0aec8edfc7f670bb43d7a628b6aa64c8f4d5d100e94be750240f94",
+        "reviewer_id": "double6-deterministic-quality-reviewer-v172",
+        "status": "pass",
+        "unresolved_findings": []
+      },
+      "safety": {
+        "risk_level": "none"
+      },
+      "source_boundary": {
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "copyright": "原创短文本与系统 emoji；不复制教材，不采集儿童媒体。",
+        "origin": "agent_authored_generic",
+        "real_child_validation": false
+      },
+      "target_atom_ids": [
+        "learn-hanzi-shape-sound-meaning-v1"
+      ],
+      "title": "☀️ 拼出“放晴”",
+      "transfer_axis": {
+        "context": "形近字晴与睛",
+        "object": "雨后天空",
+        "wording": "词块主动组成"
+      },
+      "variation_values": {
+        "context": "weather_sentence",
+        "distractors": "homophones"
+      }
+    },
+    {
+      "content_role": "misconception_repair",
+      "cues": [
+        "圈出“谁”",
+        "找人物"
+      ],
+      "duplicate_signature": "batch2:b2-reading-repair-question-type",
+      "error_mapping": {
+        "说成小哲": "learn-read-explicit-information-v1/misconception-02",
+        "说成小狗": "learn-read-explicit-information-v1/misconception-02"
+      },
+      "family_id": "family-reading-poetry",
+      "family_name": "短阅读与表达",
+      "interaction_contract": {
+        "answer_key_visible_to_guardian_only": true,
+        "guardian_required": true,
+        "no_audio_collection": true,
+        "observable_rubric": [
+          {
+            "criterion_id": "person",
+            "label": "孩子说出“奶奶”"
+          },
+          {
+            "criterion_id": "question_type",
+            "label": "孩子回答的是人物，不是地点或动作"
+          }
+        ],
+        "type": "guardian_oral_observation"
+      },
+      "item_id": "b2-reading-repair-question-type",
+      "kind": "oral_response",
+      "level": "repair",
+      "level_label": "错因纠正",
+      "misconception_refs": [
+        "learn-read-explicit-information-v1/misconception-02"
+      ],
+      "mode": "guided_practice",
+      "objective": "纠正把人物、地点和动作混在一起，并直接口头回答人物",
+      "oracle": {
+        "automated_correctness_claim": false,
+        "completion_evidence": "孩子根据原句口头说出奶奶，并明确回答人物；家长完成两项确认。",
+        "evidence_span": "奶奶在门口向他挥手",
+        "explanation": "家长已确认孩子按“谁”回答了奶奶。",
+        "source_text": "早上，小哲先给小狗添水。接着，他背上书包出门。奶奶在门口向他挥手。"
+      },
+      "presentation": {
+        "hero": "📖",
+        "stimulus_lines": [
+          "早上，小哲先给小狗添水。接着，他背上书包出门。奶奶在门口向他挥手。"
+        ]
+      },
+      "prompt": "题目问“谁”，请直接说出人物。",
+      "provenance": {
+        "presentation_donors": [
+          "cls-dy-7667992178929278435/EV-IMG-06",
+          "cls-dy-7667992178929278435/EV-IMG-07"
+        ],
+        "truth_basis": [
+          "self_contained_reading_passage:direct_evidence"
+        ]
+      },
+      "remediation_next_action": "先圈题目里的“谁”，只找人物。",
+      "render_contract": {
+        "expected_success_tokens": [
+          "家长已确认孩子按“谁”回答了奶奶。"
+        ],
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "早上，小哲先给小狗添水。接着，他背上书包出门。奶奶在门口向他挥手。",
+          "题目问“谁”，请直接说出人物。"
+        ],
+        "required_semantics": [
+          "response_guardian_oral_observation",
+          "no_audio",
+          "target_learn-read-explicit-information-v1"
+        ]
+      },
+      "response_mode": "guardian_oral_observation",
+      "review": {
+        "independent_from_author": true,
+        "review_method": "separate_deterministic_truth_age_fit_guess_risk_and_interaction_recompute_v172",
+        "review_receipt_path": "replacement-independent-review-receipt.json",
+        "review_receipt_sha256": "79577067bf0aec8edfc7f670bb43d7a628b6aa64c8f4d5d100e94be750240f94",
+        "reviewer_id": "double6-deterministic-quality-reviewer-v172",
+        "status": "pass",
+        "unresolved_findings": []
+      },
+      "safety": {
+        "risk_level": "none"
+      },
+      "source_boundary": {
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "copyright": "原创短文本与系统 emoji；不复制教材，不采集儿童媒体。",
+        "origin": "agent_authored_generic",
+        "real_child_validation": false
+      },
+      "target_atom_ids": [
+        "learn-read-explicit-information-v1"
+      ],
+      "title": "📖 问什么就找什么",
+      "variation_values": {
+        "distractors": "other_entities",
+        "question_type": "who"
+      }
+    },
+    {
+      "content_role": "additional_transfer",
+      "cues": [
+        "找“水壶”",
+        "读前面的颜色"
+      ],
+      "duplicate_signature": "batch2:b2-reading-transfer-bottle",
+      "family_id": "family-reading-poetry",
+      "family_name": "短阅读与表达",
+      "interaction_contract": {
+        "assembled_answer": "绿色水壶",
+        "blocks": [
+          {
+            "id": "green1",
+            "label": "绿色"
+          },
+          {
+            "id": "red1",
+            "label": "红色"
+          },
+          {
+            "id": "bottle1",
+            "label": "水壶"
+          }
+        ],
+        "correct_block_ids": [
+          "green1",
+          "bottle1"
+        ],
+        "type": "phrase_blocks",
+        "wrong_block_ids": [
+          "red1",
+          "bottle1"
+        ]
+      },
+      "item_id": "b2-reading-transfer-bottle",
+      "kind": "reading_evidence",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "misconception_refs": [],
+      "mode": "assessment",
+      "objective": "回到短文定位属性，并主动组成完整答案短语",
+      "oracle": {
+        "answer": "绿色水壶",
+        "answer_text": "绿色水壶",
+        "evidence_span": "绿色水壶",
+        "explanation": "短文写的是“绿色水壶”。",
+        "explanation_answer_text": "绿色水壶",
+        "passage": "放学后，安安先把雨伞挂好。她拿出绿色水壶喝水。最后坐到窗边看书。"
+      },
+      "presentation": {
+        "hero": "📖",
+        "stimulus_lines": [
+          "放学后，安安先把雨伞挂好。她拿出绿色水壶喝水。最后坐到窗边看书。"
+        ]
+      },
+      "prompt": "用词块拼出水壶的颜色和名称。",
+      "provenance": {
+        "presentation_donors": [
+          "cls-dy-7667992178929278435/EV-IMG-06",
+          "cls-dy-7667992178929278435/EV-IMG-07"
+        ],
+        "truth_basis": [
+          "self_contained_reading_passage:direct_evidence"
+        ]
+      },
+      "render_contract": {
+        "expected_success_tokens": [
+          "短文写的是“绿色水壶”"
+        ],
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "放学后，安安先把雨伞挂好。她拿出绿色水壶喝水。最后坐到窗边看书。",
+          "用词块拼出水壶的颜色和名称。"
+        ],
+        "required_semantics": [
+          "response_phrase_blocks",
+          "target_learn-read-explicit-information-v1"
+        ]
+      },
+      "response_mode": "phrase_blocks",
+      "review": {
+        "independent_from_author": true,
+        "review_method": "separate_deterministic_truth_age_fit_guess_risk_and_interaction_recompute_v172",
+        "review_receipt_path": "replacement-independent-review-receipt.json",
+        "review_receipt_sha256": "79577067bf0aec8edfc7f670bb43d7a628b6aa64c8f4d5d100e94be750240f94",
+        "reviewer_id": "double6-deterministic-quality-reviewer-v172",
+        "status": "pass",
+        "unresolved_findings": []
+      },
+      "safety": {
+        "risk_level": "none"
+      },
+      "source_boundary": {
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "copyright": "原创短文本与系统 emoji；不复制教材，不采集儿童媒体。",
+        "origin": "agent_authored_generic",
+        "real_child_validation": false
+      },
+      "target_atom_ids": [
+        "learn-read-explicit-information-v1"
+      ],
+      "title": "📖 换一篇也能找",
+      "transfer_axis": {
+        "context": "放学后短文",
+        "object": "水壶颜色",
+        "wording": "词块组成完整答案"
+      },
+      "variation_values": {
+        "passage": "after_school",
+        "question_type": "attribute"
+      }
+    },
+    {
+      "content_role": "misconception_repair",
+      "cues": [
+        "句号处停一停",
+        "说出两个动作"
+      ],
+      "duplicate_signature": "batch2:b2-retell-repair-rubric",
+      "error_mapping": {
+        "只评价口音或速度": "learn-read-aloud-phrase-retell-v1/misconception-03",
+        "只说一个动作": "learn-read-aloud-phrase-retell-v1/misconception-03"
+      },
+      "family_id": "family-reading-poetry",
+      "family_name": "短阅读与表达",
+      "interaction_contract": {
+        "answer_key_visible_to_guardian_only": true,
+        "guardian_required": true,
+        "no_audio_collection": true,
+        "observable_rubric": [
+          {
+            "criterion_id": "pause",
+            "label": "孩子在句号处自然停顿"
+          },
+          {
+            "criterion_id": "walk",
+            "label": "孩子说出“走到河边”"
+          },
+          {
+            "criterion_id": "drink",
+            "label": "孩子说出“低头喝水”"
+          }
+        ],
+        "type": "guardian_oral_observation"
+      },
+      "item_id": "b2-retell-repair-rubric",
+      "kind": "oral_response",
+      "level": "repair",
+      "level_label": "错因纠正",
+      "misconception_refs": [
+        "learn-read-aloud-phrase-retell-v1/misconception-03"
+      ],
+      "mode": "guided_practice",
+      "objective": "用可观察的停顿和要点替代对口音、速度或表演感的评价",
+      "oracle": {
+        "automated_correctness_claim": false,
+        "completion_evidence": "孩子朗读后说出走到河边和低头喝水；家长只按停顿与两个要点确认，不评价口音。",
+        "evidence_span": "走到河边，低头喝水",
+        "explanation": "家长已按停顿和两个要点确认，不评价口音或速度。",
+        "source_text": "小鹿走到河边，低头喝水。"
+      },
+      "presentation": {
+        "hero": "🦌",
+        "stimulus_lines": [
+          "小鹿走到河边，低头喝水。"
+        ]
+      },
+      "prompt": "读完后，说出小鹿做了哪两件事。",
+      "provenance": {
+        "presentation_donors": [
+          "cls-dy-7667992178929278435/EV-IMG-06",
+          "cls-dy-7667992178929278435/EV-IMG-07"
+        ],
+        "truth_basis": [
+          "observable_completion_contract:pause_keyword_two_points"
+        ]
+      },
+      "remediation_next_action": "回到原句，分别找“走到河边”和“低头喝水”。",
+      "render_contract": {
+        "expected_success_tokens": [
+          "不评价口音或速度"
+        ],
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "小鹿走到河边，低头喝水。",
+          "读完后，说出小鹿做了哪两件事。"
+        ],
+        "required_semantics": [
+          "response_guardian_oral_observation",
+          "no_audio",
+          "target_learn-read-aloud-phrase-retell-v1"
+        ]
+      },
+      "response_mode": "guardian_oral_observation",
+      "review": {
+        "independent_from_author": true,
+        "review_method": "separate_deterministic_truth_age_fit_guess_risk_and_interaction_recompute_v172",
+        "review_receipt_path": "replacement-independent-review-receipt.json",
+        "review_receipt_sha256": "79577067bf0aec8edfc7f670bb43d7a628b6aa64c8f4d5d100e94be750240f94",
+        "reviewer_id": "double6-deterministic-quality-reviewer-v172",
+        "status": "pass",
+        "unresolved_findings": []
+      },
+      "safety": {
+        "risk_level": "none"
+      },
+      "source_boundary": {
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "copyright": "原创短文本与系统 emoji；不复制教材，不采集儿童媒体。",
+        "origin": "agent_authored_generic",
+        "real_child_validation": false
+      },
+      "target_atom_ids": [
+        "learn-read-aloud-phrase-retell-v1"
+      ],
+      "title": "🦌 读一句，说两件事",
+      "variation_values": {
+        "excludes": "accent_and_speed",
+        "passage": "deer_drinks",
+        "rubric": "pause_and_two_actions"
+      }
+    },
+    {
+      "content_role": "misconception_repair",
+      "cues": [
+        "先减4到10",
+        "还要继续减2"
+      ],
+      "duplicate_signature": "batch2:b2-subtract-repair-direction",
+      "error_mapping": {
+        "10": "learn-subtract-bridge-ten-100-v1/misconception-01",
+        "12": "learn-subtract-bridge-ten-100-v1/misconception-01"
+      },
+      "family_id": "family-life-math",
+      "family_name": "生活数学",
+      "interaction_contract": {
+        "custom_keypad_required": true,
+        "type": "number_input",
+        "wrong_answer_probe": "12"
+      },
+      "item_id": "b2-subtract-repair-direction",
+      "kind": "arithmetic",
+      "level": "repair",
+      "level_label": "错因纠正",
+      "misconception_refs": [
+        "learn-subtract-bridge-ten-100-v1/misconception-01"
+      ],
+      "mode": "guided_practice",
+      "objective": "纠正到 10 后把剩余部分加回去，并主动求出最终结果",
+      "oracle": {
+        "answer": "8",
+        "explanation": "14 先减 4 到 10，再减 2，得到 8。",
+        "explanation_result": 8,
+        "initial_count": 14,
+        "operation": "subtract",
+        "remaining_count": 8,
+        "removed_count": 6,
+        "steps": [
+          {
+            "after": 10,
+            "before": 14,
+            "remove": 4
+          },
+          {
+            "after": 8,
+            "before": 10,
+            "remove": 2
+          }
+        ]
+      },
+      "presentation": {
+        "hero": "🌼",
+        "stimulus_lines": [
+          "14 - 6",
+          "6 拆成 4 和 2",
+          "14 - 4 = 10"
+        ]
+      },
+      "prompt": "14-6 等于几？请填数字。",
+      "provenance": {
+        "presentation_donors": [
+          "cls-xhs-6a69ddf6/ev-v09",
+          "cls-xhs-6a68df35/ev-013",
+          "cls-bili-bv1xt3t6here/EV-VID-02"
+        ],
+        "truth_basis": [
+          "deterministic_step_chain:14-4=10;10-2=8"
+        ]
+      },
+      "remediation_next_action": "在 6 下面圈出还没减的 2。",
+      "render_contract": {
+        "expected_success_tokens": [
+          "得到 8"
+        ],
+        "object_counts": [
+          14,
+          10,
+          8
+        ],
+        "object_token": "🌼",
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "14 - 6",
+          "6 拆成 4 和 2",
+          "14-6 等于几？请填数字。"
+        ],
+        "required_semantics": [
+          "response_number_input",
+          "target_learn-subtract-bridge-ten-100-v1"
+        ]
+      },
+      "response_mode": "number_input",
+      "review": {
+        "independent_from_author": true,
+        "review_method": "separate_deterministic_truth_age_fit_guess_risk_and_interaction_recompute_v172",
+        "review_receipt_path": "replacement-independent-review-receipt.json",
+        "review_receipt_sha256": "79577067bf0aec8edfc7f670bb43d7a628b6aa64c8f4d5d100e94be750240f94",
+        "reviewer_id": "double6-deterministic-quality-reviewer-v172",
+        "status": "pass",
+        "unresolved_findings": []
+      },
+      "safety": {
+        "risk_level": "none"
+      },
+      "source_boundary": {
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "copyright": "原创短文本与系统 emoji；不复制教材，不采集儿童媒体。",
+        "origin": "agent_authored_generic",
+        "real_child_validation": false
+      },
+      "target_atom_ids": [
+        "learn-subtract-bridge-ten-100-v1"
+      ],
+      "title": "🌼 14 减 6，自己算",
+      "variation_values": {
+        "decision": "second_step",
+        "numbers": "14-6"
+      }
+    }
+  ],
+  "pack_id": "child-learning-v1-7-2-in-place-replacements",
+  "replacement_count": 9,
+  "schema_version": "child-learning-content-replacement-pack/v1",
+  "target_product_version": "1.7.2",
+  "total_item_count_delta": 0
+}
