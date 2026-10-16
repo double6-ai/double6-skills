@@ -1,0 +1,64 @@
+{
+  "schema_version": "double6.personal-platform-bridge/v1",
+  "bridge_id": "weekly-personal-control-core-tools",
+  "version": "1.1.0",
+  "source_system": "workbench-platform/personal-execution-items",
+  "selection_policy": "only_items_that_directly_support_the_confirmed_weekly_execution_loop",
+  "items": [
+    {
+      "item_id": "p-goal-1",
+      "title": "本周三件最重要的事",
+      "body": "目标、下一步、完成定义",
+      "result": "打开本周结果，按 P1、P2、P3 写清完成定义",
+      "action": "open-week",
+      "action_label": "填写本周三个结果",
+      "target_module_id": "personal-week-plan",
+      "source_path": "workflows/workbench-platform/registries/items/personal-execution/item-p-goal-1.v1.json",
+      "source_sha256": "51abc2ec2ac24ddd7a0fcf9cd351166c19a36ac5879e137e367497fcef2cc20f"
+    },
+    {
+      "item_id": "p-today-1",
+      "title": "整理书桌 10 分钟",
+      "body": "合成示例，可删除",
+      "result": "加入今天，并记录完成状态",
+      "action": "add-today",
+      "action_label": "加到今天",
+      "target_module_id": "personal-today",
+      "source_path": "workflows/workbench-platform/registries/items/personal-execution/item-p-today-1.v1.json",
+      "source_sha256": "93f51ca184409259da50543a6b9896d865f56678a44219299dddf4f518ad5923"
+    },
+    {
+      "item_id": "p-today-2",
+      "title": "快走 20 分钟",
+      "body": "合成示例，可改时间",
+      "result": "加入今天，并保留为候补或 Top 3",
+      "action": "add-today",
+      "action_label": "加到今天",
+      "target_module_id": "personal-today",
+      "source_path": "workflows/workbench-platform/registries/items/personal-execution/item-p-today-2.v1.json",
+      "source_sha256": "02f75897bb21bcc6ad8f62de113f0c4a9f90e7fbec40517f212a2e857746c0cb"
+    },
+    {
+      "item_id": "p-project-1",
+      "title": "读完一本书的小项目",
+      "body": "目标：读完并写 3 条收获；下一步：读 10 页",
+      "result": "创建带完成定义和唯一下一步的项目",
+      "action": "add-project",
+      "action_label": "创建示例项目",
+      "target_module_id": "personal-projects",
+      "source_path": "workflows/workbench-platform/registries/items/personal-execution/item-p-project-1.v1.json",
+      "source_sha256": "d44fe2ebc88e6430c01bc27cded279cc72596f3b7e21cb10ab9374d7bed23d2f"
+    },
+    {
+      "item_id": "p-review-1",
+      "title": "周复盘三问",
+      "body": "完成了什么？哪里卡住？下周第一步？",
+      "result": "只基于当前设备事实生成复盘草稿",
+      "action": "review-draft",
+      "action_label": "生成事实复盘",
+      "target_module_id": "personal-review",
+      "source_path": "workflows/workbench-platform/registries/items/personal-execution/item-p-review-1.v1.json",
+      "source_sha256": "f87710cf0f6514af6f25577099c715f2f800b28a24615173b6291590bda28d10"
+    }
+  ]
+}

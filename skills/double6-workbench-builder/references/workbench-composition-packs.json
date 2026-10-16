@@ -1,0 +1,4487 @@
+{
+  "schema_version": 1,
+  "contract_version": "double6_declarative_composition_v2",
+  "kernel_version": "1.1.0",
+  "allowed_disclosure_modes": [
+    "open",
+    "summary",
+    "drawer"
+  ],
+  "packs": [
+    {
+      "composition_id": "composition.personal.weekly-control-v1",
+      "scene_profile_id": "scene.personal-execution.weekly-personal-control",
+      "domain_id": "personal-execution",
+      "scene_template_id": "personal_week_command",
+      "renderer_id": "personal_week_dashboard",
+      "exact_module_ids": [
+        "personal-inbox",
+        "personal-week-plan",
+        "personal-today",
+        "personal-projects",
+        "personal-habits",
+        "personal-life-log",
+        "personal-review"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "这几件到哪了",
+            "source_module_ids": [
+              "personal-week-plan",
+              "personal-projects",
+              "personal-today"
+            ],
+            "max_visible_items": 3
+          },
+          {
+            "region_id": "flow",
+            "label": "本周推进",
+            "source_module_ids": [
+              "personal-week-plan",
+              "personal-projects"
+            ],
+            "max_visible_items": 6
+          },
+          {
+            "region_id": "capture",
+            "label": "快速收集",
+            "source_module_ids": [
+              "personal-inbox"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "需要决定",
+            "source_module_ids": [
+              "personal-inbox",
+              "personal-review"
+            ],
+            "max_visible_items": 4
+          }
+        ],
+        "home_rule": "home_orients_and_routes; modules_execute_and_maintain"
+      },
+      "object_graph": {
+        "object_types": [
+          "inbox_item",
+          "week_outcome",
+          "today_action",
+          "project",
+          "habit",
+          "life_fact",
+          "weekly_review"
+        ],
+        "relations": [
+          {
+            "from": "inbox_item",
+            "relation": "promotes_to",
+            "link_relation": "promoted_to_week",
+            "to": "week_outcome"
+          },
+          {
+            "from": "week_outcome",
+            "relation": "plans",
+            "link_relation": "scheduled_today",
+            "to": "today_action"
+          },
+          {
+            "from": "project",
+            "relation": "contributes_next_action",
+            "link_relation": "project_next_action",
+            "to": "today_action"
+          },
+          {
+            "from": "habit",
+            "relation": "records",
+            "to": "life_fact"
+          },
+          {
+            "from": "today_action",
+            "relation": "summarizes_into",
+            "to": "weekly_review"
+          },
+          {
+            "from": "life_fact",
+            "relation": "summarizes_into",
+            "to": "weekly_review"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "personal-week-runtime-v1",
+        "helper_slot": "personal_week_helpers",
+        "render_slot": "personal_week_render",
+        "listener_slot": "personal_week_listeners"
+      },
+      "runtime_policies": [
+        {
+          "policy_id": "top_three_capacity",
+          "kind": "capacity_slots",
+          "module_id": "personal-today",
+          "field_id": "priority",
+          "committed_values": [
+            "Top 1",
+            "Top 2",
+            "Top 3"
+          ],
+          "max_committed": 3,
+          "overflow_value": "候补"
+        },
+        {
+          "policy_id": "weekly_review_from_local_facts",
+          "kind": "review_from_local_facts",
+          "module_id": "personal-review",
+          "source_module_ids": [
+            "personal-today",
+            "personal-week-plan",
+            "personal-habits",
+            "personal-life-log"
+          ]
+        }
+      ],
+      "modules": [
+        {
+          "module_id": "personal-inbox",
+          "object_type_id": "inbox_item",
+          "primary_job": "capture_then_triage",
+          "surface_template_id": "personal-inbox-triage-v1",
+          "surface_signature": "personal-inbox-triage-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "收件箱"
+        },
+        {
+          "module_id": "personal-week-plan",
+          "object_type_id": "week_outcome",
+          "primary_job": "commit_week_outcomes_with_capacity",
+          "surface_template_id": "personal-week-capacity-v1",
+          "surface_signature": "personal-week-capacity-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "outcome"
+          ],
+          "link_label": "本周结果",
+          "stage_field": "priority",
+          "stage_values": [
+            "P1 必须完成",
+            "P2 应该推进",
+            "P3 有余力再做"
+          ]
+        },
+        {
+          "module_id": "personal-today",
+          "object_type_id": "today_action",
+          "primary_job": "select_and_execute_top_three",
+          "surface_template_id": "personal-today-focus-v1",
+          "surface_signature": "personal-today-focus-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "今日行动"
+        },
+        {
+          "module_id": "personal-projects",
+          "object_type_id": "project",
+          "primary_job": "maintain_one_next_action",
+          "surface_template_id": "personal-project-cockpit-v1",
+          "surface_signature": "personal-project-cockpit-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "项目"
+        },
+        {
+          "module_id": "personal-habits",
+          "object_type_id": "habit",
+          "primary_job": "record_minimum_action",
+          "surface_template_id": "personal-habit-week-grid-v1",
+          "surface_signature": "personal-habit-week-grid-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "习惯"
+        },
+        {
+          "module_id": "personal-life-log",
+          "object_type_id": "life_fact",
+          "primary_job": "record_neutral_facts",
+          "surface_template_id": "personal-life-timeline-v1",
+          "surface_signature": "personal-life-timeline-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "生活记录"
+        },
+        {
+          "module_id": "personal-review",
+          "object_type_id": "weekly_review",
+          "primary_job": "turn_facts_into_next_week_action",
+          "surface_template_id": "personal-review-workbench-v1",
+          "surface_signature": "personal-review-workbench-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "date",
+            "conclusion"
+          ],
+          "link_label": "复盘"
+        }
+      ],
+      "acceptance_tasks": [
+        "capture_to_week",
+        "week_or_project_to_today",
+        "top_three_capacity",
+        "weekly_review_from_local_facts",
+        "reload_persistence",
+        "import_preview_and_undo",
+        "adult_daily_warmth_visible"
+      ],
+      "dashboard_template_id": "personal-week-home-v4",
+      "tonight_seeds": [
+        {
+          "id": "r-seed-personal-week-1",
+          "module_id": "personal-week-plan",
+          "values": {
+            "outcome": "副业交一版大纲",
+            "priority": "P1 必须完成",
+            "time_block": "今晚 40 分钟",
+            "done_definition": "电脑里有一版可发给对方看的大纲",
+            "status": "进行中"
+          }
+        },
+        {
+          "id": "r-seed-personal-week-2",
+          "module_id": "personal-week-plan",
+          "values": {
+            "outcome": "装修量完厨房尺寸",
+            "priority": "P2 应该推进",
+            "time_block": "这周内",
+            "done_definition": "本机记下长宽和照片位置",
+            "status": "计划中"
+          }
+        },
+        {
+          "id": "r-seed-personal-project-1",
+          "module_id": "personal-projects",
+          "values": {
+            "title": "论文第一章",
+            "outcome": "有一版可给自己看的目录和问题清单",
+            "stage": "进行中",
+            "milestone": "先列出要回答的三个问题",
+            "next_action": "本周不用动手，下周一再开写"
+          }
+        },
+        {
+          "id": "r-seed-personal-today-1",
+          "module_id": "personal-today",
+          "values": {
+            "title": "写出大纲的三个标题",
+            "priority": "Top 1",
+            "due": "{{today}}",
+            "notes": "今天只副业有动作；装修和论文仍要看得见"
+          },
+          "links": [
+            {
+              "sourceModuleId": "personal-week-plan",
+              "sourceRecordId": "r-seed-personal-week-1",
+              "relation": "scheduled_today"
+            }
+          ]
+        }
+      ],
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "personal-week-plan",
+          "personal-projects",
+          "personal-today"
+        ],
+        "lifecycle_module_ids": [
+          "personal-week-plan",
+          "personal-projects"
+        ],
+        "attention_module_ids": [
+          "personal-inbox",
+          "personal-review"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "personal-inbox",
+          "personal-week-plan",
+          "personal-today",
+          "personal-projects",
+          "personal-habits",
+          "personal-life-log",
+          "personal-review"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.content.idea-to-publish-v1",
+      "scene_profile_id": "scene.content-operations.idea-to-publish",
+      "domain_id": "content-operations",
+      "scene_template_id": "creator_production_room",
+      "renderer_id": "creator_production_dashboard",
+      "exact_module_ids": [
+        "content-input",
+        "content-topics",
+        "content-briefs",
+        "content-production",
+        "content-schedule",
+        "content-review"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "今晚这一篇",
+            "source_module_ids": [
+              "content-production"
+            ],
+            "max_visible_items": 3
+          },
+          {
+            "region_id": "flow",
+            "label": "生产管线",
+            "source_module_ids": [
+              "content-topics",
+              "content-briefs",
+              "content-production",
+              "content-schedule"
+            ],
+            "max_visible_items": 6
+          },
+          {
+            "region_id": "capture",
+            "label": "收下来源",
+            "source_module_ids": [
+              "content-input"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "缺证据或待确认",
+            "source_module_ids": [
+              "content-input",
+              "content-schedule",
+              "content-review"
+            ],
+            "max_visible_items": 5
+          }
+        ],
+        "home_rule": "打开就写今晚这一篇开头",
+        "flow_title": "来源 → 选题 → 任务书 → 制作 → 人工发布 → 复盘"
+      },
+      "object_graph": {
+        "object_types": [
+          "source_item",
+          "topic",
+          "brief",
+          "production_item",
+          "publish_handoff",
+          "metric_fact"
+        ],
+        "relations": [
+          {
+            "from": "source_item",
+            "relation": "supports",
+            "link_relation": "source_to_topic",
+            "to": "topic"
+          },
+          {
+            "from": "topic",
+            "relation": "specifies",
+            "link_relation": "topic_to_brief",
+            "to": "brief"
+          },
+          {
+            "from": "brief",
+            "relation": "governs",
+            "link_relation": "brief_to_production",
+            "to": "production_item"
+          },
+          {
+            "from": "production_item",
+            "relation": "prepares",
+            "link_relation": "production_to_schedule",
+            "to": "publish_handoff"
+          },
+          {
+            "from": "publish_handoff",
+            "relation": "receives_manual_result",
+            "link_relation": "schedule_to_review",
+            "to": "metric_fact"
+          },
+          {
+            "from": "metric_fact",
+            "relation": "informs_next",
+            "to": "topic"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "content-pipeline-runtime-v1",
+        "helper_slot": "content_pipeline_helpers",
+        "render_slot": "content_pipeline_render",
+        "listener_slot": "content_pipeline_listeners"
+      },
+      "runtime_policies": [
+        {
+          "policy_id": "manual_publish_state_separation",
+          "kind": "manual_handoff_fsm",
+          "module_id": "content-schedule",
+          "status_field": "notes",
+          "status_tag": "发布状态",
+          "states": [
+            "待人工发布",
+            "已复制",
+            "已打开平台",
+            "人工确认已发布"
+          ],
+          "confirmed_state": "人工确认已发布",
+          "not_executed_until_confirmed": true
+        }
+      ],
+      "modules": [
+        {
+          "module_id": "content-input",
+          "object_type_id": "source_item",
+          "primary_job": "capture_source_and_open_question",
+          "surface_template_id": "content-source-inbox-v1",
+          "surface_signature": "content-source-inbox-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "来源"
+        },
+        {
+          "module_id": "content-topics",
+          "object_type_id": "topic",
+          "primary_job": "decide_topic_and_evidence_gap",
+          "surface_template_id": "content-topic-decision-board-v1",
+          "surface_signature": "content-topic-decision-board-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "选题",
+          "stage_field": "stage",
+          "stage_values": [
+            "待处理",
+            "进行中",
+            "待确认",
+            "已完成"
+          ],
+          "default_stage": "待处理",
+          "promote_ready_stage": "待确认"
+        },
+        {
+          "module_id": "content-briefs",
+          "object_type_id": "brief",
+          "primary_job": "freeze_audience_evidence_format_acceptance",
+          "surface_template_id": "content-brief-canvas-v1",
+          "surface_signature": "content-brief-canvas-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "topic"
+          ],
+          "link_label": "任务书",
+          "gate_fields": [
+            "audience",
+            "reader_problem",
+            "acceptance"
+          ]
+        },
+        {
+          "module_id": "content-production",
+          "object_type_id": "production_item",
+          "primary_job": "execute_reviewable_production",
+          "surface_template_id": "content-production-room-v1",
+          "surface_signature": "content-production-room-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "制作"
+        },
+        {
+          "module_id": "content-schedule",
+          "object_type_id": "publish_handoff",
+          "primary_job": "separate_schedule_open_copy_and_confirmation",
+          "surface_template_id": "content-manual-publish-queue-v1",
+          "surface_signature": "content-manual-publish-queue-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "排期"
+        },
+        {
+          "module_id": "content-review",
+          "object_type_id": "metric_fact",
+          "primary_job": "review_dated_manual_metrics",
+          "surface_template_id": "content-review-lab-v1",
+          "surface_signature": "content-review-lab-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "metric"
+          ],
+          "link_label": "复盘"
+        }
+      ],
+      "acceptance_tasks": [
+        "source_to_topic",
+        "topic_to_brief",
+        "brief_to_production",
+        "manual_publish_state_separation",
+        "metric_to_next_topic",
+        "reload_persistence",
+        "import_preview_and_undo",
+        "content_tonight_board_visible",
+        "content_tonight_warmth_visible",
+        "write_tonight_opening",
+        "content_week_written_visible"
+      ],
+      "dashboard_template_id": "content-production-home-v2",
+      "tonight_seeds": [
+        {
+          "id": "r-seed-content-topic-1",
+          "module_id": "content-topics",
+          "values": {
+            "title": "为什么工作台不能先让人填表",
+            "stage": "进行中",
+            "next_action": "写完读者问题和验收标准"
+          }
+        },
+        {
+          "id": "r-seed-content-brief-1",
+          "module_id": "content-briefs",
+          "values": {
+            "topic": "今晚这一篇任务书",
+            "audience": "自己做内容、却总在记选题的人",
+            "reader_problem": "打开工具先被要求记一条，做不成今晚那篇",
+            "evidence": "本机合成观察，待核验",
+            "format": "图文",
+            "acceptance": "首页能直接推进这一篇，而不是先填来源箱"
+          }
+        },
+        {
+          "id": "r-seed-content-prod-1",
+          "module_id": "content-production",
+          "values": {
+            "title": "为什么工作台不能先让人填表",
+            "details": "先写 80 字开头，再决定要不要进人工发布",
+            "due": "{{today}}"
+          }
+        }
+      ],
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "content-production"
+        ],
+        "lifecycle_module_ids": [
+          "content-topics",
+          "content-briefs",
+          "content-production",
+          "content-schedule"
+        ],
+        "attention_module_ids": [
+          "content-input",
+          "content-schedule",
+          "content-review"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "content-input",
+          "content-topics",
+          "content-briefs",
+          "content-production",
+          "content-schedule",
+          "content-review"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.sales.lead-followup-v1",
+      "scene_profile_id": "scene.sales-trade.lead-to-followup",
+      "domain_id": "sales-trade",
+      "scene_template_id": "sales_followup_pipeline",
+      "renderer_id": "sales_followup_dashboard",
+      "exact_module_ids": [
+        "sales-leads",
+        "sales-clients",
+        "sales-followups",
+        "sales-orders",
+        "sales-quotes",
+        "sales-review"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "今天要跟进",
+            "source_module_ids": [
+              "sales-followups"
+            ],
+            "max_visible_items": 5
+          },
+          {
+            "region_id": "flow",
+            "label": "客户推进",
+            "source_module_ids": [
+              "sales-leads",
+              "sales-clients",
+              "sales-orders"
+            ],
+            "max_visible_items": 8
+          },
+          {
+            "region_id": "capture",
+            "label": "新增线索",
+            "source_module_ids": [
+              "sales-leads"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "逾期、缺下一步与待确认",
+            "source_module_ids": [
+              "sales-followups",
+              "sales-quotes",
+              "sales-review"
+            ],
+            "max_visible_items": 6
+          }
+        ],
+        "home_rule": "打开就跟今天这一家",
+        "flow_title": "线索 → 客户 → 跟进 → 询盘/订单 → 报价 → 复盘"
+      },
+      "object_graph": {
+        "object_types": [
+          "lead",
+          "client",
+          "followup",
+          "inquiry_order",
+          "quote_version",
+          "pipeline_review"
+        ],
+        "relations": [
+          {
+            "from": "lead",
+            "relation": "qualifies_into",
+            "link_relation": "qualified_to_client",
+            "to": "client"
+          },
+          {
+            "from": "client",
+            "relation": "requires",
+            "link_relation": "client_to_followup",
+            "to": "followup"
+          },
+          {
+            "from": "client",
+            "relation": "owns",
+            "link_relation": "client_to_inquiry",
+            "to": "inquiry_order"
+          },
+          {
+            "from": "inquiry_order",
+            "relation": "requests",
+            "link_relation": "object_to_quote",
+            "to": "quote_version"
+          },
+          {
+            "from": "followup",
+            "relation": "updates",
+            "to": "client"
+          },
+          {
+            "from": "client",
+            "relation": "summarizes_into",
+            "to": "pipeline_review"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "sales-pipeline-runtime-v1",
+        "helper_slot": "sales_pipeline_helpers",
+        "render_slot": "sales_pipeline_render",
+        "listener_slot": "sales_pipeline_listeners"
+      },
+      "runtime_policies": [
+        {
+          "policy_id": "lead_qualification",
+          "kind": "promote_gate",
+          "from_module_id": "sales-leads",
+          "required_fields": [
+            "source",
+            "owner",
+            "next_action"
+          ],
+          "blocked_field": "stage",
+          "blocked_values": [
+            "不适合",
+            "已转客户"
+          ]
+        },
+        {
+          "policy_id": "overdue_visibility",
+          "kind": "due_bucket",
+          "module_id": "sales-followups",
+          "date_field": "due",
+          "overdue_class": "sales-overdue"
+        },
+        {
+          "policy_id": "manual_send_confirmation",
+          "kind": "manual_handoff_fsm",
+          "module_id": "sales-followups",
+          "status_field": "result",
+          "status_tag": "沟通状态",
+          "states": [
+            "待准备",
+            "已准备",
+            "已打开渠道",
+            "人工确认已沟通"
+          ],
+          "confirmed_state": "人工确认已沟通",
+          "not_executed_until_confirmed": true
+        },
+        {
+          "policy_id": "quote_versioning",
+          "kind": "manual_handoff_fsm",
+          "module_id": "sales-quotes",
+          "status_field": "status",
+          "states": [
+            "草稿",
+            "待内部核价",
+            "待人工发送",
+            "已复制",
+            "已打开渠道",
+            "人工确认已发送"
+          ],
+          "confirmed_state": "人工确认已发送",
+          "not_executed_until_confirmed": true
+        },
+        {
+          "policy_id": "weekly_pipeline_review",
+          "kind": "review_from_local_facts",
+          "module_id": "sales-review",
+          "source_module_ids": [
+            "sales-clients",
+            "sales-followups",
+            "sales-orders",
+            "sales-quotes"
+          ]
+        }
+      ],
+      "modules": [
+        {
+          "module_id": "sales-leads",
+          "object_type_id": "lead",
+          "primary_job": "qualify_source_need_owner_next_action",
+          "surface_template_id": "sales-lead-qualification-v1",
+          "surface_signature": "sales-lead-qualification-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "client_alias"
+          ],
+          "link_label": "线索"
+        },
+        {
+          "module_id": "sales-clients",
+          "object_type_id": "client",
+          "primary_job": "advance_by_latest_fact_and_next_action",
+          "surface_template_id": "sales-client-pipeline-v1",
+          "surface_signature": "sales-client-pipeline-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "client_alias"
+          ],
+          "link_label": "客户",
+          "stage_field": "stage",
+          "stage_values": [
+            "新线索",
+            "已联系",
+            "需求确认",
+            "报价中",
+            "样品中",
+            "推进中",
+            "暂缓",
+            "结束"
+          ],
+          "default_stage": "新线索",
+          "terminal_stages": [
+            "暂缓",
+            "结束"
+          ]
+        },
+        {
+          "module_id": "sales-followups",
+          "object_type_id": "followup",
+          "primary_job": "prepare_contact_and_record_result",
+          "surface_template_id": "sales-followup-queue-v1",
+          "surface_signature": "sales-followup-queue-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "client_alias",
+            "action"
+          ],
+          "link_label": "跟进"
+        },
+        {
+          "module_id": "sales-orders",
+          "object_type_id": "inquiry_order",
+          "primary_job": "separate_inquiry_sample_and_order_truth",
+          "surface_template_id": "sales-inquiry-order-chain-v1",
+          "surface_signature": "sales-inquiry-order-chain-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "client_alias",
+            "object_type"
+          ],
+          "link_label": "询盘/订单",
+          "stage_field": "stage",
+          "stage_values": [
+            "待确认需求",
+            "待核价",
+            "待样品",
+            "待客户确认",
+            "推进中",
+            "暂缓",
+            "结束"
+          ],
+          "default_stage": "待确认需求",
+          "terminal_stages": [
+            "暂缓",
+            "结束"
+          ]
+        },
+        {
+          "module_id": "sales-quotes",
+          "object_type_id": "quote_version",
+          "primary_job": "version_quote_before_manual_handoff",
+          "surface_template_id": "sales-quote-version-workspace-v1",
+          "surface_signature": "sales-quote-version-workspace-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "client_alias",
+            "version"
+          ],
+          "link_label": "报价"
+        },
+        {
+          "module_id": "sales-review",
+          "object_type_id": "pipeline_review",
+          "primary_job": "review_progress_stall_risk_next_action",
+          "surface_template_id": "sales-pipeline-review-v1",
+          "surface_signature": "sales-pipeline-review-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "date",
+            "conclusion"
+          ],
+          "link_label": "复盘"
+        }
+      ],
+      "acceptance_tasks": [
+        "lead_to_client",
+        "client_to_followup",
+        "overdue_visibility",
+        "inquiry_quote_versioning",
+        "manual_send_confirmation",
+        "weekly_pipeline_review",
+        "reload_persistence",
+        "import_preview_and_undo",
+        "sales_tonight_board_visible",
+        "sales_tonight_warmth_visible",
+        "follow_tonight_account"
+      ],
+      "dashboard_template_id": "sales-followup-home-v3",
+      "tonight_seeds": [
+        {
+          "id": "r-seed-sales-lead-1",
+          "module_id": "sales-leads",
+          "values": {
+            "client_alias": "展会B询盘",
+            "source": "区域家居展（合成）",
+            "need": "要一套客厅样品报价",
+            "owner": "我",
+            "next_action": "判断跟不跟",
+            "stage": "待核验"
+          }
+        },
+        {
+          "id": "r-seed-sales-followup-1",
+          "module_id": "sales-followups",
+          "values": {
+            "client_alias": "展会A客户",
+            "action": "确认样品尺寸是否还能改",
+            "due": "{{today}}",
+            "channel": "微信",
+            "result": "[沟通状态:待准备]"
+          }
+        }
+      ],
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "sales-followups"
+        ],
+        "lifecycle_module_ids": [
+          "sales-leads",
+          "sales-clients",
+          "sales-orders"
+        ],
+        "attention_module_ids": [
+          "sales-followups",
+          "sales-quotes",
+          "sales-review"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "sales-leads",
+          "sales-clients",
+          "sales-followups",
+          "sales-orders",
+          "sales-quotes",
+          "sales-review"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.research.evidence-to-report-v1",
+      "scene_profile_id": "scene.research-knowledge.evidence-to-report",
+      "domain_id": "research-knowledge",
+      "maturity": "executable_ready",
+      "scene_template_id": "research_evidence_pipeline",
+      "renderer_id": "research_tonight_dashboard",
+      "exact_module_ids": [
+        "research-questions",
+        "research-evidence",
+        "research-writing",
+        "research-review",
+        "research-log"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "当前问题",
+            "source_module_ids": [
+              "research-questions"
+            ],
+            "max_visible_items": 3
+          },
+          {
+            "region_id": "flow",
+            "label": "证据到报告",
+            "source_module_ids": [
+              "research-questions",
+              "research-evidence",
+              "research-writing",
+              "research-review"
+            ],
+            "max_visible_items": 8
+          },
+          {
+            "region_id": "capture",
+            "label": "记下问题",
+            "source_module_ids": [
+              "research-questions"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "缺证据或缺口",
+            "source_module_ids": [
+              "research-evidence",
+              "research-writing",
+              "research-review"
+            ],
+            "max_visible_items": 5
+          }
+        ],
+        "home_rule": "打开就写下今晚这条带出处的结论"
+      },
+      "object_graph": {
+        "object_types": [
+          "research_question",
+          "evidence_item",
+          "writing_claim",
+          "coverage_review",
+          "process_log"
+        ],
+        "relations": [
+          {
+            "from": "research_question",
+            "relation": "asks_for",
+            "to": "evidence_item"
+          },
+          {
+            "from": "evidence_item",
+            "relation": "supports",
+            "to": "writing_claim"
+          },
+          {
+            "from": "writing_claim",
+            "relation": "surfaces_gaps_in",
+            "to": "coverage_review"
+          },
+          {
+            "from": "process_log",
+            "relation": "records",
+            "to": "research_question"
+          },
+          {
+            "from": "coverage_review",
+            "relation": "reopens",
+            "to": "research_question"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "research-evidence-runtime-v1",
+        "helper_slot": "research_evidence_helpers",
+        "render_slot": "research_evidence_render",
+        "listener_slot": "research_evidence_listeners"
+      },
+      "modules": [
+        {
+          "module_id": "research-questions",
+          "object_type_id": "research_question",
+          "primary_job": "pin_decision_question_and_next_step",
+          "surface_template_id": "research-question-board-v1",
+          "surface_signature": "research-question-board-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "研究问题"
+        },
+        {
+          "module_id": "research-evidence",
+          "object_type_id": "evidence_item",
+          "primary_job": "bind_source_excerpt_and_verified_time",
+          "surface_template_id": "research-evidence-ledger-v1",
+          "surface_signature": "research-evidence-ledger-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "文献证据"
+        },
+        {
+          "module_id": "research-writing",
+          "object_type_id": "writing_claim",
+          "primary_job": "write_claim_only_with_evidence_or_gap",
+          "surface_template_id": "research-writing-checklist-v1",
+          "surface_signature": "research-writing-checklist-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "写作"
+        },
+        {
+          "module_id": "research-review",
+          "object_type_id": "coverage_review",
+          "primary_job": "list_gaps_and_next_week_action",
+          "surface_template_id": "research-review-journal-v1",
+          "surface_signature": "research-review-journal-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "date",
+            "conclusion"
+          ],
+          "link_label": "复盘"
+        },
+        {
+          "module_id": "research-log",
+          "object_type_id": "process_log",
+          "primary_job": "record_search_read_and_recovery",
+          "surface_template_id": "research-process-log-v1",
+          "surface_signature": "research-process-log-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "过程日志"
+        }
+      ],
+      "acceptance_tasks": [
+        "reload_persistence",
+        "import_preview_and_undo",
+        "derived_selected_scope",
+        "derived_object_chain",
+        "derived_attention_model",
+        "adult_daily_warmth_visible",
+        "research_tonight_board_visible",
+        "research_tonight_warmth_visible",
+        "write_tonight_claim",
+        "keep_claim_sourced_or_gap",
+        "claim_requires_source_or_gap",
+        "coverage_review_from_local_facts"
+      ],
+      "tonight_seeds": [
+        {
+          "id": "r-seed-rs-q-1",
+          "module_id": "research-questions",
+          "values": {
+            "title": "今晚先回答：没有出处能不能写成已证实？",
+            "stage": "进行中",
+            "next_action": "先写下一条带来源或缺口的结论。"
+          }
+        },
+        {
+          "id": "r-seed-rs-e-1",
+          "module_id": "research-evidence",
+          "values": {
+            "title": "社媒工作台常把空壳当已完成",
+            "date": "{{today}}",
+            "notes": "合成摘录，可改可删。不是已核验事实。"
+          }
+        },
+        {
+          "id": "r-seed-rs-c-1",
+          "module_id": "research-writing",
+          "values": {
+            "title": "没有出处就不能写成已证实",
+            "due": "{{today}}",
+            "details": "出处：社媒工作台常把空壳当已完成"
+          }
+        }
+      ],
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "research-questions"
+        ],
+        "lifecycle_module_ids": [
+          "research-questions",
+          "research-evidence",
+          "research-writing",
+          "research-review"
+        ],
+        "attention_module_ids": [
+          "research-evidence",
+          "research-writing",
+          "research-review"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "research-questions",
+          "research-evidence",
+          "research-writing",
+          "research-review",
+          "research-log"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.education.primary-transition-1-to-2-v1",
+      "scene_profile_id": "scene.education-learning.primary-transition-1-to-2",
+      "domain_id": "education-learning",
+      "maturity": "executable_ready",
+      "scene_template_id": "child_learning_quest",
+      "renderer_id": "child_playground_v2",
+      "exact_module_ids": [
+        "education-language",
+        "education-math",
+        "education-english",
+        "education-reading",
+        "education-explore",
+        "education-movement",
+        "education-errors",
+        "education-rewards",
+        "education-parent"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "今天三站",
+            "source_module_ids": [
+              "education-language",
+              "education-math",
+              "education-english"
+            ],
+            "max_visible_items": 3
+          },
+          {
+            "region_id": "flow",
+            "label": "四个学习世界：学一学、练一练、题库",
+            "source_module_ids": [
+              "education-language",
+              "education-math",
+              "education-english",
+              "education-reading"
+            ],
+            "max_visible_items": 4
+          },
+          {
+            "region_id": "capture",
+            "label": "先做一个，按原文顺序填空并高亮当前空",
+            "source_module_ids": [
+              "education-language"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "修理、动一动、重置今日不等于清空全部、本月打卡事实不是掌握",
+            "source_module_ids": [
+              "education-errors",
+              "education-movement",
+              "education-parent"
+            ],
+            "max_visible_items": 4
+          }
+        ],
+        "home_rule": "home_orients_and_routes; modules_execute_and_maintain"
+      },
+      "object_graph": {
+        "object_types": [
+          "language_task",
+          "math_task",
+          "english_task",
+          "reading_record",
+          "explore_task",
+          "movement_log",
+          "error_item",
+          "reward_ledger",
+          "parent_review"
+        ],
+        "relations": [
+          {
+            "from": "language_task",
+            "relation": "repairs_as",
+            "to": "error_item"
+          },
+          {
+            "from": "math_task",
+            "relation": "repairs_as",
+            "to": "error_item"
+          },
+          {
+            "from": "english_task",
+            "relation": "repairs_as",
+            "to": "error_item"
+          },
+          {
+            "from": "language_task",
+            "relation": "earns",
+            "to": "reward_ledger"
+          },
+          {
+            "from": "reward_ledger",
+            "relation": "reviewed_in",
+            "to": "parent_review"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "child-playground-runtime-v1",
+        "helper_slot": "child_playground_helpers",
+        "render_slot": "child_playground_render",
+        "listener_slot": "child_playground_listeners"
+      },
+      "modules": [
+        {
+          "module_id": "education-language",
+          "object_type_id": "language_task",
+          "primary_job": "complete_one_language_quest",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "语言"
+        },
+        {
+          "module_id": "education-math",
+          "object_type_id": "math_task",
+          "primary_job": "complete_one_math_quest",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "数学"
+        },
+        {
+          "module_id": "education-english",
+          "object_type_id": "english_task",
+          "primary_job": "complete_one_english_quest",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "英语"
+        },
+        {
+          "module_id": "education-reading",
+          "object_type_id": "reading_record",
+          "primary_job": "find_one_story_clue",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "阅读"
+        },
+        {
+          "module_id": "education-explore",
+          "object_type_id": "explore_task",
+          "primary_job": "observe_and_guess",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "观察"
+        },
+        {
+          "module_id": "education-movement",
+          "object_type_id": "movement_log",
+          "primary_job": "complete_safe_body_break",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "动一动"
+        },
+        {
+          "module_id": "education-errors",
+          "object_type_id": "error_item",
+          "primary_job": "retry_with_a_new_method",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "修理"
+        },
+        {
+          "module_id": "education-rewards",
+          "object_type_id": "reward_ledger",
+          "primary_job": "earn_and_redeem_stars_without_changing_mastery",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "星星"
+        },
+        {
+          "module_id": "education-parent",
+          "object_type_id": "parent_review",
+          "primary_job": "review_local_facts_once_a_week",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "drawer",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "家长"
+        }
+      ],
+      "acceptance_tasks": [
+        "reload_persistence",
+        "import_preview_and_undo",
+        "first_completion_star",
+        "parent_confirm_redeem",
+        "reward_truth_isolation",
+        "practice_to_error_repair",
+        "reset_today_not_clear_all",
+        "subject_learn_practice_library",
+        "fill_slots_original_order_current",
+        "fact_calendar_not_mastery",
+        "combo_bonus_and_daily_three",
+        "badge_wall_unlock",
+        "parent_star_adjust",
+        "companion_stake_visible",
+        "room_theme_switchable",
+        "room_claim_visible",
+        "warm_incorrect_visible",
+        "companion_growth_visible",
+        "garden_progress_visible"
+      ],
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "education-language",
+          "education-math",
+          "education-english"
+        ],
+        "lifecycle_module_ids": [
+          "education-language",
+          "education-math",
+          "education-english",
+          "education-reading"
+        ],
+        "attention_module_ids": [
+          "education-errors",
+          "education-movement",
+          "education-parent"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "education-language",
+          "education-math",
+          "education-english",
+          "education-reading",
+          "education-explore",
+          "education-movement",
+          "education-errors",
+          "education-rewards",
+          "education-parent"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.education.baby-growth-explorer-v1",
+      "scene_profile_id": "scene.education-learning.baby-growth-explorer",
+      "domain_id": "education-learning",
+      "pack_origin": "authored",
+      "maturity": "executable_ready",
+      "scene_template_id": "child_learning_quest",
+      "renderer_id": "child_playground_v2",
+      "exact_module_ids": [
+        "education-language",
+        "education-math",
+        "education-english",
+        "education-reading",
+        "education-explore",
+        "education-movement",
+        "education-errors",
+        "education-rewards",
+        "education-parent"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "今天一起玩：今天三站",
+            "source_module_ids": [
+              "education-language",
+              "education-math",
+              "education-english"
+            ],
+            "max_visible_items": 3
+          },
+          {
+            "region_id": "flow",
+            "label": "亲子四个世界",
+            "source_module_ids": [
+              "education-language",
+              "education-math",
+              "education-english",
+              "education-reading"
+            ],
+            "max_visible_items": 4
+          },
+          {
+            "region_id": "capture",
+            "label": "先用开箱内容玩一件，家庭任务默认关闭",
+            "source_module_ids": [
+              "education-language"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "修理、动一动、家长陪同、重置今日不等于清空全部、本月打卡事实不是掌握",
+            "source_module_ids": [
+              "education-errors",
+              "education-movement",
+              "education-parent"
+            ],
+            "max_visible_items": 4
+          }
+        ],
+        "home_rule": "home_orients_and_routes; modules_execute_and_maintain"
+      },
+      "object_graph": {
+        "object_types": [
+          "language_task",
+          "math_task",
+          "english_task",
+          "reading_record",
+          "explore_task",
+          "movement_log",
+          "error_item",
+          "reward_ledger",
+          "parent_review"
+        ],
+        "relations": [
+          {
+            "from": "language_task",
+            "relation": "repairs_as",
+            "to": "error_item"
+          },
+          {
+            "from": "math_task",
+            "relation": "repairs_as",
+            "to": "error_item"
+          },
+          {
+            "from": "english_task",
+            "relation": "repairs_as",
+            "to": "error_item"
+          },
+          {
+            "from": "error_item",
+            "relation": "reviewed_in",
+            "to": "parent_review"
+          },
+          {
+            "from": "language_task",
+            "relation": "earns",
+            "to": "reward_ledger"
+          },
+          {
+            "from": "reward_ledger",
+            "relation": "reviewed_in",
+            "to": "parent_review"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "child-playground-runtime-v1",
+        "helper_slot": "child_playground_helpers",
+        "render_slot": "child_playground_render",
+        "listener_slot": "child_playground_listeners"
+      },
+      "modules": [
+        {
+          "module_id": "education-language",
+          "object_type_id": "language_task",
+          "primary_job": "complete_one_language_quest",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "语言"
+        },
+        {
+          "module_id": "education-math",
+          "object_type_id": "math_task",
+          "primary_job": "complete_one_math_quest",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "数学"
+        },
+        {
+          "module_id": "education-english",
+          "object_type_id": "english_task",
+          "primary_job": "complete_one_english_quest",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "英语"
+        },
+        {
+          "module_id": "education-reading",
+          "object_type_id": "reading_record",
+          "primary_job": "find_one_story_clue",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "阅读"
+        },
+        {
+          "module_id": "education-explore",
+          "object_type_id": "explore_task",
+          "primary_job": "observe_and_guess",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "观察"
+        },
+        {
+          "module_id": "education-movement",
+          "object_type_id": "movement_log",
+          "primary_job": "complete_safe_body_break",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "动一动"
+        },
+        {
+          "module_id": "education-errors",
+          "object_type_id": "error_item",
+          "primary_job": "retry_with_a_new_method",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "修理"
+        },
+        {
+          "module_id": "education-rewards",
+          "object_type_id": "reward_ledger",
+          "primary_job": "earn_and_redeem_stars_without_changing_mastery",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "星星"
+        },
+        {
+          "module_id": "education-parent",
+          "object_type_id": "parent_review",
+          "primary_job": "review_local_facts_once_a_week",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "drawer",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "家长"
+        }
+      ],
+      "acceptance_tasks": [
+        "reload_persistence",
+        "import_preview_and_undo",
+        "parent_observe_only",
+        "parent_beside_required",
+        "no_textbook_alignment_claim",
+        "starter_empty_state_disclosed",
+        "reset_today_not_clear_all",
+        "family_tasks_opt_in_default_off",
+        "fact_calendar_not_mastery",
+        "incentive_loop_first_class",
+        "companion_stake_visible",
+        "room_theme_switchable",
+        "room_claim_visible",
+        "warm_incorrect_visible",
+        "companion_growth_visible",
+        "garden_progress_visible",
+        "first_completion_star",
+        "parent_confirm_redeem",
+        "reward_truth_isolation",
+        "combo_bonus_and_daily_three",
+        "badge_wall_unlock",
+        "parent_star_adjust"
+      ],
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "education-language",
+          "education-math",
+          "education-english"
+        ],
+        "lifecycle_module_ids": [
+          "education-language",
+          "education-math",
+          "education-english",
+          "education-reading"
+        ],
+        "attention_module_ids": [
+          "education-errors",
+          "education-movement",
+          "education-parent"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "education-language",
+          "education-math",
+          "education-english",
+          "education-reading",
+          "education-explore",
+          "education-movement",
+          "education-errors",
+          "education-rewards",
+          "education-parent"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.education.primary-transition-2-to-3-v1",
+      "scene_profile_id": "scene.education-learning.primary-transition-2-to-3",
+      "domain_id": "education-learning",
+      "pack_origin": "authored",
+      "maturity": "executable_ready",
+      "scene_template_id": "child_learning_quest",
+      "renderer_id": "child_playground_v2",
+      "exact_module_ids": [
+        "education-language",
+        "education-math",
+        "education-english",
+        "education-reading",
+        "education-explore",
+        "education-movement",
+        "education-errors",
+        "education-rewards",
+        "education-parent"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "今天三站",
+            "source_module_ids": [
+              "education-language",
+              "education-math",
+              "education-english"
+            ],
+            "max_visible_items": 3
+          },
+          {
+            "region_id": "flow",
+            "label": "四个学习世界",
+            "source_module_ids": [
+              "education-language",
+              "education-math",
+              "education-english",
+              "education-reading"
+            ],
+            "max_visible_items": 4
+          },
+          {
+            "region_id": "capture",
+            "label": "先用开箱内容做一题，按原文顺序填空并高亮当前空",
+            "source_module_ids": [
+              "education-language"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "错题、不跨年级、不用未审游戏顶替、重置今日不等于清空全部、本月打卡事实不是掌握",
+            "source_module_ids": [
+              "education-errors",
+              "education-movement",
+              "education-parent"
+            ],
+            "max_visible_items": 4
+          }
+        ],
+        "home_rule": "home_orients_and_routes; modules_execute_and_maintain"
+      },
+      "object_graph": {
+        "object_types": [
+          "language_task",
+          "math_task",
+          "english_task",
+          "reading_record",
+          "explore_task",
+          "movement_log",
+          "error_item",
+          "reward_ledger",
+          "parent_review"
+        ],
+        "relations": [
+          {
+            "from": "language_task",
+            "relation": "repairs_as",
+            "to": "error_item"
+          },
+          {
+            "from": "math_task",
+            "relation": "repairs_as",
+            "to": "error_item"
+          },
+          {
+            "from": "english_task",
+            "relation": "repairs_as",
+            "to": "error_item"
+          },
+          {
+            "from": "error_item",
+            "relation": "reviewed_in",
+            "to": "parent_review"
+          },
+          {
+            "from": "language_task",
+            "relation": "earns",
+            "to": "reward_ledger"
+          },
+          {
+            "from": "reward_ledger",
+            "relation": "reviewed_in",
+            "to": "parent_review"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "child-playground-runtime-v1",
+        "helper_slot": "child_playground_helpers",
+        "render_slot": "child_playground_render",
+        "listener_slot": "child_playground_listeners"
+      },
+      "modules": [
+        {
+          "module_id": "education-language",
+          "object_type_id": "language_task",
+          "primary_job": "complete_one_language_quest",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "语言"
+        },
+        {
+          "module_id": "education-math",
+          "object_type_id": "math_task",
+          "primary_job": "complete_one_math_quest",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "数学"
+        },
+        {
+          "module_id": "education-english",
+          "object_type_id": "english_task",
+          "primary_job": "complete_one_english_quest",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "英语"
+        },
+        {
+          "module_id": "education-reading",
+          "object_type_id": "reading_record",
+          "primary_job": "find_one_story_clue",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "阅读"
+        },
+        {
+          "module_id": "education-explore",
+          "object_type_id": "explore_task",
+          "primary_job": "observe_and_guess",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "观察"
+        },
+        {
+          "module_id": "education-movement",
+          "object_type_id": "movement_log",
+          "primary_job": "complete_safe_body_break",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "动一动"
+        },
+        {
+          "module_id": "education-errors",
+          "object_type_id": "error_item",
+          "primary_job": "retry_with_a_new_method",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "修理"
+        },
+        {
+          "module_id": "education-rewards",
+          "object_type_id": "reward_ledger",
+          "primary_job": "earn_and_redeem_stars_without_changing_mastery",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "星星"
+        },
+        {
+          "module_id": "education-parent",
+          "object_type_id": "parent_review",
+          "primary_job": "review_local_facts_once_a_week",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "drawer",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "家长"
+        }
+      ],
+      "acceptance_tasks": [
+        "reload_persistence",
+        "import_preview_and_undo",
+        "parent_observe_only",
+        "no_adjacent_grade_fallback",
+        "no_textbook_alignment_claim",
+        "no_unreviewed_game_content",
+        "starter_empty_state_disclosed",
+        "reset_today_not_clear_all",
+        "fill_slots_original_order_current",
+        "fact_calendar_not_mastery",
+        "incentive_loop_first_class",
+        "companion_stake_visible",
+        "room_theme_switchable",
+        "room_claim_visible",
+        "warm_incorrect_visible",
+        "companion_growth_visible",
+        "garden_progress_visible",
+        "first_completion_star",
+        "parent_confirm_redeem",
+        "reward_truth_isolation",
+        "combo_bonus_and_daily_three",
+        "badge_wall_unlock",
+        "parent_star_adjust"
+      ],
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "education-language",
+          "education-math",
+          "education-english"
+        ],
+        "lifecycle_module_ids": [
+          "education-language",
+          "education-math",
+          "education-english",
+          "education-reading"
+        ],
+        "attention_module_ids": [
+          "education-errors",
+          "education-movement",
+          "education-parent"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "education-language",
+          "education-math",
+          "education-english",
+          "education-reading",
+          "education-explore",
+          "education-movement",
+          "education-errors",
+          "education-rewards",
+          "education-parent"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.education.primary-transition-3-to-4-v1",
+      "scene_profile_id": "scene.education-learning.primary-transition-3-to-4",
+      "domain_id": "education-learning",
+      "pack_origin": "authored",
+      "maturity": "executable_ready",
+      "scene_template_id": "child_learning_quest",
+      "renderer_id": "child_playground_v2",
+      "exact_module_ids": [
+        "education-language",
+        "education-math",
+        "education-english",
+        "education-reading",
+        "education-explore",
+        "education-movement",
+        "education-errors",
+        "education-rewards",
+        "education-parent"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "今天三站",
+            "source_module_ids": [
+              "education-language",
+              "education-math",
+              "education-english"
+            ],
+            "max_visible_items": 3
+          },
+          {
+            "region_id": "flow",
+            "label": "四个学习世界",
+            "source_module_ids": [
+              "education-language",
+              "education-math",
+              "education-english",
+              "education-reading"
+            ],
+            "max_visible_items": 4
+          },
+          {
+            "region_id": "capture",
+            "label": "先用开箱内容，不必自己先填空，按原文顺序填空并高亮当前空",
+            "source_module_ids": [
+              "education-language"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "错题、空状态、惩罚不改掌握、重置今日不等于清空全部、本月打卡事实不是掌握",
+            "source_module_ids": [
+              "education-errors",
+              "education-movement",
+              "education-parent"
+            ],
+            "max_visible_items": 4
+          }
+        ],
+        "home_rule": "home_orients_and_routes; modules_execute_and_maintain"
+      },
+      "object_graph": {
+        "object_types": [
+          "language_task",
+          "math_task",
+          "english_task",
+          "reading_record",
+          "explore_task",
+          "movement_log",
+          "error_item",
+          "reward_ledger",
+          "parent_review"
+        ],
+        "relations": [
+          {
+            "from": "language_task",
+            "relation": "repairs_as",
+            "to": "error_item"
+          },
+          {
+            "from": "math_task",
+            "relation": "repairs_as",
+            "to": "error_item"
+          },
+          {
+            "from": "english_task",
+            "relation": "repairs_as",
+            "to": "error_item"
+          },
+          {
+            "from": "error_item",
+            "relation": "reviewed_in",
+            "to": "parent_review"
+          },
+          {
+            "from": "language_task",
+            "relation": "earns",
+            "to": "reward_ledger"
+          },
+          {
+            "from": "reward_ledger",
+            "relation": "reviewed_in",
+            "to": "parent_review"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "child-playground-runtime-v1",
+        "helper_slot": "child_playground_helpers",
+        "render_slot": "child_playground_render",
+        "listener_slot": "child_playground_listeners"
+      },
+      "modules": [
+        {
+          "module_id": "education-language",
+          "object_type_id": "language_task",
+          "primary_job": "complete_one_language_quest",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "语言"
+        },
+        {
+          "module_id": "education-math",
+          "object_type_id": "math_task",
+          "primary_job": "complete_one_math_quest",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "数学"
+        },
+        {
+          "module_id": "education-english",
+          "object_type_id": "english_task",
+          "primary_job": "complete_one_english_quest",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "英语"
+        },
+        {
+          "module_id": "education-reading",
+          "object_type_id": "reading_record",
+          "primary_job": "find_one_story_clue",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "阅读"
+        },
+        {
+          "module_id": "education-explore",
+          "object_type_id": "explore_task",
+          "primary_job": "observe_and_guess",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "观察"
+        },
+        {
+          "module_id": "education-movement",
+          "object_type_id": "movement_log",
+          "primary_job": "complete_safe_body_break",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "动一动"
+        },
+        {
+          "module_id": "education-errors",
+          "object_type_id": "error_item",
+          "primary_job": "retry_with_a_new_method",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "修理"
+        },
+        {
+          "module_id": "education-rewards",
+          "object_type_id": "reward_ledger",
+          "primary_job": "earn_and_redeem_stars_without_changing_mastery",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "星星"
+        },
+        {
+          "module_id": "education-parent",
+          "object_type_id": "parent_review",
+          "primary_job": "review_local_facts_once_a_week",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "drawer",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "家长"
+        }
+      ],
+      "acceptance_tasks": [
+        "reload_persistence",
+        "import_preview_and_undo",
+        "parent_observe_only",
+        "no_adjacent_grade_fallback",
+        "no_textbook_alignment_claim",
+        "starter_empty_state_disclosed",
+        "no_punishment_or_pet_hunger_mastery",
+        "no_static_image_as_control",
+        "reset_today_not_clear_all",
+        "fill_slots_original_order_current",
+        "fact_calendar_not_mastery",
+        "incentive_loop_first_class",
+        "companion_stake_visible",
+        "room_theme_switchable",
+        "room_claim_visible",
+        "warm_incorrect_visible",
+        "companion_growth_visible",
+        "garden_progress_visible",
+        "first_completion_star",
+        "parent_confirm_redeem",
+        "reward_truth_isolation",
+        "combo_bonus_and_daily_three",
+        "badge_wall_unlock",
+        "parent_star_adjust"
+      ],
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "education-language",
+          "education-math",
+          "education-english"
+        ],
+        "lifecycle_module_ids": [
+          "education-language",
+          "education-math",
+          "education-english",
+          "education-reading"
+        ],
+        "attention_module_ids": [
+          "education-errors",
+          "education-movement",
+          "education-parent"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "education-language",
+          "education-math",
+          "education-english",
+          "education-reading",
+          "education-explore",
+          "education-movement",
+          "education-errors",
+          "education-rewards",
+          "education-parent"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.fitness.fat-loss-routine-v1",
+      "scene_profile_id": "scene.fitness-nutrition.fat-loss-routine",
+      "domain_id": "fitness-nutrition",
+      "maturity": "executable_ready",
+      "scene_template_id": "fitness_fat_loss_execute",
+      "renderer_id": "fitness_sprint_dashboard",
+      "exact_module_ids": [
+        "fitness-today",
+        "fitness-log",
+        "fitness-food",
+        "fitness-metrics",
+        "fitness-review"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "今天记下",
+            "source_module_ids": [
+              "fitness-food",
+              "fitness-metrics",
+              "fitness-today"
+            ],
+            "max_visible_items": 3
+          },
+          {
+            "region_id": "flow",
+            "label": "近七日",
+            "source_module_ids": [
+              "fitness-food",
+              "fitness-today",
+              "fitness-review"
+            ],
+            "max_visible_items": 6
+          },
+          {
+            "region_id": "capture",
+            "label": "加一餐",
+            "source_module_ids": [
+              "fitness-food"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "自己记的数字",
+            "source_module_ids": [
+              "fitness-metrics",
+              "fitness-review"
+            ],
+            "max_visible_items": 3
+          }
+        ],
+        "home_rule": "打开就记下体重、三餐和有没有练",
+        "flow_title": "今天的记录 → 近七日"
+      },
+      "object_graph": {
+        "object_types": [
+          "fitness_today_object",
+          "fitness_log_object",
+          "fitness_food_object",
+          "fitness_metrics_object",
+          "fitness_review_object"
+        ],
+        "relations": [
+          {
+            "from": "fitness_today_object",
+            "relation": "logs_as",
+            "to": "fitness_log_object"
+          },
+          {
+            "from": "fitness_log_object",
+            "relation": "feeds",
+            "to": "fitness_review_object"
+          },
+          {
+            "from": "fitness_food_object",
+            "relation": "notes_in",
+            "to": "fitness_review_object"
+          },
+          {
+            "from": "fitness_metrics_object",
+            "relation": "notes_in",
+            "to": "fitness_review_object"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "fitness-daily-runtime-v1",
+        "helper_slot": "fitness_daily_helpers",
+        "render_slot": "fitness_daily_render",
+        "listener_slot": "fitness_daily_listeners"
+      },
+      "modules": [
+        {
+          "module_id": "fitness-today",
+          "object_type_id": "fitness_today_object",
+          "primary_job": "check_today_session",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "今日运动"
+        },
+        {
+          "module_id": "fitness-log",
+          "object_type_id": "fitness_log_object",
+          "primary_job": "record_completed_set",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "练完记录"
+        },
+        {
+          "module_id": "fitness-food",
+          "object_type_id": "fitness_food_object",
+          "primary_job": "note_meal_fact",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "今日三餐"
+        },
+        {
+          "module_id": "fitness-metrics",
+          "object_type_id": "fitness_metrics_object",
+          "primary_job": "note_recovery_fact",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "drawer",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "体重"
+        },
+        {
+          "module_id": "fitness-review",
+          "object_type_id": "fitness_review_object",
+          "primary_job": "review_week_from_facts",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "周复盘"
+        }
+      ],
+      "acceptance_tasks": [
+        "reload_persistence",
+        "import_preview_and_undo",
+        "derived_selected_scope",
+        "derived_object_chain",
+        "derived_attention_model",
+        "adult_daily_warmth_visible",
+        "fitness_daily_warmth_visible",
+        "fitness_daily_board_visible",
+        "log_today_weight",
+        "log_today_meal",
+        "checkin_today"
+      ],
+      "tonight_seeds": [
+        {
+          "id": "r-seed-fitness-meal-1",
+          "module_id": "fitness-food",
+          "values": {
+            "title": "早餐 燕麦牛奶",
+            "date": "{{today}}",
+            "calories": 320,
+            "notes": "合成开箱。热量是自己填的估计。"
+          }
+        }
+      ],
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "fitness-food",
+          "fitness-metrics",
+          "fitness-today"
+        ],
+        "lifecycle_module_ids": [
+          "fitness-food",
+          "fitness-today",
+          "fitness-review"
+        ],
+        "attention_module_ids": [
+          "fitness-metrics",
+          "fitness-review"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "fitness-today",
+          "fitness-log",
+          "fitness-food",
+          "fitness-metrics",
+          "fitness-review"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.teaching.classroom-management-v1",
+      "scene_profile_id": "scene.teaching-classroom.classroom-management",
+      "domain_id": "teaching-classroom",
+      "maturity": "executable_ready",
+      "scene_template_id": "teaching_classroom_daily",
+      "renderer_id": "teacher_class_dashboard",
+      "exact_module_ids": [
+        "teaching-daily",
+        "teaching-progress",
+        "teaching-students",
+        "teaching-attendance",
+        "teaching-review"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "今天这几件",
+            "source_module_ids": [
+              "teaching-daily",
+              "teaching-attendance",
+              "teaching-students"
+            ],
+            "max_visible_items": 8
+          },
+          {
+            "region_id": "flow",
+            "label": "班务到跟进",
+            "source_module_ids": [
+              "teaching-daily",
+              "teaching-students",
+              "teaching-review"
+            ],
+            "max_visible_items": 6
+          },
+          {
+            "region_id": "capture",
+            "label": "再加一件班务",
+            "source_module_ids": [
+              "teaching-daily"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "敏感事实",
+            "source_module_ids": [
+              "teaching-progress",
+              "teaching-attendance"
+            ],
+            "max_visible_items": 3
+          }
+        ],
+        "home_rule": "打开就看见今天的班务、考勤和待跟进"
+      },
+      "object_graph": {
+        "object_types": [
+          "teaching_daily_object",
+          "teaching_progress_object",
+          "teaching_students_object",
+          "teaching_attendance_object",
+          "teaching_review_object"
+        ],
+        "relations": [
+          {
+            "from": "teaching_daily_object",
+            "relation": "may_open",
+            "to": "teaching_students_object"
+          },
+          {
+            "from": "teaching_students_object",
+            "relation": "notes_in",
+            "to": "teaching_review_object"
+          },
+          {
+            "from": "teaching_progress_object",
+            "relation": "notes_in",
+            "to": "teaching_review_object"
+          },
+          {
+            "from": "teaching_attendance_object",
+            "relation": "notes_in",
+            "to": "teaching_review_object"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "teacher-class-runtime-v1",
+        "helper_slot": "teacher_class_helpers",
+        "render_slot": "teacher_class_render",
+        "listener_slot": "teacher_class_listeners"
+      },
+      "modules": [
+        {
+          "module_id": "teaching-daily",
+          "object_type_id": "teaching_daily_object",
+          "primary_job": "handle_today_class_matters",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "今日班务"
+        },
+        {
+          "module_id": "teaching-progress",
+          "object_type_id": "teaching_progress_object",
+          "primary_job": "record_authorized_learning_fact",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "drawer",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "学情事实"
+        },
+        {
+          "module_id": "teaching-students",
+          "object_type_id": "teaching_students_object",
+          "primary_job": "follow_one_synthetic_student",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "跟进"
+        },
+        {
+          "module_id": "teaching-attendance",
+          "object_type_id": "teaching_attendance_object",
+          "primary_job": "record_authorized_attendance",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "drawer",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "考勤"
+        },
+        {
+          "module_id": "teaching-review",
+          "object_type_id": "teaching_review_object",
+          "primary_job": "review_week_from_class_facts",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "周报"
+        }
+      ],
+      "acceptance_tasks": [
+        "reload_persistence",
+        "import_preview_and_undo",
+        "derived_selected_scope",
+        "derived_object_chain",
+        "derived_attention_model",
+        "adult_daily_warmth_visible",
+        "teacher_class_board_visible",
+        "teacher_class_warmth_visible",
+        "tick_today_duty",
+        "mark_today_attendance",
+        "close_today_followup"
+      ],
+      "tonight_seeds": [
+        {
+          "id": "r-seed-teach-daily-1",
+          "module_id": "teaching-daily",
+          "values": {
+            "title": "早读两件事写在黑板上",
+            "due": "{{today}}",
+            "details": "合成开箱。班务不是只推一件。"
+          }
+        },
+        {
+          "id": "r-seed-teach-daily-2",
+          "module_id": "teaching-daily",
+          "values": {
+            "title": "检查今天值日",
+            "due": "{{today}}",
+            "details": "合成开箱。"
+          }
+        },
+        {
+          "id": "r-seed-teach-daily-3",
+          "module_id": "teaching-daily",
+          "values": {
+            "title": "把小B的请假条放进抽屉",
+            "due": "{{today}}",
+            "details": "合成开箱。和考勤里的小B是同一个人。"
+          }
+        },
+        {
+          "id": "r-seed-teach-att-a",
+          "module_id": "teaching-attendance",
+          "values": {
+            "title": "小A",
+            "date": "{{today}}",
+            "status": "",
+            "details": "合成代号"
+          }
+        },
+        {
+          "id": "r-seed-teach-att-b",
+          "module_id": "teaching-attendance",
+          "values": {
+            "title": "小B",
+            "date": "{{today}}",
+            "status": "假",
+            "details": "假"
+          }
+        },
+        {
+          "id": "r-seed-teach-att-c",
+          "module_id": "teaching-attendance",
+          "values": {
+            "title": "小C",
+            "date": "{{today}}",
+            "status": "",
+            "details": "合成代号"
+          }
+        },
+        {
+          "id": "r-seed-teach-follow-1",
+          "module_id": "teaching-students",
+          "values": {
+            "title": "跟进 小A：作业未交",
+            "due": "{{today}}",
+            "details": "待人工告知家长。页面不发送。"
+          }
+        }
+      ],
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "teaching-daily",
+          "teaching-attendance",
+          "teaching-students"
+        ],
+        "lifecycle_module_ids": [
+          "teaching-daily",
+          "teaching-students",
+          "teaching-review"
+        ],
+        "attention_module_ids": [
+          "teaching-progress",
+          "teaching-attendance"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "teaching-daily",
+          "teaching-progress",
+          "teaching-students",
+          "teaching-attendance",
+          "teaching-review"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.exam.civil-service-v1",
+      "scene_profile_id": "scene.exam-preparation.civil-service-exam",
+      "domain_id": "exam-preparation",
+      "maturity": "executable_ready",
+      "scene_template_id": "exam_civil_service_practice",
+      "renderer_id": "exam_practice_dashboard",
+      "exact_module_ids": [
+        "exam-goal",
+        "exam-today",
+        "exam-practice",
+        "exam-errors",
+        "exam-materials"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "今天这一组",
+            "source_module_ids": [
+              "exam-practice",
+              "exam-today"
+            ],
+            "max_visible_items": 3
+          },
+          {
+            "region_id": "flow",
+            "label": "练完回炉",
+            "source_module_ids": [
+              "exam-today",
+              "exam-practice",
+              "exam-errors"
+            ],
+            "max_visible_items": 6
+          },
+          {
+            "region_id": "capture",
+            "label": "记下今天练了什么",
+            "source_module_ids": [
+              "exam-today"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "错题与素材",
+            "source_module_ids": [
+              "exam-errors",
+              "exam-materials"
+            ],
+            "max_visible_items": 4
+          }
+        ],
+        "home_rule": "打开就选行测、申论或面试"
+      },
+      "object_graph": {
+        "object_types": [
+          "exam_goal_object",
+          "exam_today_object",
+          "exam_practice_object",
+          "exam_errors_object",
+          "exam_materials_object"
+        ],
+        "relations": [
+          {
+            "from": "exam_goal_object",
+            "relation": "schedules",
+            "to": "exam_today_object"
+          },
+          {
+            "from": "exam_today_object",
+            "relation": "opens",
+            "to": "exam_practice_object"
+          },
+          {
+            "from": "exam_practice_object",
+            "relation": "misses_go_to",
+            "to": "exam_errors_object"
+          },
+          {
+            "from": "exam_errors_object",
+            "relation": "reviews_with",
+            "to": "exam_materials_object"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "exam-practice-runtime-v1",
+        "helper_slot": "exam_practice_helpers",
+        "render_slot": "exam_practice_render",
+        "listener_slot": "exam_practice_listeners"
+      },
+      "modules": [
+        {
+          "module_id": "exam-goal",
+          "object_type_id": "exam_goal_object",
+          "primary_job": "keep_exam_date_honest",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "今晚计划"
+        },
+        {
+          "module_id": "exam-today",
+          "object_type_id": "exam_today_object",
+          "primary_job": "name_tonight_set",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "三科入口"
+        },
+        {
+          "module_id": "exam-practice",
+          "object_type_id": "exam_practice_object",
+          "primary_job": "answer_today_questions",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "行测"
+        },
+        {
+          "module_id": "exam-errors",
+          "object_type_id": "exam_errors_object",
+          "primary_job": "review_missed_item",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "错过的再做"
+        },
+        {
+          "module_id": "exam-materials",
+          "object_type_id": "exam_materials_object",
+          "primary_job": "queue_review_material",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "drawer",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "申论和面试"
+        }
+      ],
+      "acceptance_tasks": [
+        "reload_persistence",
+        "import_preview_and_undo",
+        "derived_selected_scope",
+        "derived_object_chain",
+        "derived_attention_model",
+        "adult_daily_warmth_visible",
+        "exam_practice_board_visible",
+        "exam_practice_warmth_visible",
+        "answer_tonight_question",
+        "review_exam_error"
+      ],
+      "tonight_seeds": [
+        {
+          "id": "r-seed-exam-today-1",
+          "module_id": "exam-today",
+          "values": {
+            "title": "今晚选一科",
+            "due": "{{today}}",
+            "details": "打开就选行测、申论或面试。不是真题，不保证上岸。打判还没接上。"
+          }
+        }
+      ],
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "exam-practice",
+          "exam-today"
+        ],
+        "lifecycle_module_ids": [
+          "exam-today",
+          "exam-practice",
+          "exam-errors"
+        ],
+        "attention_module_ids": [
+          "exam-errors",
+          "exam-materials"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "exam-goal",
+          "exam-today",
+          "exam-practice",
+          "exam-errors",
+          "exam-materials"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.household.weekly-handoff-v1",
+      "scene_profile_id": "scene.household-collaboration.weekly-household-handoff",
+      "domain_id": "household-collaboration",
+      "maturity": "executable_ready",
+      "scene_template_id": "household_week_coordination",
+      "renderer_id": "household_tonight_dashboard",
+      "exact_module_ids": [
+        "household-chores",
+        "household-shopping",
+        "household-handoff",
+        "household-review",
+        "household-room"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "今晚这几件",
+            "source_module_ids": [
+              "household-chores",
+              "household-shopping"
+            ],
+            "max_visible_items": 8
+          },
+          {
+            "region_id": "flow",
+            "label": "家务到当面说",
+            "source_module_ids": [
+              "household-chores",
+              "household-handoff"
+            ],
+            "max_visible_items": 6
+          },
+          {
+            "region_id": "capture",
+            "label": "再加一件今晚",
+            "source_module_ids": [
+              "household-chores"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "单设备边界",
+            "source_module_ids": [
+              "household-room",
+              "household-review"
+            ],
+            "max_visible_items": 3
+          }
+        ],
+        "home_rule": "打开就勾今晚这几件家务，谁做写在旁边"
+      },
+      "object_graph": {
+        "object_types": [
+          "household_chores_object",
+          "household_shopping_object",
+          "household_handoff_object",
+          "household_review_object",
+          "household_room_object"
+        ],
+        "relations": [
+          {
+            "from": "household_chores_object",
+            "relation": "may_need",
+            "to": "household_shopping_object"
+          },
+          {
+            "from": "household_chores_object",
+            "relation": "may_tell",
+            "to": "household_handoff_object"
+          },
+          {
+            "from": "household_shopping_object",
+            "relation": "may_tell",
+            "to": "household_handoff_object"
+          },
+          {
+            "from": "household_handoff_object",
+            "relation": "notes_in",
+            "to": "household_review_object"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "household-handoff-runtime-v1",
+        "helper_slot": "household_handoff_helpers",
+        "render_slot": "household_handoff_render",
+        "listener_slot": "household_handoff_listeners"
+      },
+      "modules": [
+        {
+          "module_id": "household-chores",
+          "object_type_id": "household_chores_object",
+          "primary_job": "tick_tonight_chore",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "今晚家务"
+        },
+        {
+          "module_id": "household-shopping",
+          "object_type_id": "household_shopping_object",
+          "primary_job": "tick_tonight_buy",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "今晚要买"
+        },
+        {
+          "module_id": "household-handoff",
+          "object_type_id": "household_handoff_object",
+          "primary_job": "mark_tell_in_person",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "待当面说"
+        },
+        {
+          "module_id": "household-review",
+          "object_type_id": "household_review_object",
+          "primary_job": "note_week_together",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "drawer",
+          "title_fields": [
+            "conclusion"
+          ],
+          "link_label": "本周记下"
+        },
+        {
+          "module_id": "household-room",
+          "object_type_id": "household_room_object",
+          "primary_job": "keep_device_boundary",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "drawer",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "这台设备"
+        }
+      ],
+      "acceptance_tasks": [
+        "reload_persistence",
+        "import_preview_and_undo",
+        "derived_selected_scope",
+        "derived_object_chain",
+        "derived_attention_model",
+        "adult_daily_warmth_visible",
+        "household_tonight_board_visible",
+        "household_tonight_warmth_visible",
+        "tick_tonight_chore",
+        "mark_tell_in_person"
+      ],
+      "tonight_seeds": [
+        {
+          "id": "r-seed-hh-chore-1",
+          "module_id": "household-chores",
+          "values": {
+            "title": "今晚做饭",
+            "due": "{{today}}",
+            "details": "谁：我"
+          }
+        },
+        {
+          "id": "r-seed-hh-chore-2",
+          "module_id": "household-chores",
+          "values": {
+            "title": "洗碗",
+            "due": "{{today}}",
+            "details": "谁：对方"
+          }
+        },
+        {
+          "id": "r-seed-hh-chore-3",
+          "module_id": "household-chores",
+          "values": {
+            "title": "倒垃圾",
+            "due": "{{today}}",
+            "details": "谁：我"
+          }
+        },
+        {
+          "id": "r-seed-hh-shop-1",
+          "module_id": "household-shopping",
+          "values": {
+            "title": "牛奶",
+            "due": "{{today}}",
+            "details": "谁：我 · 出门顺路"
+          }
+        },
+        {
+          "id": "r-seed-hh-tell-1",
+          "module_id": "household-handoff",
+          "values": {
+            "title": "提醒对方今晚洗碗",
+            "stage": "待处理",
+            "next_action": "当面说。页面不会发消息。"
+          }
+        }
+      ],
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "household-chores",
+          "household-shopping"
+        ],
+        "lifecycle_module_ids": [
+          "household-chores",
+          "household-handoff"
+        ],
+        "attention_module_ids": [
+          "household-room",
+          "household-review"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "household-chores",
+          "household-shopping",
+          "household-handoff",
+          "household-review",
+          "household-room"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.finance.monthly-bookkeeping-v1",
+      "scene_profile_id": "scene.finance-tax-contract.monthly-bookkeeping",
+      "domain_id": "finance-tax-contract",
+      "maturity": "executable_ready",
+      "scene_template_id": "finance_month_close",
+      "renderer_id": "finance_tonight_dashboard",
+      "exact_module_ids": [
+        "finance-transactions",
+        "finance-vouchers",
+        "finance-tax",
+        "finance-review",
+        "finance-audit"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "今晚这笔",
+            "source_module_ids": [
+              "finance-transactions"
+            ],
+            "max_visible_items": 8
+          },
+          {
+            "region_id": "flow",
+            "label": "流水到凭证",
+            "source_module_ids": [
+              "finance-transactions",
+              "finance-vouchers"
+            ],
+            "max_visible_items": 6
+          },
+          {
+            "region_id": "capture",
+            "label": "再记一笔",
+            "source_module_ids": [
+              "finance-transactions"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "待专业处理",
+            "source_module_ids": [
+              "finance-tax",
+              "finance-review",
+              "finance-audit"
+            ],
+            "max_visible_items": 4
+          }
+        ],
+        "home_rule": "打开就记今晚这笔，合计只加你填的数字"
+      },
+      "object_graph": {
+        "object_types": [
+          "finance_transactions_object",
+          "finance_vouchers_object",
+          "finance_tax_object",
+          "finance_review_object",
+          "finance_audit_object"
+        ],
+        "relations": [
+          {
+            "from": "finance_transactions_object",
+            "relation": "may_need",
+            "to": "finance_vouchers_object"
+          },
+          {
+            "from": "finance_vouchers_object",
+            "relation": "may_prepare",
+            "to": "finance_tax_object"
+          },
+          {
+            "from": "finance_tax_object",
+            "relation": "notes_in",
+            "to": "finance_review_object"
+          },
+          {
+            "from": "finance_review_object",
+            "relation": "may_flag",
+            "to": "finance_audit_object"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "finance-bookkeeping-runtime-v1",
+        "helper_slot": "finance_bookkeeping_helpers",
+        "render_slot": "finance_bookkeeping_render",
+        "listener_slot": "finance_bookkeeping_listeners"
+      },
+      "modules": [
+        {
+          "module_id": "finance-transactions",
+          "object_type_id": "finance_transactions_object",
+          "primary_job": "log_tonight_amount",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "今晚这笔"
+        },
+        {
+          "module_id": "finance-vouchers",
+          "object_type_id": "finance_vouchers_object",
+          "primary_job": "tick_tonight_voucher",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "今晚的票"
+        },
+        {
+          "module_id": "finance-tax",
+          "object_type_id": "finance_tax_object",
+          "primary_job": "keep_tax_unfiled",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "待专业处理"
+        },
+        {
+          "module_id": "finance-review",
+          "object_type_id": "finance_review_object",
+          "primary_job": "note_local_diff",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "conclusion"
+          ],
+          "link_label": "缺票和对账"
+        },
+        {
+          "module_id": "finance-audit",
+          "object_type_id": "finance_audit_object",
+          "primary_job": "keep_open_item",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "重复票据"
+        }
+      ],
+      "acceptance_tasks": [
+        "reload_persistence",
+        "import_preview_and_undo",
+        "derived_selected_scope",
+        "derived_object_chain",
+        "derived_attention_model",
+        "adult_daily_warmth_visible",
+        "finance_tonight_board_visible",
+        "finance_tonight_warmth_visible",
+        "log_tonight_amount",
+        "tick_tonight_voucher",
+        "keep_tax_unfiled"
+      ],
+      "tonight_seeds": [
+        {
+          "id": "r-seed-fin-voucher-1",
+          "module_id": "finance-vouchers",
+          "values": {
+            "title": "外卖小票",
+            "due": "{{today}}",
+            "details": "勾掉只表示这台设备记下找到了。"
+          }
+        },
+        {
+          "id": "r-seed-fin-tax-1",
+          "module_id": "finance-tax",
+          "values": {
+            "title": "本月申报材料",
+            "stage": "待专业处理",
+            "next_action": "本页不申报、不付款。"
+          }
+        }
+      ],
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "finance-transactions"
+        ],
+        "lifecycle_module_ids": [
+          "finance-transactions",
+          "finance-vouchers"
+        ],
+        "attention_module_ids": [
+          "finance-tax",
+          "finance-review",
+          "finance-audit"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "finance-transactions",
+          "finance-vouchers",
+          "finance-tax",
+          "finance-review",
+          "finance-audit"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.ecommerce.product-order-ops-v1",
+      "scene_profile_id": "scene.ecommerce-operations.product-order-ops",
+      "domain_id": "ecommerce-operations",
+      "maturity": "executable_ready",
+      "scene_template_id": "freelance_delivery_studio",
+      "renderer_id": "commerce_tonight_dashboard",
+      "exact_module_ids": [
+        "commerce-products",
+        "commerce-inventory",
+        "commerce-orders",
+        "commerce-service",
+        "commerce-metrics"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "今晚这几单",
+            "source_module_ids": [
+              "commerce-orders"
+            ],
+            "max_visible_items": 8
+          },
+          {
+            "region_id": "flow",
+            "label": "订单到库存",
+            "source_module_ids": [
+              "commerce-orders",
+              "commerce-inventory"
+            ],
+            "max_visible_items": 6
+          },
+          {
+            "region_id": "capture",
+            "label": "再加一单",
+            "source_module_ids": [
+              "commerce-orders"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "待在平台回",
+            "source_module_ids": [
+              "commerce-service",
+              "commerce-products",
+              "commerce-metrics"
+            ],
+            "max_visible_items": 4
+          }
+        ],
+        "home_rule": "打开就处理今天这几单，库存只是手工快照"
+      },
+      "object_graph": {
+        "object_types": [
+          "commerce_products_object",
+          "commerce_inventory_object",
+          "commerce_orders_object",
+          "commerce_service_object",
+          "commerce_metrics_object"
+        ],
+        "relations": [
+          {
+            "from": "commerce_products_object",
+            "relation": "has_snapshot",
+            "to": "commerce_inventory_object"
+          },
+          {
+            "from": "commerce_orders_object",
+            "relation": "may_need",
+            "to": "commerce_inventory_object"
+          },
+          {
+            "from": "commerce_orders_object",
+            "relation": "may_need_reply",
+            "to": "commerce_service_object"
+          },
+          {
+            "from": "commerce_orders_object",
+            "relation": "notes_in",
+            "to": "commerce_metrics_object"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "commerce-order-runtime-v1",
+        "helper_slot": "commerce_order_helpers",
+        "render_slot": "commerce_order_render",
+        "listener_slot": "commerce_order_listeners"
+      },
+      "modules": [
+        {
+          "module_id": "commerce-products",
+          "object_type_id": "commerce_products_object",
+          "primary_job": "keep_local_sku",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "drawer",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "商品台账"
+        },
+        {
+          "module_id": "commerce-inventory",
+          "object_type_id": "commerce_inventory_object",
+          "primary_job": "log_stock_snapshot",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "metric"
+          ],
+          "link_label": "库存快照"
+        },
+        {
+          "module_id": "commerce-orders",
+          "object_type_id": "commerce_orders_object",
+          "primary_job": "handle_tonight_order",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "今晚这几单"
+        },
+        {
+          "module_id": "commerce-service",
+          "object_type_id": "commerce_service_object",
+          "primary_job": "keep_service_unsent",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "待在平台回"
+        },
+        {
+          "module_id": "commerce-metrics",
+          "object_type_id": "commerce_metrics_object",
+          "primary_job": "note_local_metric",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "drawer",
+          "title_fields": [
+            "metric"
+          ],
+          "link_label": "本机记下"
+        }
+      ],
+      "acceptance_tasks": [
+        "reload_persistence",
+        "import_preview_and_undo",
+        "derived_selected_scope",
+        "derived_object_chain",
+        "derived_attention_model",
+        "adult_daily_warmth_visible",
+        "commerce_tonight_board_visible",
+        "commerce_tonight_warmth_visible",
+        "handle_tonight_order",
+        "log_stock_snapshot",
+        "keep_service_unsent"
+      ],
+      "tonight_seeds": [
+        {
+          "id": "r-seed-com-order-1",
+          "module_id": "commerce-orders",
+          "values": {
+            "title": "米色卫衣",
+            "stage": "待发货",
+            "next_action": "本页不发货、不退款。"
+          }
+        },
+        {
+          "id": "r-seed-com-order-2",
+          "module_id": "commerce-orders",
+          "values": {
+            "title": "尺码换货",
+            "stage": "待售后",
+            "next_action": "本页不退款。去平台处理。"
+          }
+        },
+        {
+          "id": "r-seed-com-stock-1",
+          "module_id": "commerce-inventory",
+          "values": {
+            "metric": "米色卫衣",
+            "value": 3,
+            "unit": "件",
+            "date": "{{today}}",
+            "notes": "手工快照，不是实时库存。"
+          }
+        },
+        {
+          "id": "r-seed-com-service-1",
+          "module_id": "commerce-service",
+          "values": {
+            "title": "还问有没有 M 码",
+            "due": "{{today}}",
+            "details": "待在平台回。页面没有发出去。"
+          }
+        }
+      ],
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "commerce-orders"
+        ],
+        "lifecycle_module_ids": [
+          "commerce-orders",
+          "commerce-inventory"
+        ],
+        "attention_module_ids": [
+          "commerce-service",
+          "commerce-products",
+          "commerce-metrics"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "commerce-products",
+          "commerce-inventory",
+          "commerce-orders",
+          "commerce-service",
+          "commerce-metrics"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.personal.life-dashboard-v1",
+      "scene_profile_id": "scene.personal-execution.personal-life-dashboard",
+      "domain_id": "personal-execution",
+      "maturity": "executable_ready",
+      "scene_template_id": "personal_life_dashboard",
+      "renderer_id": "personal_life_dashboard",
+      "exact_module_ids": [
+        "personal-today",
+        "personal-habits",
+        "life-inspiration",
+        "life-mood",
+        "life-finance",
+        "life-food",
+        "life-movement",
+        "life-reading",
+        "life-vocabulary"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "今天先完成",
+            "source_module_ids": [
+              "personal-today",
+              "life-mood",
+              "personal-habits"
+            ],
+            "max_visible_items": 3
+          },
+          {
+            "region_id": "flow",
+            "label": "目标与生活事实",
+            "source_module_ids": [
+              "personal-today",
+              "personal-habits",
+              "life-finance",
+              "life-food",
+              "life-movement",
+              "life-reading",
+              "life-vocabulary"
+            ],
+            "max_visible_items": 9
+          },
+          {
+            "region_id": "capture",
+            "label": "留下一条灵感",
+            "source_module_ids": [
+              "life-inspiration"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "需要关注的未完成",
+            "source_module_ids": [
+              "personal-today",
+              "personal-habits",
+              "life-movement"
+            ],
+            "max_visible_items": 4
+          }
+        ],
+        "home_rule": "今日一页先完成 Top 1、心情记录和一个习惯；九个模块全部保留逐模块导航"
+      },
+      "object_graph": {
+        "object_types": [
+          "today_action",
+          "habit_checkin",
+          "inspiration_note",
+          "mood_fact",
+          "finance_fact",
+          "food_fact",
+          "movement_fact",
+          "reading_item",
+          "vocabulary_fact"
+        ],
+        "relations": [
+          {
+            "from": "today_action",
+            "relation": "records_with",
+            "to": "mood_fact"
+          },
+          {
+            "from": "habit_checkin",
+            "relation": "contributes_fact",
+            "to": "movement_fact"
+          },
+          {
+            "from": "inspiration_note",
+            "relation": "may_become",
+            "to": "today_action"
+          },
+          {
+            "from": "finance_fact",
+            "relation": "summarizes_locally",
+            "to": "today_action"
+          },
+          {
+            "from": "food_fact",
+            "relation": "summarizes_locally",
+            "to": "today_action"
+          },
+          {
+            "from": "reading_item",
+            "relation": "feeds",
+            "to": "vocabulary_fact"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "personal-life-runtime-v1",
+        "helper_slot": "personal_life_helpers",
+        "render_slot": "personal_life_render",
+        "listener_slot": "personal_life_listeners"
+      },
+      "modules": [
+        {
+          "module_id": "personal-today",
+          "object_type_id": "today_action",
+          "primary_job": "complete_today_top_one",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "今日 Top 1"
+        },
+        {
+          "module_id": "personal-habits",
+          "object_type_id": "habit_checkin",
+          "primary_job": "check_one_habit",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "习惯打卡"
+        },
+        {
+          "module_id": "life-inspiration",
+          "object_type_id": "inspiration_note",
+          "primary_job": "capture_inspiration",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "灵感书房"
+        },
+        {
+          "module_id": "life-mood",
+          "object_type_id": "mood_fact",
+          "primary_job": "log_mood_fact",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "mood"
+          ],
+          "link_label": "安静角"
+        },
+        {
+          "module_id": "life-finance",
+          "object_type_id": "finance_fact",
+          "primary_job": "log_finance_fact",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "category"
+          ],
+          "link_label": "财务柜"
+        },
+        {
+          "module_id": "life-food",
+          "object_type_id": "food_fact",
+          "primary_job": "log_food_fact",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "food"
+          ],
+          "link_label": "餐厨"
+        },
+        {
+          "module_id": "life-movement",
+          "object_type_id": "movement_fact",
+          "primary_job": "complete_movement",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "运动角"
+        },
+        {
+          "module_id": "life-reading",
+          "object_type_id": "reading_item",
+          "primary_job": "maintain_reading",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "阅读室"
+        },
+        {
+          "module_id": "life-vocabulary",
+          "object_type_id": "vocabulary_fact",
+          "primary_job": "review_vocabulary",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "word"
+          ],
+          "link_label": "词汇复习"
+        }
+      ],
+      "acceptance_tasks": [
+        "reload_persistence",
+        "import_preview_and_undo",
+        "life_today_page_visible",
+        "life_complete_top_one",
+        "life_log_mood",
+        "life_check_habit",
+        "life_deduped_streak",
+        "adult_fact_projection_visible",
+        "theme_switch_isolated"
+      ],
+      "adult_fact_projection": {
+        "engine_id": "adult_fact_projection",
+        "optional_goal_days": 21,
+        "reward_mode": "user_authored_local_celebration_only"
+      },
+      "theme_family_id": "life_rooms",
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "personal-today",
+          "life-mood",
+          "personal-habits"
+        ],
+        "lifecycle_module_ids": [
+          "personal-today",
+          "personal-habits",
+          "life-finance",
+          "life-food",
+          "life-movement",
+          "life-reading",
+          "life-vocabulary"
+        ],
+        "attention_module_ids": [
+          "personal-today",
+          "personal-habits",
+          "life-movement"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "personal-today",
+          "personal-habits",
+          "life-inspiration",
+          "life-mood",
+          "life-finance",
+          "life-food",
+          "life-movement",
+          "life-reading",
+          "life-vocabulary"
+        ]
+      }
+    },
+    {
+      "composition_id": "composition.exam.cet4-sprint-v1",
+      "scene_profile_id": "scene.exam-preparation.certification-study-cycle",
+      "domain_id": "exam-preparation",
+      "maturity": "executable_ready",
+      "scene_template_id": "exam_civil_service_practice",
+      "renderer_id": "exam_practice_dashboard",
+      "exact_module_ids": [
+        "exam-goal",
+        "exam-today",
+        "exam-practice",
+        "exam-errors",
+        "exam-materials",
+        "exam-mock",
+        "exam-pomodoro",
+        "exam-review"
+      ],
+      "attention_model": {
+        "regions": [
+          {
+            "region_id": "now",
+            "label": "今天先练",
+            "source_module_ids": [
+              "exam-today",
+              "exam-practice",
+              "exam-pomodoro"
+            ],
+            "max_visible_items": 3
+          },
+          {
+            "region_id": "flow",
+            "label": "目标到复盘",
+            "source_module_ids": [
+              "exam-goal",
+              "exam-today",
+              "exam-practice",
+              "exam-errors",
+              "exam-materials",
+              "exam-mock",
+              "exam-pomodoro",
+              "exam-review"
+            ],
+            "max_visible_items": 8
+          },
+          {
+            "region_id": "capture",
+            "label": "记录一轮结果",
+            "source_module_ids": [
+              "exam-mock"
+            ],
+            "max_visible_items": 1
+          },
+          {
+            "region_id": "attention",
+            "label": "需要回炉或人工复核",
+            "source_module_ids": [
+              "exam-errors",
+              "exam-materials",
+              "exam-review"
+            ],
+            "max_visible_items": 6
+          }
+        ],
+        "home_rule": "考试日期由用户录入；先做一题或开始一段专注，再处理错题和人工复核"
+      },
+      "object_graph": {
+        "object_types": [
+          "exam_goal",
+          "exam_today_action",
+          "exam_answer_fact",
+          "exam_error_fact",
+          "exam_manual_draft",
+          "exam_mock_fact",
+          "focus_session",
+          "exam_review"
+        ],
+        "relations": [
+          {
+            "from": "exam_goal",
+            "relation": "plans",
+            "to": "exam_today_action"
+          },
+          {
+            "from": "exam_today_action",
+            "relation": "starts",
+            "to": "focus_session"
+          },
+          {
+            "from": "exam_answer_fact",
+            "relation": "creates_when_incorrect",
+            "to": "exam_error_fact"
+          },
+          {
+            "from": "exam_error_fact",
+            "relation": "retains_original_fact_after",
+            "to": "exam_review"
+          },
+          {
+            "from": "exam_manual_draft",
+            "relation": "requires_manual_review_before",
+            "to": "exam_review"
+          },
+          {
+            "from": "exam_mock_fact",
+            "relation": "informs",
+            "to": "exam_review"
+          }
+        ]
+      },
+      "runtime_binding": {
+        "runtime_id": "cet4-sprint-runtime-v1",
+        "helper_slot": "cet4_sprint_helpers",
+        "render_slot": "cet4_sprint_render",
+        "listener_slot": "cet4_sprint_listeners"
+      },
+      "modules": [
+        {
+          "module_id": "exam-goal",
+          "object_type_id": "exam_goal",
+          "primary_job": "set_exam_date",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "考试目标"
+        },
+        {
+          "module_id": "exam-today",
+          "object_type_id": "exam_today_action",
+          "primary_job": "complete_today_plan",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "今日任务"
+        },
+        {
+          "module_id": "exam-practice",
+          "object_type_id": "exam_answer_fact",
+          "primary_job": "answer_original_practice",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "自编练习"
+        },
+        {
+          "module_id": "exam-errors",
+          "object_type_id": "exam_error_fact",
+          "primary_job": "revisit_mistake",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "错题回炉"
+        },
+        {
+          "module_id": "exam-materials",
+          "object_type_id": "exam_manual_draft",
+          "primary_job": "draft_and_manual_review",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "写作与翻译"
+        },
+        {
+          "module_id": "exam-mock",
+          "object_type_id": "exam_mock_fact",
+          "primary_job": "log_section_results",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "metric"
+          ],
+          "link_label": "套卷记录"
+        },
+        {
+          "module_id": "exam-pomodoro",
+          "object_type_id": "focus_session",
+          "primary_job": "run_resumable_timer",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "open",
+          "title_fields": [
+            "title"
+          ],
+          "link_label": "专注计时"
+        },
+        {
+          "module_id": "exam-review",
+          "object_type_id": "exam_review",
+          "primary_job": "record_next_round",
+          "surface_template_id": "generic-module-surface-v1",
+          "surface_signature": "generic-module-surface-v1",
+          "default_disclosure": "summary",
+          "title_fields": [
+            "date"
+          ],
+          "link_label": "阶段复盘"
+        }
+      ],
+      "acceptance_tasks": [
+        "reload_persistence",
+        "import_preview_and_undo",
+        "exam_practice_board_visible",
+        "cet4_original_items",
+        "cet4_error_reflow",
+        "cet4_manual_review",
+        "cet4_timer_resume",
+        "cet4_source_boundary",
+        "adult_fact_projection_visible",
+        "theme_switch_isolated"
+      ],
+      "source_contract_id": "double6-cet4-original-content/v1",
+      "adult_fact_projection": {
+        "engine_id": "adult_fact_projection",
+        "daily_equal_division_only": true
+      },
+      "theme_family_id": "study_companion",
+      "execution_projection": {
+        "projection_version": "double6_execution_projection_v1",
+        "today_module_ids": [
+          "exam-today",
+          "exam-practice",
+          "exam-pomodoro"
+        ],
+        "lifecycle_module_ids": [
+          "exam-goal",
+          "exam-today",
+          "exam-practice",
+          "exam-errors",
+          "exam-materials",
+          "exam-mock",
+          "exam-pomodoro",
+          "exam-review"
+        ],
+        "attention_module_ids": [
+          "exam-errors",
+          "exam-materials",
+          "exam-review"
+        ],
+        "next_action_fields": [
+          "next_action",
+          "title"
+        ],
+        "blocker_fields": [
+          "blocker",
+          "notes",
+          "details"
+        ],
+        "completion_events": [
+          "record_completed",
+          "starter_completed"
+        ],
+        "home_projection": [
+          "today",
+          "lifecycle",
+          "attention",
+          "next_action"
+        ],
+        "selected_scope_sha_input": [
+          "exam-goal",
+          "exam-today",
+          "exam-practice",
+          "exam-errors",
+          "exam-materials",
+          "exam-mock",
+          "exam-pomodoro",
+          "exam-review"
+        ]
+      }
+    }
+  ]
+}

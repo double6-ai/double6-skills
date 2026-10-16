@@ -1,0 +1,910 @@
+{
+  "schema_version": "double6-incentive-library/v1",
+  "updated_at": "2026-08-17",
+  "purpose": "儿童与成人工作台可选用的激励系统库。引擎是行为合同，皮肤只换叙事和外观。",
+  "ledger": {
+    "currency_id": "stars",
+    "label": "星星",
+    "notes": "可兑换余额只此一册。伙伴、植物、徽章都是投影，不开第二套会打架的货币。"
+  },
+  "invariants": [
+    "奖励变化不改变掌握、家长核验或内容真值",
+    "虚拟扣减可逆",
+    "真实奖励必须家长确认，不接支付、内购或商户核销",
+    "孩子不能改规则；家长可暂停、关闭、加减星和换皮",
+    "负向必须可爱，不得羞辱、掉血清空或永久死亡",
+    "庆祝必须立刻消失",
+    "不改冻结候选 SHA 5b31d9fc"
+  ],
+  "engines": [
+    {
+      "engine_id": "earn_spend",
+      "label": "攒兑",
+      "audience": [
+        "child"
+      ],
+      "polarity": "positive",
+      "state": [
+        "balance",
+        "earned_total",
+        "redemptions"
+      ],
+      "inputs": [
+        "completion_evidence",
+        "parent_confirm"
+      ],
+      "forbidden": [
+        "second_currency",
+        "auto_fulfill_physical_reward"
+      ]
+    },
+    {
+      "engine_id": "combo_burst",
+      "label": "连击加成",
+      "audience": [
+        "child"
+      ],
+      "polarity": "positive",
+      "state": [
+        "session_combo",
+        "best_combo"
+      ],
+      "inputs": [
+        "correct_answer"
+      ],
+      "forbidden": [
+        "combo_clears_balance",
+        "lives"
+      ]
+    },
+    {
+      "engine_id": "daily_set_bonus",
+      "label": "今日套装奖励",
+      "audience": [
+        "child"
+      ],
+      "polarity": "positive",
+      "state": [
+        "daily_set_awarded_on"
+      ],
+      "inputs": [
+        "today_station_completion"
+      ],
+      "forbidden": [
+        "full_attendance_pressure",
+        "fourteen_item_default"
+      ]
+    },
+    {
+      "engine_id": "collection",
+      "label": "收集点亮",
+      "audience": [
+        "child"
+      ],
+      "polarity": "positive",
+      "state": [
+        "unlocked_ids"
+      ],
+      "inputs": [
+        "ledger_projection"
+      ],
+      "forbidden": [
+        "collection_equals_mastery"
+      ]
+    },
+    {
+      "engine_id": "companion_stake",
+      "label": "伙伴风险",
+      "audience": [
+        "child"
+      ],
+      "polarity": "negative_cute",
+      "state": [
+        "companion_mood",
+        "threat_distance",
+        "stage"
+      ],
+      "inputs": [
+        "today_station_completion"
+      ],
+      "recovery": "today_set_complete_or_parent_restore",
+      "forbidden": [
+        "hp_drain",
+        "permanent_death",
+        "mastery_change",
+        "shame_copy"
+      ]
+    },
+    {
+      "engine_id": "encouragement",
+      "label": "暖场",
+      "audience": [
+        "child",
+        "adult"
+      ],
+      "polarity": "warmth",
+      "state": [
+        "last_line_id",
+        "last_shown_on"
+      ],
+      "inputs": [
+        "session_open",
+        "incorrect_answer"
+      ],
+      "forbidden": [
+        "penalty_on_error",
+        "character_judgment"
+      ]
+    },
+    {
+      "engine_id": "progress_projection",
+      "label": "进度投影",
+      "audience": [
+        "child"
+      ],
+      "polarity": "neutral",
+      "state": [
+        "visible_stage"
+      ],
+      "inputs": [
+        "verified_or_completed_facts"
+      ],
+      "forbidden": [
+        "projection_equals_mastery",
+        "projection_spends_stars"
+      ]
+    },
+    {
+      "engine_id": "parent_adjust",
+      "label": "家长加减",
+      "audience": [
+        "child"
+      ],
+      "polarity": "adult_control",
+      "state": [
+        "adjust_events"
+      ],
+      "inputs": [
+        "parent_reason"
+      ],
+      "forbidden": [
+        "child_self_grant",
+        "adjust_changes_mastery"
+      ]
+    },
+    {
+      "engine_id": "adult_fact_projection",
+      "label": "成人事实投影",
+      "audience": [
+        "adult"
+      ],
+      "polarity": "neutral",
+      "state": [
+        "deduped_completion_dates",
+        "goal",
+        "local_ledger"
+      ],
+      "inputs": [
+        "completion_date",
+        "user_goal",
+        "local_ledger_record"
+      ],
+      "forbidden": [
+        "projection_equals_mastery",
+        "health_conclusion",
+        "exam_ability_claim",
+        "business_outcome_claim",
+        "automatic_reward_fulfillment"
+      ]
+    }
+  ],
+  "systems": [
+    {
+      "system_id": "stars-shop",
+      "engine_id": "earn_spend",
+      "label": "星星小卖部",
+      "status": "assembled",
+      "audience": "child",
+      "sources": [
+        "04_iterations/2026-08-16_workbench-builder-v1_0_0-child-incentive-absorption/overall_report.md",
+        "01_research/child_learning_points_workbench_resource_brief_2026-08-01.md"
+      ],
+      "default_on": true
+    },
+    {
+      "system_id": "combo-bonus",
+      "engine_id": "combo_burst",
+      "label": "连击加成",
+      "status": "assembled",
+      "audience": "child",
+      "sources": [
+        "04_iterations/2026-08-16_workbench-builder-v1_0_0-child-incentive-absorption/overall_report.md"
+      ],
+      "default_on": true
+    },
+    {
+      "system_id": "daily-three-bonus",
+      "engine_id": "daily_set_bonus",
+      "label": "今天三站奖励",
+      "status": "assembled",
+      "audience": "child",
+      "sources": [
+        "04_iterations/2026-08-16_workbench-builder-v1_0_0-child-incentive-absorption/overall_report.md"
+      ],
+      "default_on": true
+    },
+    {
+      "system_id": "badge-wall",
+      "engine_id": "collection",
+      "label": "徽章墙",
+      "status": "assembled",
+      "audience": "child",
+      "sources": [
+        "04_iterations/2026-08-16_workbench-builder-v1_0_0-child-incentive-absorption/overall_report.md"
+      ],
+      "default_on": true
+    },
+    {
+      "system_id": "instant-celebrate",
+      "engine_id": "encouragement",
+      "label": "答对庆祝立刻消失",
+      "status": "assembled",
+      "audience": "child",
+      "sources": [
+        "04_iterations/2026-08-16_workbench-builder-v1_0_0-child-incentive-absorption/overall_report.md"
+      ],
+      "default_on": true
+    },
+    {
+      "system_id": "parent-star-adjust",
+      "engine_id": "parent_adjust",
+      "label": "家长加减星",
+      "status": "assembled",
+      "audience": "child",
+      "sources": [
+        "04_iterations/2026-08-16_workbench-builder-v1_0_0-child-incentive-absorption/overall_report.md"
+      ],
+      "default_on": true
+    },
+    {
+      "system_id": "companion-puppy",
+      "engine_id": "companion_stake",
+      "label": "小狗会饿",
+      "status": "assembled",
+      "audience": "child",
+      "skin": {
+        "character": "puppy",
+        "emoji": "🐶",
+        "moods": {
+          "waiting": "肚子有点饿，在等你",
+          "hopeful": "吃了一口，精神好一点了",
+          "almost": "就差一站，就能吃饱",
+          "well": "吃饱了，摇尾巴"
+        },
+        "recover": "做完今天三站就喂饱",
+        "celebration": "吃饱啦！",
+        "baby_waiting": "我们一起做完，再喂小狗"
+      },
+      "sources": [
+        "01_research/per_source/cls-xhs-6a69ddf6/analysis.json",
+        "lan:resource:ab091836a43fdc15bcf12031360fe9fd5b75a363"
+      ],
+      "default_on": true
+    },
+    {
+      "system_id": "companion-panda",
+      "engine_id": "companion_stake",
+      "label": "熊猫要喂",
+      "status": "assembled",
+      "audience": "child",
+      "skin": {
+        "character": "panda",
+        "emoji": "🐼",
+        "moods": {
+          "waiting": "还想吃竹子，在等你",
+          "hopeful": "啃到一小口了",
+          "almost": "再做一站就吃饱",
+          "well": "啃到竹子了"
+        },
+        "recover": "做完今天的事就喂它",
+        "celebration": "竹子来啦！",
+        "baby_waiting": "我们一起做完，再给熊猫喂竹子"
+      },
+      "sources": [
+        "01_research/per_source/cls-xhs-6a68df35/analysis.json"
+      ],
+      "default_on": false
+    },
+    {
+      "system_id": "companion-plants",
+      "engine_id": "companion_stake",
+      "label": "植物还在守着",
+      "status": "assembled",
+      "audience": "child",
+      "skin": {
+        "character": "plants",
+        "emoji": "🌱",
+        "moods": {
+          "waiting": "小僵尸在门口张望",
+          "hopeful": "它们退了一步",
+          "almost": "还差一站，花园就安全",
+          "well": "花园安全，它们回去了"
+        },
+        "recover": "做完今天三站，它们就退回去",
+        "celebration": "花园安全啦！",
+        "baby_waiting": "我们一起做完，小僵尸就会回家"
+      },
+      "sources": [
+        "01_research/per_source/cls-dy-7669750489261920177/analysis.json",
+        "01_research/per_source/cls-dy-7669389220767664113/analysis.json"
+      ],
+      "default_on": false,
+      "notes": "只借可爱风险，不借掉血、永久死亡或阳光惩罚。"
+    },
+    {
+      "system_id": "companion-ultraman",
+      "engine_id": "companion_stake",
+      "label": "光之勇士遇险",
+      "status": "assembled",
+      "audience": "child",
+      "skin": {
+        "character": "ultraman",
+        "emoji": "🦸",
+        "moods": {
+          "waiting": "怪兽在远处晃",
+          "hopeful": "光亮了一点",
+          "almost": "再做一站，光就回来",
+          "well": "光又亮了"
+        },
+        "recover": "做完今天三站，光就回来",
+        "celebration": "光回来啦！",
+        "baby_waiting": "我们一起做完，光就会亮起来"
+      },
+      "sources": [
+        "user:north-star-negative-cute-examples"
+      ],
+      "default_on": false
+    },
+    {
+      "system_id": "companion-growth-stage",
+      "engine_id": "progress_projection",
+      "label": "伙伴长大",
+      "status": "assembled",
+      "audience": "child",
+      "skin": {
+        "stages": [
+          {
+            "id": "sprout",
+            "min": 0,
+            "label": "幼苗"
+          },
+          {
+            "id": "growing",
+            "min": 3,
+            "label": "在长大"
+          },
+          {
+            "id": "familiar",
+            "min": 10,
+            "label": "很熟了"
+          },
+          {
+            "id": "old-friend",
+            "min": 20,
+            "label": "老朋友"
+          }
+        ]
+      },
+      "sources": [
+        "01_research/per_source/cls-xhs-6a68df35/analysis.json"
+      ],
+      "default_on": true,
+      "notes": "阶段只投影已做事实，不叫升级等于学会。"
+    },
+    {
+      "system_id": "warm-incorrect",
+      "engine_id": "encouragement",
+      "label": "答错也暖",
+      "status": "assembled",
+      "audience": "child",
+      "skin": {
+        "lines": [
+          {
+            "title": "没关系",
+            "copy": "这次没对，很正常。"
+          },
+          {
+            "title": "我们再试一次",
+            "copy": "慢慢来，看清楚再选。"
+          },
+          {
+            "title": "还没对，没事",
+            "copy": "换个角度想想就好。"
+          }
+        ],
+        "default_next": "再看一眼题目，换一个答案。",
+        "baby_title": "我们一起再试一次",
+        "baby_copy": "做错了也没关系，我们再看一眼。"
+      },
+      "sources": [
+        "01_research/per_source/cls-dy-7669389220767664113/analysis.json"
+      ],
+      "default_on": true,
+      "notes": "只要短句和下一步，不要扣分恐吓。"
+    },
+    {
+      "system_id": "adult-daily-warmth",
+      "engine_id": "encouragement",
+      "label": "每天一句暖话",
+      "status": "assembled",
+      "audience": "adult",
+      "skin": {
+        "lines": [
+          "今天先做最上面那一件就好。",
+          "来了就算开始，不必一次做完。",
+          "记下的都还在这台设备上。",
+          "做完一件，再决定下一件。",
+          "慢慢来，页面会等你。"
+        ]
+      },
+      "sources": [
+        "README.md#产品北极星"
+      ],
+      "default_on": true
+    },
+    {
+      "system_id": "fitness-daily-warmth",
+      "engine_id": "encouragement",
+      "label": "减脂日常一句暖话",
+      "status": "assembled",
+      "audience": "adult",
+      "skin": {
+        "lines": [
+          {
+            "text": "千里之行，始于足下。",
+            "cite": "《老子》"
+          },
+          {
+            "text": "不积跬步，无以至千里。",
+            "cite": "《荀子》"
+          },
+          {
+            "text": "欲穷千里目，更上一层楼。",
+            "cite": "王之涣"
+          },
+          {
+            "text": "山重水复疑无路，柳暗花明又一村。",
+            "cite": "陆游"
+          },
+          {
+            "text": "莫听穿林打叶声，何妨吟啸且徐行。",
+            "cite": "苏轼"
+          },
+          {
+            "text": "野火烧不尽，春风吹又生。",
+            "cite": "白居易"
+          },
+          {
+            "text": "来了就算开始，不必一次做完。",
+            "cite": ""
+          },
+          {
+            "text": "记下今天，就已经比昨天多走一步。",
+            "cite": ""
+          },
+          {
+            "text": "休息也是今天的一种练。",
+            "cite": ""
+          },
+          {
+            "text": "慢慢走，也是往前。",
+            "cite": ""
+          }
+        ]
+      },
+      "sources": [
+        "README.md#产品北极星",
+        "user:2026-08-19-fitness-warmth-or-poetry"
+      ],
+      "default_on": true,
+      "notes": "成人减脂激励是每日一句鼓励或公版暖心诗句。不是星星、伙伴或保证减重。诗句只取公版短句。"
+    },
+    {
+      "system_id": "teacher-class-warmth",
+      "engine_id": "encouragement",
+      "label": "班主任一句暖话",
+      "status": "assembled",
+      "audience": "adult",
+      "skin": {
+        "lines": [
+          {
+            "text": "学而不厌，诲人不倦。",
+            "cite": "《论语》"
+          },
+          {
+            "text": "循循然善诱人。",
+            "cite": "《论语》"
+          },
+          {
+            "text": "一件一件来，班里的事不必一次做完。",
+            "cite": ""
+          },
+          {
+            "text": "记下今天，就是把碎事接住。",
+            "cite": ""
+          },
+          {
+            "text": "只用代号，已经是在保护孩子。",
+            "cite": ""
+          },
+          {
+            "text": "家校消息仍要你自己发。",
+            "cite": ""
+          }
+        ]
+      },
+      "sources": [
+        "README.md#产品北极星",
+        "user:2026-08-19-adult-warmth-or-poetry",
+        "lan:resource:17500c451028ece96101a72d371450c0c9d83edb"
+      ],
+      "default_on": true,
+      "notes": "班主任激励是每日一句鼓励或公版短句。不是儿童关卡，也不评价学生。"
+    },
+    {
+      "system_id": "household-handoff-warmth",
+      "engine_id": "encouragement",
+      "label": "家庭今晚一句",
+      "status": "assembled",
+      "audience": "adult",
+      "skin": {
+        "lines": [
+          {
+            "text": "勾掉今晚这几件就好。当面说一声，页面发不出去。",
+            "cite": ""
+          },
+          {
+            "text": "谁做什么写在旁边，不用猜。",
+            "cite": ""
+          },
+          {
+            "text": "这台设备上的勾，不等于对方已经看见。",
+            "cite": ""
+          },
+          {
+            "text": "家务做完是事实，不是积分。",
+            "cite": ""
+          },
+          {
+            "text": "只写我或对方，不必写真名。",
+            "cite": ""
+          }
+        ]
+      },
+      "sources": [
+        "README.md#产品北极星",
+        "01_research/social_absorption/resources/3cb4a410eb92e2e494bf1a2c710eeaf54f388cdd/analysis.md",
+        "01_research/social_absorption/resources/4826cc87e3927b637355f15a06da91ad1364c89e/analysis.md"
+      ],
+      "default_on": true,
+      "notes": "家庭激励只用一句提醒。不把爱心币、情侣天数或儿童星星扣过来。"
+    },
+    {
+      "system_id": "finance-bookkeeping-warmth",
+      "engine_id": "encouragement",
+      "label": "记账今晚一句",
+      "status": "assembled",
+      "audience": "adult",
+      "skin": {
+        "lines": [
+          {
+            "text": "先把今晚这笔写下。合计只加你填的数字。",
+            "cite": ""
+          },
+          {
+            "text": "今晚这笔写下就好，合计只看你填的数字。",
+            "cite": ""
+          },
+          {
+            "text": "数据只在这台设备。清缓存会没。",
+            "cite": ""
+          },
+          {
+            "text": "凭证勾掉，只表示你找到了那张纸。",
+            "cite": ""
+          },
+          {
+            "text": "税务材料保持待专业处理。",
+            "cite": ""
+          }
+        ]
+      },
+      "sources": [
+        "README.md#产品北极星",
+        "01_research/social_absorption/resources/4250b401226068b47b0564acbffdb2da7b78eb8e/analysis.json",
+        "01_research/social_absorption/resources/2f21891cdb8930558672d93bf48e3a110e24f2fe/analysis.json"
+      ],
+      "default_on": true,
+      "notes": "记账激励只用一句提醒。不把结余当银行余额，也不把材料齐备写成已申报。"
+    },
+    {
+      "system_id": "commerce-order-warmth",
+      "engine_id": "encouragement",
+      "label": "店铺今晚一句",
+      "status": "assembled",
+      "audience": "adult",
+      "skin": {
+        "lines": [
+          {
+            "text": "先处理今天这几单。库存只是你记下的快照。",
+            "cite": ""
+          },
+          {
+            "text": "本地勾掉，不是店铺已经发货。",
+            "cite": ""
+          },
+          {
+            "text": "客服的话还要你自己去平台回。",
+            "cite": ""
+          },
+          {
+            "text": "件数是手工快照，过一会就会过期。",
+            "cite": ""
+          },
+          {
+            "text": "不要写买家真名和店铺账号。",
+            "cite": ""
+          }
+        ]
+      },
+      "sources": [
+        "README.md#产品北极星",
+        "01_research/social_absorption/resources/2ce0a92e3b53573c4fcde3c85d6e3621385fbede/analysis.json",
+        "01_research/social_absorption/resources/45c2336def65d3f104fe3f973e9ae0ec02c887c7/analysis.json"
+      ],
+      "default_on": true,
+      "notes": "店铺激励只用一句提醒。不把本地勾选写成已发货，也不把库存快照写成实时数。"
+    },
+    {
+      "system_id": "research-evidence-warmth",
+      "engine_id": "encouragement",
+      "label": "研究今晚一句",
+      "status": "assembled",
+      "audience": "adult",
+      "skin": {
+        "lines": [
+          {
+            "text": "没有出处，就先标缺口。不要写成已经证实。",
+            "cite": ""
+          },
+          {
+            "text": "一条结论挂一条出处，就够今晚用。",
+            "cite": ""
+          },
+          {
+            "text": "未核验的摘录，只能当出处不能当事实。",
+            "cite": ""
+          },
+          {
+            "text": "本页不发表，也不生成无来源报告。",
+            "cite": ""
+          },
+          {
+            "text": "课堂材料和论文不要混在这一页。",
+            "cite": ""
+          }
+        ]
+      },
+      "sources": [
+        "README.md#产品北极星",
+        "01_research/social_absorption/scene-syntheses/scene.research-knowledge.evidence-to-report/synthesis.md"
+      ],
+      "default_on": true,
+      "notes": "研究激励只用一句提醒。不把缺口写成已证实，也不把本机笔记写成已发表。"
+    },
+    {
+      "system_id": "exam-practice-warmth",
+      "engine_id": "encouragement",
+      "label": "考公一句暖话",
+      "status": "assembled",
+      "audience": "adult",
+      "skin": {
+        "lines": [
+          {
+            "text": "不积跬步，无以至千里。",
+            "cite": "《荀子》"
+          },
+          {
+            "text": "业精于勤，荒于嬉。",
+            "cite": "韩愈"
+          },
+          {
+            "text": "先做完这一题，再想下一题。",
+            "cite": ""
+          },
+          {
+            "text": "错了就进回炉，这里不记排名。",
+            "cite": ""
+          },
+          {
+            "text": "今天练过，不等于已经会。",
+            "cite": ""
+          },
+          {
+            "text": "题目是自编通用题，不是上岸保证。",
+            "cite": ""
+          }
+        ]
+      },
+      "sources": [
+        "README.md#产品北极星",
+        "user:2026-08-19-adult-warmth-or-poetry",
+        "lan:resource:9c06d572f00eefe0298a0ee7ef6ad3ffcc6e8f6d"
+      ],
+      "default_on": true,
+      "notes": "考公激励是每日一句鼓励或公版短句。不是星星，不保证上岸。"
+    },
+    {
+      "system_id": "content-tonight-warmth",
+      "engine_id": "encouragement",
+      "label": "自媒体一句暖话",
+      "status": "assembled",
+      "audience": "adult",
+      "skin": {
+        "lines": [
+          {
+            "text": "文章本天成，妙手偶得之。",
+            "cite": "陆游"
+          },
+          {
+            "text": "纸上得来终觉浅，绝知此事要躬行。",
+            "cite": "陆游"
+          },
+          {
+            "text": "先写完这一段，再决定发不发。",
+            "cite": ""
+          },
+          {
+            "text": "没有合适的，就不强行发。",
+            "cite": ""
+          },
+          {
+            "text": "最后发什么，还是你自己定。",
+            "cite": ""
+          },
+          {
+            "text": "写下去，比再记一条观察有用。",
+            "cite": ""
+          }
+        ]
+      },
+      "sources": [
+        "README.md#产品北极星",
+        "user:2026-08-19-adult-warmth-or-poetry",
+        "lan:resource:a4c670a04a18eea457cd66824a411a100abeabe6"
+      ],
+      "default_on": true,
+      "notes": "自媒体激励是每日一句鼓励或公版短句。不是儿童关卡，也不代替写稿。"
+    },
+    {
+      "system_id": "sales-followup-warmth",
+      "engine_id": "encouragement",
+      "label": "销售一句鼓励",
+      "status": "assembled",
+      "audience": "adult",
+      "skin": {
+        "lines": [
+          {
+            "text": "先跟今天这一家就好。",
+            "cite": ""
+          },
+          {
+            "text": "一家一家来，不必一次跟完。",
+            "cite": ""
+          },
+          {
+            "text": "跟了记下，没跟也可以改期。",
+            "cite": ""
+          },
+          {
+            "text": "消息还是你自己发。",
+            "cite": ""
+          },
+          {
+            "text": "不跟也是今天的一种判断。",
+            "cite": ""
+          },
+          {
+            "text": "脱敏代号已经是在保护双方。",
+            "cite": ""
+          }
+        ]
+      },
+      "sources": [
+        "README.md#产品北极星",
+        "user:2026-08-19-sales-encouragement"
+      ],
+      "default_on": true,
+      "notes": "销售激励只用鼓励的话。不是诗句、星星或成交预测。"
+    },
+    {
+      "system_id": "garden-progress",
+      "engine_id": "progress_projection",
+      "label": "花园进度",
+      "status": "assembled",
+      "audience": "child",
+      "skin": {
+        "caption": "只表示这几天来过，不是成绩"
+      },
+      "sources": [
+        "03_decision/adoption_matrix.json"
+      ],
+      "default_on": true,
+      "notes": "只投影事实，不兑换、不惩罚。不和植物伙伴抢首页主角。连续来过另投影在伙伴卡近三日三格上；打开首页就算今天来过，不加星星、不改掌握，也不写成连续天数。"
+    },
+    {
+      "system_id": "life-21-day-facts",
+      "engine_id": "adult_fact_projection",
+      "label": "可选 21 天目标与本地里程碑",
+      "status": "assembled",
+      "audience": "adult",
+      "default_on": false,
+      "sources": [
+        "01_research/2026-08-30_workbuddy-official-showcases/cross_case_synthesis.md"
+      ]
+    },
+    {
+      "system_id": "cet4-sprint-facts",
+      "engine_id": "adult_fact_projection",
+      "label": "四级目标等分与练习事实",
+      "status": "assembled",
+      "audience": "adult",
+      "default_on": true,
+      "sources": [
+        "references/cet4-original-content.json"
+      ]
+    }
+  ],
+  "rejected": [
+    {
+      "id": "multi-currency",
+      "label": "星光/宠物粮/宝石三套货币",
+      "reason": "三本账会把注意力从做事转到刷钱包"
+    },
+    {
+      "id": "lives-hp",
+      "label": "生命值、掉血、清空",
+      "reason": "羞辱和强迫，矩阵已 reject"
+    },
+    {
+      "id": "streak-wipe",
+      "label": "连续天数清零 / 全勤施压",
+      "reason": "中断焦虑；日历只保留事实"
+    },
+    {
+      "id": "auto-physical-reward",
+      "label": "电视零食零花钱自动兑换",
+      "reason": "儿童越权；实物只走家长确认"
+    },
+    {
+      "id": "sibling-compare",
+      "label": "兄弟姐妹比阳光",
+      "reason": "不进儿童面"
+    },
+    {
+      "id": "xp-as-mastery",
+      "label": "经验或宠物状态当成学会了",
+      "reason": "漂亮指标冒充掌握"
+    },
+    {
+      "id": "heavy-daily-load",
+      "label": "十四项日课和全完成加倍",
+      "reason": "过载"
+    },
+    {
+      "id": "payment",
+      "label": "支付内购商户核销",
+      "reason": "永久禁止"
+    }
+  ]
+}

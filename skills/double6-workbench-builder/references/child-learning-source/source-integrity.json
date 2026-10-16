@@ -1,0 +1,40 @@
+{
+  "contract_version": "bundled_child_learning_source_v1",
+  "formal_product_version": "1.7.2",
+  "content_changed": false,
+  "content_library_files": {
+    "source_path": "source.json",
+    "adaptive_source_path": "adaptive_source.json",
+    "replacement_source_path": "replacement_source.json"
+  },
+  "files": {
+    "index.source.html": {
+      "sha256": "5ecaa18f6b13d1400b9d90b122ee66cefbb65d4d56efd6f48541cdbe6ea641bc",
+      "bytes": 329127
+    },
+    "product.json": {
+      "sha256": "f70fc86bc232fb0c448112cd23ab4f8c3c2dedcb2b9c11f63ad71074e8bd309a",
+      "bytes": 9773
+    },
+    "learning-path-14-day.json": {
+      "sha256": "ac2497dda0e02ecd9a9575399caf75cdb8b14329492b6b26603dbab7c5ec8534",
+      "bytes": 27485
+    },
+    "catalog.json": {
+      "sha256": "d18ce215f48e166591b7a959b87c21054151cf5f5d51a27b943336a8d813c60d",
+      "bytes": 37841
+    },
+    "source.json": {
+      "sha256": "c308235a43337baddc5c8b893431a31714e1da4b8943b1b01e6149f99e574708",
+      "bytes": 104565
+    },
+    "adaptive_source.json": {
+      "sha256": "78c20f2aa2bc3f00c3a36225b9abf656c5677f1b095147dd3ad6ec9b1c8be8c1",
+      "bytes": 111666
+    },
+    "replacement_source.json": {
+      "sha256": "94eed9c7824c14a1fe7f987f7fdc2c2d889de7de0aa8e3298fcf04315195f6b6",
+      "bytes": 34403
+    }
+  }
+}

@@ -1,1 +1,4 @@
 skills/double6-ppt-cli/vendor/ppt-master-core/** -text
+
+# 儿童冻结内容按原始字节分发，避免 Windows 换行转换破坏 SHA 校验。
+skills/double6-workbench-builder/references/child-learning-source/** -text

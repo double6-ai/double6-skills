@@ -1,0 +1,1056 @@
+{
+  "schema_version": 1,
+  "contract_version": "double6_surface_primitives_v1",
+  "status": "executable_ready_for_v0_52",
+  "scope": {
+    "parent_contract": "double6_capability_supply_v1",
+    "contract_type": "surface_primitive",
+    "selected_scope_only": true,
+    "catalog_is_not_execution": true,
+    "surface_is_not_business_truth": true
+  },
+  "counts": {
+    "surface_primitives": 9,
+    "executable_ready": 9,
+    "contract_ready": 0,
+    "legacy_surface_types_mapped": 6,
+    "unmapped_legacy_surface_types": 0
+  },
+  "hierarchy": {
+    "level": "surface_primitive",
+    "parent_path": [
+      "user_need",
+      "domain",
+      "scene_profile",
+      "module",
+      "capability",
+      "atomic_capability"
+    ],
+    "child_path": [
+      "final_workbench"
+    ],
+    "placement_levels": [
+      "home",
+      "module",
+      "detail",
+      "adult_settings"
+    ],
+    "binding_rule": "a surface primitive is rendered only when reachable from the selected scene, selected module, selected capability and selected atomic capability path"
+  },
+  "mappings": {
+    "legacy_surface_types": {
+      "action_checklist": "surface.checklist",
+      "record_ledger": "surface.record-ledger",
+      "stage_board": "surface.stage-board",
+      "metric_log": "surface.metric",
+      "review_journal": "surface.review",
+      "reward_economy": "surface.reward-exchange"
+    },
+    "runtime_special_surfaces": {
+      "renderTodayBoard": "surface.today-action",
+      "starter_reference_cards": "surface.library",
+      "starter_question_and_generator_flow": "surface.guided-practice"
+    },
+    "compatibility_rule": "legacy surface type values remain valid runtime inputs; the stable surface primitive ID is an additive governance mapping and does not rename stored records or runtime selectors"
+  },
+  "surface_primitives": [
+    {
+      "surface_primitive_id": "surface.today-action",
+      "label": "今日行动",
+      "maturity": "executable_ready",
+      "placement_levels": [
+        "home"
+      ],
+      "jobs": [
+        "汇总所选模块中今天到期或已过期且尚未完成的行动",
+        "在首页直接完成一项行动并同步回来源模块",
+        "无待办时引导进入所选首要模块而不伪造任务"
+      ],
+      "inputs": {
+        "required": [
+          "selected_module_ids",
+          "selected_module_records",
+          "local_calendar_date"
+        ],
+        "eligibility": "record has a valid due date not later than local today and is neither completed nor archived",
+        "prohibited": [
+          "unselected_module_records",
+          "synthetic_overdue_items",
+          "catalog_only_capabilities"
+        ]
+      },
+      "state_model": {
+        "kind": "derived_projection",
+        "states": [
+          "empty",
+          "due_today",
+          "overdue_carried_to_today",
+          "completion_pending",
+          "completion_saved",
+          "completion_failed"
+        ],
+        "source_of_truth": "the selected module record; the home projection never owns a second completion state"
+      },
+      "actions": [
+        "view_due_actions",
+        "complete_action",
+        "open_source_module"
+      ],
+      "outputs": [
+        "ordered_due_action_projection",
+        "source_record_completion_update",
+        "empty_state_next_step"
+      ],
+      "failure_modes": [
+        "invalid_or_missing_due_date",
+        "source_record_missing",
+        "local_storage_write_failed",
+        "stale_projection_after_update"
+      ],
+      "recovery": [
+        "exclude invalid dates without creating replacement work",
+        "recompute the projection from selected module state",
+        "on save failure retain the original incomplete record and announce the failure",
+        "offer navigation to the source module when the record still exists"
+      ],
+      "responsive_rules": {
+        "mobile": "single column; summary and first real action appear in the first scroll viewport; complete control is at least 44px",
+        "tablet": "single or two-column composition with actions ordered before aggregate metrics",
+        "desktop": "primary action list remains ahead of analytics and secondary panels",
+        "all": "no horizontal overflow and action identity, due state and source module stay visible"
+      },
+      "accessibility_rules": [
+        "completion controls have an accessible name containing the action identity",
+        "overdue state is expressed in text and not by color alone",
+        "save success or failure is announced through a polite live region",
+        "keyboard focus remains on a meaningful next control after completion"
+      ],
+      "acceptance": [
+        {
+          "acceptance_id": "surface.today-action.selected-scope",
+          "check": "every rendered item belongs to a selected module and satisfies the eligibility expression",
+          "evidence": "runtime projection inspection"
+        },
+        {
+          "acceptance_id": "surface.today-action.truth-sync",
+          "check": "completing from home changes the same source record and survives reload without a duplicate completion ledger",
+          "evidence": "browser interaction plus reload"
+        },
+        {
+          "acceptance_id": "surface.today-action.empty-truth",
+          "check": "zero eligible records renders an honest empty state and no fabricated action",
+          "evidence": "empty-state browser case"
+        }
+      ],
+      "policy_pack_ids": [
+        "policy.synthetic-data-default",
+        "policy.local-sensitive-data-consent"
+      ],
+      "runtime_binding": {
+        "status": "deterministic",
+        "implementation": "scripts/double6_runtime/builder.py:renderTodayBoard",
+        "legacy_surface_type": null
+      }
+    },
+    {
+      "surface_primitive_id": "surface.checklist",
+      "label": "清单",
+      "maturity": "executable_ready",
+      "placement_levels": [
+        "module",
+        "detail"
+      ],
+      "jobs": [
+        "创建和修改可执行事项",
+        "完成、撤销完成、归档和恢复事项",
+        "保留日期与说明以支持今日行动投影"
+      ],
+      "inputs": {
+        "required_fields": [
+          "title"
+        ],
+        "optional_fields": [
+          "due",
+          "details"
+        ],
+        "limits": {
+          "records_per_module": 500,
+          "text_characters_per_field": 10000
+        }
+      },
+      "state_model": {
+        "kind": "local_record_collection",
+        "record_states": [
+          "active",
+          "completed",
+          "archived"
+        ],
+        "transitions": [
+          "active_to_completed",
+          "completed_to_active",
+          "active_or_completed_to_archived",
+          "archived_to_active"
+        ]
+      },
+      "actions": [
+        "create",
+        "update",
+        "delete",
+        "complete",
+        "uncomplete",
+        "archive",
+        "unarchive"
+      ],
+      "outputs": [
+        "persisted_checklist_record",
+        "completion_state",
+        "due_action_projection_input",
+        "exportable_module_state"
+      ],
+      "failure_modes": [
+        "required_title_missing",
+        "record_limit_exceeded",
+        "unsafe_external_record_id",
+        "local_storage_write_failed"
+      ],
+      "recovery": [
+        "keep unsaved field values in the form",
+        "regenerate unsafe imported IDs",
+        "preserve the last persisted collection on mutation failure",
+        "allow export and later import recovery"
+      ],
+      "responsive_rules": {
+        "mobile": "one-column editor and record cards; actions wrap without hiding labels",
+        "tablet": "editor may use two columns while records remain scannable",
+        "desktop": "editor uses available columns and record actions stay adjacent to their record",
+        "all": "minimum 44px touch controls, no horizontal overflow and no desktop table shrink-down"
+      },
+      "accessibility_rules": [
+        "every input has a visible label",
+        "completed and archived states have text in addition to visual styling",
+        "edit and destructive controls name their action",
+        "validation and persistence feedback uses a live region"
+      ],
+      "acceptance": [
+        {
+          "acceptance_id": "surface.checklist.crud",
+          "check": "all declared actions mutate the intended selected-module record",
+          "evidence": "positive and negative browser CRUD path"
+        },
+        {
+          "acceptance_id": "surface.checklist.persistence",
+          "check": "create, state transitions and edits survive reload and export/import",
+          "evidence": "reload and recovery browser path"
+        },
+        {
+          "acceptance_id": "surface.checklist.failure-preservation",
+          "check": "forced storage failure preserves every entered field and the previous persisted truth",
+          "evidence": "storage-failure browser path"
+        }
+      ],
+      "policy_pack_ids": [
+        "policy.synthetic-data-default",
+        "policy.local-sensitive-data-consent"
+      ],
+      "runtime_binding": {
+        "status": "deterministic",
+        "implementation": "scripts/double6_runtime/recommendations.py:SURFACE_FIELDS and scripts/double6_runtime/builder.py",
+        "legacy_surface_type": "action_checklist"
+      }
+    },
+    {
+      "surface_primitive_id": "surface.record-ledger",
+      "label": "台账",
+      "maturity": "executable_ready",
+      "placement_levels": [
+        "module",
+        "detail"
+      ],
+      "jobs": [
+        "按时间保存事实记录",
+        "修改、删除和筛选本地记录",
+        "以原始记录而非推断结论支持后续复盘"
+      ],
+      "inputs": {
+        "required_fields": [
+          "title"
+        ],
+        "optional_fields": [
+          "date",
+          "notes"
+        ],
+        "custom_field_rule": "selected module may replace the default fields only with validated supported field types"
+      },
+      "state_model": {
+        "kind": "appendable_local_ledger",
+        "states": [
+          "empty",
+          "recorded",
+          "filtered",
+          "editing",
+          "save_failed"
+        ],
+        "truth_rule": "the persisted row is an entered fact; the surface does not infer professional, financial, medical or legal conclusions"
+      },
+      "actions": [
+        "create",
+        "update",
+        "delete",
+        "filter"
+      ],
+      "outputs": [
+        "persisted_ledger_row",
+        "filtered_view",
+        "exportable_module_state"
+      ],
+      "failure_modes": [
+        "required_field_missing",
+        "invalid_field_type",
+        "record_limit_exceeded",
+        "local_storage_write_failed"
+      ],
+      "recovery": [
+        "retain the full form on save failure",
+        "keep the last persisted ledger unchanged",
+        "preserve unknown imported fields in legacyImport.unmapped",
+        "support export, confirmed import, immediate undo and clear with confirmation"
+      ],
+      "responsive_rules": {
+        "mobile": "stack fields and ledger cards; filters do not obscure the first record",
+        "tablet": "two-column fields are allowed; record identity and actions stay together",
+        "desktop": "use wider columns without converting the ledger into an inaccessible dense table",
+        "all": "no horizontal overflow and full operation labels remain visible"
+      },
+      "accessibility_rules": [
+        "labels and units are programmatically associated with values",
+        "filtering announces the resulting record state when it changes",
+        "record action order is stable for keyboard users",
+        "errors identify the affected operation without relying on color"
+      ],
+      "acceptance": [
+        {
+          "acceptance_id": "surface.record-ledger.crud-filter",
+          "check": "create, update, delete and filter operate only on the selected module ledger",
+          "evidence": "browser CRUD and filter path"
+        },
+        {
+          "acceptance_id": "surface.record-ledger.roundtrip",
+          "check": "known values round-trip through reload and export/import; unknown values remain quarantined and exportable",
+          "evidence": "normal and legacy import cases"
+        },
+        {
+          "acceptance_id": "surface.record-ledger.no-inference",
+          "check": "rendered outputs do not add a domain conclusion not present in a selected capability",
+          "evidence": "visible-copy and output audit"
+        }
+      ],
+      "policy_pack_ids": [
+        "policy.synthetic-data-default",
+        "policy.local-sensitive-data-consent"
+      ],
+      "runtime_binding": {
+        "status": "deterministic",
+        "implementation": "scripts/double6_runtime/recommendations.py:SURFACE_FIELDS and scripts/double6_runtime/builder.py",
+        "legacy_surface_type": "record_ledger"
+      }
+    },
+    {
+      "surface_primitive_id": "surface.stage-board",
+      "label": "阶段看板",
+      "maturity": "executable_ready",
+      "placement_levels": [
+        "module",
+        "detail"
+      ],
+      "jobs": [
+        "登记处于明确阶段的工作对象",
+        "推进阶段并保留下一步行动",
+        "归档已退出当前流程的对象"
+      ],
+      "inputs": {
+        "required_fields": [
+          "title",
+          "stage"
+        ],
+        "optional_fields": [
+          "next_action"
+        ],
+        "default_stage_order": [
+          "待处理",
+          "进行中",
+          "待确认",
+          "已完成"
+        ]
+      },
+      "state_model": {
+        "kind": "ordered_stage_records",
+        "states": [
+          "active_stage",
+          "archived",
+          "editing",
+          "move_failed"
+        ],
+        "transition_rule": "move advances within the selected module's declared stage order and never moves a different record"
+      },
+      "actions": [
+        "create",
+        "update",
+        "delete",
+        "move",
+        "archive",
+        "unarchive"
+      ],
+      "outputs": [
+        "persisted_stage_record",
+        "next_stage_update",
+        "next_action_projection",
+        "exportable_module_state"
+      ],
+      "failure_modes": [
+        "unknown_stage",
+        "missing_object_identity",
+        "stale_record_during_move",
+        "local_storage_write_failed"
+      ],
+      "recovery": [
+        "reject unknown stages without silently choosing one",
+        "retain the prior stage when a move cannot be saved",
+        "re-render from persisted selected-module state",
+        "offer edit or archive only for the same identified record"
+      ],
+      "responsive_rules": {
+        "mobile": "render as vertically ordered stage cards rather than horizontally compressed columns",
+        "tablet": "allow compact columns only when every stage and action remains readable",
+        "desktop": "columns or record rows may be used while keeping the next action adjacent",
+        "all": "stage order remains the same and no horizontal overflow is introduced"
+      },
+      "accessibility_rules": [
+        "stage is present in text and not encoded only by position or color",
+        "move control announces the destination stage",
+        "keyboard order follows the declared stage order",
+        "save failure is announced while the prior stage stays visible"
+      ],
+      "acceptance": [
+        {
+          "acceptance_id": "surface.stage-board.transition",
+          "check": "move follows the declared order and persists after reload",
+          "evidence": "browser move and reload path"
+        },
+        {
+          "acceptance_id": "surface.stage-board.identity",
+          "check": "all actions preserve record and selected-module identity",
+          "evidence": "multi-record negative case"
+        },
+        {
+          "acceptance_id": "surface.stage-board.mobile",
+          "check": "all stages and actions are usable at the mobile viewport without a desktop board shrink-down",
+          "evidence": "mobile interaction and overflow metrics"
+        }
+      ],
+      "policy_pack_ids": [
+        "policy.synthetic-data-default",
+        "policy.local-sensitive-data-consent"
+      ],
+      "runtime_binding": {
+        "status": "deterministic",
+        "implementation": "scripts/double6_runtime/recommendations.py:SURFACE_FIELDS and scripts/double6_runtime/builder.py",
+        "legacy_surface_type": "stage_board"
+      }
+    },
+    {
+      "surface_primitive_id": "surface.metric",
+      "label": "指标",
+      "maturity": "executable_ready",
+      "placement_levels": [
+        "home",
+        "module",
+        "detail"
+      ],
+      "jobs": [
+        "记录有名称、数值和可选单位的观察值",
+        "按日期和关键词筛选指标记录",
+        "展示只由所选记录计算的可追踪摘要"
+      ],
+      "inputs": {
+        "required_fields": [
+          "metric",
+          "value"
+        ],
+        "optional_fields": [
+          "unit",
+          "date",
+          "notes"
+        ],
+        "number_rule": "value must normalize to a finite number before persistence"
+      },
+      "state_model": {
+        "kind": "typed_metric_log",
+        "states": [
+          "empty",
+          "recorded",
+          "filtered",
+          "invalid_value",
+          "save_failed"
+        ],
+        "truth_rule": "displayed summaries are derived only from selected local rows and are not forecasts, diagnoses or guarantees"
+      },
+      "actions": [
+        "create",
+        "update",
+        "delete",
+        "filter"
+      ],
+      "outputs": [
+        "typed_metric_row",
+        "filtered_metric_view",
+        "traceable_aggregate_when_declared",
+        "exportable_module_state"
+      ],
+      "failure_modes": [
+        "non_finite_value",
+        "missing_metric_identity",
+        "unit_mismatch",
+        "local_storage_write_failed"
+      ],
+      "recovery": [
+        "reject non-finite values and preserve the entered fields",
+        "show the raw unit beside every value used in an aggregate",
+        "fall back to the persisted rows when an aggregate cannot be calculated",
+        "keep the last persisted metric set on write failure"
+      ],
+      "responsive_rules": {
+        "mobile": "numeric input uses an appropriate keypad and a minimum 16px font; cards precede charts",
+        "tablet": "summary and recent values may form two columns without hiding units",
+        "desktop": "analytics remain secondary to the primary task and source rows remain reachable",
+        "all": "charts are optional, textual values are required and no horizontal overflow is allowed"
+      },
+      "accessibility_rules": [
+        "metric name, value and unit have a readable textual representation",
+        "any chart has an equivalent textual summary",
+        "trend or threshold meaning is not conveyed by color alone",
+        "invalid numeric input identifies the field and required correction"
+      ],
+      "acceptance": [
+        {
+          "acceptance_id": "surface.metric.typed-roundtrip",
+          "check": "finite values and units persist without changing meaning across reload and export/import",
+          "evidence": "typed record roundtrip"
+        },
+        {
+          "acceptance_id": "surface.metric.invalid",
+          "check": "invalid values do not replace persisted truth and the complete form remains available",
+          "evidence": "negative input and storage failure cases"
+        },
+        {
+          "acceptance_id": "surface.metric.traceability",
+          "check": "every displayed aggregate can be recomputed from selected visible-source rows",
+          "evidence": "independent aggregate recomputation"
+        }
+      ],
+      "policy_pack_ids": [
+        "policy.synthetic-data-default",
+        "policy.local-sensitive-data-consent"
+      ],
+      "runtime_binding": {
+        "status": "deterministic",
+        "implementation": "scripts/double6_runtime/recommendations.py:SURFACE_FIELDS and scripts/double6_runtime/builder.py",
+        "legacy_surface_type": "metric_log"
+      }
+    },
+    {
+      "surface_primitive_id": "surface.review",
+      "label": "回顾",
+      "maturity": "executable_ready",
+      "placement_levels": [
+        "home",
+        "module",
+        "adult_settings"
+      ],
+      "jobs": [
+        "记录一次回顾结论与下一步",
+        "筛选历史回顾并回到相关行动",
+        "把事实、解释和下一步分开呈现"
+      ],
+      "inputs": {
+        "required_fields": [
+          "conclusion"
+        ],
+        "optional_fields": [
+          "date",
+          "next_action"
+        ],
+        "context_rule": "any projected facts must be reachable from selected modules; user-authored conclusions remain visibly authored conclusions"
+      },
+      "state_model": {
+        "kind": "local_review_journal",
+        "states": [
+          "empty",
+          "draft",
+          "recorded",
+          "filtered",
+          "save_failed"
+        ],
+        "truth_rule": "a review is interpretation over cited local facts and never rewrites the underlying completion, mastery or ledger truth"
+      },
+      "actions": [
+        "create",
+        "update",
+        "delete",
+        "filter"
+      ],
+      "outputs": [
+        "persisted_review_entry",
+        "explicit_next_action_text",
+        "filtered_review_history",
+        "exportable_module_state"
+      ],
+      "failure_modes": [
+        "empty_conclusion",
+        "unreachable_fact_reference",
+        "stale_projection",
+        "local_storage_write_failed"
+      ],
+      "recovery": [
+        "retain the complete draft when validation or persistence fails",
+        "remove an unreachable projection without deleting its source record",
+        "recompute facts from selected module state",
+        "support export and import recovery"
+      ],
+      "responsive_rules": {
+        "mobile": "one focused prompt at a time with conclusion before supporting history",
+        "tablet": "draft and supporting facts may be adjacent if reading order remains linear",
+        "desktop": "history may use a secondary pane but cannot displace the current review task",
+        "all": "long text wraps, remains zoomable and never requires horizontal scrolling"
+      },
+      "accessibility_rules": [
+        "prompts, authored text and projected facts have distinct headings",
+        "textarea labels remain visible while editing",
+        "save status is announced and focus remains in the draft on failure",
+        "history filters and results have a logical keyboard order"
+      ],
+      "acceptance": [
+        {
+          "acceptance_id": "surface.review.authorship",
+          "check": "authored conclusions are visually distinct from source facts and do not mutate them",
+          "evidence": "state diff and visible-copy audit"
+        },
+        {
+          "acceptance_id": "surface.review.draft-recovery",
+          "check": "forced save failure preserves date, conclusion and next action values",
+          "evidence": "full-form storage failure case"
+        },
+        {
+          "acceptance_id": "surface.review.roundtrip",
+          "check": "entries survive reload and export/import with their field meanings intact",
+          "evidence": "browser recovery path"
+        }
+      ],
+      "policy_pack_ids": [
+        "policy.synthetic-data-default",
+        "policy.local-sensitive-data-consent"
+      ],
+      "runtime_binding": {
+        "status": "deterministic",
+        "implementation": "scripts/double6_runtime/recommendations.py:SURFACE_FIELDS and scripts/double6_runtime/builder.py",
+        "legacy_surface_type": "review_journal"
+      }
+    },
+    {
+      "surface_primitive_id": "surface.library",
+      "label": "资料库",
+      "maturity": "executable_ready",
+      "placement_levels": [
+        "module",
+        "detail"
+      ],
+      "jobs": [
+        "浏览所选能力随附的内置参考内容",
+        "按来源边界、主题和状态查找材料",
+        "记录已查看状态但不把查看等同于掌握或完成真实工作"
+      ],
+      "inputs": {
+        "required": [
+          "selected_capability_content_items",
+          "content_item_id",
+          "title",
+          "source_label",
+          "declared_boundary"
+        ],
+        "optional": [
+          "body",
+          "source_url",
+          "verified_at",
+          "topic_tags",
+          "offline_audio_text"
+        ],
+        "prohibited": [
+          "unselected_catalog_items",
+          "unstated_license_claims",
+          "secrets_or_session_material"
+        ]
+      },
+      "state_model": {
+        "kind": "selected_content_projection",
+        "states": [
+          "available",
+          "opened",
+          "reviewed",
+          "source_boundary_visible",
+          "unavailable"
+        ],
+        "truth_rule": "content provenance and boundary come from the frozen selected content contract; viewed state is user progress only"
+      },
+      "actions": [
+        "browse",
+        "filter",
+        "open_item",
+        "mark_reviewed",
+        "unmark_reviewed",
+        "read_aloud_when_supported"
+      ],
+      "outputs": [
+        "selected_content_view",
+        "reviewed_state",
+        "source_and_boundary_disclosure",
+        "graceful_read_aloud_status"
+      ],
+      "failure_modes": [
+        "content_item_not_selected",
+        "source_boundary_missing",
+        "read_aloud_unavailable",
+        "local_progress_write_failed"
+      ],
+      "recovery": [
+        "refuse unselected content instead of falling back to the full catalog",
+        "show a source-boundary error without inventing provenance",
+        "keep text usable when local speech synthesis is unavailable",
+        "retain the previous reviewed state on persistence failure"
+      ],
+      "responsive_rules": {
+        "mobile": "single-column cards with readable text and controls following the item",
+        "tablet": "two-column browsing is allowed while an opened item uses a readable single content column",
+        "desktop": "index and detail may be adjacent but keyboard reading order follows index then active detail",
+        "all": "content remains zoomable, long URLs wrap and no source disclosure is clipped"
+      },
+      "accessibility_rules": [
+        "each item has a unique accessible title",
+        "opened and reviewed states are expressed in text",
+        "expandable content uses native details or equivalent expanded state",
+        "read-aloud failure never blocks visual access to the same text"
+      ],
+      "acceptance": [
+        {
+          "acceptance_id": "surface.library.selected-only",
+          "check": "rendered item IDs equal the selected content item set and no catalog-only item is serialized",
+          "evidence": "compiled payload and DOM identity comparison"
+        },
+        {
+          "acceptance_id": "surface.library.boundary",
+          "check": "every opened item exposes its declared source boundary without unsupported authority or license claims",
+          "evidence": "content contract and visible-copy audit"
+        },
+        {
+          "acceptance_id": "surface.library.fallback",
+          "check": "disabling speech synthesis leaves all content and reviewed controls usable",
+          "evidence": "negative browser capability case"
+        }
+      ],
+      "policy_pack_ids": [
+        "policy.synthetic-data-default",
+        "policy.local-sensitive-data-consent"
+      ],
+      "runtime_binding": {
+        "status": "deterministic_selected_scope",
+        "implementation": "scripts/double6_runtime/builder.py starter reference cards with data-surface-library and selected-only compiler binding",
+        "legacy_surface_type": null,
+        "evidence": "v0.52 16-domain three-viewport combination receipt plus selected-scope static inspection"
+      }
+    },
+    {
+      "surface_primitive_id": "surface.guided-practice",
+      "label": "引导练习",
+      "maturity": "executable_ready",
+      "placement_levels": [
+        "module",
+        "detail"
+      ],
+      "jobs": [
+        "用单题或单任务流程完成一次可反馈练习",
+        "在提交后显示对错、答案、解析、知识点、难度与来源标签",
+        "保存续做位置和错题记录但不擅自写入独立掌握结论"
+      ],
+      "inputs": {
+        "required": [
+          "selected_practice_item_id",
+          "prompt",
+          "response_contract",
+          "answer",
+          "explanation",
+          "knowledge_point",
+          "difficulty",
+          "source_label"
+        ],
+        "optional": [
+          "hint",
+          "semantic_visual",
+          "guardian_confirmation_rubric",
+          "generator_parameters"
+        ],
+        "truth_boundary": "selected sealed answer or deterministic generator truth is authoritative for the attempt; the surface cannot change it"
+      },
+      "state_model": {
+        "kind": "attempt_flow",
+        "states": [
+          "ready",
+          "answering",
+          "submitted_incorrect",
+          "submitted_correct",
+          "explanation_visible",
+          "next_ready",
+          "paused",
+          "save_failed"
+        ],
+        "mastery_effect": false,
+        "progress_rule": "attempt and resume state may persist; guided practice alone is not independent mastery or guardian verification"
+      },
+      "actions": [
+        "select_or_enter_answer",
+        "submit",
+        "show_hint",
+        "show_explanation",
+        "next_item",
+        "pause",
+        "resume",
+        "clear_answer"
+      ],
+      "outputs": [
+        "immediate_correctness_feedback",
+        "answer_and_explanation",
+        "attempt_record_with_affects_mastery_false",
+        "mistake_record",
+        "resume_position"
+      ],
+      "failure_modes": [
+        "answer_truth_missing",
+        "response_contract_mismatch",
+        "promised_semantic_visual_missing",
+        "unsafe_offscreen_action_without_guardian_gate",
+        "attempt_persistence_failed"
+      ],
+      "recovery": [
+        "block the affected item when answer truth is missing rather than guess",
+        "preserve the current answer on submit or persistence failure",
+        "return to the same selected item after reload when resume state is valid",
+        "require the declared guardian confirmation before completing an offscreen action"
+      ],
+      "responsive_rules": {
+        "mobile": "one item per screen; large options or an in-page numeric keypad; feedback appears below the answered item without obstruction",
+        "tablet": "keep the same single-item flow with optional adjacent hint or reference panel",
+        "desktop": "supporting explanation may be adjacent but cannot reveal the answer before submit",
+        "all": "controls are at least 44px, animations respect reduced motion and the next item resets transient feedback"
+      },
+      "accessibility_rules": [
+        "answer controls expose prompt context, selected state and disabled state",
+        "correctness is announced in text and through a live region, not color alone",
+        "semantic visuals have a non-empty accessible name that matches the prompt",
+        "keyboard users can answer, submit, read feedback and continue in logical order"
+      ],
+      "acceptance": [
+        {
+          "acceptance_id": "surface.guided-practice.truth",
+          "check": "independent recomputation agrees with every accepted answer and every wrong answer is rejected",
+          "evidence": "sealed truth plus positive and negative interaction cases"
+        },
+        {
+          "acceptance_id": "surface.guided-practice.no-mastery",
+          "check": "attempt, hint, correct answer and refresh never mutate mastery, completion evidence or guardian verification",
+          "evidence": "before-and-after state diff"
+        },
+        {
+          "acceptance_id": "surface.guided-practice.three-viewport",
+          "check": "the complete answer-feedback-next path succeeds on mobile, tablet and desktop without answer leakage or overflow",
+          "evidence": "three-viewport browser interaction"
+        }
+      ],
+      "policy_pack_ids": [
+        "policy.synthetic-data-default",
+        "policy.guided-practice-safety",
+        "policy.reversible-constraint"
+      ],
+      "runtime_binding": {
+        "status": "deterministic_selected_scope",
+        "implementation": "scripts/double6_runtime/builder.py selected starter question, generator, calculator, prompt, template and action flow",
+        "legacy_surface_type": null,
+        "evidence": "v0.52 policy isolation vectors and 16-domain three-viewport combination receipt"
+      }
+    },
+    {
+      "surface_primitive_id": "surface.reward-exchange",
+      "label": "奖励兑换",
+      "maturity": "executable_ready",
+      "placement_levels": [
+        "module",
+        "adult_settings"
+      ],
+      "jobs": [
+        "展示由奖励账本提供的余额与可兑换项目",
+        "提交一次本地兑换意图并展示结果",
+        "允许成人维护家庭自定义奖励目录而不接入支付或交易"
+      ],
+      "inputs": {
+        "required": [
+          "reward_ledger_balance",
+          "selected_reward_catalog",
+          "reward_item_id",
+          "reward_cost",
+          "authorized_redeemer_context"
+        ],
+        "optional": [
+          "adult_defined_title",
+          "adult_defined_note",
+          "badge_projection",
+          "practice_calendar_projection"
+        ],
+        "prohibited": [
+          "payment_credentials",
+          "merchant_checkout",
+          "transferable_assets",
+          "child_rule_editing"
+        ]
+      },
+      "state_model": {
+        "kind": "reward_ledger_projection_and_command",
+        "surface_states": [
+          "catalog_visible",
+          "insufficient_balance",
+          "redeem_confirmation_pending",
+          "redeemed",
+          "save_failed"
+        ],
+        "business_truth_owner": "policy-bound local reward ledger outside the presentation state",
+        "truth_invariants": [
+          "reward balance never changes mastery",
+          "reward balance never changes completion evidence",
+          "reward redemption never changes domain business records",
+          "no external fulfillment, payment or merchant transaction is implied"
+        ]
+      },
+      "actions": [
+        "view_balance",
+        "filter_catalog",
+        "request_redeem",
+        "confirm_redeem",
+        "cancel_redeem",
+        "create_adult_catalog_item",
+        "update_adult_catalog_item",
+        "delete_adult_catalog_item"
+      ],
+      "outputs": [
+        "reward_ledger_command_result",
+        "updated_balance_projection",
+        "local_redemption_history",
+        "manual_fulfillment_reminder"
+      ],
+      "failure_modes": [
+        "insufficient_balance",
+        "unknown_or_unselected_reward_item",
+        "unauthorized_rule_change",
+        "duplicate_redemption_command",
+        "reward_ledger_write_failed"
+      ],
+      "recovery": [
+        "reject insufficient or unauthorized redemption without changing the ledger",
+        "use a command identity to prevent duplicate deduction",
+        "on write failure preserve the previous balance and history",
+        "allow an adult to cancel or reverse a reversible local reward according to policy"
+      ],
+      "responsive_rules": {
+        "mobile": "balance, catalog item and labeled redeem control remain together in one-column cards",
+        "tablet": "catalog may use two columns; adult editing remains separated from child-facing browsing",
+        "desktop": "balance and history may be supporting panels while the active redemption remains primary",
+        "all": "insufficient state is textual, controls are at least 44px and no cost or confirmation is clipped"
+      },
+      "accessibility_rules": [
+        "every redeem control names the reward and cost",
+        "balance changes and failures are announced through a live region",
+        "disabled redemption exposes the insufficient-balance reason",
+        "adult-only controls are absent from the child interaction scope rather than merely color-coded"
+      ],
+      "acceptance": [
+        {
+          "acceptance_id": "surface.reward-exchange.truth-isolation",
+          "check": "successful and failed redemption change only the reward ledger fields and never mastery, completion or domain records",
+          "evidence": "full-state before-and-after diff"
+        },
+        {
+          "acceptance_id": "surface.reward-exchange.atomicity",
+          "check": "a successful command deducts exactly once and a failed write deducts zero times after reload",
+          "evidence": "success, duplicate and forced-failure browser cases"
+        },
+        {
+          "acceptance_id": "surface.reward-exchange.no-commerce",
+          "check": "candidate contains no payment, merchant, purchase or transferable-asset operation",
+          "evidence": "runtime payload and external-request audit"
+        }
+      ],
+      "policy_pack_ids": [
+        "policy.reward-truth-isolation",
+        "policy.reversible-constraint",
+        "policy.external-operation-confirmation",
+        "policy.local-sensitive-data-consent"
+      ],
+      "runtime_binding": {
+        "status": "deterministic",
+        "implementation": "scripts/double6_runtime/recommendations.py reward_economy and scripts/double6_runtime/builder.py reward ledger",
+        "legacy_surface_type": "reward_economy"
+      }
+    }
+  ],
+  "audit": {
+    "audited_at": "2026-08-14",
+    "required_surface_fields": [
+      "surface_primitive_id",
+      "label",
+      "maturity",
+      "placement_levels",
+      "jobs",
+      "inputs",
+      "state_model",
+      "actions",
+      "outputs",
+      "failure_modes",
+      "recovery",
+      "responsive_rules",
+      "accessibility_rules",
+      "acceptance"
+    ],
+    "facts_read": [
+      "references/capability-supply-contract.json",
+      "references/design-system.json",
+      "references/vivid-social-template-system.json",
+      "scripts/double6_runtime/recommendations.py",
+      "scripts/double6_runtime/builder.py",
+      "scripts/double6_browser_collector.py"
+    ],
+    "requested_paths_missing": [
+      "references/design-system.md",
+      "references/templates.md"
+    ],
+    "requested_path_substitutions": {
+      "references/design-system.md": "references/design-system.json",
+      "references/templates.md": "references/vivid-social-template-system.json"
+    },
+    "maturity_notes": [
+      "six legacy surface types keep additive deterministic mappings and are executable_ready",
+      "surface.today-action is executable_ready because the current builder and browser collector exercise its shared-record projection",
+      "surface.library and surface.guided-practice are executable_ready through stable selected-scope bindings and v0.52 browser evidence",
+      "no surface is claimed release_ready by this contract"
+    ],
+    "known_gaps": [
+      "stable primitive IDs are additive governance bindings and stay out of visible copy",
+      "library and guided practice share the selected starter runtime rather than separate application bundles",
+      "no surface is release_ready or backed by long-term real-user evidence",
+      "reward truth isolation is declared here but remains governed by the separate policy pack and runtime ledger"
+    ]
+  }
+}

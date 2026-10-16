@@ -1,0 +1,3482 @@
+{
+  "schema_version": "child-learning-content-pack/v1",
+  "pack_id": "child-learning-expansion-batch1-36",
+  "stage_id": "primary-transition-1-to-2",
+  "scope": {
+    "status": "project_local_review_batch",
+    "generic_not_textbook_aligned": true,
+    "formal_product_integration": false,
+    "atom_build_or_update": false,
+    "batch_size": 36,
+    "deployment": false,
+    "host_sync": false,
+    "shared_promotion": false
+  },
+  "families": [
+    "family-life-math",
+    "family-image-hanzi",
+    "family-theme-english",
+    "family-classification-reasoning",
+    "family-reading-poetry",
+    "family-offscreen-action"
+  ],
+  "authored_by": "double6_child_content_author_v1",
+  "generated_at": "2026-08-12T15:00:00+08:00",
+  "source_file": "workflows/child-learning-content-expansion/scripts/content_source.py",
+  "items": [
+    {
+      "item_id": "math-foundation-apples-8-to-10",
+      "family_id": "family-life-math",
+      "family_name": "生活数学",
+      "level": "foundation",
+      "level_label": "基础识别",
+      "mode": "assessment",
+      "kind": "arithmetic",
+      "title": "🍎 苹果补到十",
+      "target_atom_ids": [
+        "learn-add-make-ten-100-v1"
+      ],
+      "objective": "用苹果一一对应求从 8 补到 10 的缺数",
+      "prompt": "8个苹果还差几个到10个？",
+      "cues": [
+        "先点数",
+        "再补齐"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "foundation",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "deterministic_arithmetic:10-8=2"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a69ddf6/ev-v09",
+          "cls-xhs-6a68df35/ev-013",
+          "cls-bili-bv1xt3t6here/EV-VID-02"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🧺",
+        "snapshot_labels": [
+          "现在有8个"
+        ]
+      },
+      "duplicate_signature": "add_missing:8:10:🍎",
+      "options": [
+        {
+          "value": "1",
+          "semantic": "number_1",
+          "label": "1"
+        },
+        {
+          "value": "2",
+          "semantic": "number_2",
+          "label": "2"
+        },
+        {
+          "value": "3",
+          "semantic": "number_3",
+          "label": "3"
+        }
+      ],
+      "oracle": {
+        "operation": "add_missing",
+        "answer": "2",
+        "initial_count": 8,
+        "added_count": 2,
+        "target_count": 10,
+        "explanation": "8 再添 2 就是 10。",
+        "explanation_result": 2
+      },
+      "render_contract": {
+        "object_counts": [
+          8
+        ],
+        "object_count_selector": ".bridge-step .object-row",
+        "object_token": "🍎",
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "现在有8个",
+          "🍎🍎🍎🍎🍎🍎🍎🍎",
+          "8个苹果还差几个到10个？"
+        ],
+        "expected_success_tokens": [
+          "再添 2",
+          "就是 10"
+        ],
+        "required_semantics": [
+          "initial_8",
+          "target_10"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "math-foundation-candy-6-to-10",
+      "family_id": "family-life-math",
+      "family_name": "生活数学",
+      "level": "foundation",
+      "level_label": "基础识别",
+      "mode": "assessment",
+      "kind": "arithmetic",
+      "title": "🍬 糖果补到十",
+      "target_atom_ids": [
+        "learn-count-one-to-one-20-v1"
+      ],
+      "objective": "用糖果一一对应求从 6 补到 10 的缺数",
+      "prompt": "6颗糖果还差几颗到10颗？",
+      "cues": [
+        "先点数",
+        "再补齐"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "foundation",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "deterministic_arithmetic:10-6=4"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a69ddf6/ev-v09",
+          "cls-xhs-6a68df35/ev-013",
+          "cls-bili-bv1xt3t6here/EV-VID-02"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🧺",
+        "snapshot_labels": [
+          "现在有6颗"
+        ]
+      },
+      "duplicate_signature": "add_missing:6:10:🍬",
+      "options": [
+        {
+          "value": "3",
+          "semantic": "number_3",
+          "label": "3"
+        },
+        {
+          "value": "4",
+          "semantic": "number_4",
+          "label": "4"
+        },
+        {
+          "value": "5",
+          "semantic": "number_5",
+          "label": "5"
+        }
+      ],
+      "oracle": {
+        "operation": "add_missing",
+        "answer": "4",
+        "initial_count": 6,
+        "added_count": 4,
+        "target_count": 10,
+        "explanation": "6 再添 4 就是 10。",
+        "explanation_result": 4
+      },
+      "render_contract": {
+        "object_counts": [
+          6
+        ],
+        "object_count_selector": ".bridge-step .object-row",
+        "object_token": "🍬",
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "现在有6颗",
+          "🍬🍬🍬🍬🍬🍬",
+          "6颗糖果还差几颗到10颗？"
+        ],
+        "expected_success_tokens": [
+          "再添 4",
+          "就是 10"
+        ],
+        "required_semantics": [
+          "initial_6",
+          "target_10"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "math-guided-flowers-13-minus-5",
+      "family_id": "family-life-math",
+      "family_name": "生活数学",
+      "level": "guided",
+      "level_label": "有提示练习",
+      "mode": "guided_practice",
+      "kind": "arithmetic",
+      "title": "🌼 花朵先到十",
+      "target_atom_ids": [
+        "learn-subtract-bridge-ten-100-v1"
+      ],
+      "objective": "跟随具象分步图完成 13 减 5",
+      "prompt": "13朵花拿走5朵，还剩几朵？",
+      "cues": [
+        "先到整十",
+        "再继续减"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "guided",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "deterministic_arithmetic:13-5=8",
+          "deterministic_step_chain:13-3=10;10-2=8"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a69ddf6/ev-v09",
+          "cls-xhs-6a68df35/ev-013",
+          "cls-bili-bv1xt3t6here/EV-VID-02"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🪜",
+        "snapshot_labels": [
+          "开始：13",
+          "先减3",
+          "再减2"
+        ]
+      },
+      "duplicate_signature": "guided_subtract:13:5:🌼",
+      "options": [
+        {
+          "value": "7",
+          "semantic": "number_7",
+          "label": "7"
+        },
+        {
+          "value": "8",
+          "semantic": "number_8",
+          "label": "8"
+        },
+        {
+          "value": "9",
+          "semantic": "number_9",
+          "label": "9"
+        }
+      ],
+      "oracle": {
+        "operation": "subtract",
+        "answer": "8",
+        "initial_count": 13,
+        "removed_count": 5,
+        "remaining_count": 8,
+        "steps": [
+          {
+            "before": 13,
+            "remove": 3,
+            "after": 10
+          },
+          {
+            "before": 10,
+            "remove": 2,
+            "after": 8
+          }
+        ],
+        "explanation": "先从 13 减 3 到 10，再减 2，剩 8。",
+        "explanation_result": 8
+      },
+      "render_contract": {
+        "object_counts": [
+          13,
+          10,
+          8
+        ],
+        "object_count_selector": ".bridge-step .object-row",
+        "object_token": "🌼",
+        "pre_action_answer_exposed": true,
+        "guided_hint": "三个守恒快照给出完整提示，只能作为跟随练习。",
+        "required_pre_action_tokens": [
+          "开始：13",
+          "先减3",
+          "再减2",
+          "13朵花拿走5朵，还剩几朵？"
+        ],
+        "expected_success_tokens": [
+          "减 3 到 10",
+          "剩 8"
+        ],
+        "required_semantics": [
+          "start_13",
+          "middle_10",
+          "result_8"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "math-guided-fish-14-minus-6",
+      "family_id": "family-life-math",
+      "family_name": "生活数学",
+      "level": "guided",
+      "level_label": "有提示练习",
+      "mode": "guided_practice",
+      "kind": "arithmetic",
+      "title": "🐟 小鱼先到十",
+      "target_atom_ids": [
+        "learn-subtract-bridge-ten-100-v1"
+      ],
+      "objective": "跟随具象分步图完成 14 减 6",
+      "prompt": "14条小鱼游走6条，还剩几条？",
+      "cues": [
+        "先到整十",
+        "再继续减"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "guided",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "deterministic_arithmetic:14-6=8",
+          "deterministic_step_chain:14-4=10;10-2=8"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a69ddf6/ev-v09",
+          "cls-xhs-6a68df35/ev-013",
+          "cls-bili-bv1xt3t6here/EV-VID-02"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🪜",
+        "snapshot_labels": [
+          "开始：14",
+          "先减4",
+          "再减2"
+        ]
+      },
+      "duplicate_signature": "guided_subtract:14:6:🐟",
+      "options": [
+        {
+          "value": "7",
+          "semantic": "number_7",
+          "label": "7"
+        },
+        {
+          "value": "8",
+          "semantic": "number_8",
+          "label": "8"
+        },
+        {
+          "value": "9",
+          "semantic": "number_9",
+          "label": "9"
+        }
+      ],
+      "oracle": {
+        "operation": "subtract",
+        "answer": "8",
+        "initial_count": 14,
+        "removed_count": 6,
+        "remaining_count": 8,
+        "steps": [
+          {
+            "before": 14,
+            "remove": 4,
+            "after": 10
+          },
+          {
+            "before": 10,
+            "remove": 2,
+            "after": 8
+          }
+        ],
+        "explanation": "先从 14 减 4 到 10，再减 2，剩 8。",
+        "explanation_result": 8
+      },
+      "render_contract": {
+        "object_counts": [
+          14,
+          10,
+          8
+        ],
+        "object_count_selector": ".bridge-step .object-row",
+        "object_token": "🐟",
+        "pre_action_answer_exposed": true,
+        "guided_hint": "三个守恒快照给出完整提示，只能作为跟随练习。",
+        "required_pre_action_tokens": [
+          "开始：14",
+          "先减4",
+          "再减2",
+          "14条小鱼游走6条，还剩几条？"
+        ],
+        "expected_success_tokens": [
+          "减 4 到 10",
+          "剩 8"
+        ],
+        "required_semantics": [
+          "start_14",
+          "middle_10",
+          "result_8"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "math-transfer-flowers-9-to-15",
+      "family_id": "family-life-math",
+      "family_name": "生活数学",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "mode": "assessment",
+      "kind": "arithmetic",
+      "title": "🌼 花坛补一补",
+      "target_atom_ids": [
+        "learn-add-make-ten-100-v1"
+      ],
+      "objective": "用花朵一一对应求从 9 补到 15 的缺数",
+      "prompt": "9朵花添几朵就是15朵？",
+      "cues": [
+        "先点数",
+        "再补齐"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "transfer",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "deterministic_arithmetic:15-9=6"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a69ddf6/ev-v09",
+          "cls-xhs-6a68df35/ev-013",
+          "cls-bili-bv1xt3t6here/EV-VID-02"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🧺",
+        "snapshot_labels": [
+          "花坛有9朵"
+        ]
+      },
+      "duplicate_signature": "add_missing:9:15:🌼",
+      "options": [
+        {
+          "value": "5",
+          "semantic": "number_5",
+          "label": "5"
+        },
+        {
+          "value": "6",
+          "semantic": "number_6",
+          "label": "6"
+        },
+        {
+          "value": "7",
+          "semantic": "number_7",
+          "label": "7"
+        }
+      ],
+      "oracle": {
+        "operation": "add_missing",
+        "answer": "6",
+        "initial_count": 9,
+        "added_count": 6,
+        "target_count": 15,
+        "explanation": "9 再添 6 就是 15。",
+        "explanation_result": 6
+      },
+      "render_contract": {
+        "object_counts": [
+          9
+        ],
+        "object_count_selector": ".bridge-step .object-row",
+        "object_token": "🌼",
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "花坛有9朵",
+          "🌼🌼🌼🌼🌼🌼🌼🌼🌼",
+          "9朵花添几朵就是15朵？"
+        ],
+        "expected_success_tokens": [
+          "再添 6",
+          "就是 15"
+        ],
+        "required_semantics": [
+          "initial_9",
+          "target_15"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "math-transfer-fish-12-to-20",
+      "family_id": "family-life-math",
+      "family_name": "生活数学",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "mode": "assessment",
+      "kind": "arithmetic",
+      "title": "🐟 鱼群补到二十",
+      "target_atom_ids": [
+        "learn-count-one-to-one-20-v1"
+      ],
+      "objective": "用小鱼一一对应求从 12 补到 20 的缺数",
+      "prompt": "12条小鱼还差几条到20条？",
+      "cues": [
+        "先点数",
+        "再补齐"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "transfer",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "deterministic_arithmetic:20-12=8"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a69ddf6/ev-v09",
+          "cls-xhs-6a68df35/ev-013",
+          "cls-bili-bv1xt3t6here/EV-VID-02"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🧺",
+        "snapshot_labels": [
+          "水里有12条"
+        ]
+      },
+      "duplicate_signature": "add_missing:12:20:🐟",
+      "options": [
+        {
+          "value": "7",
+          "semantic": "number_7",
+          "label": "7"
+        },
+        {
+          "value": "8",
+          "semantic": "number_8",
+          "label": "8"
+        },
+        {
+          "value": "9",
+          "semantic": "number_9",
+          "label": "9"
+        }
+      ],
+      "oracle": {
+        "operation": "add_missing",
+        "answer": "8",
+        "initial_count": 12,
+        "added_count": 8,
+        "target_count": 20,
+        "explanation": "12 再添 8 就是 20。",
+        "explanation_result": 8
+      },
+      "render_contract": {
+        "object_counts": [
+          12
+        ],
+        "object_count_selector": ".bridge-step .object-row",
+        "object_token": "🐟",
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "水里有12条",
+          "🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟",
+          "12条小鱼还差几条到20条？"
+        ],
+        "expected_success_tokens": [
+          "再添 8",
+          "就是 20"
+        ],
+        "required_semantics": [
+          "initial_12",
+          "target_20"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "hanzi-foundation-water",
+      "family_id": "family-image-hanzi",
+      "family_name": "图词识字",
+      "level": "foundation",
+      "level_label": "基础识别",
+      "mode": "assessment",
+      "kind": "meaning_mapping",
+      "title": "读一读“水”",
+      "target_atom_ids": [
+        "learn-hanzi-shape-sound-meaning-v1"
+      ],
+      "objective": "把汉字水与基本图义建立唯一映射",
+      "prompt": "“水”最接近哪幅图？",
+      "cues": [
+        "先看目标",
+        "再选意思"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "foundation",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_modern_chinese_meaning:水=water"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a68df35/ev-011",
+          "cls-xhs-6a6ac3ac/ev-007",
+          "cls-dy-7669034427246517883/EV-V-08"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🔤",
+        "pre_action_lines": [
+          "水",
+          "shuǐ",
+          "先读一读"
+        ],
+        "hint": null
+      },
+      "duplicate_signature": "hanzi:水:water",
+      "options": [
+        {
+          "value": "water",
+          "semantic": "water",
+          "label": "💧"
+        },
+        {
+          "value": "mountain",
+          "semantic": "mountain",
+          "label": "⛰️"
+        },
+        {
+          "value": "wood",
+          "semantic": "wood",
+          "label": "🪵"
+        }
+      ],
+      "oracle": {
+        "answer": "water",
+        "target_semantic": "water",
+        "explanation_semantic": "water",
+        "explanation": "“水”读 shuǐ，表示会流动的水。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "水",
+          "shuǐ",
+          "先读一读",
+          "“水”最接近哪幅图？"
+        ],
+        "expected_success_tokens": [
+          "“水”读 shuǐ，表示会流动的水。"
+        ],
+        "required_semantics": [
+          "target_hanzi-foundation-water"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "hanzi-foundation-mountain",
+      "family_id": "family-image-hanzi",
+      "family_name": "图词识字",
+      "level": "foundation",
+      "level_label": "基础识别",
+      "mode": "assessment",
+      "kind": "meaning_mapping",
+      "title": "读一读“山”",
+      "target_atom_ids": [
+        "learn-hanzi-shape-sound-meaning-v1"
+      ],
+      "objective": "把汉字山与基本图义建立唯一映射",
+      "prompt": "“山”最接近哪幅图？",
+      "cues": [
+        "先看目标",
+        "再选意思"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "foundation",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_modern_chinese_meaning:山=mountain"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a68df35/ev-011",
+          "cls-xhs-6a6ac3ac/ev-007",
+          "cls-dy-7669034427246517883/EV-V-08"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🔤",
+        "pre_action_lines": [
+          "山",
+          "shān",
+          "先读一读"
+        ],
+        "hint": null
+      },
+      "duplicate_signature": "hanzi:山:mountain",
+      "options": [
+        {
+          "value": "mountain",
+          "semantic": "mountain",
+          "label": "⛰️"
+        },
+        {
+          "value": "water",
+          "semantic": "water",
+          "label": "💧"
+        },
+        {
+          "value": "sun",
+          "semantic": "sun",
+          "label": "☀️"
+        }
+      ],
+      "oracle": {
+        "answer": "mountain",
+        "target_semantic": "mountain",
+        "explanation_semantic": "mountain",
+        "explanation": "“山”读 shān，表示山。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "山",
+          "shān",
+          "先读一读",
+          "“山”最接近哪幅图？"
+        ],
+        "expected_success_tokens": [
+          "“山”读 shān，表示山。"
+        ],
+        "required_semantics": [
+          "target_hanzi-foundation-mountain"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "hanzi-guided-rest",
+      "family_id": "family-image-hanzi",
+      "family_name": "图词识字",
+      "level": "guided",
+      "level_label": "有提示练习",
+      "mode": "guided_practice",
+      "kind": "meaning_mapping",
+      "title": "人靠树旁是“休”",
+      "target_atom_ids": [
+        "learn-hanzi-shape-sound-meaning-v1"
+      ],
+      "objective": "用人靠树旁的明确提示认识休息的休",
+      "prompt": "“休”最接近哪个意思？",
+      "cues": [
+        "先看目标",
+        "再选意思"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "guided",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_modern_chinese_meaning:休=rest"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a68df35/ev-011",
+          "cls-xhs-6a6ac3ac/ev-007",
+          "cls-dy-7669034427246517883/EV-V-08"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🌳",
+        "pre_action_lines": [
+          "休",
+          "xiū",
+          "人靠在树旁歇一歇"
+        ],
+        "hint": "人靠树旁是完整提示，所以只算引导练习。"
+      },
+      "duplicate_signature": "hanzi:休:rest",
+      "options": [
+        {
+          "value": "rest",
+          "semantic": "rest",
+          "label": "🛌"
+        },
+        {
+          "value": "run",
+          "semantic": "run",
+          "label": "🏃"
+        },
+        {
+          "value": "eat",
+          "semantic": "eat",
+          "label": "🍚"
+        }
+      ],
+      "oracle": {
+        "answer": "rest",
+        "target_semantic": "rest",
+        "explanation_semantic": "rest",
+        "explanation": "“休”有休息的意思。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": true,
+        "required_pre_action_tokens": [
+          "休",
+          "xiū",
+          "人靠在树旁歇一歇",
+          "“休”最接近哪个意思？"
+        ],
+        "expected_success_tokens": [
+          "“休”有休息的意思。"
+        ],
+        "required_semantics": [
+          "target_hanzi-guided-rest"
+        ],
+        "guided_hint": "人靠树旁是完整提示，所以只算引导练习。"
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "hanzi-guided-bright",
+      "family_id": "family-image-hanzi",
+      "family_name": "图词识字",
+      "level": "guided",
+      "level_label": "有提示练习",
+      "mode": "guided_practice",
+      "kind": "meaning_mapping",
+      "title": "日月合在一起是“明”",
+      "target_atom_ids": [
+        "learn-hanzi-shape-sound-meaning-v1"
+      ],
+      "objective": "用日月组合的明确提示认识明亮的明",
+      "prompt": "“明”最接近哪个意思？",
+      "cues": [
+        "先看目标",
+        "再选意思"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "guided",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_modern_chinese_meaning:明=bright"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a68df35/ev-011",
+          "cls-xhs-6a6ac3ac/ev-007",
+          "cls-dy-7669034427246517883/EV-V-08"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "☀️🌙",
+        "pre_action_lines": [
+          "明",
+          "míng",
+          "日和月都带来光亮"
+        ],
+        "hint": "日月与光亮是明确提示，只作跟随练习。"
+      },
+      "duplicate_signature": "hanzi:明:bright",
+      "options": [
+        {
+          "value": "bright",
+          "semantic": "bright",
+          "label": "✨"
+        },
+        {
+          "value": "dark",
+          "semantic": "dark",
+          "label": "🌑"
+        },
+        {
+          "value": "cold",
+          "semantic": "cold",
+          "label": "❄️"
+        }
+      ],
+      "oracle": {
+        "answer": "bright",
+        "target_semantic": "bright",
+        "explanation_semantic": "bright",
+        "explanation": "“明”可以表示明亮。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": true,
+        "required_pre_action_tokens": [
+          "明",
+          "míng",
+          "日和月都带来光亮",
+          "“明”最接近哪个意思？"
+        ],
+        "expected_success_tokens": [
+          "“明”可以表示明亮。"
+        ],
+        "required_semantics": [
+          "target_hanzi-guided-bright"
+        ],
+        "guided_hint": "日月与光亮是明确提示，只作跟随练习。"
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "hanzi-transfer-sunny",
+      "family_id": "family-image-hanzi",
+      "family_name": "图词识字",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "mode": "assessment",
+      "kind": "meaning_mapping",
+      "title": "选对天气的字",
+      "target_atom_ids": [
+        "learn-hanzi-shape-sound-meaning-v1"
+      ],
+      "objective": "在新句子中区分晴和睛",
+      "prompt": "雨停了，天空放___了。",
+      "cues": [
+        "先看目标",
+        "再选意思"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "transfer",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "self_contained_sentence_semantics:天空放晴"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a68df35/ev-011",
+          "cls-xhs-6a6ac3ac/ev-007",
+          "cls-dy-7669034427246517883/EV-V-08"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🔤",
+        "pre_action_lines": [
+          "雨停了",
+          "天空放___了"
+        ],
+        "hint": null
+      },
+      "duplicate_signature": "hanzi:晴睛清:天气",
+      "options": [
+        {
+          "value": "晴",
+          "semantic": "晴",
+          "label": "晴"
+        },
+        {
+          "value": "睛",
+          "semantic": "睛",
+          "label": "睛"
+        },
+        {
+          "value": "清",
+          "semantic": "清",
+          "label": "清"
+        }
+      ],
+      "oracle": {
+        "answer": "晴",
+        "target_semantic": "晴",
+        "explanation_semantic": "晴",
+        "explanation": "天气放晴用日字旁的“晴”。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "雨停了",
+          "天空放___了",
+          "雨停了，天空放___了。"
+        ],
+        "expected_success_tokens": [
+          "天气放晴用日字旁的“晴”。"
+        ],
+        "required_semantics": [
+          "target_hanzi-transfer-sunny"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "hanzi-transfer-wood",
+      "family_id": "family-image-hanzi",
+      "family_name": "图词识字",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "mode": "assessment",
+      "kind": "meaning_mapping",
+      "title": "看图选字",
+      "target_atom_ids": [
+        "learn-hanzi-shape-sound-meaning-v1"
+      ],
+      "objective": "根据木材图义与读音辨认木字",
+      "prompt": "哪一个字最接近这幅图的意思？",
+      "cues": [
+        "先看目标",
+        "再选意思"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "transfer",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_modern_chinese_meaning:木=wood"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a68df35/ev-011",
+          "cls-xhs-6a6ac3ac/ev-007",
+          "cls-dy-7669034427246517883/EV-V-08"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🔤",
+        "pre_action_lines": [
+          "🪵",
+          "mù"
+        ],
+        "hint": null
+      },
+      "duplicate_signature": "hanzi:木本禾:wood_picture",
+      "options": [
+        {
+          "value": "木",
+          "semantic": "木",
+          "label": "木"
+        },
+        {
+          "value": "本",
+          "semantic": "本",
+          "label": "本"
+        },
+        {
+          "value": "禾",
+          "semantic": "禾",
+          "label": "禾"
+        }
+      ],
+      "oracle": {
+        "answer": "木",
+        "target_semantic": "木",
+        "explanation_semantic": "木",
+        "explanation": "🪵 表示木材，对应“木”。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "🪵",
+          "mù",
+          "哪一个字最接近这幅图的意思？"
+        ],
+        "expected_success_tokens": [
+          "🪵 表示木材，对应“木”。"
+        ],
+        "required_semantics": [
+          "target_hanzi-transfer-wood"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "english-foundation-cat",
+      "family_id": "family-theme-english",
+      "family_name": "主题英语",
+      "level": "foundation",
+      "level_label": "基础识别",
+      "mode": "assessment",
+      "kind": "meaning_mapping",
+      "title": "Find cat",
+      "target_atom_ids": [
+        "learn-english-word-meaning-v1"
+      ],
+      "objective": "从纯图案中识别 cat",
+      "prompt": "Which picture shows a cat?",
+      "cues": [
+        "先看目标",
+        "再选意思"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "foundation",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_english_word_meaning:cat"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a69ddf6/ev-v10",
+          "cls-xhs-6a6ac3ac/ev-005",
+          "cls-dy-7667157388839232697/EV-IMG-04"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🗂️",
+        "pre_action_lines": [
+          "cat",
+          "Which picture shows a cat?"
+        ],
+        "hint": null
+      },
+      "duplicate_signature": "english:cat:animals",
+      "options": [
+        {
+          "value": "cat",
+          "semantic": "cat",
+          "label": "🐱"
+        },
+        {
+          "value": "dog",
+          "semantic": "dog",
+          "label": "🐶"
+        },
+        {
+          "value": "bird",
+          "semantic": "bird",
+          "label": "🐦"
+        }
+      ],
+      "oracle": {
+        "answer": "cat",
+        "target_semantic": "cat",
+        "explanation_semantic": "cat",
+        "explanation": "This is a cat."
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "cat",
+          "Which picture shows a cat?",
+          "Which picture shows a cat?"
+        ],
+        "expected_success_tokens": [
+          "This is a cat."
+        ],
+        "required_semantics": [
+          "target_english-foundation-cat"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "english-foundation-apple",
+      "family_id": "family-theme-english",
+      "family_name": "主题英语",
+      "level": "foundation",
+      "level_label": "基础识别",
+      "mode": "assessment",
+      "kind": "meaning_mapping",
+      "title": "Find apple",
+      "target_atom_ids": [
+        "learn-english-word-meaning-v1"
+      ],
+      "objective": "从纯图案中识别 apple",
+      "prompt": "Which picture shows an apple?",
+      "cues": [
+        "先看目标",
+        "再选意思"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "foundation",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_english_word_meaning:apple"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a69ddf6/ev-v10",
+          "cls-xhs-6a6ac3ac/ev-005",
+          "cls-dy-7667157388839232697/EV-IMG-04"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🗂️",
+        "pre_action_lines": [
+          "apple",
+          "Which picture shows an apple?"
+        ],
+        "hint": null
+      },
+      "duplicate_signature": "english:apple:fruit",
+      "options": [
+        {
+          "value": "apple",
+          "semantic": "apple",
+          "label": "🍎"
+        },
+        {
+          "value": "banana",
+          "semantic": "banana",
+          "label": "🍌"
+        },
+        {
+          "value": "pear",
+          "semantic": "pear",
+          "label": "🍐"
+        }
+      ],
+      "oracle": {
+        "answer": "apple",
+        "target_semantic": "apple",
+        "explanation_semantic": "apple",
+        "explanation": "This is an apple."
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "apple",
+          "Which picture shows an apple?",
+          "Which picture shows an apple?"
+        ],
+        "expected_success_tokens": [
+          "This is an apple."
+        ],
+        "required_semantics": [
+          "target_english-foundation-apple"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "english-guided-family",
+      "family_id": "family-theme-english",
+      "family_name": "主题英语",
+      "level": "guided",
+      "level_label": "有提示练习",
+      "mode": "guided_practice",
+      "kind": "meaning_mapping",
+      "title": "My family",
+      "target_atom_ids": [
+        "learn-english-word-meaning-v1"
+      ],
+      "objective": "在家庭情境提示下识别 family",
+      "prompt": "Which picture shows a family?",
+      "cues": [
+        "先看目标",
+        "再选意思"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "guided",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_english_word_meaning:family"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a69ddf6/ev-v10",
+          "cls-xhs-6a6ac3ac/ev-005",
+          "cls-dy-7667157388839232697/EV-IMG-04"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🏠",
+        "pre_action_lines": [
+          "family",
+          "These people live and care for one another."
+        ],
+        "hint": "家庭情境给出明显提示，只作引导练习。"
+      },
+      "duplicate_signature": "english:family:home_context",
+      "options": [
+        {
+          "value": "family",
+          "semantic": "family",
+          "label": "👨‍👩‍👧"
+        },
+        {
+          "value": "school",
+          "semantic": "school",
+          "label": "🏫"
+        },
+        {
+          "value": "bus",
+          "semantic": "bus",
+          "label": "🚌"
+        }
+      ],
+      "oracle": {
+        "answer": "family",
+        "target_semantic": "family",
+        "explanation_semantic": "family",
+        "explanation": "They are a family."
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": true,
+        "required_pre_action_tokens": [
+          "family",
+          "These people live and care for one another.",
+          "Which picture shows a family?"
+        ],
+        "expected_success_tokens": [
+          "They are a family."
+        ],
+        "required_semantics": [
+          "target_english-guided-family"
+        ],
+        "guided_hint": "家庭情境给出明显提示，只作引导练习。"
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "english-guided-shirt",
+      "family_id": "family-theme-english",
+      "family_name": "主题英语",
+      "level": "guided",
+      "level_label": "有提示练习",
+      "mode": "guided_practice",
+      "kind": "meaning_mapping",
+      "title": "Put on a shirt",
+      "target_atom_ids": [
+        "learn-english-word-meaning-v1"
+      ],
+      "objective": "在穿衣情境提示下识别 shirt",
+      "prompt": "Which one is a shirt?",
+      "cues": [
+        "先看目标",
+        "再选意思"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "guided",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_english_word_meaning:shirt"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a69ddf6/ev-v10",
+          "cls-xhs-6a6ac3ac/ev-005",
+          "cls-dy-7667157388839232697/EV-IMG-04"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🧺",
+        "pre_action_lines": [
+          "shirt",
+          "Put it on your upper body."
+        ],
+        "hint": "穿在上身是明显提示，只作引导练习。"
+      },
+      "duplicate_signature": "english:shirt:clothes_context",
+      "options": [
+        {
+          "value": "shirt",
+          "semantic": "shirt",
+          "label": "👕"
+        },
+        {
+          "value": "shoe",
+          "semantic": "shoe",
+          "label": "👟"
+        },
+        {
+          "value": "cap",
+          "semantic": "cap",
+          "label": "🧢"
+        }
+      ],
+      "oracle": {
+        "answer": "shirt",
+        "target_semantic": "shirt",
+        "explanation_semantic": "shirt",
+        "explanation": "This is a shirt."
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": true,
+        "required_pre_action_tokens": [
+          "shirt",
+          "Put it on your upper body.",
+          "Which one is a shirt?"
+        ],
+        "expected_success_tokens": [
+          "This is a shirt."
+        ],
+        "required_semantics": [
+          "target_english-guided-shirt"
+        ],
+        "guided_hint": "穿在上身是明显提示，只作引导练习。"
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "english-transfer-bus",
+      "family_id": "family-theme-english",
+      "family_name": "主题英语",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "mode": "assessment",
+      "kind": "meaning_mapping",
+      "title": "Take the bus",
+      "target_atom_ids": [
+        "learn-english-word-meaning-v1"
+      ],
+      "objective": "在出行情境中识别 bus",
+      "prompt": "Which picture shows a bus?",
+      "cues": [
+        "先看目标",
+        "再选意思"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "transfer",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_english_word_meaning:bus"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a69ddf6/ev-v10",
+          "cls-xhs-6a6ac3ac/ev-005",
+          "cls-dy-7667157388839232697/EV-IMG-04"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🛣️",
+        "pre_action_lines": [
+          "bus",
+          "We go to school by ___ ."
+        ],
+        "hint": null
+      },
+      "duplicate_signature": "english:bus:travel",
+      "options": [
+        {
+          "value": "bus",
+          "semantic": "bus",
+          "label": "🚌"
+        },
+        {
+          "value": "home",
+          "semantic": "home",
+          "label": "🏠"
+        },
+        {
+          "value": "tree",
+          "semantic": "tree",
+          "label": "🌳"
+        }
+      ],
+      "oracle": {
+        "answer": "bus",
+        "target_semantic": "bus",
+        "explanation_semantic": "bus",
+        "explanation": "This is a bus."
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "bus",
+          "We go to school by ___ .",
+          "Which picture shows a bus?"
+        ],
+        "expected_success_tokens": [
+          "This is a bus."
+        ],
+        "required_semantics": [
+          "target_english-transfer-bus"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "english-transfer-rain",
+      "family_id": "family-theme-english",
+      "family_name": "主题英语",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "mode": "assessment",
+      "kind": "meaning_mapping",
+      "title": "A rainy day",
+      "target_atom_ids": [
+        "learn-english-word-meaning-v1"
+      ],
+      "objective": "在天气主题中识别 rain",
+      "prompt": "Which picture shows rain?",
+      "cues": [
+        "先看目标",
+        "再选意思"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "transfer",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_english_word_meaning:rain"
+        ],
+        "presentation_donors": [
+          "cls-xhs-6a69ddf6/ev-v10",
+          "cls-xhs-6a6ac3ac/ev-005",
+          "cls-dy-7667157388839232697/EV-IMG-04"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🗂️",
+        "pre_action_lines": [
+          "rain",
+          "Which picture shows rain?"
+        ],
+        "hint": null
+      },
+      "duplicate_signature": "english:rain:weather",
+      "options": [
+        {
+          "value": "rain",
+          "semantic": "rain",
+          "label": "🌧️"
+        },
+        {
+          "value": "sun",
+          "semantic": "sun",
+          "label": "☀️"
+        },
+        {
+          "value": "star",
+          "semantic": "star",
+          "label": "⭐"
+        }
+      ],
+      "oracle": {
+        "answer": "rain",
+        "target_semantic": "rain",
+        "explanation_semantic": "rain",
+        "explanation": "This is rain."
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "rain",
+          "Which picture shows rain?",
+          "Which picture shows rain?"
+        ],
+        "expected_success_tokens": [
+          "This is rain."
+        ],
+        "required_semantics": [
+          "target_english-transfer-rain"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "class-foundation-animal-outlier",
+      "family_id": "family-classification-reasoning",
+      "family_name": "分类与推理",
+      "level": "foundation",
+      "level_label": "基础识别",
+      "mode": "assessment",
+      "kind": "classification",
+      "title": "谁不是动物",
+      "target_atom_ids": [
+        "learn-english-word-meaning-v1"
+      ],
+      "objective": "从六个语义对象中找出唯一异类",
+      "prompt": "哪一个不属于这一组？",
+      "cues": [
+        "看清类别",
+        "只选一个"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "foundation",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_category_membership:self_contained_objects"
+        ],
+        "presentation_donors": [
+          "cls-dy-7667157388839232697/EV-IMG-05",
+          "cls-xhs-6a6ac3ac/ev-010"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🧺",
+        "semantic_labels": {
+          "dog": "🐶",
+          "cat": "🐱",
+          "rabbit": "🐰",
+          "panda": "🐼",
+          "apple": "🍎",
+          "tiger": "🐯"
+        },
+        "hint": null
+      },
+      "duplicate_signature": "classification:dog,cat,rabbit,panda,apple,tiger",
+      "options": [
+        {
+          "value": "apple",
+          "semantic": "fruit",
+          "label": "🍎"
+        },
+        {
+          "value": "rabbit",
+          "semantic": "animal",
+          "label": "🐰"
+        },
+        {
+          "value": "panda",
+          "semantic": "animal",
+          "label": "🐼"
+        }
+      ],
+      "oracle": {
+        "answer": "apple",
+        "expected_category": "animal",
+        "explanation_outlier": "apple",
+        "displayed_objects": [
+          {
+            "value": "dog",
+            "category": "animal"
+          },
+          {
+            "value": "cat",
+            "category": "animal"
+          },
+          {
+            "value": "rabbit",
+            "category": "animal"
+          },
+          {
+            "value": "panda",
+            "category": "animal"
+          },
+          {
+            "value": "apple",
+            "category": "fruit"
+          },
+          {
+            "value": "tiger",
+            "category": "animal"
+          }
+        ],
+        "explanation": "苹果是水果，其他都是动物。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "哪一个不属于这一组？",
+          "🐶",
+          "🐱",
+          "🐰",
+          "🐼",
+          "🍎",
+          "🐯"
+        ],
+        "expected_success_tokens": [
+          "苹果是水果，其他都是动物。"
+        ],
+        "rendered_values_selector": "[data-semantic-values]",
+        "rendered_values": [
+          "dog",
+          "cat",
+          "rabbit",
+          "panda",
+          "apple",
+          "tiger"
+        ],
+        "required_semantics": [
+          "six_semantic_objects",
+          "one_outlier"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "class-foundation-fruit-outlier",
+      "family_id": "family-classification-reasoning",
+      "family_name": "分类与推理",
+      "level": "foundation",
+      "level_label": "基础识别",
+      "mode": "assessment",
+      "kind": "classification",
+      "title": "谁不是水果",
+      "target_atom_ids": [
+        "learn-english-word-meaning-v1"
+      ],
+      "objective": "从六个语义对象中找出唯一异类",
+      "prompt": "哪一个不属于这一组？",
+      "cues": [
+        "看清类别",
+        "只选一个"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "foundation",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_category_membership:self_contained_objects"
+        ],
+        "presentation_donors": [
+          "cls-dy-7667157388839232697/EV-IMG-05",
+          "cls-xhs-6a6ac3ac/ev-010"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🧺",
+        "semantic_labels": {
+          "apple": "🍎",
+          "banana": "🍌",
+          "pear": "🍐",
+          "orange": "🍊",
+          "carrot": "🥕",
+          "grape": "🍇"
+        },
+        "hint": null
+      },
+      "duplicate_signature": "classification:apple,banana,pear,orange,carrot,grape",
+      "options": [
+        {
+          "value": "carrot",
+          "semantic": "vegetable",
+          "label": "🥕"
+        },
+        {
+          "value": "banana",
+          "semantic": "fruit",
+          "label": "🍌"
+        },
+        {
+          "value": "pear",
+          "semantic": "fruit",
+          "label": "🍐"
+        }
+      ],
+      "oracle": {
+        "answer": "carrot",
+        "expected_category": "fruit",
+        "explanation_outlier": "carrot",
+        "displayed_objects": [
+          {
+            "value": "apple",
+            "category": "fruit"
+          },
+          {
+            "value": "banana",
+            "category": "fruit"
+          },
+          {
+            "value": "pear",
+            "category": "fruit"
+          },
+          {
+            "value": "orange",
+            "category": "fruit"
+          },
+          {
+            "value": "carrot",
+            "category": "vegetable"
+          },
+          {
+            "value": "grape",
+            "category": "fruit"
+          }
+        ],
+        "explanation": "胡萝卜是蔬菜，其他都是水果。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "哪一个不属于这一组？",
+          "🍎",
+          "🍌",
+          "🍐",
+          "🍊",
+          "🥕",
+          "🍇"
+        ],
+        "expected_success_tokens": [
+          "胡萝卜是蔬菜，其他都是水果。"
+        ],
+        "rendered_values_selector": "[data-semantic-values]",
+        "rendered_values": [
+          "apple",
+          "banana",
+          "pear",
+          "orange",
+          "carrot",
+          "grape"
+        ],
+        "required_semantics": [
+          "six_semantic_objects",
+          "one_outlier"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "class-guided-school-things",
+      "family_id": "family-classification-reasoning",
+      "family_name": "分类与推理",
+      "level": "guided",
+      "level_label": "有提示练习",
+      "mode": "guided_practice",
+      "kind": "classification",
+      "title": "学校用品里找不同",
+      "target_atom_ids": [
+        "learn-english-word-meaning-v1"
+      ],
+      "objective": "从六个语义对象中找出唯一异类",
+      "prompt": "哪一个不属于这一组？",
+      "cues": [
+        "看清类别",
+        "只选一个"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "guided",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_category_membership:self_contained_objects"
+        ],
+        "presentation_donors": [
+          "cls-dy-7667157388839232697/EV-IMG-05",
+          "cls-xhs-6a6ac3ac/ev-010"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🧺",
+        "semantic_labels": {
+          "book": "📕",
+          "pencil": "✏️",
+          "bag": "🎒",
+          "ruler": "📏",
+          "fish": "🐟",
+          "notebook": "📒"
+        },
+        "hint": "标题已经说明学校用品，只作引导练习。"
+      },
+      "duplicate_signature": "classification:book,pencil,bag,ruler,fish,notebook",
+      "options": [
+        {
+          "value": "fish",
+          "semantic": "animal",
+          "label": "🐟"
+        },
+        {
+          "value": "book",
+          "semantic": "school_item",
+          "label": "📕"
+        },
+        {
+          "value": "bag",
+          "semantic": "school_item",
+          "label": "🎒"
+        }
+      ],
+      "oracle": {
+        "answer": "fish",
+        "expected_category": "school_item",
+        "explanation_outlier": "fish",
+        "displayed_objects": [
+          {
+            "value": "book",
+            "category": "school_item"
+          },
+          {
+            "value": "pencil",
+            "category": "school_item"
+          },
+          {
+            "value": "bag",
+            "category": "school_item"
+          },
+          {
+            "value": "ruler",
+            "category": "school_item"
+          },
+          {
+            "value": "fish",
+            "category": "animal"
+          },
+          {
+            "value": "notebook",
+            "category": "school_item"
+          }
+        ],
+        "explanation": "小鱼是动物，其他都是学校用品。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": true,
+        "required_pre_action_tokens": [
+          "哪一个不属于这一组？",
+          "📕",
+          "✏️",
+          "🎒",
+          "📏",
+          "🐟",
+          "📒"
+        ],
+        "expected_success_tokens": [
+          "小鱼是动物，其他都是学校用品。"
+        ],
+        "rendered_values_selector": "[data-semantic-values]",
+        "rendered_values": [
+          "book",
+          "pencil",
+          "bag",
+          "ruler",
+          "fish",
+          "notebook"
+        ],
+        "required_semantics": [
+          "six_semantic_objects",
+          "one_outlier"
+        ],
+        "guided_hint": "标题已经说明学校用品，只作引导练习。"
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "class-guided-numbers",
+      "family_id": "family-classification-reasoning",
+      "family_name": "分类与推理",
+      "level": "guided",
+      "level_label": "有提示练习",
+      "mode": "guided_practice",
+      "kind": "classification",
+      "title": "数字里找不同",
+      "target_atom_ids": [
+        "learn-count-one-to-one-20-v1"
+      ],
+      "objective": "从六个语义对象中找出唯一异类",
+      "prompt": "哪一个不属于这一组？",
+      "cues": [
+        "看清类别",
+        "只选一个"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "guided",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "common_category_membership:self_contained_objects"
+        ],
+        "presentation_donors": [
+          "cls-dy-7667157388839232697/EV-IMG-05",
+          "cls-xhs-6a6ac3ac/ev-010"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🧺",
+        "semantic_labels": {
+          "one": "1",
+          "two": "2",
+          "three": "3",
+          "four": "4",
+          "flower": "🌼",
+          "five": "5"
+        },
+        "hint": "标题已经说明数字，只作引导练习。"
+      },
+      "duplicate_signature": "classification:one,two,three,four,flower,five",
+      "options": [
+        {
+          "value": "flower",
+          "semantic": "plant",
+          "label": "🌼"
+        },
+        {
+          "value": "two",
+          "semantic": "number",
+          "label": "2"
+        },
+        {
+          "value": "five",
+          "semantic": "number",
+          "label": "5"
+        }
+      ],
+      "oracle": {
+        "answer": "flower",
+        "expected_category": "number",
+        "explanation_outlier": "flower",
+        "displayed_objects": [
+          {
+            "value": "one",
+            "category": "number"
+          },
+          {
+            "value": "two",
+            "category": "number"
+          },
+          {
+            "value": "three",
+            "category": "number"
+          },
+          {
+            "value": "four",
+            "category": "number"
+          },
+          {
+            "value": "flower",
+            "category": "plant"
+          },
+          {
+            "value": "five",
+            "category": "number"
+          }
+        ],
+        "explanation": "花朵不是数字，其他都是数字。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": true,
+        "required_pre_action_tokens": [
+          "哪一个不属于这一组？",
+          "1",
+          "2",
+          "3",
+          "4",
+          "🌼",
+          "5"
+        ],
+        "expected_success_tokens": [
+          "花朵不是数字，其他都是数字。"
+        ],
+        "rendered_values_selector": "[data-semantic-values]",
+        "rendered_values": [
+          "one",
+          "two",
+          "three",
+          "four",
+          "flower",
+          "five"
+        ],
+        "required_semantics": [
+          "six_semantic_objects",
+          "one_outlier"
+        ],
+        "guided_hint": "标题已经说明数字，只作引导练习。"
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "sequence-transfer-apple-fish",
+      "family_id": "family-classification-reasoning",
+      "family_name": "分类与推理",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "mode": "assessment",
+      "kind": "sequence",
+      "title": "苹果小鱼轮流来",
+      "target_atom_ids": [
+        "learn-count-one-to-one-20-v1"
+      ],
+      "objective": "识别至少两轮完整 AB 交替规律",
+      "prompt": "问号的位置应该放什么？",
+      "cues": [
+        "看前两轮",
+        "找轮流规律"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "transfer",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "deterministic_sequence:applefishapplefishapple->fish"
+        ],
+        "presentation_donors": [
+          "cls-dy-7667157388839232697/EV-IMG-05",
+          "cls-xhs-6a6ac3ac/ev-010"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🔁",
+        "semantic_labels": {
+          "apple": "苹果",
+          "fish": "小鱼",
+          "flower": "花朵"
+        },
+        "hint": null
+      },
+      "duplicate_signature": "sequence:apple,fish,apple,fish,apple:fish",
+      "options": [
+        {
+          "value": "fish",
+          "semantic": "fish",
+          "label": "小鱼"
+        },
+        {
+          "value": "apple",
+          "semantic": "apple",
+          "label": "苹果"
+        },
+        {
+          "value": "flower",
+          "semantic": "flower",
+          "label": "花朵"
+        }
+      ],
+      "oracle": {
+        "answer": "fish",
+        "pattern": [
+          "apple",
+          "fish",
+          "apple",
+          "fish",
+          "apple"
+        ],
+        "explanation_next": "fish",
+        "explanation": "苹果和小鱼轮流出现，下一项是小鱼。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "问号的位置应该放什么？",
+          "苹果",
+          "小鱼"
+        ],
+        "expected_success_tokens": [
+          "轮流出现",
+          "下一项是小鱼"
+        ],
+        "rendered_values_selector": "[data-semantic-values]",
+        "rendered_values": [
+          "apple",
+          "fish",
+          "apple",
+          "fish",
+          "apple"
+        ],
+        "required_semantics": [
+          "ab_pattern_two_rounds",
+          "unknown_next"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "sequence-transfer-moon-star",
+      "family_id": "family-classification-reasoning",
+      "family_name": "分类与推理",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "mode": "assessment",
+      "kind": "sequence",
+      "title": "月亮星星轮流来",
+      "target_atom_ids": [
+        "learn-count-one-to-one-20-v1"
+      ],
+      "objective": "识别至少两轮完整 AB 交替规律",
+      "prompt": "问号的位置应该放什么？",
+      "cues": [
+        "看前两轮",
+        "找轮流规律"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "transfer",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "deterministic_sequence:moonstarmoonstarmoon->star"
+        ],
+        "presentation_donors": [
+          "cls-dy-7667157388839232697/EV-IMG-05",
+          "cls-xhs-6a6ac3ac/ev-010"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🔁",
+        "semantic_labels": {
+          "moon": "月亮",
+          "star": "星星",
+          "sun": "太阳"
+        },
+        "hint": null
+      },
+      "duplicate_signature": "sequence:moon,star,moon,star,moon:star",
+      "options": [
+        {
+          "value": "star",
+          "semantic": "star",
+          "label": "星星"
+        },
+        {
+          "value": "moon",
+          "semantic": "moon",
+          "label": "月亮"
+        },
+        {
+          "value": "sun",
+          "semantic": "sun",
+          "label": "太阳"
+        }
+      ],
+      "oracle": {
+        "answer": "star",
+        "pattern": [
+          "moon",
+          "star",
+          "moon",
+          "star",
+          "moon"
+        ],
+        "explanation_next": "star",
+        "explanation": "月亮和星星轮流出现，下一项是星星。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "问号的位置应该放什么？",
+          "星星",
+          "月亮"
+        ],
+        "expected_success_tokens": [
+          "轮流出现",
+          "下一项是星星"
+        ],
+        "rendered_values_selector": "[data-semantic-values]",
+        "rendered_values": [
+          "moon",
+          "star",
+          "moon",
+          "star",
+          "moon"
+        ],
+        "required_semantics": [
+          "ab_pattern_two_rounds",
+          "unknown_next"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "reading-foundation-watering",
+      "family_id": "family-reading-poetry",
+      "family_name": "短阅读与古诗",
+      "level": "foundation",
+      "level_label": "基础识别",
+      "mode": "assessment",
+      "kind": "reading_evidence",
+      "title": "谁在浇花",
+      "target_atom_ids": [
+        "learn-read-explicit-information-v1",
+        "learn-sentence-who-where-do-v1"
+      ],
+      "objective": "从三句自编短文中定位逐字明确信息",
+      "prompt": "谁给花浇水？",
+      "cues": [
+        "先读三句",
+        "回文中找"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "foundation",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "self_contained_reading_passage:direct_evidence"
+        ],
+        "presentation_donors": [
+          "cls-dy-7667992178929278435/EV-IMG-06",
+          "cls-dy-7667992178929278435/EV-IMG-07"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "📖",
+        "hint": null
+      },
+      "duplicate_signature": "reading:清早，爷爷来到阳台。爷爷给花浇水。小禾在旁边数叶子。:谁给花浇水？",
+      "options": [
+        {
+          "value": "grandpa",
+          "semantic": "爷爷",
+          "label": "爷爷"
+        },
+        {
+          "value": "xiaohe",
+          "semantic": "小禾",
+          "label": "小禾"
+        },
+        {
+          "value": "flower",
+          "semantic": "花",
+          "label": "花"
+        }
+      ],
+      "oracle": {
+        "answer": "grandpa",
+        "answer_text": "爷爷",
+        "explanation_answer_text": "爷爷",
+        "passage": "清早，爷爷来到阳台。爷爷给花浇水。小禾在旁边数叶子。",
+        "evidence_span": "爷爷给花浇水",
+        "explanation": "短文直接写了爷爷给花浇水。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "清早，爷爷来到阳台。爷爷给花浇水。小禾在旁边数叶子。",
+          "谁给花浇水？"
+        ],
+        "expected_success_tokens": [
+          "爷爷给花浇水"
+        ],
+        "required_semantics": [
+          "three_sentence_passage",
+          "direct_evidence"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "reading-foundation-red-ball",
+      "family_id": "family-reading-poetry",
+      "family_name": "短阅读与古诗",
+      "level": "foundation",
+      "level_label": "基础识别",
+      "mode": "assessment",
+      "kind": "reading_evidence",
+      "title": "球在哪里",
+      "target_atom_ids": [
+        "learn-read-explicit-information-v1"
+      ],
+      "objective": "从三句自编短文中定位逐字明确信息",
+      "prompt": "红皮球放在哪里？",
+      "cues": [
+        "先读三句",
+        "回文中找"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "foundation",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "self_contained_reading_passage:direct_evidence"
+        ],
+        "presentation_donors": [
+          "cls-dy-7667992178929278435/EV-IMG-06",
+          "cls-dy-7667992178929278435/EV-IMG-07"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "📖",
+        "hint": null
+      },
+      "duplicate_signature": "reading:小雨带来一个红皮球。她把球放在桌子下面。弟弟蹲下来找到了它。:红皮球放在哪里？",
+      "options": [
+        {
+          "value": "under_table",
+          "semantic": "桌子下面",
+          "label": "桌子下面"
+        },
+        {
+          "value": "on_chair",
+          "semantic": "椅子上",
+          "label": "椅子上"
+        },
+        {
+          "value": "in_bag",
+          "semantic": "书包里",
+          "label": "书包里"
+        }
+      ],
+      "oracle": {
+        "answer": "under_table",
+        "answer_text": "桌子下面",
+        "explanation_answer_text": "桌子下面",
+        "passage": "小雨带来一个红皮球。她把球放在桌子下面。弟弟蹲下来找到了它。",
+        "evidence_span": "把球放在桌子下面",
+        "explanation": "短文直接写了：把球放在桌子下面。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "小雨带来一个红皮球。她把球放在桌子下面。弟弟蹲下来找到了它。",
+          "红皮球放在哪里？"
+        ],
+        "expected_success_tokens": [
+          "把球放在桌子下面"
+        ],
+        "required_semantics": [
+          "three_sentence_passage",
+          "direct_evidence"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "reading-guided-window",
+      "family_id": "family-reading-poetry",
+      "family_name": "短阅读与古诗",
+      "level": "guided",
+      "level_label": "有提示练习",
+      "mode": "guided_practice",
+      "kind": "reading_evidence",
+      "title": "找一找谁关窗",
+      "target_atom_ids": [
+        "learn-read-explicit-information-v1"
+      ],
+      "objective": "从三句自编短文中定位逐字明确信息",
+      "prompt": "谁关上了窗户？",
+      "cues": [
+        "先读三句",
+        "回文中找"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "guided",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "self_contained_reading_passage:direct_evidence"
+        ],
+        "presentation_donors": [
+          "cls-dy-7667992178929278435/EV-IMG-06",
+          "cls-dy-7667992178929278435/EV-IMG-07"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "📖",
+        "hint": "提示：答案就在最后一句。"
+      },
+      "duplicate_signature": "reading:风吹进教室，窗帘飘了起来。老师请小明关窗。小明轻轻关上了窗户。:谁关上了窗户？",
+      "options": [
+        {
+          "value": "xiaoming",
+          "semantic": "小明",
+          "label": "小明"
+        },
+        {
+          "value": "teacher",
+          "semantic": "老师",
+          "label": "老师"
+        },
+        {
+          "value": "curtain",
+          "semantic": "窗帘",
+          "label": "窗帘"
+        }
+      ],
+      "oracle": {
+        "answer": "xiaoming",
+        "answer_text": "小明",
+        "explanation_answer_text": "小明",
+        "passage": "风吹进教室，窗帘飘了起来。老师请小明关窗。小明轻轻关上了窗户。",
+        "evidence_span": "小明轻轻关上了窗户",
+        "explanation": "短文直接写了小明轻轻关上了窗户。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": true,
+        "required_pre_action_tokens": [
+          "风吹进教室，窗帘飘了起来。老师请小明关窗。小明轻轻关上了窗户。",
+          "谁关上了窗户？"
+        ],
+        "expected_success_tokens": [
+          "小明轻轻关上了窗户"
+        ],
+        "required_semantics": [
+          "three_sentence_passage",
+          "direct_evidence"
+        ],
+        "guided_hint": "提示：答案就在最后一句。"
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "reading-guided-library",
+      "family_id": "family-reading-poetry",
+      "family_name": "短阅读与古诗",
+      "level": "guided",
+      "level_label": "有提示练习",
+      "mode": "guided_practice",
+      "kind": "reading_evidence",
+      "title": "找一找借了什么",
+      "target_atom_ids": [
+        "learn-read-explicit-information-v1"
+      ],
+      "objective": "从三句自编短文中定位逐字明确信息",
+      "prompt": "安安借了什么书？",
+      "cues": [
+        "先读三句",
+        "回文中找"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "guided",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "self_contained_reading_passage:direct_evidence"
+        ],
+        "presentation_donors": [
+          "cls-dy-7667992178929278435/EV-IMG-06",
+          "cls-dy-7667992178929278435/EV-IMG-07"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "📖",
+        "hint": "提示：看第二句。"
+      },
+      "duplicate_signature": "reading:周末，妈妈带安安去图书馆。安安借了一本动物故事书。回家后，她读给弟弟听。:安安借了什么书？",
+      "options": [
+        {
+          "value": "animal_story",
+          "semantic": "动物故事书",
+          "label": "动物故事书"
+        },
+        {
+          "value": "math_book",
+          "semantic": "数学书",
+          "label": "数学书"
+        },
+        {
+          "value": "cookbook",
+          "semantic": "菜谱",
+          "label": "菜谱"
+        }
+      ],
+      "oracle": {
+        "answer": "animal_story",
+        "answer_text": "动物故事书",
+        "explanation_answer_text": "动物故事书",
+        "passage": "周末，妈妈带安安去图书馆。安安借了一本动物故事书。回家后，她读给弟弟听。",
+        "evidence_span": "安安借了一本动物故事书",
+        "explanation": "短文直接写了安安借了一本动物故事书。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": true,
+        "required_pre_action_tokens": [
+          "周末，妈妈带安安去图书馆。安安借了一本动物故事书。回家后，她读给弟弟听。",
+          "安安借了什么书？"
+        ],
+        "expected_success_tokens": [
+          "安安借了一本动物故事书"
+        ],
+        "required_semantics": [
+          "three_sentence_passage",
+          "direct_evidence"
+        ],
+        "guided_hint": "提示：看第二句。"
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "reading-transfer-raincoat",
+      "family_id": "family-reading-poetry",
+      "family_name": "短阅读与古诗",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "mode": "assessment",
+      "kind": "reading_evidence",
+      "title": "为什么带雨衣",
+      "target_atom_ids": [
+        "learn-read-explicit-information-v1"
+      ],
+      "objective": "从三句自编短文中定位逐字明确信息",
+      "prompt": "爸爸提醒乐乐带什么？",
+      "cues": [
+        "先读三句",
+        "回文中找"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "transfer",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "self_contained_reading_passage:direct_evidence"
+        ],
+        "presentation_donors": [
+          "cls-dy-7667992178929278435/EV-IMG-06",
+          "cls-dy-7667992178929278435/EV-IMG-07"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "📖",
+        "hint": null
+      },
+      "duplicate_signature": "reading:早上，天空布满乌云。爸爸看了天气，提醒乐乐带上雨衣。放学时，果然下起了雨。:爸爸提醒乐乐带什么？",
+      "options": [
+        {
+          "value": "raincoat",
+          "semantic": "雨衣",
+          "label": "雨衣"
+        },
+        {
+          "value": "hat",
+          "semantic": "帽子",
+          "label": "帽子"
+        },
+        {
+          "value": "ball",
+          "semantic": "皮球",
+          "label": "皮球"
+        }
+      ],
+      "oracle": {
+        "answer": "raincoat",
+        "answer_text": "雨衣",
+        "explanation_answer_text": "雨衣",
+        "passage": "早上，天空布满乌云。爸爸看了天气，提醒乐乐带上雨衣。放学时，果然下起了雨。",
+        "evidence_span": "提醒乐乐带上雨衣",
+        "explanation": "短文直接写了爸爸提醒乐乐带上雨衣。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "早上，天空布满乌云。爸爸看了天气，提醒乐乐带上雨衣。放学时，果然下起了雨。",
+          "爸爸提醒乐乐带什么？"
+        ],
+        "expected_success_tokens": [
+          "提醒乐乐带上雨衣"
+        ],
+        "required_semantics": [
+          "three_sentence_passage",
+          "direct_evidence"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "reading-transfer-poem-moon",
+      "family_id": "family-reading-poetry",
+      "family_name": "短阅读与古诗",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "mode": "assessment",
+      "kind": "poetry_mapping",
+      "title": "诗句里的月亮",
+      "target_atom_ids": [
+        "learn-read-explicit-information-v1"
+      ],
+      "objective": "从公共领域古诗原句定位图义",
+      "prompt": "哪幅图最接近“举头望明月”？",
+      "cues": [
+        "先读诗句",
+        "再选画面"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "transfer",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "public_domain_poem:静夜思",
+          "direct_text_semantics:举头望明月"
+        ],
+        "presentation_donors": [
+          "cls-dy-7667992178929278435/EV-IMG-06",
+          "cls-dy-7667992178929278435/EV-IMG-07"
+        ],
+        "copyright_status": "public_domain",
+        "public_domain_reference": {
+          "title": "静夜思",
+          "author": "李白",
+          "source_locator": "education-stage-references.json / public-domain Tang poem corpus"
+        }
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "📜"
+      },
+      "duplicate_signature": "poetry:静夜思:举头望明月",
+      "options": [
+        {
+          "value": "moon",
+          "semantic": "looking_at_moon",
+          "label": "🌙"
+        },
+        {
+          "value": "fish",
+          "semantic": "fish",
+          "label": "🐟"
+        },
+        {
+          "value": "coat",
+          "semantic": "coat",
+          "label": "🧥"
+        }
+      ],
+      "oracle": {
+        "answer": "moon",
+        "target_semantic": "looking_at_moon",
+        "explanation_semantic": "looking_at_moon",
+        "source_text": {
+          "title": "静夜思",
+          "author": "李白",
+          "lines": [
+            "床前明月光",
+            "疑是地上霜",
+            "举头望明月",
+            "低头思故乡"
+          ]
+        },
+        "evidence_span": "举头望明月",
+        "explanation": "这句写抬头望着明月。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "静夜思",
+          "李白",
+          "举头望明月",
+          "哪幅图最接近“举头望明月”？"
+        ],
+        "expected_success_tokens": [
+          "这句写抬头望着明月。"
+        ],
+        "required_semantics": [
+          "poem_title_author_lines",
+          "public_domain_text"
+        ]
+      },
+      "safety": {
+        "risk_level": "none"
+      }
+    },
+    {
+      "item_id": "offscreen-foundation-read",
+      "family_id": "family-offscreen-action",
+      "family_name": "屏外行动",
+      "level": "foundation",
+      "level_label": "基础识别",
+      "mode": "offscreen_action",
+      "kind": "offscreen_action",
+      "title": "读一句给家长听",
+      "target_atom_ids": [
+        "learn-read-aloud-phrase-retell-v1"
+      ],
+      "objective": "在室内现场朗读一句话",
+      "prompt": "读完后，用自己的话说说小树怎么了。",
+      "cues": [
+        "先看一句",
+        "做完回来"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "foundation",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "observable_completion_contract:guardian_observed",
+          "conservative_child_offscreen_safety_policy:no_media"
+        ],
+        "presentation_donors": [
+          "cls-dy-7668115479056115301/EV-IMG-03",
+          "cls-dy-7667992178929278435/EV-IMG-08"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🌿",
+        "action_lines": [
+          "春雨过后，小树长出了新叶。",
+          "只在家长陪同的室内读。",
+          "不录音、不上传；累了或不想读就停。"
+        ]
+      },
+      "duplicate_signature": "offscreen:read:new_leaf",
+      "oracle": {
+        "completion_evidence": "孩子现场朗读并复述小树长出新叶；家长只确认过程。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "春雨过后，小树长出了新叶。",
+          "只在家长陪同的室内读。",
+          "不录音、不上传；累了或不想读就停。",
+          "读完后，用自己的话说说小树怎么了。"
+        ],
+        "required_semantics": [
+          "child_report",
+          "guardian_confirmation",
+          "no_media"
+        ]
+      },
+      "safety": {
+        "risk_level": "low",
+        "policy_id": "indoor_guardian_observed_no_media",
+        "guardian_required": true,
+        "no_media_collection": true,
+        "allowed_place": "家长在场的室内安全地点",
+        "stop_condition": "孩子不愿继续、疲劳或家长离开时停止",
+        "hazards": [
+          "child_fatigue",
+          "guardian_absent",
+          "coerced_performance"
+        ]
+      }
+    },
+    {
+      "item_id": "offscreen-foundation-describe-toy",
+      "family_id": "family-offscreen-action",
+      "family_name": "屏外行动",
+      "level": "foundation",
+      "level_label": "基础识别",
+      "mode": "offscreen_action",
+      "kind": "offscreen_action",
+      "title": "说说你的玩具",
+      "target_atom_ids": [
+        "learn-read-aloud-phrase-retell-v1"
+      ],
+      "objective": "在室内观察一个熟悉玩具并口头描述",
+      "prompt": "说出它的颜色和形状。",
+      "cues": [
+        "先看一句",
+        "做完回来"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "foundation",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "observable_completion_contract:guardian_observed",
+          "conservative_child_offscreen_safety_policy:no_media"
+        ],
+        "presentation_donors": [
+          "cls-dy-7668115479056115301/EV-IMG-03",
+          "cls-dy-7667992178929278435/EV-IMG-08"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🌿",
+        "action_lines": [
+          "选一个你熟悉的玩具。",
+          "只在家长陪同的室内观察。",
+          "不拍照、不上传；不想说就停。"
+        ]
+      },
+      "duplicate_signature": "offscreen:describe:toy",
+      "oracle": {
+        "completion_evidence": "孩子说出一个玩具的颜色和形状；家长只确认过程。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "选一个你熟悉的玩具。",
+          "只在家长陪同的室内观察。",
+          "不拍照、不上传；不想说就停。",
+          "说出它的颜色和形状。"
+        ],
+        "required_semantics": [
+          "child_report",
+          "guardian_confirmation",
+          "no_media"
+        ]
+      },
+      "safety": {
+        "risk_level": "low",
+        "policy_id": "indoor_guardian_observed_no_media",
+        "guardian_required": true,
+        "no_media_collection": true,
+        "allowed_place": "家长在场的室内安全地点",
+        "stop_condition": "孩子不愿继续、疲劳或家长离开时停止",
+        "hazards": [
+          "child_fatigue",
+          "guardian_absent",
+          "coerced_performance"
+        ]
+      }
+    },
+    {
+      "item_id": "offscreen-guided-sort-books",
+      "family_id": "family-offscreen-action",
+      "family_name": "屏外行动",
+      "level": "guided",
+      "level_label": "有提示练习",
+      "mode": "offscreen_action",
+      "kind": "offscreen_action",
+      "title": "给三本书排队",
+      "target_atom_ids": [
+        "learn-read-aloud-phrase-retell-v1"
+      ],
+      "objective": "在室内按高矮排列三本自己的书",
+      "prompt": "排好后，从高到矮说一遍。",
+      "cues": [
+        "先看一句",
+        "做完回来"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "guided",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "observable_completion_contract:guardian_observed",
+          "conservative_child_offscreen_safety_policy:no_media"
+        ],
+        "presentation_donors": [
+          "cls-dy-7668115479056115301/EV-IMG-03",
+          "cls-dy-7667992178929278435/EV-IMG-08"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🌿",
+        "action_lines": [
+          "拿三本家长允许使用的书。",
+          "放在稳固桌面，不站椅子取书。",
+          "不拍照、不上传；家长离开就停。"
+        ]
+      },
+      "duplicate_signature": "offscreen:sort:three_books",
+      "oracle": {
+        "completion_evidence": "孩子在稳固桌面完成三本书高矮排序并口头描述；家长确认过程。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "拿三本家长允许使用的书。",
+          "放在稳固桌面，不站椅子取书。",
+          "不拍照、不上传；家长离开就停。",
+          "排好后，从高到矮说一遍。"
+        ],
+        "required_semantics": [
+          "child_report",
+          "guardian_confirmation",
+          "no_media"
+        ]
+      },
+      "safety": {
+        "risk_level": "low",
+        "policy_id": "indoor_guardian_observed_no_media",
+        "guardian_required": true,
+        "no_media_collection": true,
+        "allowed_place": "家长在场的室内安全地点",
+        "stop_condition": "孩子不愿继续、疲劳或家长离开时停止",
+        "hazards": [
+          "child_fatigue",
+          "guardian_absent",
+          "coerced_performance"
+        ]
+      }
+    },
+    {
+      "item_id": "offscreen-guided-fruit-count",
+      "family_id": "family-offscreen-action",
+      "family_name": "屏外行动",
+      "level": "guided",
+      "level_label": "有提示练习",
+      "mode": "offscreen_action",
+      "kind": "offscreen_action",
+      "title": "数一数家里的水果",
+      "target_atom_ids": [
+        "learn-read-aloud-phrase-retell-v1"
+      ],
+      "objective": "在室内点数家长准备的五个以内水果",
+      "prompt": "数完后告诉家长一共有几个。",
+      "cues": [
+        "先看一句",
+        "做完回来"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "guided",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "observable_completion_contract:guardian_observed",
+          "conservative_child_offscreen_safety_policy:no_media"
+        ],
+        "presentation_donors": [
+          "cls-dy-7668115479056115301/EV-IMG-03",
+          "cls-dy-7667992178929278435/EV-IMG-08"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🌿",
+        "action_lines": [
+          "只数家长放在桌上的水果。",
+          "不使用刀具，不拿高处物品。",
+          "不拍照、不上传；累了就停。"
+        ]
+      },
+      "duplicate_signature": "offscreen:count:fruit",
+      "oracle": {
+        "completion_evidence": "孩子一一指向并数出家长准备的水果；家长确认过程，不以此诊断掌握。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "只数家长放在桌上的水果。",
+          "不使用刀具，不拿高处物品。",
+          "不拍照、不上传；累了就停。",
+          "数完后告诉家长一共有几个。"
+        ],
+        "required_semantics": [
+          "child_report",
+          "guardian_confirmation",
+          "no_media"
+        ]
+      },
+      "safety": {
+        "risk_level": "low",
+        "policy_id": "indoor_guardian_observed_no_media",
+        "guardian_required": true,
+        "no_media_collection": true,
+        "allowed_place": "家长在场的室内安全地点",
+        "stop_condition": "孩子不愿继续、疲劳或家长离开时停止",
+        "hazards": [
+          "child_fatigue",
+          "guardian_absent",
+          "coerced_performance"
+        ]
+      }
+    },
+    {
+      "item_id": "offscreen-transfer-room-sounds",
+      "family_id": "family-offscreen-action",
+      "family_name": "屏外行动",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "mode": "offscreen_action",
+      "kind": "offscreen_action",
+      "title": "听一听室内声音",
+      "target_atom_ids": [
+        "learn-read-aloud-phrase-retell-v1"
+      ],
+      "objective": "在安静室内辨认两个安全的日常声音",
+      "prompt": "说说你听见了哪两个声音。",
+      "cues": [
+        "先看一句",
+        "做完回来"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "transfer",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "observable_completion_contract:guardian_observed",
+          "conservative_child_offscreen_safety_policy:no_media"
+        ],
+        "presentation_donors": [
+          "cls-dy-7668115479056115301/EV-IMG-03",
+          "cls-dy-7667992178929278435/EV-IMG-08"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🌿",
+        "action_lines": [
+          "和家长一起安静听十秒。",
+          "不靠近电器、门窗或发声设备。",
+          "不录音、不上传；声音太大马上停。"
+        ]
+      },
+      "duplicate_signature": "offscreen:listen:room_sounds",
+      "oracle": {
+        "completion_evidence": "孩子口头说出两个当时听见的日常声音；家长确认过程。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "和家长一起安静听十秒。",
+          "不靠近电器、门窗或发声设备。",
+          "不录音、不上传；声音太大马上停。",
+          "说说你听见了哪两个声音。"
+        ],
+        "required_semantics": [
+          "child_report",
+          "guardian_confirmation",
+          "no_media"
+        ]
+      },
+      "safety": {
+        "risk_level": "low",
+        "policy_id": "indoor_guardian_observed_no_media",
+        "guardian_required": true,
+        "no_media_collection": true,
+        "allowed_place": "家长在场的室内安全地点",
+        "stop_condition": "孩子不愿继续、疲劳或家长离开时停止",
+        "hazards": [
+          "child_fatigue",
+          "guardian_absent",
+          "coerced_performance"
+        ]
+      }
+    },
+    {
+      "item_id": "offscreen-transfer-leaves",
+      "family_id": "family-offscreen-action",
+      "family_name": "屏外行动",
+      "level": "transfer",
+      "level_label": "换情境迁移",
+      "mode": "offscreen_action",
+      "kind": "offscreen_action",
+      "title": "观察两片落叶",
+      "target_atom_ids": [
+        "learn-read-aloud-phrase-retell-v1"
+      ],
+      "objective": "在家长陪同的安全地点观察两片地上落叶",
+      "prompt": "回来后说说哪片更长。",
+      "cues": [
+        "先看一句",
+        "做完回来"
+      ],
+      "difficulty": {
+        "stage": "primary-transition-1-to-2",
+        "level": "transfer",
+        "prerequisite": "只使用已声明目标 atom 的前置能力"
+      },
+      "provenance": {
+        "truth_basis": [
+          "observable_completion_contract:guardian_observed",
+          "conservative_child_offscreen_safety_policy:no_media"
+        ],
+        "presentation_donors": [
+          "cls-dy-7668115479056115301/EV-IMG-03",
+          "cls-dy-7667992178929278435/EV-IMG-08"
+        ]
+      },
+      "source_boundary": {
+        "origin": "agent_authored_generic",
+        "claim": "一升二通用自编内容，未对齐指定教材、地区或考试。",
+        "real_child_validation": false,
+        "copyright": "原创短文本、系统 emoji 或公共领域文本；不复制教材和第三方媒体。"
+      },
+      "presentation": {
+        "hero": "🌿",
+        "action_lines": [
+          "只观察地上的落叶，不摘植物。",
+          "陌生植物、虫子和尖锐物都不碰。",
+          "不拍照、不上传；离开家长视线马上停。"
+        ]
+      },
+      "duplicate_signature": "offscreen:observe:two_fallen_leaves",
+      "oracle": {
+        "completion_evidence": "孩子观察两片地上落叶并口头比较长短；家长确认过程。"
+      },
+      "render_contract": {
+        "pre_action_answer_exposed": false,
+        "required_pre_action_tokens": [
+          "只观察地上的落叶，不摘植物。",
+          "陌生植物、虫子和尖锐物都不碰。",
+          "不拍照、不上传；离开家长视线马上停。",
+          "回来后说说哪片更长。"
+        ],
+        "required_semantics": [
+          "child_report",
+          "guardian_confirmation",
+          "no_media"
+        ]
+      },
+      "safety": {
+        "risk_level": "low",
+        "policy_id": "outdoor_guardian_line_of_sight_observe_only_no_touch",
+        "guardian_required": true,
+        "no_media_collection": true,
+        "allowed_place": "家长明确允许并现场陪同的安全地点，只观察地面可见事物",
+        "stop_condition": "遇到道路、水边、陌生植物、虫子、尖锐物或离开家长视线时立即停止",
+        "hazards": [
+          "road_or_water",
+          "unknown_plants",
+          "insects",
+          "sharp_objects",
+          "out_of_guardian_sight"
+        ]
+      }
+    }
+  ]
+}

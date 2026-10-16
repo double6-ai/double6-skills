@@ -3,6 +3,18 @@
   "comparison_policy": "no_formal_baseline_or_host_comparison",
   "evals": [
     {
+      "id": "ambiguous-scene-discovery-and-reset",
+      "prompt": "我想做个工作台。先帮我想清楚；中途我可能会改成另一个场景。",
+      "expected_output": "先厘清谁使用、反复任务和期望结果；当前场景合计最多五问，切换场景后问题计数、推荐和选择全部重置。",
+      "files": []
+    },
+    {
+      "id": "primary-transition-no-universal-priority",
+      "prompt": "给孩子做一个小学一升二学习工作台。",
+      "expected_output": "直接推荐一升二模块和能力项供采用或调整，不固定追问学习重点；保持九模块角色、八个学习 atom 与 104 条正式内容可追踪。",
+      "files": []
+    },
+    {
       "id": "exam-both-core",
       "prompt": "做一个手机和电脑都能用的考公工作台，管理计划、刷题和错题复盘，数据只保存在本地。",
       "expected_output": "零到一次关键澄清、自然产品确认、一个推荐候选、保存恢复和双视口核心验收通过。",

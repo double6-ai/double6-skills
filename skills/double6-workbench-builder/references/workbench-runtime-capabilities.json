@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "contract_version": "double6_runtime_capabilities_v1",
+  "purpose": "运行时本机能力四态。构建期成熟度仍用 catalog_only / contract_ready / executable_ready / release_ready；本文件只描述当前设备上还能不能保存、导入导出、复制和记本地提醒。",
+  "source": {
+    "id": "danielmiessler-lifeos-capability-doctor",
+    "repo": "danielmiessler/LifeOS",
+    "license": "MIT",
+    "adopted": "ready / broken / declined / stale 四态；用户拒绝是合法稳定态；缺失时产出带标签的降级说明，不伪装完整能力"
+  },
+  "states": ["ready", "broken", "declined", "stale"],
+  "visible_labels": {
+    "ready": "可用",
+    "broken": "不可用",
+    "declined": "已关闭",
+    "stale": "待复查"
+  },
+  "rules": [
+    "declined 不是验收失败，也不是构建失败",
+    "不接任何云 Connection 或账号",
+    "导出文件不携带 runtimeCapabilities，避免把这台设备的降级状态带到另一台设备",
+    "页面可见文案只用中文标签，英文状态只出现在 data 属性"
+  ],
+  "capabilities": [
+    {
+      "capability_id": "storage",
+      "title": "本机保存",
+      "required": true,
+      "probe": "localStorage.setItem"
+    },
+    {
+      "capability_id": "import_export",
+      "title": "导入导出",
+      "required": true,
+      "probe": "FileReader and Blob download"
+    },
+    {
+      "capability_id": "clipboard",
+      "title": "复制到剪贴板",
+      "required": false,
+      "probe": "navigator.clipboard.writeText"
+    },
+    {
+      "capability_id": "reminder",
+      "title": "本地提醒",
+      "required": false,
+      "probe": "local reminder intent; system notification is optional and never claimed as sent"
+    }
+  ]
+}

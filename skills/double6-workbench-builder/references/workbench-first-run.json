@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "contract_version": "double6_first_run_v1",
+  "purpose": "第一次打开工作台时的短说明。只解释先做什么、数据在哪、怎么备份，以及电脑 Chrome 可用应用窗口打开。",
+  "source": {
+    "id": "linuxying-personal-workbench-first-open",
+    "repo": "linuxying/personal-workbench",
+    "license": "MIT",
+    "adopted": "首启说明和以应用窗口打开的轻量交付提示；不吸收远程字体、CDN 或单文件继续膨胀"
+  },
+  "rules": [
+    "只在未见过且还没有自有记录时显示",
+    "点「知道了」后不再出现；清空数据也保持已看过",
+    "不注册 service worker",
+    "不声称已可安装、已上线或已是原生应用",
+    "不依赖 Google Fonts 或其它远程资源",
+    "不得挡住首页主动作"
+  ],
+  "visible_points": [
+    "今天先做首页标出的那一件",
+    "写下的内容只留在这台设备的这个浏览器；浏览器存储不是加密保险箱，也不是账号",
+    "换电脑或重装浏览器前先导出备份",
+    "电脑 Chrome 可用应用窗口打开，但那不是已经安装或已经上线"
+  ]
+}

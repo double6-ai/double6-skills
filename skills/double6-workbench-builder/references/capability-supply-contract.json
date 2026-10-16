@@ -1,0 +1,267 @@
+{
+  "schema_version": 1,
+  "contract_version": "double6_capability_supply_v1",
+  "status": "locked_for_v0_50_to_v0_52",
+  "scope": {
+    "target_releases": [
+      "0.50.0",
+      "0.51.0",
+      "0.52.0"
+    ],
+    "hierarchy": [
+      "user_need",
+      "domain",
+      "scene_profile",
+      "module",
+      "capability",
+      "atomic_capability",
+      "surface_primitive",
+      "final_workbench"
+    ],
+    "selected_scope_only": true,
+    "catalog_is_not_execution": true,
+    "frozen_child_baseline_sha256": "5b31d9fce4edb1b6717fa87177db2c0f950e2462a6f558c92f09e5427ffaf92d"
+  },
+  "identifier_contract": {
+    "domain_id": {
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "compatibility": "retain_the_existing_16_domain_ids"
+    },
+    "scene_profile_id": {
+      "pattern": "^scene\\.[a-z0-9-]+\\.[a-z0-9-]+$",
+      "example": "scene.personal-execution.weekly-personal-control"
+    },
+    "module_id": {
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "compatibility": "retain_existing_module_ids"
+    },
+    "capability_id": {
+      "pattern": "^CAP-[0-9]{2}-[0-9]{2}$",
+      "compatibility": "retain_existing_capability_ids"
+    },
+    "atomic_capability_id": {
+      "pattern": "^atom\\.(?:shared|[a-z0-9-]+)\\.[a-z0-9-]+$",
+      "example": "atom.shared.create-record"
+    },
+    "surface_primitive_id": {
+      "pattern": "^surface\\.[a-z0-9-]+$",
+      "example": "surface.today-action"
+    },
+    "policy_pack_id": {
+      "pattern": "^policy\\.[a-z0-9-]+$",
+      "example": "policy.synthetic-data-default"
+    }
+  },
+  "maturity_contract": {
+    "ordered_levels": [
+      "catalog_only",
+      "contract_ready",
+      "executable_ready",
+      "release_ready"
+    ],
+    "rules": {
+      "catalog_only": {
+        "requires": [
+          "stable_id",
+          "label",
+          "owner_or_domain",
+          "declared_boundary"
+        ],
+        "may_be_recommended_as_usable": false
+      },
+      "contract_ready": {
+        "requires": [
+          "all_type_specific_fields",
+          "input_output_contract",
+          "failure_and_recovery_contract",
+          "machine_checkable_acceptance"
+        ],
+        "may_be_recommended_as_usable": false
+      },
+      "executable_ready": {
+        "requires": [
+          "contract_ready",
+          "deterministic_runtime_binding",
+          "automated_positive_and_negative_tests",
+          "selected_scope_embedding_proof"
+        ],
+        "may_be_recommended_as_usable": true
+      },
+      "release_ready": {
+        "requires": [
+          "executable_ready",
+          "release_gate_receipt",
+          "safety_and_authorization_proof",
+          "visible_surface_three_viewport_proof",
+          "no_orphan_or_cross_module_leakage"
+        ],
+        "may_be_recommended_as_usable": true
+      }
+    },
+    "no_level_skipping": true,
+    "evidence_required_for_each_promotion": true
+  },
+  "contract_types": {
+    "scene_profile": {
+      "required": [
+        "scene_profile_id",
+        "domain_id",
+        "label",
+        "maturity",
+        "user",
+        "goal",
+        "frequency",
+        "inputs",
+        "outputs",
+        "risk_class",
+        "recommended_module_ids",
+        "boundaries",
+        "clarification_conditions"
+      ]
+    },
+    "capability_graph": {
+      "required": [
+        "scene_profile_id",
+        "module_id",
+        "capability_id",
+        "atomic_capability_ids",
+        "surface_primitive_ids",
+        "policy_pack_ids",
+        "maturity"
+      ],
+      "ownership_rule": "every capability belongs to one or more selected modules inside one selected scene; all embedded atoms must be reachable from that path"
+    },
+    "atomic_capability": {
+      "required": [
+        "atomic_capability_id",
+        "label",
+        "maturity",
+        "action",
+        "inputs",
+        "state_model",
+        "outputs",
+        "failure_modes",
+        "recovery",
+        "acceptance",
+        "supported_surface_primitive_ids",
+        "policy_pack_ids"
+      ]
+    },
+    "surface_primitive": {
+      "required": [
+        "surface_primitive_id",
+        "label",
+        "maturity",
+        "placement_levels",
+        "jobs",
+        "inputs",
+        "state_model",
+        "actions",
+        "outputs",
+        "failure_modes",
+        "recovery",
+        "responsive_rules",
+        "accessibility_rules",
+        "acceptance"
+      ]
+    },
+    "policy_pack": {
+      "required": [
+        "policy_pack_id",
+        "label",
+        "maturity",
+        "reward_rules",
+        "constraint_rules",
+        "privacy_rules",
+        "real_data_rules",
+        "external_operation_rules",
+        "failure_recovery",
+        "acceptance"
+      ],
+      "invariants": [
+        "rewards_do_not_change_mastery",
+        "rewards_do_not_change_business_truth",
+        "rewards_do_not_change_completion_evidence",
+        "punishments_are_reversible_by_default",
+        "external_operations_require_explicit_authorization"
+      ]
+    }
+  },
+  "vertical_samples": [
+    {
+      "vertical_id": "vertical.personal-household",
+      "domain_ids": [
+        "personal-execution",
+        "household-collaboration"
+      ]
+    },
+    {
+      "vertical_id": "vertical.content-research",
+      "domain_ids": [
+        "content-operations",
+        "research-knowledge"
+      ]
+    },
+    {
+      "vertical_id": "vertical.small-business",
+      "domain_ids": [
+        "sales-trade",
+        "finance-tax-contract",
+        "ecommerce-operations",
+        "local-service-store"
+      ]
+    }
+  ],
+  "release_targets": {
+    "0.50.0": {
+      "minimum_honest_stop": "five_contract_types_and_three_vertical_samples_contract_ready_with_executable_vertical_paths",
+      "domain_scope": "three_vertical_samples",
+      "must_not_claim": "all_16_domains_executable"
+    },
+    "0.51.0": {
+      "minimum_honest_stop": "all_16_domains_in_capability_graph_and_deterministic_selected_scope_recommendation_compiler",
+      "domain_scope": "all_16_domains",
+      "must_not_claim": "layout_policy_and_all_combination_release_gate_complete"
+    },
+    "0.52.0": {
+      "minimum_honest_stop": "layout_system_policy_packs_and_all_domain_combination_acceptance_with_machine_receipt",
+      "domain_scope": "all_16_domains",
+      "must_not_claim": "packaged_host_synced_deployed_published_or_long_term_user_effective"
+    }
+  },
+  "parallel_ownership": {
+    "main_agent_only": [
+      "workflows/double6-workbench-builder/references/capability-supply-contract.json",
+      "workflows/double6-workbench-builder/manifest.json",
+      "README.md",
+      "PROGRESS.md",
+      "project.yaml",
+      "indexes/current_state.json",
+      "indexes/version_authority.json",
+      "indexes/artifact_index.json",
+      "all_runtime_integration_and_release_receipts"
+    ],
+    "agent_a_only": [
+      "workflows/double6-workbench-builder/references/scene-profiles.json"
+    ],
+    "agent_b_only": [
+      "workflows/double6-workbench-builder/references/atomic-capabilities.json"
+    ],
+    "agent_c_only": [
+      "workflows/double6-workbench-builder/references/surface-primitives.json",
+      "workflows/double6-workbench-builder/references/layout-system.json"
+    ]
+  },
+  "prohibited_scope": [
+    "modify_frozen_child_baseline",
+    "produce_third_batch_child_learning_content",
+    "add_child_learning_atoms",
+    "start_real_child_or_family_trial",
+    "collect_identity_voice_photo_or_video",
+    "package_or_sync_host",
+    "overwrite_workbuddy_or_trae",
+    "restart_host",
+    "deploy_or_publish",
+    "promote_shared_capability"
+  ]
+}
