@@ -191,6 +191,25 @@ def test_round2_headingless_refs_same_page_as_translated_body_pass(tmp_path):
     assert result['severity'] == 'ok', result['pages']
 
 
+def test_round2_headingless_refs_page_with_carried_over_fragments_pass(tmp_path):
+    # 真实论文的续页：页首是上一页条目的残段（无编号、无年份之外的特征），中间条目被拆成两段。
+    carry = ('Xu, Zheng Yan, Iliyan Zarov, Yuchen Zhang, Angela Fan, Melanie Kambadur, Sharan Narang, '
+             'Aurelien Rodriguez, Robert Stojnic, and Thomas Scialom. Llama 2: Open foundation models, 2023.')
+    split_head = ('[35] Andrew Jaegle, Felix Gimeno, Andy Brock, Oriol Vinyals, Andrew Zisserman, and Joao Carreira. '
+                  'Perceiver: General perception with iterative attention. In ICML, pages 4651-')
+    entries = [(carry, 'helv')] + [(r, 'helv') for r in REFS[:4]] + [(split_head, 'helv'), ('4664. PMLR, 2021.', 'helv')] \
+        + [(r, 'helv') for r in REFS[4:]]
+    def doc(body, font):
+        first = Page(); flow(first, 50, 545, 50, [(body, font)] * 3)
+        second = Page(); flow(second, 50, 545, 50, entries, gap=9)
+        return [first, second]
+    result = check_render_residue(save(tmp_path / 's.pdf', doc(EN_PARA, 'helv')),
+                                  save(tmp_path / 't.pdf', doc(ZH_PARA, 'china-s')))
+    assert result['severity'] == 'ok', result['pages']
+    row = result['pages'][1]
+    assert row['excluded_source_breakdown'].get('reference_entries_headingless', 0) >= row['source_latin_words'] + row['excluded_source_words'] - 5, row
+
+
 def test_round2_headingless_english_prose_at_page_bottom_still_counts(tmp_path):
     def doc(body, font):
         page = Page(); flow(page, 50, 545, 50, [(body, font)])
