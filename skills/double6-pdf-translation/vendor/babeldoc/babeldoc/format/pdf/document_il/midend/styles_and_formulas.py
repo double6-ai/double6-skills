@@ -53,6 +53,63 @@ class StylesAndFormulas:
     def update_formula_data(self, formula: PdfFormula):
         update_formula_data(formula)
 
+    @staticmethod
+    def _paragraph_x_bounds(paragraph) -> tuple[float, float] | None:
+        box = getattr(paragraph, "box", None)
+        if box is not None and box.x is not None and box.x2 is not None:
+            return box.x, box.x2
+        xs = [
+            (char.box.x, char.box.x2)
+            for composition in paragraph.pdf_paragraph_composition or []
+            for line in [composition.pdf_line]
+            if line is not None
+            for char in line.pdf_character or []
+        ]
+        if not xs:
+            return None
+        return min(x for x, _ in xs), max(x2 for _, x2 in xs)
+
+    @staticmethod
+    def _is_visual_line_wrap(
+        previous: PdfCharacter,
+        following: PdfCharacter,
+        bounds: tuple[float, float] | None,
+    ) -> bool:
+        """Double6 PR #2: 判断两个相邻字形之间是否发生了栏内折行。
+
+        行切分（line-threading）遇到上下标、大括号、分式等高字形时，相邻两条视觉行在
+        y 方向重叠，会被合成同一个 PdfLine。此时折行处两侧的行内公式字符会被归成一个
+        跨两行的“公式”，其外框覆盖整行，随后 merge_overlapping_formulas 会把同一 PdfLine
+        内所有公式吞并进去，翻译输入只剩一个 {vN}、其余位置留下空洞，排版时公式整体错位。
+
+        判据刻意保守，只认典型的正文折行：下一个字形回到栏左缘附近（≤25% 栏宽），
+        上一个字形位于栏右侧（右缘 ≥60% 栏宽），回退距离 > max(20pt, 35% 栏宽)，
+        且下一个字形中心落在上一个字形底边之下。行内分式（分母只回退分子宽度）、
+        居中排版的多行公式都不满足“回到左缘”，不会被拆开。
+        """
+        if bounds is None or previous is None or following is None:
+            return False
+        left, right = bounds
+        width = right - left
+        if width <= 0:
+            return False
+        prev_box, next_box = previous.box, following.box
+        centre = (next_box.y + next_box.y2) / 2
+        return (
+            prev_box.x - next_box.x > max(20.0, 0.35 * width)
+            and centre < prev_box.y
+            and next_box.x - left <= 0.25 * width
+            and prev_box.x2 - left >= 0.6 * width
+        )
+
+    @staticmethod
+    def _edge_glyph(chars: list[PdfCharacter], last: bool) -> PdfCharacter | None:
+        seq = reversed(chars) if last else iter(chars)
+        for char in seq:
+            if char.char_unicode is not None and not char.char_unicode.isspace():
+                return char
+        return None
+
     def process(self, document: Document):
         with self.translation_config.progress_monitor.stage_start(
             self.stage_name,
@@ -563,9 +620,15 @@ class StylesAndFormulas:
         self,
         tagged_chars: list[tuple[PdfCharacter, bool, bool]],
         line_index: int,
+        bounds: tuple[float, float] | None = None,
     ) -> list[PdfParagraphComposition]:
         """
         Phase 2: Group consecutive characters with the same tag into new compositions.
+
+        Double6 PR #2: a formula group is also closed at a visual line wrap
+        (see ``_is_visual_line_wrap``) so that an inline formula broken across
+        two lines becomes two inline formulas instead of one block spanning
+        the whole line.
         """
         if not tagged_chars:
             return []
@@ -574,8 +637,31 @@ class StylesAndFormulas:
         current_chars = []
         current_tag = tagged_chars[0][1]
         current_corner_mark_flags = []
+        last_glyph = None
 
         for char, is_formula_tag, is_corner_mark in tagged_chars:
+            is_glyph = char.char_unicode is not None and not char.char_unicode.isspace()
+            wrapped = (
+                is_formula_tag
+                and current_tag
+                and current_chars
+                and is_glyph
+                and self._is_visual_line_wrap(last_glyph, char, bounds)
+            )
+            if is_glyph:
+                last_glyph = char
+            if wrapped:
+                new_compositions.append(
+                    self.create_composition(
+                        current_chars,
+                        current_tag,
+                        line_index,
+                        any(current_corner_mark_flags),
+                    ),
+                )
+                current_chars = [char]
+                current_corner_mark_flags = [is_corner_mark]
+                continue
             if is_formula_tag == current_tag:
                 current_chars.append(char)
                 current_corner_mark_flags.append(is_corner_mark)
@@ -644,6 +730,7 @@ class StylesAndFormulas:
                 }
 
             new_paragraph_compositions = []
+            bounds = self._paragraph_x_bounds(paragraph)
             # This flag is carried through all compositions in a paragraph, as in the original implementation.
             first_is_bullet = False
 
@@ -666,7 +753,7 @@ class StylesAndFormulas:
                     continue
 
                 grouped_compositions = self._group_classified_characters(
-                    tagged_chars, line_index
+                    tagged_chars, line_index, bounds
                 )
                 new_paragraph_compositions.extend(grouped_compositions)
 
@@ -1038,8 +1125,29 @@ class StylesAndFormulas:
         result = []
         current_chars = []
         bracket_level = 0  # 跟踪括号的层数
+        # Double6 PR #2: 下标/上标里的逗号（如 M_{i,j}）字号明显小于公式主字号，
+        # 不是列举分隔符；拆开会让 "M_i" "," "j=1" 三段被分别排版、在折行处断开。
+        sizes = [
+            char.pdf_style.font_size
+            for char in formula.pdf_character
+            if char.pdf_style is not None
+            and char.pdf_style.font_size
+            and char.char_unicode
+            and not char.char_unicode.isspace()
+        ]
+        main_size = max(sizes) if sizes else None
 
         for char in formula.pdf_character:
+            is_script_comma = (
+                char.char_unicode == ","
+                and main_size is not None
+                and char.pdf_style is not None
+                and char.pdf_style.font_size is not None
+                and char.pdf_style.font_size < main_size * 0.85
+            )
+            if is_script_comma:
+                current_chars.append(char)
+                continue
             # 检查是否是左括号
             if char.char_unicode in LEFT_BRACKET:
                 bracket_level += 1
@@ -1131,6 +1239,8 @@ class StylesAndFormulas:
             if not paragraph.pdf_paragraph_composition:
                 continue
 
+            bounds = self._paragraph_x_bounds(paragraph)
+
             # 重复执行合并过程，直到没有更多可以合并的公式
             merged = True
             while merged:
@@ -1193,6 +1303,39 @@ class StylesAndFormulas:
                                 > 0.8
                             )
                         )
+
+                        if should_merge and j > i + 1 and any(
+                            self._edge_glyph(flatten, last=False) is not None
+                            for between in paragraph.pdf_paragraph_composition[i + 1 : j]
+                            if between.pdf_formula is None
+                            for flatten in [
+                                between.pdf_line.pdf_character
+                                if between.pdf_line is not None
+                                else (
+                                    between.pdf_same_style_characters.pdf_character
+                                    if between.pdf_same_style_characters is not None
+                                    else (
+                                        [between.pdf_character]
+                                        if between.pdf_character is not None
+                                        else []
+                                    )
+                                )
+                            ]
+                        ):
+                            # Double6 PR #2: 不相邻的两个公式之间夹着正文时，
+                            # 合并会把后一个公式连同其位置搬到前一个公式处、把中间
+                            # 正文挤到后面（例如被 CMEX 大括号虚高外框“包含”的上一行
+                            # 编号），这是阅读顺序损坏而不是角标合并。
+                            should_merge = False
+
+                        if should_merge and self._is_visual_line_wrap(
+                            self._edge_glyph(formula1.pdf_character, last=True),
+                            self._edge_glyph(formula2.pdf_character, last=False),
+                            bounds,
+                        ):
+                            # Double6 PR #2: 同一 PdfLine 内跨视觉折行的两个行内公式
+                            # 不是角标关系，合并会把后一个公式搬到前一个位置。
+                            should_merge = False
 
                         if should_merge:
                             # 合并公式
