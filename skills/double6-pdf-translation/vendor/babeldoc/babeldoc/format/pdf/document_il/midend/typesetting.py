@@ -1776,6 +1776,15 @@ class Typesetting:
             if type(left) not in (float,int):raise ValueError('actual source native host left origin required')
             box.x=left;current_x=left+metadata['first_line_indent_pt']
             current_y=reviewed['page_height']-metadata['source_first_baseline']
+        # 单行表格/图内文字：首行落到原文基线。源字框下沿含下伸部，直接从框底排会让
+        # 整行下移约 0.3 em 压到下一行。只上移、最多半个行高，上边界同步放宽同样距离。
+        top_limit = box.y2
+        anchor = getattr(paragraph, "source_baseline", None) if reviewed is None else None
+        if anchor is not None:
+            lift = float(anchor) - current_y
+            if 0 < lift <= 0.5 * first_line_height:
+                current_y = float(anchor)
+                top_limit = box.y2 + lift
         # box.y -= avg_height * (line_spacing - 1.01) # line_spacing 已被替换为 line_skip
         line_height = 0
         current_line_heights = []  # 存储当前行所有元素的高度
@@ -1912,7 +1921,7 @@ class Typesetting:
             # 再减一次字高会把可容纳的一行判为溢出并丢段。
             if current_y < box.y - 0.01:
                 all_units_fit = False
-            if current_y + unit_height > box.y2 + 0.01:
+            if current_y + unit_height > top_limit + 0.01:
                 all_units_fit = False
 
             # 放置当前单元

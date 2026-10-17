@@ -30,6 +30,7 @@ from babeldoc.format.pdf.document_il.utils.paragraph_helper import (
     is_placeholder_only_paragraph,
 )
 from babeldoc.format.pdf.document_il.utils.paragraph_helper import (
+    bypasses_min_text_length,
     is_pure_numeric_paragraph,
 )
 from babeldoc.format.pdf.translation_config import TranslationConfig
@@ -316,7 +317,7 @@ class ILTranslatorLLMOnly:
             return False
 
         # Minimum length check
-        if paragraph.layout_label not in {"cover_year", "diagram_node"} and len(paragraph.unicode) < self.translation_config.min_text_length:
+        if not bypasses_min_text_length(paragraph) and len(paragraph.unicode) < self.translation_config.min_text_length:
             return False
 
         # Body text check if requested
@@ -575,7 +576,7 @@ class ILTranslatorLLMOnly:
             if paragraph.debug_id is None or paragraph.unicode is None:
                 continue
 
-            if paragraph.layout_label != "cover_year" and re.fullmatch(r"20\d{2}", re.sub(r"\s+", "", paragraph.unicode)):
+            if paragraph.layout_label not in {"cover_year", "year_label"} and re.fullmatch(r"20\d{2}", re.sub(r"\s+", "", paragraph.unicode)):
                 paragraph.layout_label = "cover_year"
 
             # Check CID paragraph - advance progress bar if filtered out
@@ -586,7 +587,7 @@ class ILTranslatorLLMOnly:
 
             # Check minimum length - advance progress bar if filtered out
             if (
-                paragraph.layout_label not in {"cover_year", "diagram_node"}
+                not bypasses_min_text_length(paragraph)
                 and len(paragraph.unicode) < self.translation_config.min_text_length
             ):
                 if pbar:
