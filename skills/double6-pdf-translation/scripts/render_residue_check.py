@@ -220,22 +220,26 @@ def split_counted_text(document) -> tuple[list[str], list[dict[str, int]], list[
             elif in_region and is_citation_entry(group['text'], len(group['rows']), strict=False):
                 group['exclude'] = 'reference_section'
             group['in_region'] = in_region
-    # 无标题的参考文献：连续 ≥3 条按严格阈值通过校验的条目（跳过页码等极短组）。
+    # 无标题的参考文献：由逐条通过校验的条目组成的连续段（跨页续接的条目残段只需满足普通阈值），
+    # 段内至少 3 条满足严格阈值（含年份）且整段虚词比例更低时才剔除；页码等极短组随段剔除，不打断连续段。
     run: list[dict[str, Any]] = []
+    passengers: list[dict[str, Any]] = []
     sequence = [g for groups in pages for g in groups] + [None]
     for group in sequence:
-        if group is not None and len(LATIN_WORD.findall(group['text'])) < 4 and group['kind'] is None:
+        free = group is not None and group['exclude'] is None and not group['in_region'] and group['kind'] is None
+        if free and len(LATIN_WORD.findall(group['text'])) < 4:
+            if run:
+                passengers.append(group)
             continue
-        candidate = (group is not None and group['exclude'] is None and not group['in_region']
-                     and group['kind'] is None and is_citation_entry(group['text'], len(group['rows']), strict=True))
-        if candidate:
+        if free and is_citation_entry(group['text'], len(group['rows']), strict=False):
             run.append(group)
             continue
+        strict_count = sum(1 for g in run if is_citation_entry(g['text'], len(g['rows']), strict=True))
         mean_stop = (sum(citation_features(g['text'])['stopword_ratio'] for g in run) / len(run)) if run else 1.0
-        if len(run) >= HEADINGLESS_MIN_RUN and mean_stop <= HEADINGLESS_RUN_MEAN_STOPWORDS:
-            for item in run:
+        if strict_count >= HEADINGLESS_MIN_RUN and mean_stop <= HEADINGLESS_RUN_MEAN_STOPWORDS:
+            for item in run + passengers:
                 item['exclude'] = 'reference_entries_headingless'
-        run = []
+        run, passengers = [], []
     counted_pages, excluded_pages, reference_pages = [], [], []
     for groups in pages:
         counted, stats = [], {'reference_section': 0, 'reference_entries_headingless': 0, 'code': 0}
