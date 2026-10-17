@@ -1,0 +1,14 @@
+{
+  "candidate": {
+    "path": "/absolute/output/candidate.pdf",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "annotations": [
+    {
+      "page": 1,
+      "xref": 21,
+      "kind": 2,
+      "uri": "https://example.org/paper"
+    }
+  ]
+}

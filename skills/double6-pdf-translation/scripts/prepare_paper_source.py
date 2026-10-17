@@ -6,7 +6,7 @@ import html.parser
 import json
 import re
 import shutil
-from _subprocess_safe import run_text
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -38,11 +38,30 @@ PDF_METADATA_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("journal_footer", re.compile(r"(?i)\b(?:humanities and social sciences communications|nature|springer|elsevier|acm|ieee)\b.*\|\s*(?:\(?\d{4}\)?|\d+)")),
     ("arxiv_footer", re.compile(r"(?i)^\s*arxiv\s*:\s*\d{4}\.\d+")),
 ]
+INLINE_MATH_PATTERN = re.compile(r"(?<![\\$])\$(?!\$)[^$\n]{1,240}(?<!\\)\$(?!\$)")
+DISPLAY_MATH_PATTERN = re.compile(r"(?<![\\$])\$\$(?!\$)[\s\S]{1,16000}?(?<!\\)\$\$(?!\$)|\\\[[\s\S]{1,16000}?\\\]")
+CURRENCY_DOLLAR_PATTERN = re.compile(
+    r"(?<![\w$\\])(?:US|HK|CA|AU|NZ|SG|NT|CDN|C|A|R)\$(?=\s*\d)"
+    r"|(?<![\w$\\])\$(?=(?>\d[\d,]*(?:\.\d+)?)(?:\s+(?:and|or|to|dollars?|USD|million|billion|with|while|per|at|in|for|compared|whereas)\b|\s*[;,.]|\s*$))",
+    re.I,
+)
+
+
+def inline_math_scan_text(text: str) -> str:
+    """只遮住已识别金额的美元符号，保留长度和真实数学范围的原偏移。"""
+    characters = list(text)
+    for match in CURRENCY_DOLLAR_PATTERN.finditer(text):
+        dollar = text.index('$',match.start(),match.end())
+        characters[dollar] = ' '
+    return ''.join(characters)
+
+
 PROTECTED_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("display_math", DISPLAY_MATH_PATTERN),
     ("url", re.compile(r"https?://[^\s)>\]]+")),
     ("doi", re.compile(r"(?i)\b10\.\d{4,9}/[-._;()/:A-Z0-9]+")),
     ("citation", re.compile(r"\[(?:\d+|[A-Z][A-Za-z-]+(?:\s+et\s+al\.)?,?\s+\d{4})(?:\s*[,;]\s*(?:\d+|[A-Z][A-Za-z-]+(?:\s+et\s+al\.)?,?\s+\d{4}))*\]")),
-    ("inline_math", re.compile(r"(?<!\\)\$[^$\n]{1,240}(?<!\\)\$")),
+    ("inline_math", INLINE_MATH_PATTERN),
     ("latex_command", re.compile(r"\\[A-Za-z]+(?:\*|\[[^\]]{0,120}\]|\{[^{}]{0,160}\})*")),
     ("inline_code", re.compile(r"`[^`\n]{1,200}`")),
     ("variable", re.compile(r"\b(?:[A-Za-z]+_[A-Za-z0-9_]+|[A-Za-z]+[A-Z][A-Za-z0-9]*|[A-Z]{2,}[A-Za-z0-9]*)\b")),
@@ -111,19 +130,23 @@ def strip_latex_comments(text: str) -> str:
 
 
 def extract_latex_braced_value(text: str, command: str) -> str:
-    marker = "\\" + command
-    start = text.find(marker)
-    if start == -1:
+    found = re.search(r"\\" + re.escape(command) + r"(?![A-Za-z@])", text)
+    if not found:
         return ""
-    brace = text.find("{", start + len(marker))
+    brace = text.find("{", found.end())
     if brace == -1:
         return ""
     depth = 0
     for index in range(brace, len(text)):
         char = text[index]
-        if char == "{" and (index == 0 or text[index - 1] != "\\"):
+        slashes, previous = 0, index - 1
+        while previous >= 0 and text[previous] == "\\":
+            slashes += 1
+            previous -= 1
+        escaped = slashes % 2 == 1
+        if char == "{" and not escaped:
             depth += 1
-        elif char == "}" and (index == 0 or text[index - 1] != "\\"):
+        elif char == "}" and not escaped:
             depth -= 1
             if depth == 0:
                 return text[brace + 1 : index]
@@ -155,7 +178,9 @@ def latex_to_plain_text(text: str) -> str:
     text = re.sub(r"\\begin\{(?:table|figure|table\*|figure\*)\}.*?\\end\{(?:table|figure|table\*|figure\*)\}", lambda match: "\n\n" + "\n".join(re.findall(r"\\caption\{([^{}]+)\}", match.group(0))) + "\n\n", text, flags=re.S)
     text = re.sub(r"\\begin\{(?:equation|align|align\*|gather|gather\*)\}.*?\\end\{(?:equation|align|align\*|gather|gather\*)\}", " [display_math] ", text, flags=re.S)
     text = re.sub(r"\$\$.*?\$\$|\\\[.*?\\\]", " [display_math] ", text, flags=re.S)
-    text = re.sub(r"(?<!\\)\$[^$\n]{1,240}(?<!\\)\$", " [inline_math] ", text)
+    math_ranges=list(INLINE_MATH_PATTERN.finditer(inline_math_scan_text(text)))
+    for match in reversed(math_ranges):
+        text=text[:match.start()]+' [inline_math] '+text[match.end():]
     text = re.sub(r"\\[A-Za-z]+\*?(?:\[[^\]]*\])?(?:\{([^{}]*)\})?", lambda match: match.group(1) or " ", text)
     text = text.replace("\\&", "&").replace("\\%", "%").replace("\\_", "_").replace("\\#", "#")
     text = re.sub(r"[{}]", "", text)
@@ -164,8 +189,8 @@ def latex_to_plain_text(text: str) -> str:
     return "\n".join(line for line in lines if line).strip()
 
 
-def read_latex(path: Path) -> str:
-    raw = strip_latex_comments(path.read_text(encoding="utf-8", errors="replace"))
+def read_latex_text(raw: str) -> str:
+    raw = strip_latex_comments(raw)
     document = extract_latex_environment(raw, "document") or raw
     document = re.sub(r"\\maketitle\b", "", document)
     title = extract_latex_braced_value(raw, "title")
@@ -178,6 +203,10 @@ def read_latex(path: Path) -> str:
         parts.append("## Abstract\n\n" + latex_to_plain_text(abstract))
     parts.append(latex_to_plain_text(document_without_abstract))
     return "\n\n".join(part for part in parts if part.strip()).strip()
+
+
+def read_latex(path: Path) -> str:
+    return read_latex_text(path.read_text(encoding="utf-8", errors="replace"))
 
 
 def try_pymupdf(path: Path) -> tuple[str, int | None]:
@@ -198,11 +227,32 @@ def try_pymupdf(path: Path) -> tuple[str, int | None]:
         return "\n".join(text_parts).strip(), len(doc)
 
 
+def try_pypdf(path: Path) -> tuple[str, int | None]:
+    try:
+        from pypdf import PdfReader  # type: ignore
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(f"pypdf unavailable: {exc}") from exc
+
+    reader = PdfReader(str(path))
+    text_parts: list[str] = []
+    for index, page in enumerate(reader.pages, start=1):
+        page_text = page.extract_text() or ""
+        if page_text.strip():
+            text_parts.append(f"\n\n<!-- page:{index} -->\n\n{page_text.strip()}")
+    return "\n".join(text_parts).strip(), len(reader.pages)
+
+
 def try_pdftotext(path: Path) -> tuple[str, int | None]:
     binary = shutil.which("pdftotext")
     if not binary:
         raise RuntimeError("pdftotext unavailable")
-    result = run_text([binary, "-layout", str(path), "-"], check=False)
+    result = subprocess.run(
+        [binary, "-layout", str(path), "-"],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "pdftotext failed")
     return result.stdout.strip(), None
@@ -373,8 +423,9 @@ def build_protected_spans(blocks: list[dict[str, Any]]) -> dict[str, Any]:
         block_span_ids: list[str] = []
         occupied: list[tuple[int, int]] = []
         for kind, pattern in PROTECTED_PATTERNS:
-            for match in pattern.finditer(text):
-                value = match.group(0)
+            scan = inline_math_scan_text(text) if kind == 'inline_math' else text
+            for match in pattern.finditer(scan):
+                value = text[match.start():match.end()]
                 if kind in {"url", "doi"}:
                     value = value.rstrip(".,;:")
                 key = (kind, value, str(block.get("block_id")))
@@ -558,7 +609,7 @@ def is_corrupt_pdf_error(error: str) -> bool:
 
 
 def classify_pdf_failure(attempts: list[dict[str, Any]]) -> tuple[str, str]:
-    text_attempts = [item for item in attempts if item.get("method") in {"pymupdf", "pdftotext"}]
+    text_attempts = [item for item in attempts if item.get("method") in {"pymupdf", "pypdf", "pdftotext"}]
     errors = [str(item.get("error") or "") for item in text_attempts if item.get("status") == "error"]
     ok_attempts = [item for item in text_attempts if item.get("status") == "ok"]
     non_dependency_errors = [error for error in errors if not is_dependency_error(error)]
@@ -569,7 +620,7 @@ def classify_pdf_failure(attempts: list[dict[str, Any]]) -> tuple[str, str]:
     if non_dependency_errors and not ok_attempts:
         return "pdf_read_error", "PDF 抽取工具可用但读取失败；需要查看 attempts 中的错误并确认文件状态。"
     if not ok_attempts:
-        return "needs_pdf_dependency", "当前环境没有可用的 PDF 文本抽取工具；可选工具包括 PyMuPDF 或 pdftotext。"
+        return "needs_pdf_dependency", "当前环境没有可用的 PDF 文本抽取工具；可选工具包括 PyMuPDF、pypdf 或 pdftotext。"
     return "needs_ocr", "PDF 文本抽取为空，疑似扫描件或图片型 PDF，需要 OCR。"
 
 
@@ -579,9 +630,12 @@ def try_ocrmypdf(path: Path, output_dir: Path) -> tuple[str, int | None, dict[st
         raise RuntimeError("ocrmypdf unavailable")
     sidecar = output_dir / "ocr_sidecar.txt"
     ocr_pdf = output_dir / "ocr_source.pdf"
-    result = run_text(
+    result = subprocess.run(
         [binary, "--skip-text", "--sidecar", str(sidecar), str(path), str(ocr_pdf)],
         check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
     detail = {
         "command": [binary, "--skip-text", "--sidecar", str(sidecar), str(path), str(ocr_pdf)],
@@ -602,6 +656,7 @@ def extract_pdf(path: Path, output_dir: Path, enable_ocr: bool) -> tuple[str, st
     page_count: int | None = None
     for method, extractor in [
         ("pymupdf", try_pymupdf),
+        ("pypdf", try_pypdf),
         ("pdftotext", try_pdftotext),
     ]:
         try:
@@ -760,6 +815,26 @@ def prepare_source(args: argparse.Namespace) -> dict[str, Any]:
         manifest["warnings"].append(
             f"已从 PDF 正文翻译流中分离 {len(metadata_blocks)} 条页眉页脚、期刊页脚、版权或元数据噪声；详见 metadata_blocks。"
         )
+    if input_type == "pdf" and input_path:
+        from source_formatting import extract_pdf_formatting
+
+        try:
+            formatting = extract_pdf_formatting(input_path, page_limit=getattr(args, "pdf_formatting_page_limit", 500))
+        except (ImportError, RuntimeError, OSError) as exc:
+            formatting = {"schema_version":1,"status":"unavailable","scope_complete":False,
+                          "source":str(input_path),"error":str(exc),"pages":[]}
+            manifest["warnings"].append("原文格式提取未完成；不能声明对齐、间距与颜色已还原。")
+        formatting_path = output_dir / "source_formatting.json"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        formatting_path.write_text(json.dumps(formatting, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        import hashlib
+        manifest["source_formatting"] = {
+            "path": str(formatting_path),
+            "sha256": hashlib.sha256(formatting_path.read_bytes()).hexdigest(),
+            "status": formatting["status"],
+            "scope_complete": formatting["scope_complete"],
+            "purpose": "原文对齐、基线步长、首行缩进、引用、RGB及粗斜体的几何证据；扫描页另需OCR",
+        }
     return write_outputs(text=text, output_dir=output_dir, manifest=manifest)
 
 
@@ -771,6 +846,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", help="Output directory. Defaults to <input-stem>-zh next to the input.")
     parser.add_argument("--no-ocr", action="store_true", help="Do not try optional OCR tools such as ocrmypdf.")
     parser.add_argument("--keep-pdf-noise", action="store_true", help="Keep PDF header/footer and metadata-like lines in source.md.")
+    parser.add_argument("--pdf-formatting-page-limit", type=int, default=500,
+                        help="Maximum pages for source geometry and inline styles (1–500); truncation is reported.")
     return parser
 
 

@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "源局部脚本样式候选报告",
+  "type": "object",
+  "required": [
+    "component_decision",
+    "rows",
+    "quality_pass"
+  ],
+  "properties": {
+    "component_decision": {
+      "enum": [
+        "pass",
+        "fail",
+        "unverified"
+      ]
+    },
+    "rows": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "required": [
+          "source_id",
+          "label",
+          "source_script",
+          "source_actual_normalized_offset",
+          "target_actual_normalized_offset",
+          "source_size_ratio",
+          "target_size_ratios",
+          "normalized_baseline_error",
+          "size_ratio_error",
+          "component_decision",
+          "failure_reasons",
+          "target_actual_normalized_offsets",
+          "target_label_baseline_spread_pt"
+        ],
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_script": {
+            "enum": [
+              "normal",
+              "superscript",
+              "subscript"
+            ]
+          },
+          "source_actual_normalized_offset": {
+            "type": "number"
+          },
+          "target_actual_normalized_offset": {
+            "type": "number"
+          },
+          "source_size_ratio": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "target_size_ratios": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "normalized_baseline_error": {
+            "type": "number",
+            "minimum": 0
+          },
+          "size_ratio_error": {
+            "type": "number",
+            "minimum": 0
+          },
+          "component_decision": {
+            "enum": [
+              "pass",
+              "fail"
+            ]
+          },
+          "failure_reasons": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "source_local_baseline_mismatch",
+                "source_local_size_ratio_mismatch",
+                "target_script_label_spans_multiple_baselines"
+              ]
+            }
+          },
+          "target_actual_normalized_offsets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50000,
+            "items": {
+              "type": "number"
+            }
+          },
+          "target_label_baseline_spread_pt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "component_decision": {
+                  "const": "pass"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "failure_reasons": {
+                  "maxItems": 0
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "failure_reasons": {
+                  "minItems": 1
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "quality_pass": {
+      "const": false
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "unknown_is_not_error_detected": {
+      "const": true
+    },
+    "policy_scope_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "normalized_tolerance": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 0.02
+    },
+    "size_ratio_tolerance": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 0.01
+    },
+    "source_native_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "target_native_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "source_inventory_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "binding_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "actual_pdf_identity_source_inventory_and_visual_review_still_required": {
+      "const": true
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "component_decision": {
+            "const": "unverified"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason",
+          "unknown_is_not_error_detected"
+        ],
+        "properties": {
+          "rows": {
+            "maxItems": 0
+          }
+        }
+      },
+      "else": {
+        "required": [
+          "policy_scope_id",
+          "normalized_tolerance",
+          "size_ratio_tolerance",
+          "source_native_sha256",
+          "target_native_sha256",
+          "source_inventory_sha256",
+          "binding_sha256",
+          "actual_pdf_identity_source_inventory_and_visual_review_still_required"
+        ],
+        "properties": {
+          "rows": {
+            "minItems": 1
+          }
+        },
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "reason"
+              ]
+            },
+            {
+              "required": [
+                "unknown_is_not_error_detected"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "component_decision": {
+            "const": "pass"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "rows": {
+            "items": {
+              "properties": {
+                "component_decision": {
+                  "const": "pass"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "component_decision": {
+            "const": "fail"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "rows": {
+            "contains": {
+              "properties": {
+                "component_decision": {
+                  "const": "fail"
+                }
+              }
+            },
+            "minContains": 1
+          }
+        }
+      }
+    }
+  ]
+}

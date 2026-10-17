@@ -7,11 +7,11 @@ Double6 AI 维护的开源 agent skills。仓库目前包含四个可以独立�
 | Skill | 适合做什么 | 运行要求 | 公开状态 |
 |---|---|---|---|
 | [`double6-deep-research`](skills/double6-deep-research/) | 研究开放性问题、比较多个对象、形成有证据的决策建议，并交付可核验的完整报告 | 宿主 agent 已提供并允许使用搜索、网页或材料读取能力；Python 3.10+ 仅用于可选的交付校验 | 可公开使用 |
-| [`double6-pdf-translation`](skills/double6-pdf-translation/) | 将非扫描版英文 PDF 翻译为简体中文，尽量保留原始版式，并生成中文单语与中英双语 PDF | Python 3.11、`pdf2zh_next`、用户自行配置的 OpenAI-compatible 模型服务 | 可公开使用，但需要先配置运行环境 |
+| [`double6-pdf-translation`](skills/double6-pdf-translation/) | 将英文 PDF/可信 LaTeX 或有限清晰单栏扫描译为简体中文，保留完整审校并生成单语与双语 PDF | macOS/Linux、Python 3.12、随包维护后端和显式配置的模型服务 | [2.0.0-rc.2](https://github.com/double6-ai/double6-skills/releases/tag/double6-pdf-translation-v2.0.0-rc.2)，111 开工合同 |
 | [`double6-ppt-cli`](skills/double6-ppt-cli/) | 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX，覆盖 Markdown/结构化材料创作、模板对象级填充，以及已有 PPTX 的质检与受限修复 | Python 3、OfficeCLI 1.x（bootstrap 固定安装 pin `1.0.157`，运行时接受 ≥ 1.0.144 的 1.x）；**portable 档不需要 macOS**；native 档需要 macOS + Microsoft PowerPoint + `osascript` | 可公开使用；完整 native 闭环建议本机 PowerPoint，portable 档交付为 `pass_with_warnings` |
 | [`double6-workbench-builder`](skills/double6-workbench-builder/) | 把反复要做的真实事情（学习台、备考台、任务面板、内容/社媒运营台、阅读与研究追踪、记录与复盘等）构建为离线优先、严格单文件的本地个人工作台，个人数据只留在当前设备 | Python 3.10+（仅标准库）；浏览器验收可选 Playwright + Chromium | 可公开使用（实验性） |
 
-这些 skill 都不会随仓库分发模型、API key、搜索服务、OfficeCLI 二进制或第三方 PDF 后端。请根据任务选择安装，不必复制整个仓库。
+这些 skill 都不会随仓库分发模型、API key、搜索服务、OfficeCLI 二进制或未声明的第三方组件。请根据任务选择安装，不必复制整个仓库。
 
 ## 安装
 
@@ -71,28 +71,20 @@ clawhub install double6-workbench-builder
 请使用 $double6-pdf-translation 将这个 PDF 翻译成准确、可读的简体中文，并尽量保持原始版式。
 ```
 
-首次使用前，在已安装的 skill 目录中准备运行环境：
+当前目录保留 `paper-translation` 的 `110-unpublished` 路线，已同步第 111 轮当前开工合同；来源按第 111 轮合同纠正，软件候选与每份成品的接受状态分别登记。每份文档需要完整语义、页面、字形样式、链接、真实阅读复制及冷重建核验；陌生输入不自动准入。
+
+在已安装 skill 目录创建独立环境：
 
 ```bash
-bash scripts/setup_venv.sh
-bash run_translate.sh <input-file.pdf> --output-dir <output-dir> \
-  --provider deepseek --model <model-name> --api-key-file <key-file>
+bash scripts/setup_venv.sh /absolute/new/venv
+/absolute/new/venv/bin/python scripts/paper_translation_workflow.py --help
 ```
 
-启动器会先执行运行时检查，再进入正式翻译。也可以使用其它 OpenAI-compatible 服务；provider、base URL、模型与 API key 仅从本次命令行参数读取。缺少必要配置时不会开始正式翻译。
+适用 macOS/Linux、Python 3.12。电子 PDF 与可信 LaTeX 主入口限完整 1–5 页；扫描预检默认最多 2 页，随后须具名确认完整源组和角色。新翻译必须明确模型、服务与凭据；冻结重建可离线运行。模型、字体、TeX、论文和缓存不随包分发。维护后端源码保留其 AGPL v3 与内嵌组件许可。
 
-适用边界：
+`2.0.0-rc.2` 已按精确冻结包[公开发布](https://github.com/double6-ai/double6-skills/releases/tag/double6-pdf-translation-v2.0.0-rc.2)，下载包 SHA256 为 `cf3cb6a3e0780459f1c9b0625e376f373edfbf9e0e8a37cc5c1a4043a79eace6`。它保留候选版本标识和包内冻结时的状态元数据；每份 PDF 的技术核验、用户接受和严格交付仍分别登记。
 
-- 面向包含可提取文本层的英文 PDF；扫描版、图像版或严重损坏的 PDF 应先做 OCR。
-- 默认可能把待翻译文本发送到用户配置的模型服务；处理敏感文档前，请确认服务商的数据与隐私政策。
-- 默认不会访问 arXiv；只有用户明确同意并传入 `--allow-arxiv-source-autodownload` 时才下载论文源码；子进程使用环境白名单，且不再执行文档专用硬编码改写。
-- PDF 后端和辅助工具由用户自行安装，并分别受其自身许可证约束。
-
-完整依赖、配置和故障处理见：
-
-- [`skills/double6-pdf-translation/SKILL.md`](skills/double6-pdf-translation/SKILL.md)
-- [`runtime-dependencies.md`](skills/double6-pdf-translation/references/runtime-dependencies.md)
-- [`known-pitfalls.md`](skills/double6-pdf-translation/references/known-pitfalls.md)
+入口及配置见 [SKILL.md](skills/double6-pdf-translation/SKILL.md)、[运行说明](skills/double6-pdf-translation/references/release-quickstart.md) 和 [运行依赖及许可](skills/double6-pdf-translation/references/runtime-dependencies.md)。
 
 ### 可编辑 PPTX 闭环
 
@@ -134,7 +126,7 @@ bash run_translate.sh <input-file.pdf> --output-dir <output-dir> \
 - 不要把 API key、`.env`、私有文档、研究快照或运行产物提交到仓库。
 - 安装 skill 前建议先阅读其 `SKILL.md`、脚本和依赖说明；PDF 翻译 skill 会执行本地进程、写入指定输出目录并访问用户配置的网络服务；PPT skill 会读写本地 run 副本，并在 native 档驱动本机 PowerPoint 做验证。
 - 深度研究结果可能包含网页摘录或用户提供的材料。公开研究 bundle 前，请自行检查版权、个人信息和保密要求。
-- 仓库不包含本地治理工具、验收报告、缓存、测试运行产物、OfficeCLI 二进制或第三方 PDF 后端源码。
+- 仓库不包含本地治理工具、验收报告、缓存、测试运行产物或 OfficeCLI 二进制。PDF 翻译候选包含有许可声明的维护后端源码。
 
 ## 仓库结构
 
@@ -147,9 +139,12 @@ skills/
 │   ├── tests/
 │   └── CHANGELOG.md
 ├── double6-pdf-translation/
-│   ├── SKILL.md
+│   ├── SKILL.md / README.md / LICENSE
+│   ├── configs/ / schemas/ / examples/ / prompts/
 │   ├── references/
-│   └── scripts/
+│   ├── scripts/
+│   ├── vendor/             # PDFMathTranslate-next / BabelDOC维护源码
+│   └── requirements-*.lock
 ├── double6-ppt-cli/
 │   ├── SKILL.md
 │   ├── assets/
@@ -181,6 +176,6 @@ skills/
 
 ## 许可
 
-除 `skills/double6-ppt-cli` 外，本仓库源码使用 [MIT License](LICENSE) 发布。`skills/double6-ppt-cli` 是例外：其中 Double6 原创的 glue、policy、CLI、schema 与测试按该 skill 根目录的 Apache License 2.0 发布，`vendor/ppt-master-core` 继续适用 PPT Master 的 MIT 许可证，详见该目录的 [`LICENSE`](skills/double6-ppt-cli/LICENSE)、[`NOTICE`](skills/double6-ppt-cli/NOTICE) 与 [`THIRD_PARTY_NOTICES.md`](skills/double6-ppt-cli/THIRD_PARTY_NOTICES.md)。子目录中的 LICENSE 文件优先于根目录 LICENSE。外部模型服务、Python 包、OfficeCLI、PDF 工具和其它第三方组件不随本仓库分发，并适用各自的许可证与服务条款。
+除 `skills/double6-ppt-cli` 和 `skills/double6-pdf-translation` 外，本仓库源码使用 [MIT License](LICENSE) 发布。`skills/double6-ppt-cli` 是例外：其中 Double6 原创的 glue、policy、CLI、schema 与测试按该 skill 根目录的 Apache License 2.0 发布，`vendor/ppt-master-core` 继续适用 PPT Master 的 MIT 许可证，详见该目录的 [`LICENSE`](skills/double6-ppt-cli/LICENSE)、[`NOTICE`](skills/double6-ppt-cli/NOTICE) 与 [`THIRD_PARTY_NOTICES.md`](skills/double6-ppt-cli/THIRD_PARTY_NOTICES.md)。PDF 翻译候选保留 AGPL v3 许可原文与上游声明，当前开发成员仍待精确许可范围及发布接受，见其 [依赖与许可说明](skills/double6-pdf-translation/references/runtime-dependencies.md)。子目录中的 LICENSE 文件优先于根目录 LICENSE。通过安装获取的 Python 包、外部模型服务、OfficeCLI 和系统工具适用各自的许可证与服务条款；随包维护源码按对应目录声明保留许可。
 
-发布到 ClawHub 的 skill 版本按该平台规则另行使用 MIT-0：允许使用、修改和再分发（包括商业使用），且不要求署名。该 MIT-0 说明不适用于 `double6-ppt-cli`：其 Apache-2.0 原创部分与 vendored MIT 组件仍须按各自许可证保留版权声明与 NOTICE。GitHub 与 skills.sh 上的仓库源码适用上述根目录及子目录许可证。
+发布到 ClawHub 的 skill 版本按该平台规则另行使用 MIT-0：允许使用、修改和再分发（包括商业使用），且不要求署名。该 MIT-0 说明不适用于当前 PDF 翻译候选及 `double6-ppt-cli`：PDF 翻译候选保留 AGPL v3 许可脉络。PPT 的 Apache-2.0 原创部分与 vendored MIT 组件仍须按各自许可证保留版权声明与 NOTICE。GitHub 与 skills.sh 上的仓库源码适用上述根目录及子目录许可证。

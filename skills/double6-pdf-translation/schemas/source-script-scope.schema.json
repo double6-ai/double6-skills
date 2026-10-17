@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "独立源审校的完整脚本样式范围",
+  "description": "用于冻结前检查输入字段；运行时另核PDF身份、完整成员、源宿主和实际样式。不授予视觉或整件接受。 文档最多2048标签、单源页最多256标签；运行时核对源/目标成员唯一归属，按当前物理页串行枚举。 非空范围须绑定独立完整源成员清单，核对遗漏、重复、错误排除与复合指数分组；仅非空不能证明完整。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source",
+    "standard",
+    "reviewer_id",
+    "method",
+    "pages",
+    "items"
+  ],
+  "$defs": {
+    "ref": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  },
+  "properties": {
+    "source": {
+      "$ref": "#/$defs/ref"
+    },
+    "standard": {
+      "$ref": "#/$defs/ref"
+    },
+    "reviewer_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "method": {
+      "const": "source_first"
+    },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "runtime_ref": {
+      "$ref": "#/$defs/ref"
+    },
+    "schema_ref": {
+      "$ref": "#/$defs/ref"
+    },
+    "not_applicable_reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 2048,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "page",
+          "label",
+          "source_script",
+          "source_label_indices",
+          "source_host_anchor_index",
+          "normalized_tolerance",
+          "size_ratio_tolerance",
+          "policy_scope_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_script": {
+            "enum": [
+              "normal",
+              "superscript",
+              "subscript"
+            ]
+          },
+          "source_label_indices": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 49999
+            }
+          },
+          "source_host_anchor_index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 49999
+          },
+          "normalized_tolerance": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 0.02
+          },
+          "size_ratio_tolerance": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 0.01
+          },
+          "policy_scope_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "source_members_ref": {
+      "$ref": "#/$defs/ref"
+    },
+    "typed_routes_ref": {
+      "$ref": "#/$defs/ref"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "items": {
+            "minItems": 1
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "then": {
+        "required": [
+          "source_members_ref"
+        ]
+      }
+    }
+  ]
+}

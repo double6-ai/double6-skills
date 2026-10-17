@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Single active default entry policy; declarative existing CLI actions",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "development_revision",
+    "entry_script",
+    "defaults",
+    "routes",
+    "quality_requirements",
+    "source_policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "development_revision": {
+      "const": "110-unpublished"
+    },
+    "entry_script": {
+      "const": "scripts/paper_translation_workflow.py"
+    },
+    "defaults": {
+      "type": "object",
+      "required": [
+        "scan_new_input",
+        "scan_reviewed_reprepare",
+        "scan_frozen_rebuild",
+        "digital_pdf",
+        "latex_verified"
+      ],
+      "properties": {
+        "scan_new_input": {
+          "const": "inspect-input"
+        },
+        "scan_reviewed_reprepare": {
+          "const": "run-reviewed-scan"
+        },
+        "scan_frozen_rebuild": {
+          "const": "trial-render"
+        },
+        "digital_pdf": {
+          "const": "collect"
+        },
+        "latex_verified": {
+          "const": "candidate"
+        }
+      },
+      "additionalProperties": false
+    },
+    "routes": {
+      "type": "object",
+      "required": [
+        "scan_new_input",
+        "scan_reviewed_reprepare",
+        "scan_frozen_rebuild",
+        "digital_pdf",
+        "latex_verified"
+      ]
+    },
+    "quality_requirements": {
+      "type": "array",
+      "minItems": 7
+    },
+    "source_policy": {
+      "type": "object"
+    },
+    "software_release": {
+      "const": false
+    }
+  }
+}

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Double6 Skills，2026-10-17：基于paper-translation维护源码整理；变更见Skill根目录MODIFICATIONS.md。
 from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 import re
 import sys
@@ -13,9 +14,9 @@ from typing import Any
 
 import policy_utils
 
-DEFAULT_BASE_URL = ""
-DEFAULT_MODEL = ""
-DEFAULT_API_KEY = ""
+DEFAULT_BASE_URL = None
+DEFAULT_MODEL = None
+DEFAULT_API_KEY = "local-dummy"
 DEFAULT_REASONING_EFFORT = "none"
 DEFAULT_SYSTEM_PROMPT = (
     "/no_think You are a professional, authentic machine translation engine. "
@@ -110,13 +111,17 @@ def request_translation(user_text: str, system_prompt: str, args: argparse.Names
         "max_tokens": args.max_tokens,
         "stream": False,
     }
-    if args.reasoning_effort:
+    for name in ("top_p", "top_k", "repetition_penalty"):
+        value = getattr(args, name, None)
+        if value is not None:
+            payload[name] = value
+    if args.reasoning_effort and "qwen" in str(args.model).lower():
         payload["reasoning_effort"] = args.reasoning_effort
     request = urllib.request.Request(
         chat_completions_url(args.base_url),
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
         headers={
-            "Authorization": f"Bearer {args.api_key}",
+            **({"Authorization": f"Bearer {args.api_key}"} if args.api_key else {}),
             "Content-Type": "application/json",
         },
         method="POST",
@@ -134,6 +139,8 @@ def request_translation(user_text: str, system_prompt: str, args: argparse.Names
 
 def translate(text: str, args: argparse.Namespace) -> str:
     first = request_translation(text, args.system_prompt, args)
+    if policy_utils.policy_note_leaks(text, first, policy_utils.load_policy_context(getattr(args, "context_file", None))):
+        raise RuntimeError("policy_instruction_leak: model output copied document policy notes")
     first = apply_source_aware_replacements(text, first)
     missing = missing_protected_values(text, first)
     if not missing:
@@ -143,6 +150,8 @@ def translate(text: str, args: argparse.Namespace) -> str:
         + "\nProtected span validation failed on the previous attempt. The retry must include every listed protected span verbatim."
     )
     second = request_translation(build_retry_user_input(text, missing), retry_prompt, args)
+    if policy_utils.policy_note_leaks(text, second, policy_utils.load_policy_context(getattr(args, "context_file", None))):
+        raise RuntimeError("policy_instruction_leak: model output copied document policy notes")
     second = apply_source_aware_replacements(text, second)
     still_missing = missing_protected_values(text, second)
     if still_missing:
@@ -152,8 +161,8 @@ def translate(text: str, args: argparse.Namespace) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="stdin/stdout Qwen translator adapter for pdf2zh-next CLITranslator.")
-    parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--base-url", required=True)
+    parser.add_argument("--model", required=True)
     parser.add_argument("--api-key", default=DEFAULT_API_KEY)
     parser.add_argument("--reasoning-effort", default=DEFAULT_REASONING_EFFORT)
     parser.add_argument("--temperature", type=float, default=0.1)
@@ -165,10 +174,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if not args.base_url.strip() or not args.model.strip() or not args.api_key.strip():
-        parser.error("--base-url, --model, and --api-key are required.")
+    args = build_parser().parse_args(argv)
     source = sys.stdin.read()
     if not source.strip():
         return 0

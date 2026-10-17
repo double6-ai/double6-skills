@@ -1,0 +1,239 @@
+start = Document
+Document =
+  element document {
+    Page+,
+    attribute totalPages { xsd:int }
+  }
+Page =
+  element page {
+    element mediabox { Box },
+    element cropbox { Box },
+    PDFXobject*,
+    PageLayout*,
+    PDFRectangle*,
+    PDFFont*,
+    PDFParagraph*,
+    PDFFigure*,
+    PDFCharacter*,
+    PDFCurve*,
+    PDFForm*,
+    attribute pageNumber { xsd:int },
+    attribute Unit { xsd:string },
+    element baseOperations { xsd:string }
+  }
+Box =
+  element box {
+    # from (x,y) to (x2,y2)
+    attribute x { xsd:float },
+    attribute y { xsd:float },
+    attribute x2 { xsd:float },
+    attribute y2 { xsd:float }
+  }
+PDFXrefId = xsd:int
+PDFFont =
+  element pdfFont {
+    attribute name { xsd:string },
+    attribute fontId { xsd:string },
+    attribute xrefId { PDFXrefId },
+    attribute encodingLength { xsd:int },
+    attribute bold { xsd:boolean }?,
+    attribute italic { xsd:boolean }?,
+    attribute monospace { xsd:boolean }?,
+    attribute serif { xsd:boolean }?,
+    attribute ascent { xsd:float }?,
+    attribute descent { xsd:float }?,
+    PDFFontCharBoundingBox*
+  }
+PDFFontCharBoundingBox =
+  element pdfFontCharBoundingBox {
+    attribute x { xsd:float },
+    attribute y { xsd:float },
+    attribute x2 { xsd:float },
+    attribute y2 { xsd:float },
+    attribute char_id { xsd:int }
+  }
+PDFXobject =
+  element pdfXobject {
+    attribute xobjId { xsd:int },
+    attribute xrefId { PDFXrefId },
+    Box,
+    PDFFont*,
+    element baseOperations { xsd:string }
+  }
+PDFCharacter =
+  element pdfCharacter {
+    attribute vertical { xsd:boolean }?,
+    attribute scale { xsd:float }?,
+    attribute pdfCharacterId { xsd:int }?,
+    attribute char_unicode { xsd:string },
+    attribute advance { xsd:float }?,
+    # xobject nesting depth
+    attribute xobjId { xsd:int }?,
+    attribute debug_info { xsd:boolean }?,
+    attribute formula_layout_id { xsd:int }?,
+    attribute renderOrder { xsd:int }?,
+    attribute subRenderOrder { xsd:int }?,
+    PDFStyle,
+    Box,
+    element visual_bbox { Box }?
+  }
+PageLayout =
+  element pageLayout {
+    attribute id { xsd:int },
+    attribute conf { xsd:float },
+    attribute class_name { xsd:string },
+    Box
+  }
+GraphicState =
+  element graphicState {
+    attribute passthroughPerCharInstruction { xsd:string }?
+  }
+PDFStyle =
+  element pdfStyle {
+    attribute font_id { xsd:string },
+    attribute font_size { xsd:float },
+    GraphicState
+  }
+PDFParagraph =
+  element pdfParagraph {
+    attribute xobjId { xsd:int }?,
+    attribute unicode { xsd:string },
+    attribute scale { xsd:float }?,
+    attribute optimal_scale { xsd:float }?,
+    attribute vertical { xsd:boolean }?,
+    attribute FirstLineIndent { xsd:boolean }?,
+    attribute debug_id { xsd:string }?,
+    attribute layout_label { xsd:string }?,
+    attribute layout_id { xsd:int }?,
+    attribute renderOrder { xsd:int }?,
+    Box,
+    PDFStyle,
+    PDFParagraphComposition*
+  }
+PDFParagraphComposition =
+  element pdfParagraphComposition {
+    PDFLine
+    | PDFFormula
+    | PDFSameStyleCharacters
+    | PDFCharacter
+    | PDFSameStyleUnicodeCharacters
+  }
+PDFLine =
+  element pdfLine {
+    Box,
+    PDFCharacter+,
+    attribute renderOrder { xsd:int }?
+  }
+PDFSameStyleCharacters =
+  element pdfSameStyleCharacters { Box, PDFStyle, PDFCharacter+ }
+PDFSameStyleUnicodeCharacters =
+  element pdfSameStyleUnicodeCharacters {
+    PDFStyle?,
+    attribute unicode { xsd:string },
+    attribute debug_info { xsd:boolean }?
+  }
+PDFFormula =
+  element pdfFormula {
+    Box,
+    PDFCharacter+,
+    PDFCurve*,
+    PDFForm*,
+    attribute x_offset { xsd:float },
+    attribute y_offset { xsd:float },
+    attribute x_advance { xsd:float }?,
+    attribute lineId { xsd:int }?,
+    attribute is_corner_mark { xsd:boolean }?
+  }
+PDFFigure = element pdfFigure { Box }
+PDFRectangle =
+  element pdfRectangle {
+    Box,
+    GraphicState,
+    attribute debug_info { xsd:boolean }?,
+    attribute fill_background { xsd:boolean }?,
+    attribute xobjId { xsd:int }?,
+    attribute lineWidth { xsd:float }?,
+    attribute renderOrder { xsd:int }?
+  }
+PDFCurve =
+  element pdfCurve {
+    Box,
+    GraphicState,
+    PDFPath*,
+    PDFOriginalPath*,
+    attribute debug_info { xsd:boolean }?,
+    attribute fill_background { xsd:boolean }?,
+    attribute stroke_path { xsd:boolean }?,
+    attribute evenodd { xsd:boolean }?,
+    attribute xobjId { xsd:int }?,
+    attribute renderOrder { xsd:int }?,
+    attribute ctm {
+      list {
+        xsd:float, xsd:float, xsd:float, xsd:float, xsd:float, xsd:float
+      }
+    }?,
+    attribute relocation_transform {
+      list {
+        xsd:float, xsd:float, xsd:float, xsd:float, xsd:float, xsd:float
+      }
+    }?
+  }
+PDFOriginalPath = element pdfOriginalPath { PDFPath }
+PDFPath =
+  element pdfPath {
+    attribute x { xsd:float },
+    attribute y { xsd:float },
+    attribute op { xsd:string },
+    attribute has_xy { xsd:boolean }?
+  }
+PDFForm =
+  element pdfForm {
+    attribute xobjId { xsd:int },
+    Box,
+    GraphicState,
+    PDFMatrix,
+    PDFAffineTransform,
+    attribute ctm {
+      list {
+        xsd:float, xsd:float, xsd:float, xsd:float, xsd:float, xsd:float
+      }
+    }?,
+    attribute relocation_transform {
+      list {
+        xsd:float, xsd:float, xsd:float, xsd:float, xsd:float, xsd:float
+      }
+    }?,
+    attribute renderOrder { xsd:int },
+    attribute formType { xsd:string },
+    PDFFormSubtype
+  }
+PDFFormSubtype = element pdfFormSubtype { PDFInlineForm | PDFXobjForm }
+PDFInlineForm =
+  element pdfInlineForm {
+    attribute formData { xsd:string }?,
+    attribute imageParameters { xsd:string }?
+  }
+PDFXobjForm =
+  element pdfXobjForm {
+    attribute xrefId { PDFXrefId },
+    attribute doArgs { xsd:string }
+  }
+PDFMatrix =
+  element pdfMatrix {
+    attribute a { xsd:float },
+    attribute b { xsd:float },
+    attribute c { xsd:float },
+    attribute d { xsd:float },
+    attribute e { xsd:float },
+    attribute f { xsd:float }
+  }
+# Decomposed transform parameters for a CTM
+PDFAffineTransform =
+  element pdfAffineTransform {
+    attribute translation_x { xsd:float },
+    attribute translation_y { xsd:float },
+    attribute rotation { xsd:float },
+    attribute scale_x { xsd:float },
+    attribute scale_y { xsd:float },
+    attribute shear { xsd:float }
+  }

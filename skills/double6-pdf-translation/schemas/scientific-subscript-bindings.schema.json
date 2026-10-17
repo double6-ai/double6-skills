@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scientific-subscript-bindings@1",
+  "type": "array", "minItems": 1, "maxItems": 50000,
+  "items": {
+    "type": "object", "additionalProperties": false,
+    "required": ["id", "class", "source_index", "source_host_index", "target_index", "target_host_index"],
+    "properties": {
+      "id": {"type": "string", "minLength": 1},
+      "class": {"type": "string", "minLength": 1, "description": "由独立源角色/样式证据核定的类别；不得是逐字、词串、页码或坐标补丁"},
+      "source_index": {"type": "integer", "minimum": 0},
+      "source_host_index": {"type": "integer", "minimum": 0},
+      "target_index": {"type": "integer", "minimum": 0},
+      "target_host_index": {"type": "integer", "minimum": 0}
+    }
+  }
+}
