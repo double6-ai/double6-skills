@@ -1,5 +1,38 @@
 # 变更记录
 
+## 2.0.0-rc.3 本地发布候选 · 2026-10-17
+
+- 修复 `inspect-input` 不带 `--catalog-url` 时子进程参数含 `None` 导致的 TypeError；有界执行回执和失败收据保留脱敏、截断后的真实错误消息，不再只记异常类型名。
+- 资源上限可配置：`--task-memory-mib`、`--job-timeout-seconds`、`--memory-metric` 及对应环境变量；平台默认 macOS 3 GiB RSS／120 秒（不变），Linux 4 GiB PSS／300 秒，默认不超过物理内存 25%，显式值最多 50%。Linux 按 PSS 计量，避免 fork 子进程共享页被重复计入；回执记录实际峰值。后端超时随作业时限推导，120 秒时仍为 110/90。
+- 新增结构化输入预检（`pdf_input_preflight.py`）：分别报告用户密码加密、所有者权限限制（警告）、截断/损坏、页数超限、非原生电子页（扫描/转曲）、源语言等；`inspect-input` 与 `candidate`/`collect` 共用同一 `findings` 结构，失败时输出 JSON 并以退出码 2 结束，不再打印原始 traceback。
+- 源语言检测：源文主要为中文而目标为中文时直接拒绝（`source_language_matches_target`），不再静默输出中文。
+- 新增基于实际成品的渲染英文残留检查（`render_residue_check.py`）：大面积未翻译判为高风险，综合质量 `fail`，`quality_report.md` 顶部写明。
+- `candidate` 退出码区分质量失败：综合质量 `fail` 时译文照常写出，但以退出码 3 结束（预检拦截仍为 2），结果 JSON 列出 `quality_fail_reasons`（检查项、页码、残留比例与逐页等级）、`quality_fail_summary` 和 `output_files`。
+- 评审修复（PR #16）：
+  - FREEZE 绑定动作（`candidate`、`collect`、`resume-latex`）以冻结的 `resource_contract` 为唯一预算；命令行/环境变量与冻结值不同即以 `resource_override_conflicts_with_freeze` 拒绝，回执 `resource_limits` 记录实际执行的上限。
+  - 渲染英文残留检查不再计入参考文献段、等宽代码、URL/DOI/邮箱/arXiv 编号、编号与作者-年份引用；正文已译、参考文献保留英文时不再误判失败。
+  - 退出码 3 由综合质量结论驱动，覆盖 LaTeX 路线、`resume-latex`、`revise-latex`、`preserve-roles` 及其它产出综合质量的动作；`comprehensive_quality.json` 优先于 `render_manifest.json`。
+  - 输入预检在页数超限时立即返回，不再逐页解析；`candidate`/`collect` 的预检移入有界子进程（1.5 GiB RSS／60 秒）。
+  - 有界执行的峰值内存计入基线与收尾样本，并在启动后 50 ms 先采一次样，快作业不再记为 0。
+  - PSS 快照测试改为跨平台运行，不再在非 Linux 上跳过。
+- 评审修复第二轮（PR #16）：
+  - 参考文献区域改按几何阅读顺序（行框、双栏、通栏区段）确定，不再依赖内容流顺序；区域内逐条校验是否为文献条目，普通正文照常计入；译文侧剔除量以源文同页剔除量为上限。
+  - 字母编号附录（`A Proof …`、`A.1 …`、`B Additional Results`、`Appendix A`、`附录`）结束参考文献区域，其后正文计入残留。
+  - 无标题参考文献：连续 ≥3 条严格条目（行首编号/作者缩写、年份、DOI/arXiv/卷页、会议期刊词，且虚词比例低）才剔除，普通英文正文不受影响。
+  - 文档：旧合同未写 `memory_metric` 时按 RSS 计量，视作业可能超出预算，建议重新冻结。
+- 评审修复第三轮（PR #16）：
+  - 修复漏判：带人名、年份、编号和指标的英文实验正文曾被当作无标题参考文献整段剔除（源与译文两侧同样剔除，残留率 0.0）。
+  - 新增正文否决（指标枚举、多个小数/年份/叙述式引用、第一人称、谓语动词、句首连接词），参考文献标题之后的区域同样适用。
+  - 无标题参考文献改为强结构证据：编号或作者开头 + 年份 + 出处信号的 strong 条目至少 3 条、左边距一致、位于文末或节末，全文剔除量不超过源文英文词一半；译文侧只在源文已接受的页上剔除；候选段写入 `excluded.headingless_runs` 供审计。
+  - 更正文档中“局限只会偏严”的说法：已知仍有漏判路径，见运行说明。
+- 评审修复第四轮（PR #16）：
+  - 修复漏判：3 条真实文献条目之后的 57 词英文实验叙述（无出处信息）曾被归为 weak 并随整段剔除（ok / 0.0）。
+  - weak 条目默认计数，只有正面证据才剔除：编号与紧邻条目连续，或紧接未结束条目的栏首/页首续接残段；无标题段与 References 标题区域使用同一套逐条规则。
+  - 审计输出逐条决定：`excluded.headingless_runs[].entries_detail` 与 `excluded.reference_region_entries`。
+  - 分组修正：`2000. 标题` 这类以年份开头的续行不再被当作 `n.` 编号而拆开条目；作者名支持非 ASCII 大写字母和行尾连字符断词；`. In …` 计为出处信号。
+- 版本统一为 2.0.0-rc.3（SKILL.md、默认路线配置、输出中的 `skill_version`）；新增本 skill 的 pytest 覆盖与 Linux 冒烟 CI。
+- 未改动：行内公式重建、表格/图内文字抽取、中译英、扫描 OCR、长文档分块。
+
 ## 2.0.0-rc.2 本地发布候选 · 2026-10-17
 
 - 纠正来源基线：同步源项目第 111 轮当前开工合同；五条路线仍称 110，旧长说明移入本地历史归档，不再作为公开包入口。
