@@ -59,6 +59,3 @@ paper-translation-zh/
 # 工作台的主题/角色素材属于运行源码，由主题合同和 SHA 校验；本地验收截图仍留在 reports/。
 !skills/double6-workbench-builder/references/assets/**/*.png
 !skills/double6-workbench-builder/references/assets/**/*.jpg
-
-# PR 评审证据截图（已压缩，少量）按目录显式放行；其余截图仍不入库。
-!docs/evidence/**/*.png
