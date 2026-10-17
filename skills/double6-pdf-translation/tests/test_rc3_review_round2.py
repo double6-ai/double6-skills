@@ -171,8 +171,8 @@ def test_round2_appendix_after_references_is_counted(tmp_path, heading, target_h
 
 @pytest.mark.parametrize('refs', [REFS, AUTHOR_YEAR_REFS], ids=['numbered', 'author_year'])
 def test_round2_headingless_references_with_translated_body_pass(tmp_path, refs):
-    def doc(body, font):
-        first = Page(); flow(first, 50, 545, 50, [(body, font)] * 3)
+    def doc(body, font):  # 第三轮起无标题剔除不得超过文档英文词一半，正文取 5 段
+        first = Page(); flow(first, 50, 545, 50, [(body, font)] * 5)
         second = Page(); flow(second, 50, 545, 50, [(r, 'helv') for r in refs])
         return [first, second]
     result = check_render_residue(save(tmp_path / 's.pdf', doc(EN_PARA, 'helv')),
@@ -183,7 +183,7 @@ def test_round2_headingless_references_with_translated_body_pass(tmp_path, refs)
 
 def test_round2_headingless_refs_same_page_as_translated_body_pass(tmp_path):
     def doc(body, font):
-        page = Page(); y = flow(page, 50, 545, 50, [(body, font)])
+        page = Page(); y = flow(page, 50, 545, 50, [(body, font)] * 4)  # 第三轮：正文须多于无标题条目
         flow(page, 50, 545, y + 10, [(r, 'helv') for r in REFS])
         return [page]
     result = check_render_residue(save(tmp_path / 's.pdf', doc(EN_PARA, 'helv')),
@@ -200,14 +200,16 @@ def test_round2_headingless_refs_page_with_carried_over_fragments_pass(tmp_path)
     entries = [(carry, 'helv')] + [(r, 'helv') for r in REFS[:4]] + [(split_head, 'helv'), ('4664. PMLR, 2021.', 'helv')] \
         + [(r, 'helv') for r in REFS[4:]]
     def doc(body, font):
-        first = Page(); flow(first, 50, 545, 50, [(body, font)] * 3)
+        first = Page(); flow(first, 50, 545, 50, [(body, font)] * 5)
         second = Page(); flow(second, 50, 545, 50, entries, gap=9)
         return [first, second]
     result = check_render_residue(save(tmp_path / 's.pdf', doc(EN_PARA, 'helv')),
                                   save(tmp_path / 't.pdf', doc(ZH_PARA, 'china-s')))
     assert result['severity'] == 'ok', result['pages']
+    # 第三轮起：页首无编号的续接残段与缺年份的半条目照常计数（宁可误报），其余条目剔除，该页不足评估词数。
     row = result['pages'][1]
-    assert row['excluded_source_breakdown'].get('reference_entries_headingless', 0) >= row['source_latin_words'] + row['excluded_source_words'] - 5, row
+    assert row['excluded_source_breakdown'].get('reference_entries_headingless', 0) >= 120, row
+    assert not row['evaluated'], row
 
 
 def test_round2_headingless_english_prose_at_page_bottom_still_counts(tmp_path):
