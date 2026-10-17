@@ -1,0 +1,7 @@
+{
+  "policy": "lossless_object_save_v1",
+  "input_path": "/frozen/input.pdf",
+  "input_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "output_path": "/new/candidate.pdf",
+  "expected_pages": 2
+}

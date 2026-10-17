@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "109 same-workspace reviewed scan run; no OCR/MT or implicit adaptation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mode",
+    "preparation_ref"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "mode": {
+      "enum": [
+        "reprepare",
+        "rebuild"
+      ]
+    },
+    "preparation_ref": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "max_pages": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "default": 2
+    },
+    "model": {
+      "type": "string"
+    },
+    "model_catalog_url": {
+      "type": "string"
+    }
+  },
+  "description": "replay skips model network; current model fields are optional metadata only. All old preparation/source/target/font/code refs are verified before output."
+}

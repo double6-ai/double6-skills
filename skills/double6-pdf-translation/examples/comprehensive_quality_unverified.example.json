@@ -1,0 +1,200 @@
+{
+  "source": {
+    "path": "/ABSOLUTE/PATH/source.pdf",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "target": {
+    "path": "/ABSOLUTE/PATH/target.pdf",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "standard": {
+    "path": "/ABSOLUTE/PATH/review-standard.md",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "reviewer_id": "示例_审校人待授权",
+  "requirements_ref": {
+    "path": "/ABSOLUTE/PATH/source-first-requirements.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "source_inventory_ref": {
+    "path": "/ABSOLUTE/PATH/source-inventory.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "declared_pages": [
+    1
+  ],
+  "content_inputs": {
+    "elements_ref": {
+      "path": "/ABSOLUTE/PATH/elements_ref.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "translations_ref": {
+      "path": "/ABSOLUTE/PATH/translations_ref.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "bindings_ref": {
+      "path": "/ABSOLUTE/PATH/bindings_ref.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "protected_bindings_ref": {
+      "path": "/ABSOLUTE/PATH/protected_bindings_ref.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "role_review_ref": {
+      "path": "/ABSOLUTE/PATH/role_review_ref.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "semantic_review_ref": {
+      "path": "/ABSOLUTE/PATH/semantic_review_ref.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "visual_inputs": {
+    "regions_ref": {
+      "path": "/ABSOLUTE/PATH/regions_ref.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "review_ref": {
+      "path": "/ABSOLUTE/PATH/review_ref.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "assets_links_inputs": {
+    "native_links_ref": {
+      "path": "/ABSOLUTE/PATH/native-links.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "results": [
+    {
+      "id": "source_inventory",
+      "status": "unverified",
+      "source": {
+        "path": "/ABSOLUTE/PATH/source.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "target": {
+        "path": "/ABSOLUTE/PATH/target.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "standard_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidence": []
+    },
+    {
+      "id": "roles",
+      "status": "unverified",
+      "source": {
+        "path": "/ABSOLUTE/PATH/source.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "target": {
+        "path": "/ABSOLUTE/PATH/target.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "standard_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidence": []
+    },
+    {
+      "id": "coverage",
+      "status": "unverified",
+      "source": {
+        "path": "/ABSOLUTE/PATH/source.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "target": {
+        "path": "/ABSOLUTE/PATH/target.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "standard_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidence": []
+    },
+    {
+      "id": "paragraphs",
+      "status": "unverified",
+      "source": {
+        "path": "/ABSOLUTE/PATH/source.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "target": {
+        "path": "/ABSOLUTE/PATH/target.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "standard_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidence": []
+    },
+    {
+      "id": "captions",
+      "status": "unverified",
+      "source": {
+        "path": "/ABSOLUTE/PATH/source.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "target": {
+        "path": "/ABSOLUTE/PATH/target.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "standard_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidence": []
+    },
+    {
+      "id": "spacing",
+      "status": "unverified",
+      "source": {
+        "path": "/ABSOLUTE/PATH/source.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "target": {
+        "path": "/ABSOLUTE/PATH/target.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "standard_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidence": []
+    },
+    {
+      "id": "semantics",
+      "status": "unverified",
+      "source": {
+        "path": "/ABSOLUTE/PATH/source.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "target": {
+        "path": "/ABSOLUTE/PATH/target.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "standard_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidence": []
+    },
+    {
+      "id": "visual",
+      "status": "unverified",
+      "source": {
+        "path": "/ABSOLUTE/PATH/source.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "target": {
+        "path": "/ABSOLUTE/PATH/target.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "standard_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidence": []
+    },
+    {
+      "id": "assets_links",
+      "status": "unverified",
+      "source": {
+        "path": "/ABSOLUTE/PATH/source.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "target": {
+        "path": "/ABSOLUTE/PATH/target.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "standard_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidence": []
+    }
+  ],
+  "quality_pass": false,
+  "strict_delivery": false,
+  "example_only": true,
+  "warning": "全部路径与SHA为占位，须实际冻结证据后替换；示例不构成接受或可执行审校包。"
+}

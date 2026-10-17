@@ -6,10 +6,6 @@ from typing import Any
 
 import policy_utils
 
-SCRIPT_INTERFACE = "internal-module"
-SCRIPT_INTERFACE_REASON = "Imported by translation and layout QA CLI scripts for role-specific terminology and formatting policy."
-
-STYLE_TAG_RE = re.compile(r"</?style\b[^>]*>", re.I)
 
 SECTION_HEADING_TRANSLATIONS: dict[str, str] = {
     "abstract": "摘要",
@@ -72,6 +68,21 @@ BACKMATTER_SECTION_MARKERS = (
     "did not require ethical approval",
     "informed consent was therefore not required",
 )
+
+# 流程图卡片的完整概念用短标签表达，避免把缩写展开挤出原节点。
+DIAGRAM_NODE_TRANSLATIONS = {
+    "research idea/ abstract": "研究思路/摘要",
+    "llm keyword based search": "LLM关键词检索",
+    "llm + human generated query keywords": "LLM与人工生成的查询词",
+    "generator module": "生成模块",
+    "generated literature review": "生成的文献综述",
+    "plan": "规划",
+    "re-ranking module": "重排序模块",
+    "relevant papers": "相关论文",
+    "re-ranked papers": "重排序后的论文",
+    "user defined papers of interest": "用户指定的关注论文",
+    "embedding based search": "基于嵌入的检索",
+}
 
 REPORT_LABEL_TRANSLATIONS: dict[str, str] = {
     "chair": "主席",
@@ -211,10 +222,11 @@ INSTITUTION_TRANSLATIONS: dict[str, str] = {
     "Stanford University": "斯坦福大学",
     "Northeastern University": "东北大学",
     "University of Minnesota": "明尼苏达大学",
-    "SRI International": "斯坦福研究院国际",
-    "UNSW Sydney": "新南威尔士大学悉尼分校",
+    "University of Southern California": "南加州大学",
+    "SRI International": "SRI International",
+    "UNSW Sydney": "悉尼新南威尔士大学",
     "JPMorgan Chase & Co.": "摩根大通",
-    "Schmidt Sciences": "施密特科学",
+    "Schmidt Sciences": "Schmidt Sciences",
     "Brookings": "布鲁金斯学会",
     "Oxford University": "牛津大学",
     "University of Southern California": "南加州大学",
@@ -239,14 +251,9 @@ KNOWN_LATIN_PERSON_NAMES: dict[str, tuple[str, ...]] = {
 
 def visible_text(text: str) -> str:
     value = str(text or "")
-    value = STYLE_TAG_RE.sub(" ", value)
+    value = re.sub(r"</?style\b[^>]*>", " ", value, flags=re.I)
     value = re.sub(r"\{v\d+\}", " ", value)
     return re.sub(r"\s+", " ", value).strip()
-
-
-def strip_rich_text_tags(text: str) -> str:
-    value = STYLE_TAG_RE.sub("", str(text or ""))
-    return re.sub(r"[ \t]+", " ", value).strip()
 
 
 def _looks_like_long_prose(text: str) -> bool:
@@ -337,8 +344,11 @@ def report_heading_direct_output(source: str) -> str | None:
 def classify_babeldoc_item(item: dict[str, Any], *, references_mode: bool = False) -> str:
     source = str(item.get("input") or "")
     visible = visible_text(source)
+    lowered = visible.lower()
     layout_label = str(item.get("layout_label") or "").lower()
     heading = normalized_heading(source)
+    if layout_label == "diagram_node":
+        return "diagram_node"
     if is_backmatter_section(source):
         return "backmatter_section"
     if layout_label in {"email_footer", "affiliation_footer", "running_header", "running_footer", "doi_line", "open_badge", "author_line", "institution_line"}:
@@ -383,6 +393,8 @@ def classify_babeldoc_item(item: dict[str, Any], *, references_mode: bool = Fals
         return "references_heading" if heading == "references" else "section_heading"
     if heading in REPORT_LABEL_TRANSLATIONS:
         return "report_org_heading"
+    if layout_label in {"title", "document_title", "heading", "section_title"}:
+        return "body_prose"
     if is_chart_or_table_label(source, layout_label):
         return "chart_label"
     if is_example_block(source):
@@ -395,8 +407,6 @@ def classify_babeldoc_item(item: dict[str, Any], *, references_mode: bool = Fals
         return "author_line"
     if is_numbered_question_list(source):
         return "numbered_question_list"
-    if references_mode and not is_open_access_license(source) and looks_like_body_prose_fragment(source):
-        return "body_prose"
     if references_mode and not is_open_access_license(source):
         return "references_entry"
     if looks_like_reference_entry(source):
@@ -459,7 +469,13 @@ def is_backmatter_section(text: str) -> bool:
     if not value:
         return False
     lowered = value.lower()
-    if any(marker in lowered for marker in BACKMATTER_SECTION_MARKERS):
+    # 正文提到 additional/supplementary information 并不意味着它是末尾声明。
+    # 章节名必须从该块开头出现；完整声明句仍可在合并的 backmatter 块中匹配。
+    declaration_markers = BACKMATTER_SECTION_MARKERS[14:]
+    heading_markers = BACKMATTER_SECTION_MARKERS[:14]
+    if any(marker in lowered for marker in declaration_markers):
+        return True
+    if any(re.match(r"^\s*(?:\d+(?:\.\d+)*[.)]?\s+)?" + re.escape(marker) + r"(?:\b|$)", lowered) for marker in heading_markers):
         return True
     heading = normalized_heading(value)
     return heading in {
@@ -535,7 +551,12 @@ def is_author_line(text: str) -> bool:
     value = visible_text(text)
     if any(name in value for name in KNOWN_LATIN_PERSON_NAMES):
         return True
-    return bool(re.fullmatch(r"(?:[A-Z][A-Za-z'’-]+(?:\s+[A-Z][A-Za-z'’-]+){1,3}\s*(?:[,;&]|and)?\s*){2,}", value))
+    # Case alone does not distinguish an ordinary capitalized title from names.
+    # Without an explicit author layout role, require separated mixed-case names.
+    if value.isupper() or not re.search(r"[,;&]|\band\b", value):
+        return False
+    names = re.split(r"\s*(?:[,;&]|\band\b)\s*", value)
+    return len(names) >= 2 and all(re.fullmatch(r"[A-Z][a-zA-Z'’-]+(?:\s+[A-Z][a-zA-Z'’-]+){1,3}", name) for name in names)
 
 
 def is_numbered_question_list(text: str) -> bool:
@@ -557,30 +578,8 @@ def looks_like_reference_entry(text: str) -> bool:
     if len(value) < 45:
         return False
     year_or_doi = bool(re.search(r"\(\d{4}\)|\b\d{4}\.\s+https?://doi\.org|\bdoi\.org/", value, flags=re.I))
-    author_signal = bool(re.match(r"[A-Z][A-Za-z'’-]+,\s+[A-Z]", value)) or bool(
-        re.match(r"[A-Z][A-Za-z'’-]+(?:\s+et\s+al\.?)?\s*\(?\d{4}\)?\s*[:.,]", value, flags=re.I)
-    )
+    author_signal = bool(re.match(r"[A-Z][A-Za-z'’-]+,\s+[A-Z]", value)) or " et al" in value.lower()
     return year_or_doi and author_signal
-
-
-def looks_like_body_prose_fragment(text: str) -> bool:
-    value = visible_text(text)
-    if looks_like_reference_entry(value):
-        return False
-    words = re.findall(r"\b[A-Za-z][A-Za-z-]{2,}\b", value)
-    if len(words) < 10:
-        return False
-    if re.match(r"[A-Z][A-Za-z'’-]+,\s+[A-Z]", value):
-        return False
-    return bool(
-        re.search(r"\b(?:the|this|these|those|usually|before|however|therefore|water|organic|anthropogenic|aerosol)\b", value, re.I)
-        and re.search(
-            r"\b(?:is|are|was|were|has|have|had|used?|found|showed|shown|claimed|estimated|"
-            r"targets?|controls?|changes?|increases?|forms?|depends?|suggests?|shows?)\b",
-            value,
-            re.I,
-        )
-    )
 
 
 def is_open_access_license(text: str) -> bool:
@@ -588,7 +587,8 @@ def is_open_access_license(text: str) -> bool:
 
 
 def direct_output_for_role(role: str, source: str) -> str | None:
-    source_clean = strip_rich_text_tags(source)
+    if role == "diagram_node":
+        return DIAGRAM_NODE_TRANSLATIONS.get(normalized_heading(source))
     if role == "cover_year":
         visible = visible_text(source)
         visible = re.sub(r"\b2\s+0\s+2\s+6\b", "2026", visible)
@@ -693,25 +693,25 @@ def direct_output_for_role(role: str, source: str) -> str | None:
             value = re.sub(rf"\b{re.escape(source_country)}\b", target_country, value, flags=re.I)
         return value if value != visible_text(source) else None
     if role == "references_entry":
-        return source_clean
+        return source
     if role == "example_block":
-        return strip_rich_text_tags(normalize_example_heading(source))
+        return normalize_example_heading(source)
     if role == "doi_line":
-        return source_clean
+        return source
     if role == "open_badge":
         return "OPEN"
     if role == "running_header":
-        return source_clean
+        return source
     if role == "running_footer":
-        return source_clean
+        return source
     if role == "affiliation_footer":
-        return source_clean
+        return source
     if role in {"institution_line", "institution_label"}:
         return normalize_institution_line(source)
     if role == "email_footer":
-        return source_clean
+        return source
     if role == "author_line":
-        return source_clean
+        return source
     if role == "drop_cap":
         return ""
     return None
@@ -838,10 +838,10 @@ def role_prompt(role: str) -> str:
 
 
 def postprocess_translation_for_role(role: str, source: str, translated: str) -> str:
-    value = strip_rich_text_tags(policy_utils.dedupe_nested_person_parentheses(translated))
+    value = policy_utils.dedupe_nested_person_parentheses(translated)
     if role not in {"affiliation_footer", "institution_line", "references_entry", "running_header"}:
         value = normalize_institution_line(value)
-    if role in {"author_line", "body_prose", "numbered_question_list"} or any(name in source for name in KNOWN_LATIN_PERSON_NAMES):
+    if role in {"author_line", "body_prose", "numbered_question_list"}:
         value = restore_known_latin_person_names(source, value)
     if role == "numbered_question_list":
         value = split_numbered_items(value)

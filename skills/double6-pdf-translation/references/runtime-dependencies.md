@@ -1,79 +1,49 @@
-# Runtime Dependencies
+# 运行依赖、来源与许可
 
-This skill does not vendor full PDFMathTranslate-next, BabelDOC, pdf2zh-skill, Poppler, PyMuPDF, TeX Live, Docker, or model-serving projects. Treat those as external runtime tools configured by the user environment.
+## 安装
 
-Pass the model API information explicitly for each real run. The skill intentionally ships without a default model and does not inspect ambient credentials. An explicit `--provider` can infer `base_url`; otherwise pass `--base-url`.
-
-```bash
-API_KEY="your-api-key"
-```
-
-Then run this from the installed skill root on every fresh install:
+支持 macOS/Linux 和 Python 3.12。主工作流使用 POSIX 文件锁及进程资源控制；Windows 需使用 Linux 环境，不宣称原生支持。
 
 ```bash
-python scripts/preflight_runtime.py --strict --provider deepseek --model <model-name> --api-key "$API_KEY"
+bash scripts/setup_venv.sh /absolute/new/venv
 ```
 
-The preflight report is the runtime contract: required failures block real translation; optional warnings reduce automatic diagnostics or fallback rendering only.
+安装器只接受新环境路径，使用 `uv` 和现有 Python 3.12，在新 venv 安装 `requirements-runtime.lock` 与 `requirements-build.lock` 的哈希锁定依赖，再以无依赖、无构建隔离方式安装本地维护的 PDFMathTranslate-next。用户自行准备 Python 和 uv；脚本不下载解释器、不复用或修改 WorkBuddy 等共享环境。
 
-## Privacy and network boundary
+## 分层
 
-Remote translation sends extracted document text and related prompts to the user-selected endpoint. The
-endpoint URL and model are recorded in the output manifest, but API keys are not. The standalone preflight
-does not contact an endpoint unless `--allow-endpoint-check` is supplied. Keep confidential documents on an
-approved endpoint, and use no arXiv, Docker or cloud option unless the user explicitly opts in.
+| 内容 | 用途 |
+| --- | --- |
+| Python、psutil、PyYAML、Pillow、jsonschema | 工作流、资源限制、配置与审校输入 |
+| PyMuPDF、fontTools、freetype-py、NumPy、reportlab、pypdf | 真实 PDF 读写、字形/布局/保护区和双语核验；reportlab/pypdf 也服务辅助渲染与诊断，不能因辅助工具缺失宣称所有主翻译路径失败 |
+| PDFMathTranslate-next 2.8.2 与 BabelDOC 0.5.24 维护副本 | 电子 PDF 排版、保护和翻译后端，包含本地修复，不能替换成无修改上游包后继承既有质量结论 |
+| RapidOCR 1.4.4 | 已有后端及可选 OCR；模型/字体下载与来源单独声明 |
+| XeLaTeX 与所需 TeX 包 | 仅可信 LaTeX 路线，调用方显式准备 |
+| Poppler | 可选独立文字框诊断 |
+| MinerU 4.0.4、其模型及服务 | 可选扫描实验，不在默认环境安装；无此能力时可使用明确提供的已有 OCR，不宣称 OCR 已完成 |
+| 模型服务、API key、字体、源论文 | 调用方明确提供与冻结，不随 skill 分发 |
 
-## Required Runtime Surface
+默认依赖已移除 Gradio/gradio-pdf/gradio-i18n、FastAPI/Uvicorn/SSE，以及 Ollama、Xinference、DeepL、Azure 翻译和腾讯翻译 SDK。当前公共入口使用 OpenAI-compatible 服务；需要其它上游适配时应另行配置和验证。上游 GUI 源码仅为完整来源保留，CLI 发行候选拒绝 GUI 执行。
 
-- Python 3.11-compatible interpreter for the scripts in `scripts/`.
-- A high-fidelity PDF backend. **The backend executable MUST come from the `pdf2zh_next` package** (install via `pip install pdf2zh_next`). Note: PyPI also ships an unrelated/older project literally named `pdf2zh` (≈1.7.9) whose CLI only accepts `--service`/`--lang-out`; using it produces `pdf2zh: error: unrecognized arguments: --output ... --openai-model ...` at runtime. Pick one resolution path:
-  - `--pdf2zh-binary /path/to/pdf2zh`, or
-  - `PAPER_TRANSLATION_PDF2ZH_BINARY=/path/to/pdf2zh`, or
-  - installed `pdf2zh_next` module used through `scripts/pdf2zh_backend.py` (preferred for managed-Python installs), or
-  - `pdf2zh` executable on `PATH` (only if it is the `pdf2zh_next` one).
-- OpenAI-compatible Chat Completions endpoint configured by `--base-url` or inferred from explicit `--provider`.
-- Translation model configured by explicit `--model`.
-- API key configured by explicit `--api-key` for this run.
-- `pdf2zh_next` when using the bundled module backend. The `scripts/setup_venv.sh` helper installs only this package: `pip install pdf2zh_next`. PyMuPDF arrives as a transitive dependency of the backend; do not add a second unpinned `pymupdf` install.
+## 来源和许可证
 
-The runtime starts `scripts/translation_compat_proxy.py` only when the user explicitly passes `--translation-compat-proxy on`. This local adapter forwards to the approved endpoint and records retry/quality evidence.
+- 先前 `paper-translation 2.0.0-trial.2` 第一方代码采用 AGPL-3.0-only。当前开发副本和本次整理保留该许可脉络及完整 [AGPL 原文](../LICENSE)，本次维护保持既有许可，变更及上游边界见 [MODIFICATIONS.md](../MODIFICATIONS.md)。旧 SHA 接受记录不重写为当前包接受，公开发布动作仍需另行授权。
+- `vendor/pdfmathtranslate_next` 来自 PDFMathTranslate-next 2.8.2，保留其 AGPL-3.0 LICENSE 和版权；包含源项目的模型接口、排版、保护及缓存修复。本次另精简 pyproject 默认依赖并阻断 GUI。
+- `vendor/babeldoc` 来自 BabelDOC 0.5.24，保留 AGPL v3 LICENSE；包含源项目的布局、字形及链接等修复，安全回移见 `SECURITY_BACKPORT.json`。
+- `vendor/babeldoc/babeldoc/pdfminer` 保留自身 MIT LICENSE；Adobe CMap 数据继续适用同目录 README 的再分发条件。
+- 未复制许可未闭合的 `vendor/pdf2zh_skill`，也未复制未被运行代码使用的 arxiv-paper-translator 规则副本。
+- Python distribution 通过安装获取并适用各自许可证；site-packages、模型、字体、论文和 TeX 不随包分发。当前权利清单和校验回执保留在本项目本地报告中。
 
-## Optional Diagnostic Tools
+## 许可核对与使用边界
 
-These are not part of the default install. Missing them reduces automatic audits or LaTeX/fallback rendering; they do not block the main layout-preserving translation path.
+公开包保留第一方 AGPL-3.0-only、两项后端原许可证、内嵌 pdfminer 的 MIT 声明与 Adobe CMap 的再分发声明。维护版与所标上游版本的源码差异、维护日期见根目录 [MODIFICATIONS.md](../MODIFICATIONS.md)。旧 `pdf2zh_skill` 缺少可核验的许可凭据，未纳入分发。
 
-- PyMuPDF usually arrives with `pdf2zh_next`. The skill uses it for layout inspection, TOC repair, residue repair, and bilingual rebuild when importable. Do not `pip install pymupdf` separately.
-- reportlab for readable QA fallback PDFs only.
-- Poppler tools for text bounding-box audits when already present on the host.
-- RapidOCR or Tesseract for optional visible-residue OCR on critical pages.
-- TeX Live or Docker only when the user explicitly selects a LaTeX source or `--latex-compile-runtime docker`.
-- Network access to `https://arxiv.org/e-print/<id>` when arXiv source auto-download is enabled and no local LaTeX source is found.
+本次核对覆盖锁定运行环境的 98 项分发包。它们由安装器按哈希下载，不将 wheel、已安装环境或模型权重放进 Skill 包。MIT、BSD、Apache、ISC、PSF 等许可仍属于各自原作者；不能因为安装后在同一环境中运行，就把其许可证文字替换为本项目许可证。
 
-## Environment Caveats (WorkBuddy managed Python)
+需要单独保留理解的条目包括：PyMuPDF 与 BabelDOC 使用 AGPL；Levenshtein 0.27.3 标注 GPL-2.0-or-later，可按后续版本选项选择 GPLv3，与 AGPLv3 组合时遵守各自条件；certifi、orjson 与 tqdm 涉及 MPL 或复合许可。GNU 对 GPLv3/AGPLv3 组合及“或更新版本”的说明见[许可兼容说明](https://www.gnu.org/licenses/license-compatibility.en.html)。下载和再分发这些依赖时，仍须保留各自声明和适用的源码义务。
 
-Installing the backend in this environment hits several traps (full detail in `references/known-pitfalls.md`):
+论文、模型、字体和 TeX 由运行者自行提供或安装，各自权利独立核对。回放使用的系统中文字体和已有模型仅在本机读取，未随 Skill 再分发。
 
-- **P1 — wrong package.** `pip install pdf2zh` pulls an unrelated/older project (≈1.7.9) whose CLI only accepts `--service`/`--lang-out`. This skill needs the `pdf2zh_next` package: `pip install pdf2zh_next`. A wrong install fails at runtime with `pdf2zh: error: unrecognized arguments: --output ... --openai-model ...`.
-- **P3 — do not `rm -rf` a venv.** The bash safe-delete wrapper hangs on bulk-delete confirmation non-interactively. Recreate by using a *fresh* path instead of deleting the old one.
-- **P4 — leftover `~` dists.** Killing a `pip install` can leave invalid `~radio`/`~ymupdf` dirs. Do not let this skill remove them automatically; inspect and clean the dedicated venv manually if needed.
-- **P5 — 凭据持久化受限。** 不要把 key 写入仓库或共享启动器；从 secrets manager 取得后，仅传给本次命令的 `--api-key`。
-- **P16 — `python -m venv` is a silent no-op.** On this managed Python, `python -m venv <path>` exits 0 but creates an *empty* directory (no `Scripts/python.exe`). Use `venv.EnvBuilder(with_pip=True).create(path)` instead, or — better — reuse an existing usable venv and just `pip install` into it. `scripts/setup_venv.sh` already does this (reuse-or-builder, never the `python -m venv` CLI).
-- **P17 — Git-Bash `/c/...` paths break Windows subprocess.** When a binary path built under Git Bash (`/c/Users/.../pdf2zh.exe`) is passed to a Windows `subprocess` (e.g. the backend binary), it fails with `WinError 2`. Always hand a **native `C:\...` path** to Windows subprocesses. `run_translate.sh` normalizes the backend binary path via `cygpath -w`; when setting `PAPER_TRANSLATION_PDF2ZH_BINARY` manually under Git Bash, use a native path (e.g. `C:\Users\<username>\.workbuddy\binaries\python\envs\default\Scripts\pdf2zh.exe`).
-- **P19 — Git-Bash `/d/...` input/output paths land in the wrong place.** The same MSYS-path trap applies to the *input PDF* and `--output-dir` (and `--pdf2zh-binary`/`--source-override`/`--latex-source`/`--latex-source-root`/`--latex-baseline-pdf`/`--engine-home`): Windows Python normalizes `/d/WorkBuddySpace/...` into a doubled-drive `D:\d\WorkBuddySpace\...`, so outputs go to the wrong folder and later JSON reads `FileNotFoundError`. `run_translate.sh` now rewrites **all** path args to native `C:\...` via `cygpath -w` before exec'ing the Python runtime, so you can pass `/d/...` paths safely under Git Bash. On macOS/Linux the paths pass through unchanged.
+本地无鉴权兼容服务由后端 SDK 要求一个非空字段时，命令适配器使用明确的 `local-no-auth` 占位值；它不是凭据。远程后端缺少密钥会明确停止。实际上游 HTTP 请求在未配置密钥时不发送 `Bearer None`。
 
-## Third-Party Notice
-
-This skill does not vendor or redistribute PDF backend runtime code. Users provide compatible runtime dependencies outside this repository.
-
-Depending on the selected backend and optional diagnostics, third-party components may include a `pdf2zh` executable, a compatible `pdf2zh_next` Python module, PDFMathTranslate-next, PDFMathTranslate, BabelDOC, PyMuPDF, Poppler tools, LaTeX tooling, Docker images, or compatible components required by the user's backend installation.
-
-All third-party dependencies are governed by their own licenses and are not redistributed in this repository.
-
-## Review Notes
-
-- Missing optional audit tools reduce observability; they do not lower the expected final layout quality.
-- Agent-side vision is not a runtime requirement. Non-vision agents should rely on generated audit artifacts and delivery gates.
-- Runtime caches and generated backend working directories must stay outside the open-source skill package.
-- API keys should be provided only through this run's explicit `--api-key` and must not be committed.
-- `render_manifest.json` records the resolved backend and preflight report path so release evidence can be reproduced on another machine.
-- The shared `run_translate.sh` launcher forwards explicit arguments and must never contain a hardcoded key.
+安装脚本在哈希锁定安装后实际导入主路径原生模块，最多等待 180 秒；该步骤不载入翻译模型、不发送翻译请求。安装完成后的论文任务仍按各自冻结合同计算资源与时限。

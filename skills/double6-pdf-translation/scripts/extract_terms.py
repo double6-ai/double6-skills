@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import re
 from collections import Counter
@@ -187,6 +188,50 @@ STOP_PHRASES = {
 LOW_VALUE_END_WORDS = {"and", "or", "with", "of", "the", "in", "for", "to"}
 LOW_VALUE_START_WORDS = {"the", "this", "these", "in", "on", "for", "with", "using"}
 
+# Match source syntax, never blacklist the spelling of an identifier globally.
+NONLEXICAL_PATTERNS = (
+    ("url", re.compile(r"(?:https?://|ftp://|\bwww\.)[^\s<>\[\]{}()\"\\]+", re.I)),
+    ("citation_or_reference_marker", re.compile(r"\[(?:cite|ref):[^\[\]\n]+\]")),
+    ("latex_url_target", re.compile(r"\\(?:url|href)\{(?P<identity>[^{}]+)\}")),
+    ("latex_reference", re.compile(
+        r"\\(?:cite|citep|citet|parencite|textcite|autocite|nocite|ref|eqref|autoref|cref|Cref)"
+        r"\*?(?:\[[^\]\n]*\]){0,2}\{(?P<identity>[^{}]+)\}")),
+    ("bibitem_key", re.compile(r"\\bibitem(?:\[[^\]\n]*\])?\{(?P<identity>[^{}]+)\}")),
+    ("bibtex_key", re.compile(r"@[A-Za-z]+\s*[({]\s*(?P<identity>[^\s,{}()]+)\s*,")),
+)
+
+
+def nonlexical_spans(text: str) -> list[dict[str, Any]]:
+    """Identify complete URL/reference syntax without guessing bare PDF fragments."""
+    spans = []
+    for reason, pattern in NONLEXICAL_PATTERNS:
+        for match in pattern.finditer(text):
+            start, end = match.span("identity") if "identity" in pattern.groupindex else match.span()
+            spans.append({"start": start, "end": end, "reason": reason, "source": text[start:end]})
+    return sorted(spans, key=lambda row: (row["start"], row["end"], row["reason"]))
+
+
+def candidate_text(text: str) -> str:
+    # A non-word, non-space separator prevents phrases on either side joining.
+    chars = list(text)
+    for span in nonlexical_spans(text):
+        for index in range(span["start"], span["end"]):
+            if chars[index] not in "\r\n":
+                chars[index] = "\ufffc"
+    return "".join(chars)
+
+
+def write_extraction_report(text: str, rows: list[dict[str, str]], path: Path) -> None:
+    report = {
+        "schema_version": 1,
+        "source_text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        "scope": "candidate extraction only; source text, protected spans and manual glossary remain unchanged",
+        "excluded_occurrences": nonlexical_spans(text),
+        "selected_terms": [row["source_term"] for row in rows],
+        "limitations": ["broken or unmarked PDF identifiers need source review", "not semantic or human acceptance"],
+    }
+    path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
 
 def normalize_space(value: str) -> str:
     return " ".join(value.strip().split())
@@ -296,7 +341,7 @@ def first_seen_block(term: str, blocks: list[dict[str, Any]]) -> str:
         return ""
     pattern = re.compile(rf"(?<![A-Za-z0-9]){re.escape(term)}(?![A-Za-z0-9])") if re.fullmatch(r"[A-Za-z0-9+-]+", term) else None
     for block in blocks:
-        text = str(block.get("text") or "")
+        text = candidate_text(str(block.get("text") or ""))
         found = bool(pattern.search(text)) if pattern else term in text
         if found:
             return str(block.get("block_id") or "")
@@ -315,18 +360,29 @@ def attach_block_metadata(rows: list[dict[str, str]], blocks: list[dict[str, Any
 
 def extract_candidate_terms(text: str, max_terms: int = 80, blocks: list[dict[str, Any]] | None = None) -> list[dict[str, str]]:
     scope = title_and_abstract(text)
+    lexical_text = candidate_text(text)
+    eligible: dict[str, bool] = {}
+
+    def has_body_occurrence(term: str) -> bool:
+        if term not in eligible:
+            eligible[term] = bool(re.search(
+                rf"(?<![A-Za-z0-9]){re.escape(term)}(?![A-Za-z0-9])", lexical_text))
+        return eligible[term]
+
     candidates: dict[str, dict[str, str]] = {}
 
     for term in KNOWN_TERMS:
-        if re.search(rf"(?<![A-Za-z0-9]){re.escape(term)}(?![A-Za-z0-9])", scope):
+        if has_body_occurrence(term) and re.search(rf"(?<![A-Za-z0-9]){re.escape(term)}(?![A-Za-z0-9])", scope):
             add_candidate(candidates, term, confidence="high")
 
-    acronym_counts = Counter(re.findall(r"\b[A-Z][A-Z0-9]{1,}s?\b", scope))
-    camel_counts = Counter(re.findall(r"\b[A-Z][A-Za-z]+[A-Z][A-Za-z0-9]*\b", scope))
+    # Filter before top-N: many URL IDs must not crowd actual terms out.
+    # A name first seen in a URL may have a real body occurrence after 6000 chars.
+    acronym_counts = Counter(term for term in re.findall(r"\b[A-Z][A-Z0-9]{1,}s?\b", scope) if has_body_occurrence(term))
+    camel_counts = Counter(term for term in re.findall(r"\b[A-Z][A-Za-z]+[A-Z][A-Za-z0-9]*\b", scope) if has_body_occurrence(term))
     phrase_pattern = re.compile(
         r"\b(?:[A-Z][a-z]+|[A-Z]{2,}s?)(?:[ \t]+(?:of|for|and|in|to|the|with|[A-Z][a-z]+|[A-Z]{2,}s?)){1,5}\b"
     )
-    phrase_counts = Counter(match.group(0) for match in phrase_pattern.finditer(scope))
+    phrase_counts = Counter(match.group(0) for match in phrase_pattern.finditer(scope) if has_body_occurrence(match.group(0)))
 
     for term, _count in acronym_counts.most_common(40):
         add_candidate(candidates, term, confidence="high" if term in KNOWN_TERMS else "medium")
@@ -373,6 +429,7 @@ def main(argv: list[str] | None = None) -> int:
     manifest_path = Path(args.manifest) if args.manifest else source_path.with_name("source_manifest.json")
     rows = extract_candidate_terms(text, max_terms=args.max_terms, blocks=load_blocks(manifest_path))
     write_glossary(rows, output_path)
+    write_extraction_report(text, rows, output_path.with_name(output_path.stem + ".extraction.json"))
     print(str(output_path))
     return 0
 

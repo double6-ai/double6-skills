@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "固定行内绑定选项（结构流排文字项）",
+  "type": "object",
+  "properties": {
+    "inline_attachment_policy": {"const": "numeric-and-figure-v1"},
+    "balanced_line_flow": {"const": true},
+    "actual_style_ref": {
+      "type": "object",
+      "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+      "required": ["path", "sha256"], "additionalProperties": false
+    }
+  },
+  "required": ["inline_attachment_policy", "balanced_line_flow"],
+  "additionalProperties": true
+}

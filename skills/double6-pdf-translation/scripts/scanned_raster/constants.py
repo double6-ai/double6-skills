@@ -1,0 +1,115 @@
+"""Constants shared by the three-layer PDF router and scanned-page pipeline."""
+from __future__ import annotations
+
+SCHEMA_VERSION = 2
+SKILL_VERSION = "2.0.0"
+MINERU_VERSION = "4.0.4"
+MINERU_MIDDLE_SCHEMA = "docvortex.middle"
+MINERU_MIDDLE_SCHEMA_VERSION = "2.0"
+
+DOCUMENT_ROUTE_LATEX_DIRECT = "latex_direct"
+DOCUMENT_ROUTE_PDF_BACKEND = "pdf_backend"
+DOCUMENT_ROUTE_SCANNED_RASTER = "scanned_raster"
+DOCUMENT_ROUTE_MIXED_REVIEW = "mixed_requires_review"
+DOCUMENT_ROUTE_MIXED_COVER = "mixed_cover_digital"
+DOCUMENT_ROUTE_LATEX_BLOCKED = "latex_identity_blocked"
+
+DOCUMENT_ROUTES = (
+    DOCUMENT_ROUTE_LATEX_DIRECT,
+    DOCUMENT_ROUTE_PDF_BACKEND,
+    DOCUMENT_ROUTE_SCANNED_RASTER,
+    DOCUMENT_ROUTE_MIXED_REVIEW,
+    DOCUMENT_ROUTE_MIXED_COVER,
+    DOCUMENT_ROUTE_LATEX_BLOCKED,
+)
+
+PAGE_DECISION_DIGITAL = "digital"
+PAGE_DECISION_SCANNED = "scanned"
+PAGE_DECISION_NEEDS_REVIEW = "needs_review"
+PAGE_DECISIONS = (PAGE_DECISION_DIGITAL, PAGE_DECISION_SCANNED, PAGE_DECISION_NEEDS_REVIEW)
+
+LATEX_STATUS_NOT_APPLICABLE = "not_applicable"
+LATEX_STATUS_NOT_FOUND_UNKNOWN = "not_found_unknown"
+LATEX_STATUS_EXPECTED_BUT_MISSING = "expected_but_missing"
+LATEX_STATUS_AMBIGUOUS = "ambiguous"
+LATEX_STATUS_VERIFIED_MATCH = "verified_match"
+LATEX_STATUSES = (
+    LATEX_STATUS_NOT_APPLICABLE,
+    LATEX_STATUS_NOT_FOUND_UNKNOWN,
+    LATEX_STATUS_EXPECTED_BUT_MISSING,
+    LATEX_STATUS_AMBIGUOUS,
+    LATEX_STATUS_VERIFIED_MATCH,
+)
+
+REGION_STATUS_TRANSLATED = "translated"
+REGION_STATUS_PROTECTED = "protected"
+REGION_STATUS_SKIPPED = "skipped_with_reason"
+REGION_STATUS_FAILED = "failed"
+REGION_STATUSES = (
+    REGION_STATUS_TRANSLATED,
+    REGION_STATUS_PROTECTED,
+    REGION_STATUS_SKIPPED,
+    REGION_STATUS_FAILED,
+)
+
+# MinerU 4.0.4 emits ``equation`` for both inline and display mathematics in
+# real MiddleJSON. Keep upstream aliases so protected content is never sent to
+# translation or included in a destroke mask.
+PROTECTED_LAYOUT_ROLES = frozenset(
+    {
+        "equation",
+        "formula",
+        "interline_equation",
+        "image",
+        "chart",
+        "table",
+        "illustration_text",
+        "header",
+        "footer",
+        "page_number",
+        "ref_text",
+        "copyright",
+    }
+)
+FORMULA_LAYOUT_ROLES = frozenset({"equation", "formula", "interline_equation"})
+
+RENDER_SOURCES = (
+    DOCUMENT_ROUTE_LATEX_DIRECT,
+    DOCUMENT_ROUTE_PDF_BACKEND,
+    DOCUMENT_ROUTE_SCANNED_RASTER,
+    DOCUMENT_ROUTE_MIXED_COVER,
+)
+
+ROUTE_STATUS_READY = "ready"
+ROUTE_STATUS_NEEDS_REVIEW = "needs_review"
+ROUTE_STATUS_BLOCKED = "blocked"
+ROUTE_STATUS_ERROR = "error"
+ROUTE_STATUSES = (
+    ROUTE_STATUS_READY,
+    ROUTE_STATUS_NEEDS_REVIEW,
+    ROUTE_STATUS_BLOCKED,
+    ROUTE_STATUS_ERROR,
+)
+
+SCANNED_PARSERS = ("auto", "rapidocr", "mineru")
+MINERU_TIERS = ("auto", "basic", "standard", "advanced")
+MINERU_RUNTIMES = ("local", "remote")
+RAPIDOCR_MIN_REGION_CONFIDENCE = 0.75
+RAPIDOCR_MIN_MEDIAN_CONFIDENCE = 0.90
+MINERU_MIN_TEXT_RECALL = 0.80
+DEFAULT_SCAN_DPI = 144
+DEFAULT_SCAN_PAGE_BATCH_LIMIT = 5
+
+MIN_DIGITAL_TEXT_CHARS = 120
+MIN_DIGITAL_SPAN_COUNT = 8
+SCANNED_TEXT_CHAR_CEILING = 40
+SCANNED_IMAGE_COVERAGE = 0.55
+HIDDEN_OCR_IMAGE_COVERAGE = 0.80
+MAX_ABNORMAL_CHAR_RATE = 0.35
+TITLE_SIMILARITY_THRESHOLD = 0.75
+CACHE_TEX_WALK_LIMIT = 80
+IDENTITY_PAGE_WINDOW = 2
+
+LATEX_CACHE_ROOT_ENV = "PAPER_TRANSLATION_LATEX_SOURCE_CACHE_ROOT"
+LATEX_SOURCE_HINT_ENV = "PAPER_TRANSLATION_LATEX_SOURCE_HINT"
+LATEX_SOURCE_ROOTS_ENV = "PAPER_TRANSLATION_LATEX_SOURCE_ROOTS"

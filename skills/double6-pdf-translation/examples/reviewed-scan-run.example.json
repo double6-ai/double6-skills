@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "mode": "reprepare",
+  "preparation_ref": {
+    "path": "/absolute/path/to/already_reviewed/TRIAL_CONTRACT.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "max_pages": 2
+}

@@ -1,629 +1,106 @@
-#!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Double6 Skills，2026-10-17：基于paper-translation维护源码整理；变更见Skill根目录MODIFICATIONS.md。
+"""pdf translation runtime：从原入口拆出的同一实现。"""
 from __future__ import annotations
+from run_pdf_translation_context import *
 
-import argparse
-import json
-import os
-import re
-import shlex
-import shutil
-import sys
-from pathlib import Path
-from typing import Any
+def bind_final_group_artifact(args, output_dir, manifest, invocation_ref):
+    """最后保存后的实际身份；复用写时门证据，rawgraph/physical未知分开保留。"""
+    import fitz
+    import hashlib
+    from pdf_source_cache import bound_json,file_ref
+    from pdf_group_source_style import source_font_inventory
+    from pdf_glyph_paint_evidence import parse_tounicode
+    context=bound_json({'path':str(args.source_cache_context.resolve()),'sha256':args.source_cache_context_sha256})
+    if not context.get('source_style_contract_ref'):return
+    invocation=bound_json(invocation_ref);run_id=invocation['render_id']
+    proof_path=Path(context['collection_file']).parent/'writer'/run_id/'FINAL_SAVED_WRITER_RECONCILIATION.jsonl'
+    if not proof_path.is_file():raise ValueError('final artifact current saved writer evidence missing')
+    proofs=[json.loads(line)for line in proof_path.read_text().splitlines()if json.loads(line).get('render_id')==run_id]
+    if len(proofs)!=1:raise ValueError('final artifact current writer identity ambiguous')
+    proof=proofs[0]
+    actual_manifest=json.loads((output_dir/'render_manifest.json').read_text())
+    target=actual_manifest.get('outputs',{}).get('translated_pdf')
+    if not target:raise ValueError('final artifact missing actual PDF')
+    final_ref=file_ref(target);report={'render_id':run_id,'final_pdf_ref':final_ref,'writer_evidence_ref':file_ref(proof_path),
+        'writer_saved_pdf_ref':proof['saved_pdf_ref'],'context_ref':invocation['context_ref'],'pages':[],
+        'physical_glyphs_unknown':proof['physical_glyphs_unknown'],'strict_quality_pass':False}
+    with fitz.open(args.input_pdf)as source,fitz.open(target)as doc:
+        before=source_font_inventory(source);after=source_font_inventory(doc,False)
+        report['source_raw_font_graph_exact']=all(after['fonts'].get(x)==r for x,r in before['fonts'].items())
+        report['source_font_key_values_equal']=all(set(source.xref_get_keys(x))==set(doc.xref_get_keys(x))
+            and all(source.xref_get_key(x,k)==doc.xref_get_key(x,k)for k in source.xref_get_keys(x))for x in before['fonts'])
+        if not report['source_font_key_values_equal']:raise ValueError('final source font semantic dictionary changed')
+        for page in proof['pages']:
+            stream=page['stream_ref'];n=stream['page_number'];contents=doc[n].get_contents()
+            if contents!=[stream['stream_xref']] or hashlib.sha256(doc.xref_stream(contents[0])).hexdigest()!=stream['decoded_stream_sha256']:
+                raise ValueError('final artifact actual committed content stream changed')
+            maps={};fonts={}
+            for glyph in page['final_actual_glyphs']:
+                x=glyph['final_font_xref']
+                if x not in fonts:fonts[x]=hashlib.sha256(doc.extract_font(x)[3]).hexdigest()
+                if fonts[x]!=glyph['final_font_program_sha256']:raise ValueError('final artifact actual font program changed')
+                if glyph['source_binding'].get('origin')=='reviewed_complete_target_natural_span':
+                    if x not in maps:
+                        kind,value=doc.xref_get_key(x,'ToUnicode')
+                        if kind!='xref':raise ValueError('final natural ToUnicode missing')
+                        maps[x]=parse_tounicode(doc.xref_stream(int(value.split()[0])))
+                    if maps[x].get(bytes.fromhex(glyph['encoded_hex']))!=glyph['actual_transform_evidence']['actual_ToUnicode']:
+                        raise ValueError('final natural actual ToUnicode changed')
+            report['pages'].append({'page':n+1,'actual_stream_ref':stream['stream_xref'],
+                'decoded_stream_sha256':stream['decoded_stream_sha256'],'actual_font_programs_equal':True,'actual_natural_unicode_equal':True})
+    if file_ref(target)!=final_ref:raise ValueError('final artifact changed during identity binding')
+    report['raw_font_graph_boundary']='raw dictionary serialization differs' if not report['source_raw_font_graph_exact'] else None
+    path=output_dir/'FINAL_ARTIFACT_IDENTITY.json';path.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+    manifest['final_artifact_identity_ref']=file_ref(path)
 
-from _subprocess_safe import minimal_subprocess_env, run_text
-import visual_layout
+def run(args: argparse.Namespace) -> dict[str, Any]:
+    from pdf_translation_paths import default_output_dir
+    from pdf_translation_render import _run_render
+    review = getattr(args, "quality_review", None)
+    digest = getattr(args, "quality_review_sha256", None)
+    if bool(review) != bool(digest):
+        raise ValueError("quality_review_and_frozen_sha_required_together")
+    if not getattr(args, 'route_only', False):
+        if getattr(args, 'source_cache_mode', None) in {'read', 'collect'} and getattr(args, 'source_cache_context', None):
+            from pdf_source_cache import bound_json
+            frozen = bound_json({'path': str(args.source_cache_context.resolve()),
+                                 'sha256': args.source_cache_context_sha256})
+            args.model = args.model or frozen.get('model')
+            args.base_url = args.base_url or frozen.get('endpoint')
+        if not getattr(args, 'model', None) or not getattr(args, 'base_url', None):
+            raise ValueError('new_translation_requires_explicit_model_and_base_url')
+    invocation_ref=None
+    if getattr(args,'source_cache_mode',None)=='read':
+        from pdf_source_cache import GROUP_PROTOCOLS,bound_json,begin_group_render
+        context_ref={'path':str(args.source_cache_context.resolve()),'sha256':args.source_cache_context_sha256}
+        if bound_json(context_ref).get('protocol') in GROUP_PROTOCOLS:
+            source=Path(args.input_pdf).expanduser().resolve()
+            output=Path(args.output_dir).expanduser().resolve() if args.output_dir else default_output_dir(source).resolve()
+            invocation_ref=begin_group_render(context_ref,source,output,getattr(args,'pages',None))
+            args.source_cache_render_id=bound_json(invocation_ref)['render_id']
+    manifest = _run_render(args)
+    if invocation_ref:
+        manifest['source_cache_render_invocation_ref']=invocation_ref
+        for filename in ('render_manifest.json','backend_run_manifest.json'):
+            path=output/filename
+            if path.is_file():
+                value=json.loads(path.read_text());value['source_cache_render_invocation_ref']=invocation_ref
+                path.write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n')
+    if bool(getattr(args, "route_only", False)):
+        return manifest
+    if getattr(args, "source_cache_mode", None) == "collect":
+        if manifest.get("status") != "source_only_collected" or manifest.get("candidate_generated") is not False or manifest.get("actual_provider_calls") != 0:
+            raise ValueError("source-only result failed no-generation/no-PDF boundary")
+        return manifest
+    from qa_pipeline import attach_pipeline_quality
+    source = Path(args.input_pdf).expanduser().resolve()
+    output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else default_output_dir(source).resolve()
+    result=attach_pipeline_quality(manifest, source=source, output_dir=output_dir,
+        review_ref={"path": str(Path(review).resolve()), "sha256": digest} if review else None)
+    if invocation_ref:bind_final_group_artifact(args,output_dir,result,invocation_ref)
+    return result
+
 
 SCRIPT_INTERFACE = "internal-module"
-SCRIPT_INTERFACE_REASON = "Imported by run_pdf_translation.py for path resolution, backend command construction, and runtime defaults."
-
-DEFAULT_MODEL = ""
-DEFAULT_BASE_URL = ""
-PROVIDER_BASE_URL_CANDIDATES = [
-    {
-        "provider": "deepseek",
-        "display_name": "DeepSeek",
-        "base_url": "https://api.deepseek.com",
-        "aliases": ["deepseek"],
-        "notes": "OpenAI-compatible endpoint.",
-    },
-    {
-        "provider": "openai",
-        "display_name": "OpenAI",
-        "base_url": "https://api.openai.com/v1",
-        "aliases": ["openai"],
-        "notes": "OpenAI official API endpoint.",
-    },
-    {
-        "provider": "dashscope",
-        "display_name": "Alibaba Cloud Model Studio / DashScope",
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "aliases": ["dashscope", "aliyun", "qwen"],
-        "notes": "Generic compatible-mode endpoint; workspace-specific endpoints can override this.",
-    },
-    {
-        "provider": "moonshot",
-        "display_name": "Moonshot / Kimi",
-        "base_url": "https://api.moonshot.cn/v1",
-        "aliases": ["moonshot", "kimi"],
-        "notes": "OpenAI SDK compatible endpoint.",
-    },
-    {
-        "provider": "siliconflow",
-        "display_name": "SiliconFlow",
-        "base_url": "https://api.siliconflow.cn/v1",
-        "aliases": ["siliconflow"],
-        "notes": "OpenAI-compatible chat completions endpoint.",
-    },
-    {
-        "provider": "zhipu",
-        "display_name": "Zhipu / Z.ai",
-        "base_url": "https://open.bigmodel.cn/api/paas/v4",
-        "aliases": ["zhipu", "zai", "bigmodel", "glm"],
-        "notes": "OpenAI-style chat completions endpoint.",
-    },
-    {
-        "provider": "openrouter",
-        "display_name": "OpenRouter",
-        "base_url": "https://openrouter.ai/api/v1",
-        "aliases": ["openrouter"],
-        "notes": "OpenAI SDK compatible model router.",
-    },
-    {
-        "provider": "volcengine_ark",
-        "display_name": "Volcengine Ark",
-        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-        "aliases": ["volcengine_ark", "ark", "volcengine", "doubao"],
-        "notes": "Common Ark OpenAI-compatible endpoint; override for non-Beijing regions if needed.",
-    },
-]
-DEFAULT_API_KEY = ""
-DEFAULT_REASONING_EFFORT = "none"
-DEFAULT_TRANSLATOR_MODE = "auto"
-DEFAULT_CLI_MAX_TOKENS = 4096
-DEFAULT_LOCAL_MAX_CONCURRENCY = 3
-DEFAULT_TRANSLATION_COMPAT_PROXY_PORT = 18082
-DEFAULT_PDF2ZH_BACKEND = "path"
-DEFAULT_LATEX_RENDER_MODE = "auto"
-DEFAULT_LATEX_PROJECT_MODE = "in-place"
-DEFAULT_LATEX_DOCKER_IMAGE = "paper-translation-tex:2026-05-21"
-DEFAULT_HYMT2_TEMPERATURE = 0.1
-PDF2ZH_BINARY_ENV = "PAPER_TRANSLATION_PDF2ZH_BINARY"
-LATEX_SOURCE_HINT_ENV = "PAPER_TRANSLATION_LATEX_SOURCE_HINT"
-LATEX_SOURCE_ROOTS_ENV = "PAPER_TRANSLATION_LATEX_SOURCE_ROOTS"
-DEFAULT_SYSTEM_PROMPT = (
-    "You are a professional, authentic machine translation engine. "
-    "Translate academic PDFs into fluent Simplified Chinese while preserving "
-    "formulas, citations, URLs, named entities, terminology, and layout-sensitive placeholders. "
-    "Only output the translated result without additional explanation. "
-    "Do not leave ordinary English words untranslated; translate residual prose words such as "
-    "'overwhelmingly' into natural Chinese unless they are protected spans, code, URLs, emails, or approved names."
-)
-PROTECTED_CHECK_VALUES = [
-    "LLMs",
-    "AI sovereignty",
-    "Human-Centered AI",
-    "Stanford Institute for Human-Centered AI",
-    "Hong Kong Polytechnic University",
-]
-PROTECTED_CHECK_TRANSLATIONS = {
-    "LLMs": ["大型语言模型", "LLMs"],
-    "AI sovereignty": ["人工智能主权"],
-    "Human-Centered AI": ["以人为本人工智能"],
-    "Stanford Institute for Human-Centered AI": ["斯坦福以人为本人工智能研究院", "斯坦福大学以人为本人工智能研究院"],
-    "Hong Kong Polytechnic University": ["香港理工大学"],
-}
-LATEX_MAIN_NAME_HINTS = {"main", "paper", "acl_latex", "ms", "article"}
-LATEX_BAD_NAME_HINTS = {"merge_中文", "merge_english", "output", "template", "test"}
-LATEX_REFLOW_LINE_WIDTH_CJK = 38.0
-LATEX_REFLOW_LINES_PER_PAGE = 84
-
-
-def provider_base_url_candidates() -> list[dict[str, Any]]:
-    return [dict(candidate) for candidate in PROVIDER_BASE_URL_CANDIDATES]
-
-
-def provider_candidate(provider: str | None) -> dict[str, Any] | None:
-    normalized = re.sub(r"[^a-z0-9]+", "", str(provider or "").lower())
-    if not normalized:
-        return None
-    for candidate in PROVIDER_BASE_URL_CANDIDATES:
-        names = [str(candidate["provider"]), str(candidate["display_name"]), *[str(alias) for alias in candidate.get("aliases", [])]]
-        if normalized in {re.sub(r"[^a-z0-9]+", "", name.lower()) for name in names}:
-            return candidate
-    return None
-
-
-def configured_provider_api_key_envs() -> list[dict[str, str]]:
-    """兼容旧调用；正式运行不扫描宿主环境中的服务商凭据。"""
-    return []
-
-
-def infer_base_url_from_api_key_env() -> str:
-    return DEFAULT_BASE_URL
-
-
-def resolve_base_url(provider: str | None = None, base_url: str | None = None) -> str:
-    if str(base_url or "").strip():
-        return str(base_url).strip()
-    candidate = provider_candidate(provider)
-    if candidate:
-        return str(candidate["base_url"])
-    return infer_base_url_from_api_key_env()
-
-
-def resolve_api_key(provider: str | None = None, api_key: str | None = None) -> str:
-    if str(api_key or "").strip():
-        return str(api_key).strip()
-    return DEFAULT_API_KEY
-
-
-def read_explicit_api_key_file(path_value: str | None) -> str:
-    """读取用户显式选择的凭据文件，不扫描默认位置或宿主环境。"""
-    if not str(path_value or "").strip():
-        return ""
-    path = Path(str(path_value)).expanduser().resolve()
-    text = path.read_text(encoding="utf-8").strip()
-    if not text:
-        return ""
-    try:
-        payload = json.loads(text)
-        if isinstance(payload, dict):
-            for key in ("api_key", "key"):
-                value = payload.get(key)
-                if isinstance(value, str) and value.strip():
-                    return value.strip()
-    except json.JSONDecodeError:
-        pass
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        value = stripped.split("=", 1)[1] if "=" in stripped else stripped
-        return value.strip().strip('"').strip("'")
-    return ""
-
-
-def infer_provider_from_api_key_env() -> dict[str, str] | None:
-    configured = configured_provider_api_key_envs()
-    return configured[0] if len(configured) == 1 else None
-
-
-def resolve_base_url_inference(provider: str | None = None, base_url: str | None = None) -> dict[str, str] | None:
-    if str(base_url or "").strip():
-        return None
-    selected = provider_candidate(provider)
-    if selected:
-        return {
-            "provider": str(selected["provider"]),
-            "display_name": str(selected["display_name"]),
-            "source": "provider",
-            "base_url": str(selected["base_url"]),
-        }
-    return None
-
-
-def repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
-
-
-def paper_translation_project_root() -> Path:
-    return repo_root() / "projects" / "double6-pdf-translation"
-
-
-def paper_translation_run_root() -> Path:
-    return paper_translation_project_root() / "runs" / "default"
-
-
-def paper_translation_shared_library_dir() -> Path:
-    return repo_root() / "shared_resources"
-
-
-def default_engine_home() -> Path:
-    return (Path.home() / ".cache" / "double6-pdf-translation" / "pdf2zh-home").resolve()
-
-
-def external_pdf2zh_skill_root() -> Path | None:
-    return None
-
-
-def latex_translation_after_writeback_repair(source: str, translation: str) -> str:
-    """返回 LaTeX 写回前译文；不从用户路径动态导入代码。"""
-    return translation
-
-
-def default_output_dir(input_pdf: Path) -> Path:
-    return input_pdf.with_name(f"{input_pdf.stem}-zh")
-
-
-def find_pdf2zh_binary(explicit: str | None = None) -> str:
-    if explicit:
-        return explicit
-    configured = os.environ.get(PDF2ZH_BINARY_ENV, "").strip()
-    if configured:
-        return configured
-    return shutil.which("pdf2zh") or "pdf2zh"
-
-
-def resolved_pdf2zh_backend(args: argparse.Namespace) -> dict[str, Any]:
-    explicit_binary = str(getattr(args, "pdf2zh_binary", "") or "").strip()
-    env_binary = os.environ.get(PDF2ZH_BINARY_ENV, "").strip()
-    backend_mode = str(getattr(args, "pdf2zh_backend", DEFAULT_PDF2ZH_BACKEND) or DEFAULT_PDF2ZH_BACKEND)
-    if explicit_binary:
-        binary = find_pdf2zh_binary(explicit_binary)
-        return {"mode": "path", "source": "cli_binary", "binary": binary, "command_prefix": [binary]}
-    if env_binary:
-        binary = find_pdf2zh_binary(None)
-        return {"mode": "path", "source": "env_binary", "binary": binary, "command_prefix": [binary]}
-    if backend_mode == "module":
-        wrapper = Path(__file__).resolve().with_name("pdf2zh_backend.py")
-        return {"mode": "module", "source": "module_wrapper", "binary": "", "wrapper": str(wrapper), "command_prefix": [sys.executable, str(wrapper)]}
-    binary = find_pdf2zh_binary(None)
-    return {"mode": "path", "source": "path_lookup", "binary": binary, "command_prefix": [binary]}
-
-
-def pdf2zh_command_prefix(args: argparse.Namespace) -> list[str]:
-    return [str(item) for item in resolved_pdf2zh_backend(args)["command_prefix"]]
-
-
-def _pdf2zh_help_text(args: argparse.Namespace, output_dir: Path) -> str:
-    engine_home = Path(str(getattr(args, "engine_home", "") or default_engine_home())).expanduser().resolve()
-    env = minimal_subprocess_env(
-        {
-            "HOME": str(engine_home),
-            "XDG_CACHE_HOME": str(engine_home / ".cache"),
-            "HF_HOME": str(engine_home / ".hf-home"),
-            "UV_CACHE_DIR": str(engine_home / ".uv-cache"),
-            "PYTHONUNBUFFERED": "1",
-        }
-    )
-    for key in ("XDG_CACHE_HOME", "HF_HOME", "UV_CACHE_DIR"):
-        Path(env[key]).mkdir(parents=True, exist_ok=True)
-    try:
-        result = run_text(
-            [*pdf2zh_command_prefix(args), "--help"],
-            cwd=output_dir,
-            env=env,
-            timeout=30,
-            check=False,
-        )
-    except Exception as exc:
-        setattr(
-            args,
-            "backend_help_probe",
-            {"status": "failed", "reason": f"help_command_failed: {exc}", "parameter_policy": "conservative"},
-        )
-        return ""
-    help_text = (result.stdout or "") + "\n" + (result.stderr or "")
-    readable = bool(help_text.strip())
-    setattr(
-        args,
-        "backend_help_probe",
-        {
-            "status": "ok" if result.returncode == 0 and readable else "failed",
-            "returncode": int(result.returncode),
-            "reason": None if result.returncode == 0 and readable else "help_text_unreadable_or_command_failed",
-            "parameter_policy": "detected" if result.returncode == 0 and readable else "conservative",
-        },
-    )
-    return help_text if result.returncode == 0 and readable else ""
-
-
-def _pdf2zh_supports_option(help_text: str, option: str) -> bool:
-    return bool(help_text and option in help_text)
-
-
-def _append_supported_option(
-    command: list[str],
-    help_text: str,
-    option: str,
-    values: list[str] | None = None,
-    *,
-    skipped: list[str],
-) -> None:
-    if _pdf2zh_supports_option(help_text, option):
-        command.append(option)
-        if values:
-            command.extend(values)
-    else:
-        skipped.append(option)
-
-
-def should_use_qwen_cli_adapter(args: argparse.Namespace) -> bool:
-    mode = args.translator_mode
-    if mode == "qwen-cli":
-        return True
-    if mode == "openai":
-        return False
-    model = str(getattr(args, "model", "") or "").lower()
-    base_url = str(getattr(args, "base_url", "") or "")
-    return "qwen" in model and ("localhost" in base_url or "127.0.0.1" in base_url)
-
-
-def should_enable_translation_compat_proxy(args: argparse.Namespace) -> bool:
-    mode = str(getattr(args, "translation_compat_proxy", "off") or "off")
-    return mode == "on" and not should_use_qwen_cli_adapter(args)
-
-
-def pdf_has_toc_like_pages(input_pdf: Path, max_pages: int = 5) -> bool:
-    try:
-        fitz = visual_layout._load_fitz()
-        with fitz.open(str(input_pdf)) as doc:  # type: ignore[attr-defined]
-            for page_index in range(min(max_pages, len(doc))):
-                lines = visual_layout.normalize_lines(doc[page_index].get_text("text"))
-                if visual_layout.looks_like_toc_page(lines):
-                    return True
-    except Exception:
-        return False
-    return False
-
-
-def resolve_pdf_layout_profile(args: argparse.Namespace, input_pdf: Path) -> str:
-    profile = str(getattr(args, "pdf_layout_profile", "auto") or "auto")
-    if profile in {"default", "toc-safe"}:
-        return profile
-    return "toc-safe" if pdf_has_toc_like_pages(input_pdf) else "default"
-
-
-def apply_pdf_direct_text_repairs(
-    pdf_path: Path | None,
-    source_pdf: Path,
-    output_dir: Path,
-    *,
-    apply_overlay: bool = False,
-) -> dict[str, Any]:
-    manifest_path = output_dir / "pdf_direct_text_repair_manifest.json"
-    if not pdf_path or not pdf_path.is_file():
-        manifest = {"version": 1, "status": "skipped", "reason": "missing_pdf", "repairs": []}
-    else:
-        manifest = {
-            "version": 1,
-            "status": "skipped",
-            "reason": "document_specific_pdf_direct_repairs_not_in_open_source_skill",
-            "pdf": str(pdf_path),
-            "source_pdf": str(source_pdf),
-            "overlay_requested": bool(apply_overlay),
-            "overlay_applied": False,
-            "delivery_safe": True,
-            "note": "Open-source skill keeps high-fidelity backend rendering, layout audits, gates, and rerender plans; it does not ship historical document-specific overlay patches.",
-            "repairs": [],
-        }
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return manifest
-
-def build_qwen_cli_command(args: argparse.Namespace, context_file: Path | None = None) -> str:
-    script = Path(__file__).resolve().with_name("qwen_pdf2zh_cli_translator.py")
-    cli_timeout = min(int(args.openai_timeout), 300)
-    command = [
-        sys.executable,
-        str(script),
-        "--base-url",
-        args.base_url,
-        "--model",
-        args.model,
-        "--api-key",
-        args.api_key,
-        "--reasoning-effort",
-        args.openai_reasoning_effort,
-        "--temperature",
-        str(args.temperature),
-        "--max-tokens",
-        str(args.cli_max_tokens),
-        "--timeout",
-        str(cli_timeout),
-        "--system-prompt",
-        args.custom_system_prompt,
-    ]
-    if context_file:
-        command.extend(["--context-file", str(context_file)])
-    return " ".join(shlex.quote(item) for item in command)
-
-
-def _compact_policy_items(items: list[dict[str, Any]], *, limit: int = 12) -> list[str]:
-    lines: list[str] = []
-    for item in items[:limit]:
-        source = str(item.get("source_term") or item.get("source") or item.get("value") or "")
-        translation = str(item.get("translation") or item.get("target") or "")
-        if not source:
-            continue
-        line = f"- {source}"
-        if translation:
-            line += f" => {translation}"
-        forbidden = item.get("forbidden_translations")
-        if isinstance(forbidden, list) and forbidden:
-            line += "；禁用：" + "、".join(str(value) for value in forbidden if value)
-        lines.append(line[:240])
-    return lines
-
-
-def _policy_item_is_active(item: dict[str, Any]) -> bool:
-    """过滤已被评测/审计标记为缺席或停用的策略项，避免把假实体注入模型提示词。"""
-    if item.get("active") is False or item.get("enabled") is False:
-        return False
-    status = str(item.get("status") or item.get("claim_status") or "").lower()
-    if status in {"inactive", "absent", "rejected", "disabled"}:
-        return False
-    source_location = item.get("source_location")
-    if isinstance(source_location, str) and source_location.lower() in {"absent", "not_found", "inactive"}:
-        return False
-    source_locations = item.get("source_locations")
-    if isinstance(source_locations, list) and source_locations:
-        normalized = {str(value).lower() for value in source_locations}
-        if normalized <= {"absent", "not_found", "inactive"}:
-            return False
-    return True
-
-
-def build_backend_system_prompt(base_prompt: str, output_dir: Path) -> str:
-    sections: list[str] = []
-    for name, title in [
-        ("entity_map.json", "专名实体策略"),
-        ("term_policy.json", "术语策略"),
-    ]:
-        path = output_dir / name
-        if not path.exists():
-            continue
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            continue
-        raw_items = data.get("entities") if name == "entity_map.json" else data.get("terms")
-        if isinstance(raw_items, list):
-            lines = _compact_policy_items(
-                [item for item in raw_items if isinstance(item, dict) and _policy_item_is_active(item)]
-            )
-            if lines:
-                sections.append(title + "：\n" + "\n".join(lines))
-    protected_path = output_dir / "protected_spans.json"
-    if protected_path.exists():
-        try:
-            protected = json.loads(protected_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            protected = {}
-        spans = protected.get("spans") if isinstance(protected, dict) else []
-        if isinstance(spans, list):
-            kind_counts: dict[str, int] = {}
-            samples: list[dict[str, Any]] = []
-            for span in spans:
-                if not isinstance(span, dict):
-                    continue
-                kind = str(span.get("kind") or "unknown")
-                kind_counts[kind] = kind_counts.get(kind, 0) + 1
-                if len(samples) < 16 and kind in {"doi", "url", "citation", "inline_math", "display_math", "inline_code"}:
-                    samples.append(span)
-            sample_lines = _compact_policy_items(samples, limit=16)
-            sections.append(
-                "不可翻译元素策略：必须逐字保留 DOI、URL、引用编号、公式、代码、占位符和模型名。"
-                f"类型计数：{json.dumps(kind_counts, ensure_ascii=False)}"
-                + ("\n样例：\n" + "\n".join(sample_lines) if sample_lines else "")
-            )
-    if not sections:
-        return base_prompt
-    return (
-        base_prompt.rstrip()
-        + "\n\nDocument-level constraints from paper-translation QA artifacts:\n"
-        + "\n\n".join(sections)
-        + "\nTranslate ordinary English prose completely. Preserve protected spans verbatim."
-    )
-
-
-def build_pdf2zh_command(args: argparse.Namespace, output_dir: Path, context_file: Path | None = None) -> list[str]:
-    backend_help = _pdf2zh_help_text(args, output_dir)
-    skipped_options: list[str] = []
-    command = [
-        *pdf2zh_command_prefix(args),
-        str(args.input_pdf),
-        "--output",
-        str(output_dir),
-        "--lang-out",
-        "zh",
-    ]
-    if bool(getattr(args, "backend_debug_artifacts", True)):
-        _append_supported_option(
-            command,
-            backend_help,
-            "--working-dir",
-            [str(output_dir / "_backend_working")],
-            skipped=skipped_options,
-        )
-    if bool(getattr(args, "ignore_translation_cache", False)):
-        command.append("--ignore-cache")
-    if should_use_qwen_cli_adapter(args):
-        command.extend(
-            [
-                "--clitranslator",
-                "--clitranslator-command",
-                build_qwen_cli_command(args, context_file),
-                "--clitranslator-timeout",
-                str(min(int(args.openai_timeout), 300)),
-            ]
-        )
-    else:
-        command.extend(
-            [
-                "--openai",
-                "--openai-model",
-                args.model,
-                "--openai-base-url",
-                args.base_url,
-                "--openai-api-key",
-                args.api_key,
-                "--openai-timeout",
-                str(args.openai_timeout),
-                "--openai-temperature",
-                str(args.temperature),
-                "--openai-send-temprature",
-                "--openai-reasoning-effort",
-                args.openai_reasoning_effort,
-                "--openai-send-reasoning-effort",
-                "--term-openai-timeout",
-                str(args.openai_timeout),
-                "--term-openai-temperature",
-                str(args.temperature),
-                "--term-openai-send-temprature",
-                "--term-openai-reasoning-effort",
-                args.openai_reasoning_effort,
-                "--term-openai-send-reasoning-effort",
-            ]
-        )
-        if args.openai_json_mode:
-            command.append("--openai-enable-json-mode")
-        if getattr(args, "disable_same_text_fallback", True):
-            _append_supported_option(
-                command,
-                backend_help,
-                "--disable-same-text-fallback",
-                skipped=skipped_options,
-            )
-    setattr(args, "backend_unsupported_options", skipped_options)
-    command.extend(
-        [
-            "--qps",
-            str(args.local_max_concurrency),
-            "--custom-system-prompt",
-            args.custom_system_prompt,
-            "--pool-max-workers",
-            str(args.local_max_concurrency),
-            "--term-qps",
-            str(args.local_max_concurrency),
-            "--term-pool-max-workers",
-            str(args.local_max_concurrency),
-            "--no-auto-extract-glossary",
-            "--skip-scanned-detection",
-            "--watermark-output-mode",
-            "no_watermark",
-        ]
-    )
-    if str(getattr(args, "resolved_pdf_layout_profile", getattr(args, "pdf_layout_profile", ""))) == "toc-safe":
-        command.extend(
-            [
-                "--split-short-lines",
-                "--short-line-split-factor",
-                "0.95",
-                "--no-merge-alternating-line-numbers",
-            ]
-        )
-    if args.dual:
-        command.append("--dual")
-        # P18/P20: --dual-translate-first is only a backend hint. BabelDOC 0.6.2
-        # comments say default --dual is original-left, but pdf2zh_next 2.9.0
-        # produced Chinese-left without the flag. Delivery never trusts this
-        # mapping; geometry verification decides, and a mismatch rebuilds.
-        bilingual_layout = str(
-            getattr(args, "bilingual_layout", "en-left-zh-right")
-            or "en-left-zh-right"
-        )
-        if bilingual_layout == "zh-left-en-right":
-            _append_supported_option(
-                command,
-                backend_help,
-                "--dual-translate-first",
-                skipped=skipped_options,
-            )
-    if args.pages:
-        command.extend(["--pages", args.pages])
-    return command
-
-
-def redacted_command(command: list[str], api_key: str) -> list[str]:
-    return [item.replace(api_key, "<API_KEY>") if api_key else item for item in command]
+SCRIPT_INTERFACE_REASON = "由兼容入口调用的职责模块，不提供独立命令。"

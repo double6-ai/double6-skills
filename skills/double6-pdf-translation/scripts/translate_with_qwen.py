@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Double6 Skills，2026-10-17：基于paper-translation维护源码整理；变更见Skill根目录MODIFICATIONS.md。
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -11,8 +12,8 @@ from typing import Any
 from model_client import extract_text, post_chat
 
 
-DEFAULT_ENDPOINT = ""
-DEFAULT_MODEL = ""
+DEFAULT_ENDPOINT = None
+DEFAULT_MODEL = None
 DEFAULT_REASONING_EFFORT = "none"
 DEFAULT_HYMT2_TEMPERATURE = 0.7
 DEFAULT_HYMT2_MAX_TOKENS = 4096
@@ -388,13 +389,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--output", help="Output translation.md path. Defaults to beside source.")
     parser.add_argument("--manifest", help="Run manifest path. Defaults to translation_run_manifest.json beside output.")
-    parser.add_argument(
-        "--endpoint",
-        default=os.environ.get("LOCAL_TRANSLATION_ENDPOINT") or DEFAULT_ENDPOINT,
-        help="Chat completions endpoint.",
-    )
+    parser.add_argument("--endpoint", required=True, help="Local chat endpoint.")
     parser.add_argument("--provider", default="openai_compatible", help="Chat provider shape.")
-    parser.add_argument("--model", default=os.environ.get("LOCAL_TRANSLATION_MODEL") or DEFAULT_MODEL, help="Executor model.")
+    parser.add_argument("--model", required=True, help="Executor model.")
     parser.add_argument("--target-language", default="简体中文", help="Target language.")
     parser.add_argument("--instruction", help="Extra translation instruction.")
     parser.add_argument("--whole-document", action="store_true", help="Ignore manifest blocks and translate source.md as one document.")
@@ -407,10 +404,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if not args.endpoint.strip() or not args.model.strip():
-        parser.error("--endpoint and --model are required.")
+    args = build_parser().parse_args(argv)
     manifest = translate(args)
     print(json.dumps({k: v for k, v in manifest.items() if k != "responses"}, ensure_ascii=False, indent=2))
     return 0

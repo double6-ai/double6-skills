@@ -1,0 +1,24 @@
+{
+  "schema_version": "uri-padding-projection@1",
+  "source": {
+    "path": "/absolute/source.pdf",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "target": {
+    "path": "/absolute/target.pdf",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "pages": [
+    1
+  ],
+  "policy": {
+    "id": "uniform-literal-uri-padding-v1",
+    "maximum_pages": 20,
+    "maximum_annotations_per_page": 1000,
+    "maximum_padding_pt": 3.0,
+    "source_uniformity_pt": 0.5,
+    "repair_threshold_pt": 0.5,
+    "saved_geometry_tolerance_pt": 0.001,
+    "case_overrides_allowed": false
+  }
+}

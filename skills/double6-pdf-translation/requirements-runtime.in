@@ -1,0 +1,27 @@
+# macOS/Linux，Python 3.12；CLI与实际PDF质量核验依赖
+psutil==7.2.2
+PyYAML>=6.0
+jsonschema>=4.23
+Pillow
+fonttools
+freetype-py
+reportlab>=4.0
+pypdf>=5.0
+rapidocr-onnxruntime==1.4.4
+babeldoc==0.5.24
+requests
+pymupdf<1.25.3
+tqdm
+tenacity
+numpy
+openai>=1.0.0
+peewee>=3.17.8
+fontTools
+babeldoc>=0.5.20,<0.6.0
+rich
+pydantic-settings>=2.8.1
+pydantic>=2.10.6
+httpx>=0.28.1
+legacy-cgi; python_version >= '3.13'
+chardet>=5.2.0
+pyyaml>=6.0.2

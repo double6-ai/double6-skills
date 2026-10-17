@@ -1,0 +1,104 @@
+{
+  "illustrative_only": true,
+  "quality_pass": false,
+  "scope": {
+    "source": {
+      "path": "/absolute/source.pdf",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "standard": {
+      "path": "/absolute/hardening-qa-contract.md",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "reviewer_id": "illustrative-independent-reviewer",
+    "method": "source_first",
+    "pages": [
+      1
+    ],
+    "runtime_ref": {
+      "path": "scripts/source_script_audit.py",
+      "sha256": "364bdcfa37099af39c96f164872843ad568c8db24b30f156a10d2c9a0ea2cd16"
+    },
+    "schema_ref": {
+      "path": "schemas/source-script-audit.schema.json",
+      "sha256": "013e14355dc1b5e4947c973128fe620b0af3935113276812a825ac8e35f47194"
+    },
+    "items": [
+      {
+        "id": "complete-range",
+        "page": 1,
+        "label": "80-88",
+        "source_script": "superscript",
+        "source_label_indices": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "source_host_anchor_index": 0,
+        "normalized_tolerance": 0.005,
+        "size_ratio_tolerance": 0.002,
+        "policy_scope_id": "constructed-citation-only"
+      }
+    ]
+  },
+  "empty_scope": {
+    "source": {
+      "path": "/absolute/source.pdf",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "standard": {
+      "path": "/absolute/hardening-qa-contract.md",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "reviewer_id": "illustrative-independent-reviewer",
+    "method": "source_first",
+    "pages": [
+      1
+    ],
+    "items": [],
+    "not_applicable_reason": "示例源全文仅普通BODY，无脚本；实际源现场仍须无相反信号。"
+  },
+  "requirements_extension": {
+    "script_styles_scope_ref": {
+      "path": "/absolute/independent-script-scope.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "packet_extension": {
+    "script_styles_bindings_ref": {
+      "path": "/absolute/target-script-bindings.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "target_binding": {
+    "source": {
+      "path": "/absolute/source.pdf",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "target": {
+      "path": "/absolute/target.pdf",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "items": [
+      {
+        "id": "complete-range",
+        "page": 1,
+        "target_label_indices": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "target_host_anchor_index": 0
+      }
+    ]
+  },
+  "notes": [
+    "零SHA和示例源路径不可执行，不能作为接受证据。",
+    "容差仅演示已冻结引用范围；普通科学差异须按其审查目标裁决。",
+    "runtime_ref/schema_ref使用当前正式组件身份，源范围由独立审校者冻结。"
+  ]
+}

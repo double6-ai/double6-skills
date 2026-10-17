@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-STRICT_KINDS = {"url", "doi", "citation", "inline_math", "latex_command", "inline_code", "code_block"}
+STRICT_KINDS = {"url", "doi", "citation", "inline_math", "display_math", "latex_command", "inline_code", "code_block"}
 
 
 def load_json(path: Path) -> dict[str, Any]:

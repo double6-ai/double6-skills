@@ -1,0 +1,30 @@
+{
+  "source": {
+    "path": "/absolute/source.pdf",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "groups": [
+    {
+      "id": "reviewed_complete_paragraph",
+      "region_ids": [
+        "source_fragment_before_blank",
+        "source_fragment_after_blank"
+      ],
+      "target_text": "已按完整源段独立审校的完整中文目标。",
+      "boundary_evidence": "具名源图审校确认同一段跨空白背面连续；不从OCR空列表猜测。"
+    }
+  ],
+  "blank_source_pages": [
+    {
+      "page": 2,
+      "image_ref": {
+        "path": "/absolute/source_p2.png",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "review_ref": {
+        "path": "/absolute/source_review.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  ]
+}

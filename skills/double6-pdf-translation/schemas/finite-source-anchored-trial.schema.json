@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Finite source-role anchored trial v1",
+  "type": "object",
+  "required": [
+    "policy",
+    "kind",
+    "source_pdf_ref",
+    "font_ref",
+    "role_evidence",
+    "typography"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "policy": {
+      "const": "explicit_source_roles_and_anchors_v1"
+    },
+    "kind": {
+      "enum": [
+        "scan",
+        "native"
+      ]
+    },
+    "source_pdf_ref": {
+      "$ref": "#/$defs/ref"
+    },
+    "font_ref": {
+      "$ref": "#/$defs/ref"
+    },
+    "role_evidence": {
+      "$ref": "#/$defs/ref"
+    },
+    "regions_ref": {
+      "$ref": "#/$defs/ref"
+    },
+    "native_plan_ref": {
+      "$ref": "#/$defs/ref"
+    },
+    "code_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ref"
+      }
+    },
+    "additional_font_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ref"
+      }
+    },
+    "typography": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/typography"
+        },
+        "heading": {
+          "$ref": "#/$defs/typography"
+        },
+        "single_line_metadata": {
+          "$ref": "#/$defs/typography"
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/typography"
+      }
+    },
+    "scan_semantic_flow_ref": {
+      "$ref": "#/$defs/ref"
+    },
+    "source_ink_protection_ref": {
+      "$ref": "#/$defs/ref"
+    },
+    "preparation_inputs_ref": {
+      "$ref": "#/$defs/ref"
+    },
+    "source_plan_materialization_ref": {
+      "$ref": "#/$defs/ref"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "scan"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "regions_ref"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "native"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "native_plan_ref"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "ref": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "typography": {
+      "type": "object",
+      "required": [
+        "font_size_pt",
+        "baseline_step_pt"
+      ],
+      "properties": {
+        "font_size_pt": {
+          "type": "number",
+          "minimum": 3,
+          "maximum": 40
+        },
+        "baseline_step_pt": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "font_ref": {
+          "$ref": "#/$defs/ref"
+        },
+        "source_role": {
+          "enum": [
+            "body",
+            "heading",
+            "single_line_metadata"
+          ]
+        }
+      }
+    }
+  }
+}

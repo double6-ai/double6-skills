@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "109 bounded input facts; physical source unchanged",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "development_revision",
+    "status",
+    "source",
+    "page_count",
+    "pages",
+    "qualification",
+    "blockers",
+    "todos",
+    "model_inventory",
+    "input_modified",
+    "physical_scale_policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "development_revision": {
+      "const": "109-unpublished"
+    },
+    "status": {
+      "enum": [
+        "blocked",
+        "needs_source_review",
+        "ready_for_declared_route"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "page_count": {
+      "type": "integer"
+    },
+    "pages": {
+      "type": "array"
+    },
+    "qualification": {
+      "type": "object"
+    },
+    "blockers": {
+      "type": "array"
+    },
+    "todos": {
+      "type": "array"
+    },
+    "model_inventory": {
+      "type": "object"
+    },
+    "input_modified": {
+      "const": false
+    },
+    "physical_scale_policy": {
+      "const": "preserve_input_media_and_crop_boxes"
+    }
+  }
+}

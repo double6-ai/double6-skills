@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from layout_role_policy import is_backmatter_section
+
 
 BACKMATTER_MARKERS = (
     "acknowledgements",
@@ -59,8 +61,7 @@ def has_cjk(text: str) -> bool:
 
 
 def has_backmatter_marker(text: str) -> bool:
-    lowered = str(text or "").lower()
-    return any(marker in lowered for marker in BACKMATTER_MARKERS)
+    return is_backmatter_section(str(text or ""))
 
 
 def toc_row_requires_page_number_group(item: dict[str, Any]) -> bool:
@@ -270,8 +271,6 @@ def build_layout_structure_gate(
     cause_categories: dict[str, list[dict[str, Any]]] = {}
     for finding in active_visual_findings:
         cause = str(finding.get("cause_category") or "")
-        if cause == "typeset_reflow" and str(finding.get("rule") or "") == "heading_bold_style_drift":
-            continue
         if cause:
             cause_categories.setdefault(cause, []).append(finding)
     for cause, severity, recommendation in [
@@ -317,7 +316,6 @@ def build_layout_structure_gate(
         ("chart_title_missing", "blocking", "源页小节/图表标题不能在译文页消失；需修 chart_label/section heading writeback。"),
         ("protected_person_name_translation_drift", "blocking", "AI Index 人员名单、citation 和作者名应保留英文原样，不能大面积音译。"),
         ("person_name_passthrough_coverage_low", "blocking", "人员名单英文姓名保留率不足时，需回到 protected span / roster role policy 修复。"),
-        ("person_name_translated_with_parenthetical_english", "blocking", "人员名单、作者和委员姓名默认保留英文原样，不能音译为中文名加括号英文。"),
         ("publisher_badge_background_drift", "blocking", "出版商 badge / UI 控件应整体保护；若需要翻译，也必须继承源区域渐变和图标背景。"),
         ("source_region_image_background_loss", "blocking", "图像型源区域背景被洗白或擦除时，需 source-region passthrough 或背景保持重绘。"),
         ("institution_label_untranslated", "warn", "机构标签应由实体策略整体翻译或明确保留。"),
@@ -402,20 +400,12 @@ def build_layout_structure_gate(
         worst = "blocking"
     elif issues:
         worst = "warn"
-    warn_only_delivery_safe = (
-        worst == "warn"
-        and issues
-        and all(item.get("rule") == "layout_label_coverage_low" for item in issues)
-        and str(visual.get("status") or "") == "ok"
-    )
     return {
         "version": 1,
         "status": "partial" if worst == "blocking" else "warn" if worst == "warn" else "ok",
         "worst_gate": worst,
         "issue_count": len(issues),
         "issues": issues,
-        "warn_only_delivery_safe": warn_only_delivery_safe,
-        "warn_only_delivery_safety": "only_layout_label_coverage_low_and_visual_qa_ok" if warn_only_delivery_safe else None,
         "inputs": {
             "layout_source": layout.get("layout_source"),
             "engine_block_coverage_ratio": layout.get("engine_block_coverage_ratio"),

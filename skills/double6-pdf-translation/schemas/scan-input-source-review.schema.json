@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Explicit source-image qualification; not an automatic semantic acceptance",
+  "type": "object",
+  "required": [
+    "source",
+    "reviewer",
+    "source_image_evidence_ref",
+    "complete_work",
+    "script_kind"
+  ],
+  "properties": {
+    "source": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "reviewer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_image_evidence_ref": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "complete_work": {
+      "type": "boolean"
+    },
+    "script_kind": {
+      "enum": [
+        "printed",
+        "printed_with_protected_signature",
+        "handwritten",
+        "mixed",
+        "UNKNOWN"
+      ]
+    }
+  },
+  "additionalProperties": false
+}
