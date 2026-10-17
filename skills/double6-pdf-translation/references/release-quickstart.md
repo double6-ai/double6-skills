@@ -55,7 +55,7 @@ python scripts/paper_translation_workflow.py collect \
 
 带 FREEZE 的动作（`candidate`、`collect`、`resume-latex`）以冻结的 `resource_contract` 为唯一权威预算：
 
-- 实际执行的内存上限、单作业时限和计量口径全部取自冻结合同；合同未写 `memory_metric` 时按原始含义 `rss` 解释（旧 3 GiB/120 s 合同）。
+- 实际执行的内存上限、单作业时限和计量口径全部取自冻结合同；合同未写 `memory_metric` 时按原始含义 `rss` 解释（旧 3 GiB/120 s 合同）。这类旧合同在 Linux 上按逐进程 RSS 相加计量，fork 子进程的共享页会被重复计入，视具体作业可能超出预算而被停止；建议按下方 Linux 建议合同重新冻结。
 - 命令行或环境变量给出的值必须与冻结值相同；不同（无论更大还是更小）即以 `resource_override_conflicts_with_freeze` 拒绝，退出码 2，不启动任何重任务。要换预算请重新冻结。
 - 冻结内存超过物理内存 50% 时报 `task_memory_limit_exceeds_host_authorization`。
 - Linux 建议冻结 `{"task_rss_bytes": 4294967296, "per_job_seconds": 300, "concurrency": 1, "memory_metric": "pss"}`；`doctor` 输出本平台的 `recommended_resource_contract`。
@@ -96,7 +96,10 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 
 每次渲染都会写 `render_residue_check.json`：逐页比较源与成品可抽取的拉丁词数，残留率 ≥0.6 的页为高风险，≥0.3 为中风险；整体残留率 ≥0.5 或存在高风险页时 `comprehensive_quality` 判 `fail`，`quality_report.md` 顶部同步写明。按 skill 规则本就不翻译的内容不计入残留率，源与译文两侧同样剔除，并在报告中逐页记录剔除词数（`excluded_source_words`、`excluded_source_breakdown`）和参考文献段所在页（`excluded.reference_section_pages`）：
 
-- 参考文献段：整行标题为 References / Bibliography / Works Cited / 参考文献 等，之后的内容直到 Appendix / 附录 等标题；
+- 参考文献段：按几何阅读顺序（行框坐标；检测到双栏时先左栏后右栏，通栏行切分区段）而非内容流顺序确定。整行标题为 References / Bibliography / Works Cited / 参考文献 等，其后到结束标题之间的区域内，**逐条**判断：只有看起来像文献条目（行首 `[n]`/`n.` 编号、作者姓名缩写、年份、DOI/arXiv/页码/卷号、会议期刊词、逗号密度，且英文虚词比例低）的条目才剔除，区域内的普通正文照常计入；
+- 结束标题：Appendix / Appendices / Supplementary / 附录 等，以及加粗、字号更大或前有段距的字母编号标题（如 `A Proof of the Main Theorem`、`A.1 …`、`B Additional Results`）；其后的正文照常计入；
+- 无标题参考文献：没有 References 标题时，只有连续 ≥3 条、每条都满足严格条目特征（必须含年份、虚词比例低）且整段虚词比例更低的条目才剔除（`reference_entries_headingless`），零散的带年份或引用的英文正文不剔除；
+- 译文侧剔除上限：每页译文剔除词数不得超过源文同页剔除词数 ×1.2 + 20，超出部分加回计数（`target_exclusion_capped_words`），防止译文把未翻译正文排成“参考文献”样式来规避检查；
 - 等宽字体代码；
 - URL、DOI、邮箱、arXiv 编号；
 - 方括号编号引用（如 `[12]`、`[3–5]`）、作者-年份括号引用和 `et al.`。
