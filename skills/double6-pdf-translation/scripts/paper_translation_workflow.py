@@ -215,6 +215,47 @@ def run_job(args, command, operation):
 
 
 CHILD_RESULT_MARKER = 'PAPER_TRANSLATION_STRUCTURED_RESULT '
+EXIT_OK, EXIT_ERROR, EXIT_BLOCKED, EXIT_QUALITY_FAIL = 0, 1, 2, 3
+
+
+def quality_gate_failure(output_dir, manifest):
+    """QA 判 fail 时的结构化原因：哪些检查、哪些页、残留等级；译文文件照常保留。"""
+    output_dir = Path(output_dir)
+    quality_path = output_dir / 'comprehensive_quality.json'
+    quality = read_json(quality_path) if quality_path.is_file() else {}
+    issues = [i for i in quality.get('issues', []) if isinstance(i, dict)]
+    blocking = [i for i in issues if i.get('severity') in {'high', 'critical', 'blocker'}] or issues
+    reasons = []
+    for issue in blocking:
+        reason = {k: issue[k] for k in ('id', 'rule', 'severity', 'pages', 'overall_residue_ratio', 'message') if k in issue}
+        reason.setdefault('id', issue.get('rule') or 'quality_issue')
+        reasons.append(reason)
+    residue_path = output_dir / 'render_residue_check.json'
+    residue_pages = []
+    if residue_path.is_file():
+        residue = read_json(residue_path)
+        residue_pages = [{'page': page.get('page'), 'severity': page.get('severity'),
+                          'residue_ratio': page.get('residue_ratio')}
+                         for page in residue.get('pages', [])
+                         if page.get('evaluated') and page.get('severity') in {'high', 'medium'}]
+        for reason in reasons:
+            if reason.get('id') == 'render_english_residue':
+                reason['page_levels'] = residue_pages
+                reason['thresholds'] = residue.get('thresholds')
+    if not reasons:
+        reasons.append({'id': 'quality_status_fail', 'severity': 'high',
+                        'message': 'comprehensive quality status is fail without itemised issues'})
+    outputs = manifest.get('outputs') if isinstance(manifest.get('outputs'), dict) else {}
+    files = sorted({Path(v).name for k, v in outputs.items()
+                    if isinstance(v, str) and v.endswith('.pdf') and (output_dir / Path(v).name).is_file()})
+    summary = '; '.join(
+        f"{r['id']}({r.get('severity')})" + (f" pages {r['pages']}" if r.get('pages') else '')
+        + (f" residue {r['overall_residue_ratio']}" if r.get('overall_residue_ratio') is not None else '')
+        for r in reasons)
+    return {'quality_gate': 'fail', 'exit_code': EXIT_QUALITY_FAIL,
+            'quality_fail_summary': f'quality_status=fail: {summary}',
+            'quality_fail_reasons': reasons, 'render_residue_pages': residue_pages,
+            'outputs_written': True, 'output_files': files}
 
 
 def child_structured_result(result):
@@ -696,11 +737,15 @@ def main(argv=None):
         print(json.dumps(result, ensure_ascii=False, indent=2))
         if args.action == '_execute-digital' and isinstance(exc, PreflightError):
             print(CHILD_RESULT_MARKER + json.dumps({k: result[k] for k in ('status', 'error_code', 'findings')}, ensure_ascii=False))
-        return 2
+        return EXIT_BLOCKED
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if result['status'] == 'blocked':
-        return 2
-    return 0 if result['status'] in {'ready', 'succeeded', 'ready_for_delivery', 'delivered', 'candidate', 'source_only_collected'} else 1
+        return EXIT_BLOCKED
+    ok = result['status'] in {'ready', 'succeeded', 'ready_for_delivery', 'delivered', 'candidate', 'source_only_collected'}
+    if ok and args.action == 'candidate' and result.get('quality_status') == 'fail':
+        # 译文已照常写出，但质量门判 fail：用独立退出码 3，与预检拦截（2）区分。
+        return EXIT_QUALITY_FAIL
+    return EXIT_OK if ok else EXIT_ERROR
 
 
 def structured_failure(args, exc):
@@ -822,6 +867,8 @@ def dispatch(args):
                 # 候选阶段仍以生成结果为准；综合质量与渲染残留结论上浮到回执，交付门另行阻止。
                 manifest = read_json(manifest_path)
                 result.update(quality_status=manifest.get('quality_status'), render_residue=manifest.get('render_residue'))
+                if manifest.get('quality_status') == 'fail':
+                    result.update(quality_gate_failure(args.output, manifest))
         result.update(freeze_ref=ref(args.freeze), input_ref=ref(args.input), route=args.route,
                       declared_pages=pages, stage='smoke_candidate' if args.smoke else 'candidate',
                       human_accepted=False, strict_delivery=False, heavy_task_concurrency=1)

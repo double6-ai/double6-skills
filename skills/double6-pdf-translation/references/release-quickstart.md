@@ -57,6 +57,13 @@ python scripts/paper_translation_workflow.py collect \
 
 `inspect-input` 报告和 `candidate`/`collect` 的 `WORKFLOW_INPUT_PREFLIGHT.json` 使用同一结构：`status`（`ok`/`blocked`，扫描事实报告另有原状态）、`error_code`、`warnings` 和 `findings[]`（`code`、`severity`、`message`、`details`）。任何动作被预检或合同校验拦下时，标准输出是同形 JSON，退出码 2；不再打印原始 traceback。
 
+| 退出码 | 含义 |
+|---|---|
+| 0 | 成功；`candidate` 的质量结论为 `pass`/`warn`/`unverified` |
+| 1 | 其它失败（如资源超限停止、后端失败），见 `status`/`stop_reason`/`exception` |
+| 2 | 被输入预检或合同校验拦下（`status: blocked`，见 `error_code`/`findings`），不产生译文 |
+| 3 | 仅 `candidate`：译文照常写出，但综合质量判 `fail`；结果 JSON 含 `quality_gate: fail`、`quality_fail_summary`、`quality_fail_reasons`（检查项、页码、残留比例与逐页等级）、`render_residue_pages` 和 `output_files` |
+
 | 错误码 | 级别 | 含义 |
 |---|---|---|
 | `input_not_found` / `not_a_pdf` / `input_too_large` | error | 文件不存在、不是 PDF、超过 100 MiB |
@@ -73,4 +80,4 @@ python scripts/paper_translation_workflow.py collect \
 
 ## 渲染英文残留检查
 
-每次渲染都会写 `render_residue_check.json`：逐页比较源与成品可抽取的拉丁词数，残留率 ≥0.6 的页为高风险，≥0.3 为中风险；整体残留率 ≥0.5 或存在高风险页时 `comprehensive_quality` 判 `fail`，`quality_report.md` 顶部同步写明。它只是最小版成品检查，不替代逐页人工核对。
+每次渲染都会写 `render_residue_check.json`：逐页比较源与成品可抽取的拉丁词数，残留率 ≥0.6 的页为高风险，≥0.3 为中风险；整体残留率 ≥0.5 或存在高风险页时 `comprehensive_quality` 判 `fail`，`quality_report.md` 顶部同步写明。`candidate` 遇到质量 `fail` 时退出码为 3（译文文件仍保留，便于人工检查）。阈值是启发式的：按本版本测试语料标定（未翻译直通残留率 1.00，正常译文 0.04–0.14，含大量英文图框标签的图页 0.34），只评估源文拉丁词 ≥50 的页。它只是最小版成品检查，不替代逐页人工核对。

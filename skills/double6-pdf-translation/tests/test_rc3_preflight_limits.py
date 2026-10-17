@@ -255,3 +255,77 @@ def test_versions_are_unified():
     changelog = (SKILL / 'CHANGELOG.md').read_text(encoding='utf-8')
     assert routes['candidate_version'] == version == SKILL_VERSION
     assert changelog.split('\n## ', 1)[1].startswith(version)
+
+
+# ---------- candidate exit codes: quality fail -> 3, pass/warn -> 0, preflight block -> 2 ----------
+
+def _fake_backend(monkeypatch, wf, translated):
+    """替换重任务子进程：照常写出译文与 QA 产物（残留检查用真实实现），其余入口逻辑保持真实。"""
+    import qa_pipeline
+
+    def fake_run_bounded(command, **kwargs):
+        out = Path(command[command.index('--output') + 1])
+        source = Path(command[command.index('--input') + 1])
+        out.mkdir(parents=True)
+        mono = out / 'in.no_watermark.zh.mono.pdf'
+        with fitz.open(source) as src_doc:
+            pages = src_doc.page_count
+        make_pdf(mono, pages=pages, text=ZH, cjk=True) if translated else make_pdf(mono, pages=pages)
+        residue = qa_pipeline.render_residue_gate(source, mono, out)
+        issues = []
+        if residue['severity'] == 'high':
+            issues.append({'id': 'render_english_residue', 'rule': 'render_english_residue_high', 'severity': 'high',
+                           'pages': residue['high_pages'], 'overall_residue_ratio': residue['overall_residue_ratio']})
+        status = 'fail' if issues else 'warn'
+        (out / 'comprehensive_quality.json').write_text(json.dumps({'status': status, 'issues': issues}))
+        (out / 'render_manifest.json').write_text(json.dumps({
+            'quality_status': status, 'outputs': {'translated_pdf': str(mono), 'mono_pdf': str(mono)},
+            'render_residue': {k: residue.get(k) for k in ('severity', 'overall_residue_ratio', 'high_pages', 'medium_pages')}}))
+        return {'status': 'succeeded', 'command': {'stdout_summary': {'excerpt': ''}}}
+
+    monkeypatch.setattr(wf, 'run_bounded', fake_run_bounded)
+    monkeypatch.setattr(wf, 'validate_freeze', lambda *a, **k: [1])
+    monkeypatch.setattr(wf, 'doctor', lambda *a, **k: {'blockers': [], 'latex_ready': True})
+    monkeypatch.setattr(wf, 'candidate_command', lambda args, freeze: [
+        sys.executable, 'run_pdf_translation.py', '--input', str(args.input), '--output', str(args.output)])
+
+
+def _candidate_main(tmp_path, wf, pdf, capsys):
+    (tmp_path / 'FREEZE.json').write_text('{}')
+    code = wf.main(['candidate', '--input', str(pdf), '--output', str(tmp_path / 'out'), '--receipts', str(tmp_path / 'rc'),
+                    '--freeze', str(tmp_path / 'FREEZE.json'), '--route', 'digital_pdf', '--model', 'm',
+                    '--base-url', 'http://127.0.0.1:9/v1', '--lock-path', str(tmp_path / 'wf.lock')])
+    return code, json.loads(capsys.readouterr().out)
+
+
+def test_candidate_quality_fail_exits_3_with_outputs_and_reasons(tmp_path, monkeypatch, capsys):
+    import paper_translation_workflow as wf
+    _fake_backend(monkeypatch, wf, translated=False)
+    code, result = _candidate_main(tmp_path, wf, make_pdf(tmp_path / 'in.pdf', pages=2), capsys)
+    assert code == wf.EXIT_QUALITY_FAIL == 3
+    assert result['status'] == 'succeeded' and result['quality_status'] == 'fail' and result['exit_code'] == 3
+    assert result['outputs_written'] is True and result['output_files'] == ['in.no_watermark.zh.mono.pdf']
+    assert (tmp_path / 'out/in.no_watermark.zh.mono.pdf').is_file()
+    reason = result['quality_fail_reasons'][0]
+    assert reason['id'] == 'render_english_residue' and reason['severity'] == 'high' and reason['pages'] == [1, 2]
+    assert [p['page'] for p in reason['page_levels']] == [1, 2] and all(p['severity'] == 'high' for p in reason['page_levels'])
+    assert reason['thresholds']['page_high'] == 0.6
+    assert 'render_english_residue(high) pages [1, 2]' in result['quality_fail_summary']
+    receipt = json.loads((tmp_path / 'rc/WORKFLOW_CANDIDATE.json').read_text())
+    assert receipt['quality_fail_reasons'] == result['quality_fail_reasons']
+
+
+def test_candidate_quality_pass_or_warn_exits_0(tmp_path, monkeypatch, capsys):
+    import paper_translation_workflow as wf
+    _fake_backend(monkeypatch, wf, translated=True)
+    code, result = _candidate_main(tmp_path, wf, make_pdf(tmp_path / 'in.pdf', pages=2), capsys)
+    assert code == 0 and result['quality_status'] == 'warn' and result['render_residue']['severity'] == 'ok'
+    assert 'quality_fail_reasons' not in result and 'exit_code' not in result
+
+
+def test_candidate_preflight_block_still_exits_2(tmp_path, monkeypatch, capsys):
+    import paper_translation_workflow as wf
+    _fake_backend(monkeypatch, wf, translated=False)
+    code, result = _candidate_main(tmp_path, wf, make_pdf(tmp_path / 'in.pdf', text=ZH, cjk=True), capsys)
+    assert code == wf.EXIT_BLOCKED == 2 and result['error_code'] == 'source_language_matches_target'
+    assert not (tmp_path / 'out').exists()
