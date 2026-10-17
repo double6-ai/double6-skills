@@ -13,8 +13,12 @@
 参考文献的识别不依赖内容流顺序：先按文本行的坐标（纵向位置与分栏）计算阅读顺序，
 再把行切成条目（编号、悬挂缩进或空行分隔），每个条目单独校验是否像文献条目
 （编号、年份、作者/首字母、出版物/DOI/页码等特征，且虚词比例低）。
-- 有 References/参考文献 等标题时，标题之后（阅读顺序）通过校验的条目被剔除，直到附录类标题
-  （Appendix、附录、A/A.1/B 等字母编号标题）为止；标题之后的普通正文仍然计数。
+- 逐条分类为 strong（编号/作者开头 + 年份 + 出处信号）、weak（只缺其一、栏首残段或栏底被截断的编号条目头）、
+  short、break。strong 剔除；weak 默认计数，只有正面证据才剔除：编号与紧邻条目连续（numbered_sequence），
+  或是紧接已剔除且未结束条目的栏首/页首续接残段（continuation）；break 计数。无标题段与标题区域规则一致，
+  每条决定写入审计记录。
+- 有 References/参考文献 等标题时，规则作用于标题之后（阅读顺序）直到附录类标题
+  （Appendix、附录、A/A.1/B 等字母编号标题）为止的区域。
 - 句子式正文（指标枚举、多个小数/年份/叙述式引用、第一人称、谓语动词、句首连接词）一律否决。
 - 没有标题时需要强结构证据（宁可误报不可漏判）：≥3 条编号/作者开头且含年份与出处的条目、左边距一致、
   位于文末或节末、全文剔除不超过源文英文词一半；译文侧只在源文已接受的页上剔除；候选段写入审计记录。
@@ -57,14 +61,15 @@ INLINE_EXCLUSIONS = (
 MONO_FONT = re.compile(r'mono|courier|consol|code|menlo|inconsolata|cour\b', re.IGNORECASE)
 
 # 文献条目特征。
-LEADING_MARKER = re.compile(r'^\s*(?:\[\d{1,4}\]|\(\d{1,4}\)|\d{1,4}\.\s)')
+LEADING_MARKER = re.compile(r'^\s*(?:\[\d{1,4}\]|\(\d{1,4}\)|\d{1,3}\.\s)')  # n. 最多三位，避免把 "2000. 标题" 当编号
 # 年份：不把 arXiv 编号（2010.11929）的前四位算作年份。
 YEAR = re.compile(r'(?<![\d.:/])(?:19|20)\d{2}[a-z]?(?!\d|\.\d)')
 AUTHOR = re.compile(r"\b[A-Z]\.(?:\s?[A-Z]\.)*\s?[A-Z][a-zA-Z'\-]+|\b[A-Z][a-zA-Z'\-]+,\s(?:[A-Z]\.\s?)+|\bet\s+al\b|"
                     r"(?:\b[A-Z][a-zA-Z'\-]+(?:\s+[A-Z]\.?)*\s+[A-Z][a-zA-Z'\-]+,\s+){2,}")
 VENUE = re.compile(r'\b(?:proceedings|proc\.|conference|journal|transactions|symposium|workshop|arxiv|preprint|doi|'
                    r'vol\.|volume|pp\.|pages|press|neurips|nips|icml|iclr|cvpr|iccv|eccv|acl|naacl|emnlp|aaai|ieee|acm|'
-                   r'springer|elsevier|pmlr|advances\s+in)\b|10\.\d{4,9}/', re.IGNORECASE)
+                   r'springer|elsevier|pmlr|advances\s+in)\b|10\.\d{4,9}/|\d+\s*\(\d+\)\s*:\s*\d+', re.IGNORECASE)
+VENUE_IN = re.compile(r'\.\s+In\s+(?:[A-Z]|\d{4})')  # "… title. In Proceedings / In ICLR / In 2021 …\"
 STOPWORDS = frozenset(
     'the of and to in is that for we this with as on are be by it an which from at or can our not these their its '
     'was were has have had been than also such into more but when where while only both each other there they them '
@@ -73,9 +78,16 @@ STOPWORDS = frozenset(
     'you he she his her i me my your'.split())
 MAX_ENTRY_LINES = 10
 # 无标题参考文献（第三轮收紧）：只有强结构证据才剔除，宁可误报不可漏判。
-ENTRY_MARKER = re.compile(r'^\s*(?:\[\d{1,4}\]|\d{1,4}\.\s)')
+ENTRY_MARKER = re.compile(r'^\s*(?:\[\d{1,4}\]|\d{1,3}\.\s)')
 AUTHOR_LEAD = re.compile(r"^\s*(?:[A-Z][\w'\u2019\-]+,\s+(?:[A-Z]\.\s?)+|(?:[A-Z]\.\s?){1,3}[A-Z][\w'\u2019\-]+)")
-NAME_TOKEN = re.compile(r"^(?:[A-Z][\w'\u2019\-]*\.?|and|et|al\.?|&|van|von|der|den|de|da|del|di|du|la|le)$")
+NAME_PARTICLES = frozenset('and et al al. & van von der den de da del di du la le dos das y'.split())
+
+
+def _is_name_token(token: str) -> bool:
+    """作者名中的词：首字母大写（含 Ł、É 等非 ASCII 大写）且只由字母、连字符、撇号、句点组成，或常见姓名小词。"""
+    if token in NAME_PARTICLES:
+        return True
+    return token[:1].isupper() and all(ch.isalpha() or ch in ".-'\u2019" for ch in token)
 # 正文否决：出现任一硬否决，或软信号合计 ≥2，该块就不是文献条目。
 HARD_METRIC = re.compile(
     r'%|\u00b1|\+/-|\b(?:accuracy|acc|bleu|rouge(?:-\w+)?|f1|perplexity|ppl|psnr|ssim|mAP|auc|wer|cer|top-?[15]|error rate|'
@@ -100,7 +112,6 @@ HEADINGLESS_MAX_DOCUMENT_FRACTION = 0.5
 SHORT_GROUP_WORDS = 6
 # 虚词比例阈值：实测文献条目 0.10–0.29，英文正文 0.40–0.50（含夹带引用的正文）。
 REGION_ENTRY_STOPWORDS = 0.33
-STRICT_ENTRY_STOPWORDS = 0.32
 HEADINGLESS_RUN_MEAN_STOPWORDS = 0.27
 HEADINGLESS_MIN_RUN = 3
 MAX_ENTRY_WORDS = 160
@@ -174,7 +185,7 @@ def citation_features(text: str) -> dict[str, Any]:
     words = LATIN_WORD.findall(text)
     features = {'words': len(words), 'stopword_ratio': round(_stopword_ratio(words), 3),
                 'marker': bool(LEADING_MARKER.match(text)), 'year': bool(YEAR.search(text)),
-                'author': bool(AUTHOR.search(text)), 'venue': bool(VENUE.search(text)),
+                'author': bool(AUTHOR.search(text)), 'venue': bool(VENUE.search(text) or VENUE_IN.search(text)),
                 'comma_dense': bool(words) and text.count(',') / len(words) >= 0.10}
     features['score'] = (2 * features['marker'] + features['year'] + features['author'] + features['venue']
                          + features['comma_dense'])
@@ -205,42 +216,40 @@ def entry_lead(text: str) -> str | None:
         return 'marker'
     if AUTHOR_LEAD.match(text):
         return 'author'
+    text = re.sub(r'(\w)-\s+([a-z])', r'\1\2', text)  # 行尾连字符断词（Pap- pas → Pappas）
     match = YEAR.search(text)
     if match and match.start() <= 400:
         prefix = text[:match.start()].strip().rstrip('(').strip()
         tokens = [t.strip(',;:') for t in prefix.split()]
         tokens = [t for t in tokens if t]
-        if (len(tokens) >= 2 and prefix[-1:] in '.,' and (',' in prefix or ' and ' in prefix or '&' in prefix)
-                and all(NAME_TOKEN.match(t) for t in tokens)):
+        acl_year = bool(re.match(r'\s*\(?(?:19|20)\d{2}[a-z]?\)?\.', text[match.start() - (1 if text[match.start() - 1:match.start()] == '(' else 0):]))
+        if (len(tokens) >= 2 and prefix[-1:] in '.,'
+                and (',' in prefix or ' and ' in prefix or '&' in prefix or (acl_year and prefix.endswith('.')))
+                and all(_is_name_token(t) for t in tokens)):
             return 'author_list'
     return None
 
 
-def is_citation_entry(text: str, lines: int, *, strict: bool) -> bool:
-    """参考文献标题之后的单个条目是否像文献条目；普通正文（虚词比例高、句子式、指标枚举）一律不算。"""
-    f = citation_features(text)
-    if f['words'] < 4 or lines > MAX_ENTRY_LINES or f['words'] > MAX_ENTRY_WORDS or prose_veto(text):
-        return False
-    if strict:
-        return f['year'] and f['score'] >= 4 and f['stopword_ratio'] <= STRICT_ENTRY_STOPWORDS
-    return f['score'] >= 3 and f['stopword_ratio'] <= REGION_ENTRY_STOPWORDS
-
-
-def headingless_entry_class(group: dict[str, Any]) -> str:
-    """无标题参考文献的逐块分类：strong（编号/作者开头 + 年份 + 出处信号）、weak（只缺年份或出处之一，
-    或栏/页首的续接残段）、short（页码等极短组）、break（其它，包括被否决的正文）。"""
+def headingless_entry_class(group: dict[str, Any], *, region: bool = False) -> str:
+    """逐块分类：strong（编号/作者开头 + 年份 + 出处信号）、weak（只缺年份或出处之一，或栏/页首的残段）、
+    short（页码等极短组）、break（其它，包括被否决的正文）。weak 默认计数，见 _decide_entries。
+    region=True 时用于 References 标题之后的区域（条目长度与虚词比例上限略宽）。"""
     text = group['text']
     f = citation_features(text)
     if f['words'] < SHORT_GROUP_WORDS and not prose_veto(text):
         return 'short'
-    if (f['words'] > HEADINGLESS_MAX_ENTRY_WORDS or len(group['rows']) > HEADINGLESS_MAX_ENTRY_LINES
-            or f['stopword_ratio'] > HEADINGLESS_ENTRY_STOPWORDS or prose_veto(text)):
+    max_words, max_lines, max_stop = ((MAX_ENTRY_WORDS, MAX_ENTRY_LINES, REGION_ENTRY_STOPWORDS) if region else
+                                      (HEADINGLESS_MAX_ENTRY_WORDS, HEADINGLESS_MAX_ENTRY_LINES, HEADINGLESS_ENTRY_STOPWORDS))
+    if (f['words'] > max_words or len(group['rows']) > max_lines or f['stopword_ratio'] > max_stop
+            or prose_veto(text)):
         return 'break'
     lead = entry_lead(text)
     if lead and f['year'] and f['venue']:
         return 'strong'
     if (lead or group.get('column_start')) and (f['year'] or f['venue']):
         return 'weak'
+    if lead == 'marker' and group.get('column_end') and not text.rstrip().endswith('.'):
+        return 'weak'  # 栏底/页底被截断的编号条目头（下一栏/页续接）
     return 'break'
 
 
@@ -282,7 +291,10 @@ def _page_groups(page) -> list[dict[str, Any]]:
             groups[-1]['rows'].append(row)
         prev = row
     seen_columns: set[str] = set()
+    last_in_column = {g['rows'][0]['col']: id(g) for g in groups
+                      if len(LATIN_WORD.findall(' '.join(r['text'] for r in g['rows']))) >= 2}  # 忽略页码
     for group in groups:
+        group['column_end'] = last_in_column.get(group['rows'][0]['col']) == id(group)
         group['text'] = ' '.join(r['text'] for r in group['rows'])
         group['code'] = sum(r['code'] for r in group['rows'])
         group['page'] = page.number + 1
@@ -311,24 +323,19 @@ def _mark_headingless_runs(pages: list[list[dict[str, Any]]], allowed_pages: set
     total_words = sum(len(LATIN_WORD.findall(g['text'])) for g in sequence)
     runs: list[dict[str, Any]] = []
     current: list[dict[str, Any]] = []
+    segment: list[dict[str, Any]] = []
 
     def close(index: int) -> None:
-        nonlocal current
-        members = current
-        current = []
+        members, seg = list(current), list(segment)
+        current.clear(); segment.clear()
         strong = [g for g in members if g['_class'] == 'strong']
         if not strong:
             return
-        tail = sequence[index:]
-        after = next((g for g in tail if not (g['_class'] == 'short' and g['kind'] is None)), None)
-        record = {'pages': sorted({g['page'] for g in members}), 'entries': len(members), 'strong_entries': len(strong),
-                  'weak_entries': len(members) - len(strong),
-                  'excluded_words': sum(len(LATIN_WORD.findall(g['text'])) for g in members),
-                  'first_entry': _preview(members[0]['text']), 'last_entry': _preview(members[-1]['text']),
-                  'members': members}
+        after = next((g for g in sequence[index:] if not (g['_class'] == 'short' and g['kind'] is None)), None)
         margins: dict[str, list[float]] = {}
         for g in strong:
             margins.setdefault(g['rows'][0]['col'], []).append(g['x0'])
+        pages_ = sorted({g['page'] for g in members})
         mean_stop = sum(citation_features(g['text'])['stopword_ratio'] for g in strong) / len(strong)
         if len(strong) < HEADINGLESS_MIN_RUN:
             reason = 'too_few_strong_entries'
@@ -340,39 +347,106 @@ def _mark_headingless_runs(pages: list[list[dict[str, Any]]], allowed_pages: set
             reason = 'inconsistent_margin'
         elif after is not None and after['kind'] != 'end_heading':
             reason = 'not_at_document_or_section_end'
-        elif allowed_pages is not None and not set(record['pages']) <= allowed_pages:
+        elif allowed_pages is not None and not set(pages_) <= allowed_pages:
             reason = 'no_matching_source_run'
         else:
             reason = 'accepted'
-        record['reason'] = reason
-        runs.append(record)
+        runs.append({'pages': pages_, 'entries': len(members), 'strong_entries': len(strong),
+                     'weak_entries': len(members) - len(strong), 'reason': reason,
+                     'first_entry': _preview(members[0]['text']), 'last_entry': _preview(members[-1]['text']),
+                     '_members': members, '_segment': seg})
 
     for index, group in enumerate(sequence):
         free = group['exclude'] is None and not group['in_region'] and group['kind'] is None
         group['_class'] = headingless_entry_class(group) if free else 'break'
         if group['_class'] in ('strong', 'weak'):
-            current.append(group)
+            current.append(group); segment.append(group)
         elif group['_class'] == 'short' and current:
-            continue
+            segment.append(group)
         elif current:
             close(index)
     if current:
         close(len(sequence))
+    label = 'reference_entries_headingless'
+    for record in runs:
+        if record['reason'] == 'accepted':
+            record['entries_detail'] = _decide_entries(record['_segment'], label)
     if allowed_pages is None:
-        accepted_words = sum(r['excluded_words'] for r in runs if r['reason'] == 'accepted')
-        if accepted_words > HEADINGLESS_MAX_DOCUMENT_FRACTION * total_words:
+        excluded = sum(r['words'] for rec in runs if rec['reason'] == 'accepted'
+                       for r in rec['entries_detail'] if r['decision'] == 'excluded')
+        if excluded > HEADINGLESS_MAX_DOCUMENT_FRACTION * total_words:
             for record in runs:
                 if record['reason'] == 'accepted':
                     record['reason'] = 'exceeds_document_fraction'
+                    for g in record['_segment']:
+                        if g.get('exclude') == label:
+                            g['exclude'] = None
     for record in runs:
         record['accepted'] = record['reason'] == 'accepted'
-        if record['accepted']:
-            for g in record.pop('members'):
-                g['exclude'] = 'reference_entries_headingless'
-        else:
-            record.pop('members')
-            record['excluded_words'] = 0
+        if not record['accepted']:
+            record['entries_detail'] = [_entry_row(g, 'counted', 'run_rejected:' + record['reason'])
+                                        for g in record['_members']]
+        record['excluded_words'] = sum(r['words'] for r in record['entries_detail'] if r['decision'] == 'excluded')
+        del record['_members'], record['_segment']
     return runs
+
+
+def _marker_number(text: str) -> int | None:
+    match = re.match(r'^\s*\[?(\d{1,4})[\].]', text)
+    return int(match.group(1)) if match and ENTRY_MARKER.match(text) else None
+
+
+def _entry_row(group: dict[str, Any], decision: str, reason: str) -> dict[str, Any]:
+    return {'page': group['page'], 'class': group['_class'], 'decision': decision, 'reason': reason,
+            'words': len(LATIN_WORD.findall(group['text'])), 'preview': _preview(group['text'])}
+
+
+def _decide_entries(seq: list[dict[str, Any]], label: str) -> list[dict[str, Any]]:
+    """对一段按阅读顺序排列的块（已分类）逐条决定剔除或计数，并返回逐条审计记录。
+
+    strong 剔除；weak 默认计数，只有正面证据才剔除：
+    - numbered_sequence：带 [n]/n. 编号、≤40 词（栏底被截断、虚词比例 ≤0.15 的条目头不限词数），紧邻的带编号条目与之连续（n-1 或 n+1），且不存在不连续的紧邻编号；
+    - continuation：栏首/页首、无编号也无作者开头，紧接在一个已剔除且未以句号结束的条目之后，
+      左边距不在该栏 strong 条目边距之外（悬挂缩进一致）。
+    break 与 short 计数（short 不进审计）。"""
+    rows: list[dict[str, Any]] = []
+    margins: dict[str, float] = {}
+    for g in seq:
+        if g['_class'] == 'strong':
+            col = g['rows'][0]['col']
+            margins[col] = min(margins.get(col, g['x0']), g['x0'])
+    solid = [g for g in seq if g['_class'] != 'short']
+    for index, g in enumerate(solid):
+        cls = g['_class']
+        if cls == 'break':
+            rows.append(_entry_row(g, 'counted', 'not_an_entry'))
+            continue
+        if cls == 'strong':
+            g['exclude'] = label
+            rows.append(_entry_row(g, 'excluded', 'strong_entry'))
+            continue
+        prev = solid[index - 1] if index > 0 else None
+        nxt = solid[index + 1] if index + 1 < len(solid) else None
+        reason = 'weak_no_positive_evidence'
+        number = _marker_number(g['text'])
+        cut_head = (g.get('column_end') and not g['text'].rstrip().endswith('.')
+                    and citation_features(g['text'])['stopword_ratio'] <= 0.15)
+        if number is not None and (len(LATIN_WORD.findall(g['text'])) <= 40 or cut_head):
+            neighbours = [(n, _marker_number(n['text'])) for n in (prev, nxt) if n is not None and n['_class'] in ('strong', 'weak')]
+            numbered = [(n, k) for n, k in neighbours if k is not None]
+            expected = {id(prev): number - 1, id(nxt): number + 1}
+            if numbered and all(k == expected[id(n)] for n, k in numbered):
+                reason = 'numbered_sequence'
+        elif (entry_lead(g['text']) is None and g.get('column_start') and prev is not None and prev.get('exclude')
+              and not prev['text'].rstrip().endswith('.')
+              and g['x0'] >= margins.get(g['rows'][0]['col'], g['x0']) - HEADINGLESS_MARGIN_TOLERANCE):
+            reason = 'continuation'
+        if reason == 'weak_no_positive_evidence':
+            rows.append(_entry_row(g, 'counted', reason))
+        else:
+            g['exclude'] = label
+            rows.append(_entry_row(g, 'excluded', reason))
+    return rows
 
 
 def split_counted_text(document, allowed_pages: set[int] | None = None):
@@ -389,9 +463,12 @@ def split_counted_text(document, allowed_pages: set[int] | None = None):
                 in_region, group['exclude'] = True, 'reference_section'
             elif group['kind'] == 'end_heading':
                 in_region = False
-            elif in_region and is_citation_entry(group['text'], len(group['rows']), strict=False):
-                group['exclude'] = 'reference_section'
-            group['in_region'] = in_region
+            group['in_region'] = in_region and group['kind'] is None
+    # References 标题之后：与无标题段同一套逐条规则（strong 剔除，weak 需正面证据，其余计数）。
+    region_seq = [g for groups in pages for g in groups if g['in_region']]
+    for g in region_seq:
+        g['_class'] = headingless_entry_class(g, region=True)
+    region_rows = _decide_entries(region_seq, 'reference_section')
     audit = _mark_headingless_runs(pages, allowed_pages)
     counted_pages, excluded_pages, reference_pages = [], [], []
     for groups in pages:
@@ -411,7 +488,7 @@ def split_counted_text(document, allowed_pages: set[int] | None = None):
             page_text = pattern.sub(' ', page_text)
         counted_pages.append(page_text)
         excluded_pages.append(stats)
-    return counted_pages, excluded_pages, reference_pages, audit
+    return counted_pages, excluded_pages, reference_pages, {'headingless_runs': audit, 'region_entries': region_rows}
 
 
 def _norm_lines(text: str) -> list[str]:
@@ -451,9 +528,11 @@ def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh')
         # mono 成品与源页一一对应；页数不一致时只比较共同页并记录。
         count = min(len(source), len(target))
         result['page_count_source'], result['page_count_target'] = len(source), len(target)
-        source_text, source_excluded, source_refs, source_runs = split_counted_text(source)
+        source_text, source_excluded, source_refs, source_audit = split_counted_text(source)
+        source_runs = source_audit['headingless_runs']
         accepted_pages = {page for run in source_runs if run['accepted'] for page in run['pages']}
-        target_text, target_excluded, target_refs, target_runs = split_counted_text(target, accepted_pages)
+        target_text, target_excluded, target_refs, target_audit = split_counted_text(target, accepted_pages)
+        target_runs = target_audit['headingless_runs']
         for index in range(count):
             source_ex, target_ex = sum(source_excluded[index].values()), sum(target_excluded[index].values())
             allowed = int(source_ex * TARGET_EXCLUSION_SLACK[0]) + TARGET_EXCLUSION_SLACK[1]
@@ -470,6 +549,7 @@ def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh')
             'target_exclusion_cap': {'factor': TARGET_EXCLUSION_SLACK[0], 'slack_words': TARGET_EXCLUSION_SLACK[1]},
             'reference_section_pages': {'source': source_refs, 'target': target_refs},
             'headingless_runs': {'source': source_runs, 'target': target_runs},
+            'reference_region_entries': {'source': source_audit['region_entries'], 'target': target_audit['region_entries']},
             'headingless_rules': {'max_document_fraction': HEADINGLESS_MAX_DOCUMENT_FRACTION,
                                   'min_strong_entries': HEADINGLESS_MIN_RUN,
                                   'max_entry_stopword_ratio': HEADINGLESS_ENTRY_STOPWORDS,

@@ -83,8 +83,8 @@ def test_round4_narrative_in_references_heading_region_is_counted(tmp_path):
 
 def test_round4_cross_page_continuation_fragment_is_excluded(tmp_path):
     head = ('[6] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. '
-            'In Proceedings of the IEEE Conference on Computer')
-    tail = 'Vision and Pattern Recognition, pages 770-778, 2016.'
+            'In IEEE Conference on Computer')
+    tail = 'Vision and Pattern Recognition (CVPR), pages 770-778, 2016.'
     later = ['[7] ' + REFS[3][4:], '[8] ' + REFS[4][4:], '[9] ' + REFS[1][4:]]
     def doc(body, font):
         first = Page(); flow(first, 50, 545, 50, [(body, font)] * 6)
@@ -108,10 +108,10 @@ def test_round4_numbered_short_entry_without_venue_is_excluded(tmp_path):
 
 
 def test_round4_unnumbered_weak_entry_is_counted_by_default(tmp_path):
-    entries = REFS[:3] + ['Noam Shazeer. Glu variants improve transformer, 2020.'] + REFS[3:]
+    entries = REFS[:3] + ['Shazeer, N. GLU variants improve the transformer model family, 2020.'] + REFS[3:]
     source, target = two_pages(entries)
     result = run(tmp_path, source, target)
-    row = [r for r in entry_decisions(result) if r['preview'].startswith('Noam Shazeer')][0]
+    row = [r for r in entry_decisions(result) if r['preview'].startswith('Shazeer, N.')][0]
     assert row['class'] == 'weak' and row['decision'] == 'counted' and row['reason'] == 'weak_no_positive_evidence', row
 
 

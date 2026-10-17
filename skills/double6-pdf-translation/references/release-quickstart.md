@@ -96,15 +96,16 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 
 每次渲染都会写 `render_residue_check.json`：逐页比较源与成品可抽取的拉丁词数，残留率 ≥0.6 的页为高风险，≥0.3 为中风险；整体残留率 ≥0.5 或存在高风险页时 `comprehensive_quality` 判 `fail`，`quality_report.md` 顶部同步写明。按 skill 规则本就不翻译的内容不计入残留率，源与译文两侧同样剔除，并在报告中逐页记录剔除词数（`excluded_source_words`、`excluded_source_breakdown`）和参考文献段所在页（`excluded.reference_section_pages`）：
 
-- 参考文献段：按几何阅读顺序（行框坐标；检测到双栏时先左栏后右栏，通栏行切分区段）而非内容流顺序确定。整行标题为 References / Bibliography / Works Cited / 参考文献 等，其后到结束标题之间的区域内，**逐条**判断：只有看起来像文献条目（行首 `[n]`/`n.` 编号、作者姓名缩写、年份、DOI/arXiv/页码/卷号、会议期刊词、逗号密度，且英文虚词比例低）、并且没有被正文否决（见下）的条目才剔除，区域内的普通正文照常计入；
+- 参考文献段：按几何阅读顺序（行框坐标；检测到双栏时先左栏后右栏，通栏行切分区段）而非内容流顺序确定。整行标题为 References / Bibliography / Works Cited / 参考文献 等，其后到结束标题之间的区域内**逐条**判断，规则与无标题参考文献相同（见下文 strong / weak）：只剔除 strong 条目和有正面证据的 weak 条目，区域内的普通正文和缺证据的 weak 条目照常计入；
 - 结束标题：Appendix / Appendices / Supplementary / 附录 等，以及加粗、字号更大或前有段距的字母编号标题（如 `A Proof of the Main Theorem`、`A.1 …`、`B Additional Results`）；其后的正文照常计入；
 - 正文否决（区域内与无标题都适用）：块内出现指标枚举（`%`、`±`、`accuracy of 92.3`、`41.3 BLEU`、`F1 of …` 等）、两个以上短小数、三个以上年份、两个以上叙述式引用（`Smith et al. (2020)`）之一即否决；第一人称（we/our）、谓语动词（is/are/was/has…、proposed/showed/trained/achieved…）、句首连接词（We/This/However…）、分号合计 ≥2 也否决。被否决的块按正文计数；
 - 无标题参考文献（`reference_entries_headingless`，宁可误报不可漏判）：没有 References 标题时，只有同时满足以下全部条件的连续条目段才剔除，否则照常计数：
-  - 逐块分类：strong = 行首 `[n]`/`n.` 编号或作者开头（`Surname, X.`、`X. Surname`、作者列表后紧跟年份）+ 年份 + 出处信号（会议/期刊/出版社/DOI/arXiv/页码/卷号），且虚词比例 ≤0.30、不超过 90 词/8 行、未被否决；weak = 只缺年份或出处之一的条目，或栏首/页首的续接残段；其它块（包括被否决的正文）立即打断连续段；
+  - 逐块分类：strong = 行首 `[n]`/`n.` 编号或作者开头（`Surname, X.`、`X. Surname`、作者列表后紧跟年份）+ 年份 + 出处信号（会议/期刊/出版社/DOI/arXiv/页码/卷号/`. In …`），且虚词比例 ≤0.30、不超过 90 词/8 行、未被否决；weak = 只缺年份或出处之一的条目、栏首/页首的残段，或栏底被截断的编号条目头；其它块（包括被否决的正文）立即打断连续段；
+  - **weak 默认计数**（第四轮）：只有正面证据才剔除——`numbered_sequence`（带编号、≤40 词，紧邻的带编号条目与之连续；栏底被截断且虚词比例 ≤0.15 的条目头不限词数），或 `continuation`（栏首/页首、无编号也无作者开头，紧接在一个已剔除且未以句号结束的条目之后，左边距不在 strong 条目边距之外）。抽取器不提供“参考文献”角色标注，所以不使用角色信号；
   - 至少 3 条 strong，strong 占条目 2/3 以上，strong 条目虚词比例均值 ≤0.27，strong 条目首行左边距一致（同栏相差 ≤3pt）；
   - 位于文档末尾或节末：段后直到文档结束或下一个附录类标题之间只有页码等极短组；
   - 源文侧全文的无标题剔除量不超过源文英文词总数的一半，超过则整段退回计数（`exceeds_document_fraction`）；译文侧只在源文已接受的页上接受（`no_matching_source_run`）；
-  - 每个候选段都写入 `excluded.headingless_runs`（`source`/`target`）：页码、strong/weak 条目数、剔除词数、`accepted`、`reason` 和首末条目预览，便于审计；
+  - 每个候选段都写入 `excluded.headingless_runs`（`source`/`target`）：页码、strong/weak 条目数、剔除词数、`accepted`、`reason`、首末条目预览和逐条决定 `entries_detail`（`class`、`decision` = excluded/counted、`reason`、词数、预览）；References 标题区域的逐条决定写入 `excluded.reference_region_entries`；
 - 译文侧剔除上限：每页译文剔除词数不得超过源文同页剔除词数 ×1.2 + 20，超出部分加回计数（`target_exclusion_capped_words`），防止译文把未翻译正文排成“参考文献”样式来规避检查；
 - 等宽字体代码；
 - URL、DOI、邮箱、arXiv 编号；
@@ -113,5 +114,9 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 综合质量判 `fail` 时（任何检查、任何路线），生成候选的动作退出码为 3（译文文件仍保留，便于人工检查）。阈值是启发式的：按本版本测试语料标定（未翻译直通残留率 1.00，正常译文 0.04–0.14，含大量英文图框标签的图页 0.34），只评估源文拉丁词 ≥50 的页。它只是最小版成品检查，不替代逐页人工核对。
 
 已知局限（不是只会偏严）：
-- 漏判路径仍存在：未翻译的英文若排成完整的文献格式（编号或作者开头、年份、会议/期刊/页码，不含指标、谓语动词和第一人称），位于文末且不超过全文英文词一半，会按无标题参考文献剔除；References 标题之后、同样排成文献格式的未翻译内容也会剔除。`excluded.headingless_runs` 与 `excluded_source_breakdown` 会列出这些剔除，复核时请查看。
-- 误报路径：标题含 `It's`、多个年份或谓语动词的真实文献条目会被否决而计数；无标题参考文献超过全文英文词一半（例如只截取参考文献页）、不在文末、或左边距不一致时整段计数，可能判 medium/high。
+- 漏判路径仍存在：
+  - 未翻译的英文若排成完整的 strong 文献条目（编号或作者开头、年份、出处信号，不含指标、谓语动词和第一人称），无标题时还需位于文末、左边距一致、不超过全文英文词一半，会被剔除；References 标题之后同样格式的条目也会剔除；
+  - weak 条目若带 `[n]`/`n.` 编号且与紧邻条目编号连续、不超过 40 词（或位于栏底被截断且虚词比例 ≤0.15），会作为 `numbered_sequence` 剔除；
+  - 紧接在未结束的已剔除条目之后的栏首/页首残段会作为 `continuation` 剔除，即使其内容其实是正文；
+  - 这些剔除都逐条列在 `entries_detail` / `reference_region_entries` 中，复核时请查看。
+- 误报路径：被否决的真实条目（标题含 `It's`、多个年份或谓语动词）、缺出处信号且无编号的条目、作者名格式特殊的条目会计数；无标题参考文献超过全文一半、不在文末或左边距不一致时整段计数，可能判 medium/high。
