@@ -8,6 +8,13 @@
 - 源语言检测：源文主要为中文而目标为中文时直接拒绝（`source_language_matches_target`），不再静默输出中文。
 - 新增基于实际成品的渲染英文残留检查（`render_residue_check.py`）：大面积未翻译判为高风险，综合质量 `fail`，`quality_report.md` 顶部写明。
 - `candidate` 退出码区分质量失败：综合质量 `fail` 时译文照常写出，但以退出码 3 结束（预检拦截仍为 2），结果 JSON 列出 `quality_fail_reasons`（检查项、页码、残留比例与逐页等级）、`quality_fail_summary` 和 `output_files`。
+- 评审修复（PR #16）：
+  - FREEZE 绑定动作（`candidate`、`collect`、`resume-latex`）以冻结的 `resource_contract` 为唯一预算；命令行/环境变量与冻结值不同即以 `resource_override_conflicts_with_freeze` 拒绝，回执 `resource_limits` 记录实际执行的上限。
+  - 渲染英文残留检查不再计入参考文献段、等宽代码、URL/DOI/邮箱/arXiv 编号、编号与作者-年份引用；正文已译、参考文献保留英文时不再误判失败。
+  - 退出码 3 由综合质量结论驱动，覆盖 LaTeX 路线、`resume-latex`、`revise-latex`、`preserve-roles` 及其它产出综合质量的动作；`comprehensive_quality.json` 优先于 `render_manifest.json`。
+  - 输入预检在页数超限时立即返回，不再逐页解析；`candidate`/`collect` 的预检移入有界子进程（1.5 GiB RSS／60 秒）。
+  - 有界执行的峰值内存计入基线与收尾样本，并在启动后 50 ms 先采一次样，快作业不再记为 0。
+  - PSS 快照测试改为跨平台运行，不再在非 Linux 上跳过。
 - 版本统一为 2.0.0-rc.3（SKILL.md、默认路线配置、输出中的 `skill_version`）；新增本 skill 的 pytest 覆盖与 Linux 冒烟 CI。
 - 未改动：行内公式重建、表格/图内文字抽取、中译英、扫描 OCR、长文档分块。
 

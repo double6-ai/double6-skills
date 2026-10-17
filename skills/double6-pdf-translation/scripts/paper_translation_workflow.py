@@ -19,7 +19,8 @@ import urllib.request
 from bounded_execution import run_bounded, snapshot
 from cutover.scoped import check_scoped_preflight, sha
 from pdf_input_preflight import DIGITAL_MAX_PAGES, PreflightError, blocked_result, finding, inspect_pdf
-from resource_limits import ResourceLimitError, backend_timeouts, resolve_limits, validate_resource_contract
+from resource_limits import (ResourceLimitError, backend_timeouts, limits_from_frozen_contract, recommended_contract,
+                             resolve_limits, validate_resource_contract)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 from runtime_paths import workspace_root
@@ -99,7 +100,8 @@ def doctor(base_url, model=MODEL, provider_generation_required=True):
             'scan_dependencies_required': False, 'model_calls': 0,
             'provider_generation_required':provider_generation_required,
             'resources': {key: memory[key] for key in ('total', 'available', 'swap_used', 'codex')},
-            'supported_routes': list(ROUTES)}
+            'supported_routes': list(ROUTES),
+            'recommended_resource_contract': recommended_contract()}
 
 
 def validate_freeze(freeze, input_pdf, route, model):
@@ -216,6 +218,47 @@ def run_job(args, command, operation):
 
 CHILD_RESULT_MARKER = 'PAPER_TRANSLATION_STRUCTURED_RESULT '
 EXIT_OK, EXIT_ERROR, EXIT_BLOCKED, EXIT_QUALITY_FAIL = 0, 1, 2, 3
+# FREEZE 绑定的动作：冻结的 resource_contract 是唯一权威预算（见 resource_limits.limits_from_frozen_contract）。
+FREEZE_BOUND_ACTIONS = {'candidate', 'collect', 'resume-latex'}
+# 输入预检子进程自身的有界预算：只读、最多解析 5 页，不需要作业级预算。
+PREFLIGHT_RSS_BYTES = 1536 * 1024 ** 2
+PREFLIGHT_SECONDS = 60
+
+
+def frozen_limits(args, freeze):
+    return limits_from_frozen_contract(freeze.get('resource_contract'), memory_mib=getattr(args, 'task_memory_mib', None),
+        timeout_seconds=getattr(args, 'job_timeout_seconds', None), memory_metric=getattr(args, 'memory_metric', None))
+
+
+def quality_verdict(output_dir, manifest=None):
+    """综合质量结论（任何路线）：comprehensive_quality.json 为准，其次 render_manifest 的 quality_status。"""
+    output_dir = Path(output_dir)
+    if manifest is None:
+        manifest_path = output_dir / 'render_manifest.json'
+        manifest = read_json(manifest_path) if manifest_path.is_file() else {}
+    quality_path = output_dir / 'comprehensive_quality.json'
+    quality = read_json(quality_path) if quality_path.is_file() else {}
+    status = quality.get('status') or manifest.get('quality_status')
+    if not status:
+        return {}
+    verdict = {'quality_status': status, 'quality_source': 'comprehensive_quality.json' if quality.get('status')
+               else 'render_manifest.json'}
+    if manifest.get('render_residue') is not None:
+        verdict['render_residue'] = manifest['render_residue']
+    if status == 'fail':
+        verdict.update(quality_gate_failure(output_dir, manifest))
+    return verdict
+
+
+def quality_output_dirs(args, result):
+    dirs = []
+    output = getattr(args, 'output', None)
+    if output:
+        dirs += [Path(output), Path(output) / 'render']
+    candidate = (result.get('candidate_ref') or {}).get('path') if isinstance(result.get('candidate_ref'), dict) else None
+    if candidate:
+        dirs.append(Path(candidate).parent)
+    return dirs
 
 
 def quality_gate_failure(output_dir, manifest):
@@ -722,7 +765,8 @@ def main(argv=None):
     for name, subparser in sub.choices.items():
         if name in {'doctor', '_execute-digital', 'preflight', 'deliver', 'preflight-finite', 'deliver-finite'}:
             continue
-        group = subparser.add_argument_group('resource limits (CLI > env > platform default)')
+        group = subparser.add_argument_group('resource limits (CLI > env > platform default; candidate/collect/resume-latex: '
+                                              'the frozen FREEZE resource_contract is authoritative, overrides must match it)')
         group.add_argument('--task-memory-mib', type=int, default=None,
                            help='进程树内存上限（MiB）；也可用环境变量 PAPER_TRANSLATION_TASK_MEMORY_MIB。默认 macOS 3072（RSS）、Linux 4096（PSS），且不超过物理内存 25%%')
         group.add_argument('--job-timeout-seconds', type=int, default=None,
@@ -742,8 +786,9 @@ def main(argv=None):
     if result['status'] == 'blocked':
         return EXIT_BLOCKED
     ok = result['status'] in {'ready', 'succeeded', 'ready_for_delivery', 'delivered', 'candidate', 'source_only_collected'}
-    if ok and args.action == 'candidate' and result.get('quality_status') == 'fail':
-        # 译文已照常写出，但质量门判 fail：用独立退出码 3，与预检拦截（2）区分。
+    if ok and result.get('quality_status') == 'fail':
+        # 任何生成候选的动作/路线：译文已照常写出，但综合质量判 fail，用独立退出码 3（预检拦截为 2）。
+        result.setdefault('exit_code', EXIT_QUALITY_FAIL)
         return EXIT_QUALITY_FAIL
     return EXIT_OK if ok else EXIT_ERROR
 
@@ -754,7 +799,7 @@ def structured_failure(args, exc):
         result = getattr(exc, 'result', None) or exc.to_dict()
         result = dict(result, status='blocked', error_code=exc.code)
     else:
-        code = ('resource_limit_invalid' if isinstance(exc, ResourceLimitError) else
+        code = (getattr(exc, 'code', 'resource_limit_invalid') if isinstance(exc, ResourceLimitError) else
                 'project_lock_busy' if isinstance(exc, RuntimeError) else
                 'input_or_contract_invalid' if isinstance(exc, ValueError) else 'io_error')
         result = blocked_result([finding(code, f'{type(exc).__name__}: {exc}'[:500])])
@@ -762,13 +807,38 @@ def structured_failure(args, exc):
     return result
 
 
+def bounded_input_preflight(input_pdf, receipts, *, require_digital):
+    """在有界子进程中解析 PDF（内存/时限受监控）；页数超限时子进程不再逐页解析。"""
+    receipt_dir = Path(receipts) / 'input-preflight'
+    report_path = receipt_dir / 'input_preflight_report.json'
+    receipt_dir.mkdir(parents=True, exist_ok=True)
+    command = [sys.executable, str(SCRIPT_DIR / 'pdf_input_preflight.py'), '--input', str(Path(input_pdf).resolve()),
+               '--max-pages', str(DIGITAL_MAX_PAGES), '--target-language', 'zh', '--output', str(report_path)]
+    if require_digital:
+        command.append('--require-digital')
+    outcome = run_bounded(command, cwd=SCRIPT_DIR, receipt_dir=receipt_dir, operation='input-preflight',
+                          timeout_seconds=PREFLIGHT_SECONDS, interval_seconds=0.5, rss_limit=PREFLIGHT_RSS_BYTES,
+                          max_processes=4, memory_metric='rss', max_total_fraction=0.5)
+    guard = {key: outcome.get(key) for key in ('status', 'stop_reason', 'elapsed_seconds', 'rss_limit_bytes',
+                                               'memory_metric', 'peak_task_memory_bytes')}
+    guard['timeout_seconds'] = PREFLIGHT_SECONDS
+    if outcome.get('status') != 'succeeded' or not report_path.is_file():
+        report = blocked_result([finding('preflight_guard_stopped',
+            f"输入预检子进程未在有界预算内完成：{outcome.get('stop_reason') or outcome.get('status')}",
+            stop_reason=outcome.get('stop_reason'), exception=outcome.get('exception_message'),
+            stderr=((outcome.get('command') or {}).get('stderr_summary') or {}).get('excerpt', '')[-300:])])
+    else:
+        report = read_json(report_path)
+    report['preflight_guard'] = guard
+    return report
+
+
 def candidate_input_preflight(args):
     """candidate/collect 在验证 FREEZE 与启动重任务前先做轻量结构化输入预检。"""
-    report = inspect_pdf(args.input, max_pages=DIGITAL_MAX_PAGES, target_language='zh',
-                         require_digital=args.route == 'digital_pdf')
     receipts = Path(args.receipts)
     receipts.mkdir(parents=True, exist_ok=True)
     path = receipts / 'WORKFLOW_INPUT_PREFLIGHT.json'
+    report = bounded_input_preflight(args.input, receipts, require_digital=args.route == 'digital_pdf')
     if not path.exists():
         write_new(path, report)
     if report['status'] == 'blocked':
@@ -780,7 +850,7 @@ def candidate_input_preflight(args):
 
 
 def dispatch(args):
-    if hasattr(args, 'task_memory_mib'):
+    if hasattr(args, 'task_memory_mib') and args.action not in FREEZE_BOUND_ACTIONS:
         args.resource_limits = resolve_limits(memory_mib=args.task_memory_mib,
             timeout_seconds=args.job_timeout_seconds, memory_metric=args.memory_metric)
     if args.action == 'inspect-input':
@@ -801,6 +871,7 @@ def dispatch(args):
             raise ValueError('resume_requires_fresh_receipt_directory')
         freeze = read_json(args.freeze)
         pages = validate_freeze(freeze, args.input, 'latex_verified', args.model)
+        args.resource_limits = frozen_limits(args, freeze)
         args.frozen_environment = freeze.get('backend_environment', {})
         health = doctor(args.base_url, args.model)
         if health['blockers'] or not health['latex_ready']:
@@ -808,12 +879,15 @@ def dispatch(args):
         result = run_latex_candidate(args, freeze, resume=True)
         result.update(freeze_ref=ref(args.freeze), input_ref=ref(args.input), route='latex_verified',
                       declared_pages=pages, stage='resumed_candidate', human_accepted=False,
-                      strict_delivery=False, previous_result_ref=ref(args.previous_result))
+                      strict_delivery=False, previous_result_ref=ref(args.previous_result),
+                      resource_contract_frozen=freeze.get('resource_contract'))
+        result.update(quality_verdict(args.output))
         write_new(args.receipts/'WORKFLOW_RESUMED_CANDIDATE.json', result)
     elif args.action in ('candidate','collect'):
         preflight_report = candidate_input_preflight(args)
         freeze = read_json(args.freeze)
         pages = validate_freeze(freeze, args.input, args.route, args.model)
+        args.resource_limits = frozen_limits(args, freeze)
         args.frozen_environment = freeze.get('backend_environment', {})
         if args.output.exists():
             raise ValueError('candidate requires a new output directory')
@@ -862,13 +936,6 @@ def dispatch(args):
                 command+=['--source-cache-mode','read','--source-cache-context',str(args.source_cache_context.resolve()),'--source-cache-context-sha256',args.source_cache_context_sha256]
             result = run_job(args, [sys.executable, str(Path(__file__)), '_execute-digital',
                 '--freeze', str(args.freeze.resolve()), '--', *command[2:]], 'candidate')
-            manifest_path = args.output / 'render_manifest.json'
-            if manifest_path.is_file():
-                # 候选阶段仍以生成结果为准；综合质量与渲染残留结论上浮到回执，交付门另行阻止。
-                manifest = read_json(manifest_path)
-                result.update(quality_status=manifest.get('quality_status'), render_residue=manifest.get('render_residue'))
-                if manifest.get('quality_status') == 'fail':
-                    result.update(quality_gate_failure(args.output, manifest))
         result.update(freeze_ref=ref(args.freeze), input_ref=ref(args.input), route=args.route,
                       declared_pages=pages, stage='smoke_candidate' if args.smoke else 'candidate',
                       human_accepted=False, strict_delivery=False, heavy_task_concurrency=1)
@@ -876,6 +943,9 @@ def dispatch(args):
                       resource_contract_frozen=freeze.get('resource_contract'))
         if args.route=='digital_pdf':result['routing_contract']=DIGITAL_ROUTING
         if args.action=='collect':result.update(stage='source_only_collect',candidate_generated=False)
+        else:
+            # 任何路线（电子 PDF、LaTeX）都把综合质量结论上浮到回执；fail 时退出码 3。
+            result.update(quality_verdict(args.output))
         write_new(args.receipts / ('WORKFLOW_COLLECTION.json' if args.action=='collect' else 'WORKFLOW_CANDIDATE.json'), result)
     elif args.action == 'revise-latex':
         contract = read_json(args.contract)
@@ -887,6 +957,7 @@ def dispatch(args):
         result.update(stage='complete_unit_editorial_revision', input_ref=ref(args.input),
                       contract_ref=ref(args.contract), new_model_calls=0,
                       human_accepted=False, strict_delivery=False)
+        result.update(quality_verdict(args.output))
         write_new(args.receipts/'WORKFLOW_EDITORIAL_REVISION.json', result)
     elif args.action == 'prepare-scan':
         result = prepare_scan_job(args)
@@ -902,6 +973,7 @@ def dispatch(args):
         result.update(stage='source_bound_protected_role', input_ref=ref(args.input),
                       contract_ref=ref(args.contract), new_model_calls=0,
                       human_accepted=False, strict_delivery=False)
+        result.update(quality_verdict(args.output))
         write_new(args.receipts/'WORKFLOW_PROTECTED_ROLE.json', result)
     elif args.action == 'review':
         command = [sys.executable, str(SCRIPT_DIR / 'build_delivery_review_packet.py'),
@@ -919,6 +991,16 @@ def dispatch(args):
         result = deliver_finite(args.packet, args.acceptance, args.output)
     else:
         result = deliver(args.packet, args.acceptance, args.output)
+    if args.action in {'trial-render', 'run-reviewed-scan', 'continue-digital'} and 'quality_status' not in result:
+        # 这些动作的回执由各自流程写出；若产出了综合质量结论，另写一份结论回执并上浮。
+        for directory in quality_output_dirs(args, result):
+            verdict = quality_verdict(directory)
+            if verdict:
+                result.update(verdict, quality_output_dir=str(directory))
+                receipts = getattr(args, 'receipts', None)
+                if receipts and Path(receipts).is_dir() and not (Path(receipts) / 'WORKFLOW_QUALITY_VERDICT.json').exists():
+                    write_new(Path(receipts) / 'WORKFLOW_QUALITY_VERDICT.json', verdict)
+                break
     return result
 
 

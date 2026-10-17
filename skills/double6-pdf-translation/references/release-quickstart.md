@@ -51,7 +51,18 @@ python scripts/paper_translation_workflow.py collect \
 | `--job-timeout-seconds` | `PAPER_TRANSLATION_JOB_TIMEOUT_SECONDS` | 120 / 300 |
 | `--memory-metric` | `PAPER_TRANSLATION_MEMORY_METRIC` | `rss` / `pss` |
 
-优先级：命令行 > 环境变量 > 平台默认。显式内存上限最多为物理内存 50%，越界直接报 `resource_limit_invalid`。Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读页，逐进程 RSS 相加会重复计算共享页。回执记录 `resource_limits`、`memory_metric`、`peak_task_memory_bytes` 和 `peak_task_rss_sum_bytes`；FREEZE 中的 `resource_contract` 仍要求并发 1，并在边界内（512 MiB–64 GiB、30–7200 秒）。
+无 FREEZE 的动作（`inspect-input`、`review`、`run-reviewed-scan` 等）优先级为：命令行 > 环境变量 > 平台默认。显式内存上限最多为物理内存 50%，越界直接报 `resource_limit_invalid`。
+
+带 FREEZE 的动作（`candidate`、`collect`、`resume-latex`）以冻结的 `resource_contract` 为唯一权威预算：
+
+- 实际执行的内存上限、单作业时限和计量口径全部取自冻结合同；合同未写 `memory_metric` 时按原始含义 `rss` 解释（旧 3 GiB/120 s 合同）。
+- 命令行或环境变量给出的值必须与冻结值相同；不同（无论更大还是更小）即以 `resource_override_conflicts_with_freeze` 拒绝，退出码 2，不启动任何重任务。要换预算请重新冻结。
+- 冻结内存超过物理内存 50% 时报 `task_memory_limit_exceeds_host_authorization`。
+- Linux 建议冻结 `{"task_rss_bytes": 4294967296, "per_job_seconds": 300, "concurrency": 1, "memory_metric": "pss"}`；`doctor` 输出本平台的 `recommended_resource_contract`。
+- 回执的 `resource_limits` 记录实际执行的上限（`source` 为 `freeze`），`resource_contract_frozen` 记录冻结原文。
+
+输入预检本身在有界子进程中运行（1.5 GiB RSS／60 秒，最多解析 5 页；页数超限时只读页数即返回），回执的 `preflight_guard` 记录其状态与峰值。
+Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读页，逐进程 RSS 相加会重复计算共享页。回执记录 `resource_limits`、`memory_metric`、`peak_task_memory_bytes` 和 `peak_task_rss_sum_bytes`；FREEZE 中的 `resource_contract` 仍要求并发 1，并在边界内（512 MiB–64 GiB、30–7200 秒）。
 
 ## 结构化预检与错误码
 
@@ -62,7 +73,7 @@ python scripts/paper_translation_workflow.py collect \
 | 0 | 成功；`candidate` 的质量结论为 `pass`/`warn`/`unverified` |
 | 1 | 其它失败（如资源超限停止、后端失败），见 `status`/`stop_reason`/`exception` |
 | 2 | 被输入预检或合同校验拦下（`status: blocked`，见 `error_code`/`findings`），不产生译文 |
-| 3 | 仅 `candidate`：译文照常写出，但综合质量判 `fail`；结果 JSON 含 `quality_gate: fail`、`quality_fail_summary`、`quality_fail_reasons`（检查项、页码、残留比例与逐页等级）、`render_residue_pages` 和 `output_files` |
+| 3 | 生成候选的动作（`candidate` 各路线、`resume-latex`、`revise-latex`、`preserve-roles` 等）：译文照常写出，但综合质量判 `fail`；结果 JSON 含 `quality_gate: fail`、`quality_fail_summary`、`quality_fail_reasons`（检查项、页码、残留比例与逐页等级）、`render_residue_pages` 和 `output_files` |
 
 | 错误码 | 级别 | 含义 |
 |---|---|---|
@@ -76,8 +87,18 @@ python scripts/paper_translation_workflow.py collect \
 | `source_language_mixed` / `source_language_unknown` | warning / info | 中英混合或可抽取文字过少 |
 | `page_load_failed` | error | 部分页面无法解析 |
 | `resource_limit_invalid` | error | 资源参数越界 |
+| `resource_override_conflicts_with_freeze` | error | 命令行/环境变量的资源值与 FREEZE 冻结合同不同；请去掉覆盖或重新冻结 |
+| `task_memory_limit_exceeds_host_authorization` | error | 内存上限超过物理内存 50% |
+| `preflight_guard_stopped` | error | 输入预检子进程超出 1.5 GiB／60 秒预算被停止 |
 | `input_or_contract_invalid` | error | FREEZE 或其它输入合同不符，`message` 给出原因 |
 
 ## 渲染英文残留检查
 
-每次渲染都会写 `render_residue_check.json`：逐页比较源与成品可抽取的拉丁词数，残留率 ≥0.6 的页为高风险，≥0.3 为中风险；整体残留率 ≥0.5 或存在高风险页时 `comprehensive_quality` 判 `fail`，`quality_report.md` 顶部同步写明。`candidate` 遇到质量 `fail` 时退出码为 3（译文文件仍保留，便于人工检查）。阈值是启发式的：按本版本测试语料标定（未翻译直通残留率 1.00，正常译文 0.04–0.14，含大量英文图框标签的图页 0.34），只评估源文拉丁词 ≥50 的页。它只是最小版成品检查，不替代逐页人工核对。
+每次渲染都会写 `render_residue_check.json`：逐页比较源与成品可抽取的拉丁词数，残留率 ≥0.6 的页为高风险，≥0.3 为中风险；整体残留率 ≥0.5 或存在高风险页时 `comprehensive_quality` 判 `fail`，`quality_report.md` 顶部同步写明。按 skill 规则本就不翻译的内容不计入残留率，源与译文两侧同样剔除，并在报告中逐页记录剔除词数（`excluded_source_words`、`excluded_source_breakdown`）和参考文献段所在页（`excluded.reference_section_pages`）：
+
+- 参考文献段：整行标题为 References / Bibliography / Works Cited / 参考文献 等，之后的内容直到 Appendix / 附录 等标题；
+- 等宽字体代码；
+- URL、DOI、邮箱、arXiv 编号；
+- 方括号编号引用（如 `[12]`、`[3–5]`）、作者-年份括号引用和 `et al.`。
+
+综合质量判 `fail` 时（任何检查、任何路线），生成候选的动作退出码为 3（译文文件仍保留，便于人工检查）。阈值是启发式的：按本版本测试语料标定（未翻译直通残留率 1.00，正常译文 0.04–0.14，含大量英文图框标签的图页 0.34），只评估源文拉丁词 ≥50 的页。它只是最小版成品检查，不替代逐页人工核对。

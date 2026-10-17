@@ -110,7 +110,13 @@
         "PAPER_TRANSLATION_MEMORY_METRIC"
       ],
       "default_max_fraction_of_physical_memory": 0.25,
-      "explicit_max_fraction_of_physical_memory": 0.5
+      "explicit_max_fraction_of_physical_memory": 0.5,
+      "frozen_contract_authoritative_for": [
+        "candidate",
+        "collect",
+        "resume-latex"
+      ],
+      "override_conflict_error": "resource_override_conflicts_with_freeze"
     }
   },
   "software_release": false,

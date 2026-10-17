@@ -101,11 +101,15 @@ def test_bounded_failure_receipt_keeps_real_message(tmp_path):
     assert 'TypeError:' in json.dumps(receipt, ensure_ascii=False)
 
 
-@pytest.mark.skipif(not sys.platform.startswith('linux'), reason='PSS is Linux-only')
 def test_pss_snapshot_not_larger_than_rss_sum():
+    # 跨平台运行（原先在非 Linux 上 skip）：Linux 读真实 PSS；macOS/Windows 的 psutil 不提供 PSS，
+    # 按设计逐进程回退为 RSS，因此任何平台上都应满足 0 < task_rss <= task_rss_sum。
     from bounded_execution import snapshot
     sample = snapshot([], metric='pss')
     assert sample['memory_metric'] == 'pss' and 0 < sample['task_rss'] <= sample['task_rss_sum']
+    assert all(0 < row['pss'] <= row['rss'] for row in sample['processes'])
+    if not sys.platform.startswith('linux'):
+        assert sample['task_rss'] == sample['task_rss_sum']
 
 
 # ---------- structured preflight ----------
@@ -262,8 +266,11 @@ def test_versions_are_unified():
 def _fake_backend(monkeypatch, wf, translated):
     """替换重任务子进程：照常写出译文与 QA 产物（残留检查用真实实现），其余入口逻辑保持真实。"""
     import qa_pipeline
+    import bounded_execution
 
     def fake_run_bounded(command, **kwargs):
+        if kwargs.get('operation') == 'input-preflight':  # 输入预检仍走真实有界子进程
+            return bounded_execution.run_bounded(command, **kwargs)
         out = Path(command[command.index('--output') + 1])
         source = Path(command[command.index('--input') + 1])
         out.mkdir(parents=True)
@@ -291,7 +298,8 @@ def _fake_backend(monkeypatch, wf, translated):
 
 
 def _candidate_main(tmp_path, wf, pdf, capsys):
-    (tmp_path / 'FREEZE.json').write_text('{}')
+    (tmp_path / 'FREEZE.json').write_text(json.dumps({'resource_contract': {
+        'task_rss_bytes': 3 * GIB, 'per_job_seconds': 120, 'concurrency': 1}}))
     code = wf.main(['candidate', '--input', str(pdf), '--output', str(tmp_path / 'out'), '--receipts', str(tmp_path / 'rc'),
                     '--freeze', str(tmp_path / 'FREEZE.json'), '--route', 'digital_pdf', '--model', 'm',
                     '--base-url', 'http://127.0.0.1:9/v1', '--lock-path', str(tmp_path / 'wf.lock')])
