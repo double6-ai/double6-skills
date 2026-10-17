@@ -13,6 +13,7 @@ BabelDOC `ParagraphFinder.process_page` 入口时导出的单页逐字符几何�
 | `arxiv2610.21759-p2-fig1.json` | arXiv:2610.21759, p.2 Fig. 1 及图注 | CC BY 4.0 |
 | `arxiv2610.21759-p4-fig2.json` | arXiv:2610.21759, p.4 Fig. 2（Binary Quantizer 框图）及图注 | CC BY 4.0 |
 | `arxiv2610.20087-p16-tables.json` | "Binary Cyclic Gradient Coding: Exact Recovery …", arXiv:2610.20087, p.16 Table II/III（数据集名与数值） | CC BY 4.0 |
+| `arxiv2505.23884-p3-fig1-legend.json` | arXiv:2505.23884, p.3 Figure 1（四联图的白底绘图区、图例与子图题） | CC BY 4.0 |
 
 字段：`chars` 每项为 `[unicode, box(4), visual_box(4), font_id, font_size, vertical, xobj_id, render_order]`，
 坐标为 PDF 用户空间（左下原点）。`source` 记录文档与页码，`region` 为裁剪框。
