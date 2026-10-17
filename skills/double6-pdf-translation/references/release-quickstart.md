@@ -10,7 +10,7 @@ python scripts/paper_translation_workflow.py inspect-input \
   --receipts /absolute/new/receipts
 ```
 
-该动作核真实页框、可见/隐藏字形和扫描覆盖，不改源文件、不自动选择 OCR 或模型。结果可能是 `needs_source_review`，须检查 `blockers` 和 `todos`。新扫描的完整作品、源角色和手写资格需要具名源图审阅；如进入新翻译，显式给定 `--fresh --source-review`、`--model` 和 LM Studio 兼容的 `--catalog-url`。未配置库存时不探测任何默认本机服务。其它服务的新翻译身份通过对应路线的冻结合同核定。
+该动作核真实页框、可见/隐藏字形和扫描覆盖，不改源文件、不自动选择 OCR 或模型。不给 `--catalog-url` 时不探测模型库存。结果可能是 `needs_source_review`，须检查 `blockers` 和 `todos`。新扫描的完整作品、源角色和手写资格需要具名源图审阅；如进入新翻译，显式给定 `--fresh --source-review`、`--model` 和 LM Studio 兼容的 `--catalog-url`。未配置库存时不探测任何默认本机服务。其它服务的新翻译身份通过对应路线的冻结合同核定。
 
 ## 已审扫描重建
 
@@ -40,3 +40,37 @@ python scripts/paper_translation_workflow.py collect \
 对实际单语和双语完整页面核语义、字形、样式、图片公式、链接、整段复制及冷重建。生成后 `review` 收集审阅包，再使用精确绑定的审校与接受材料执行 `preflight` 或 `deliver`。有限交付入口只用于具名、精确 SHA、披露限制的已接受产物。任何语义/视觉/阅读器缺口均保留未验证，不以技术成功替代用户接受。
 
 旧工作区冻结合同绑定旧代码和资产。安装副本中重新冻结受影响的引用并重新核验，不能改 SHA 后声称旧接受自动延续。当前副本的公开发布准备状态由本地发布报告登记，不自动获得软件发布接受。
+
+## 资源上限
+
+`inspect-input`、`candidate`、`collect`、`review` 等重任务动作都接受：
+
+| 参数 | 环境变量 | 默认（macOS / Linux） |
+|---|---|---|
+| `--task-memory-mib` | `PAPER_TRANSLATION_TASK_MEMORY_MIB` | 3072 / 4096，且默认不超过物理内存 25% |
+| `--job-timeout-seconds` | `PAPER_TRANSLATION_JOB_TIMEOUT_SECONDS` | 120 / 300 |
+| `--memory-metric` | `PAPER_TRANSLATION_MEMORY_METRIC` | `rss` / `pss` |
+
+优先级：命令行 > 环境变量 > 平台默认。显式内存上限最多为物理内存 50%，越界直接报 `resource_limit_invalid`。Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读页，逐进程 RSS 相加会重复计算共享页。回执记录 `resource_limits`、`memory_metric`、`peak_task_memory_bytes` 和 `peak_task_rss_sum_bytes`；FREEZE 中的 `resource_contract` 仍要求并发 1，并在边界内（512 MiB–64 GiB、30–7200 秒）。
+
+## 结构化预检与错误码
+
+`inspect-input` 报告和 `candidate`/`collect` 的 `WORKFLOW_INPUT_PREFLIGHT.json` 使用同一结构：`status`（`ok`/`blocked`，扫描事实报告另有原状态）、`error_code`、`warnings` 和 `findings[]`（`code`、`severity`、`message`、`details`）。任何动作被预检或合同校验拦下时，标准输出是同形 JSON，退出码 2；不再打印原始 traceback。
+
+| 错误码 | 级别 | 含义 |
+|---|---|---|
+| `input_not_found` / `not_a_pdf` / `input_too_large` | error | 文件不存在、不是 PDF、超过 100 MiB |
+| `pdf_truncated_or_corrupt` | error | 无法打开、缺少文件尾或修复后 0 页 |
+| `encrypted_user_password_required` | error | 需要打开密码；不猜测、不破解 |
+| `permissions_restricted` | warning | 所有者权限限制（禁止修改/复制等）；请确认有权翻译 |
+| `page_limit_exceeded` | error | 超出当前路线页数（电子 PDF 1–5 页；扫描预检 `--max-pages`，默认 2、最大 20） |
+| `non_digital_pages` | error | 电子 PDF 路线遇到扫描图像页、文字转曲页或路由判为需复核的页 |
+| `source_language_matches_target` | error | 源文主要是中文；当前只支持英译中 |
+| `source_language_mixed` / `source_language_unknown` | warning / info | 中英混合或可抽取文字过少 |
+| `page_load_failed` | error | 部分页面无法解析 |
+| `resource_limit_invalid` | error | 资源参数越界 |
+| `input_or_contract_invalid` | error | FREEZE 或其它输入合同不符，`message` 给出原因 |
+
+## 渲染英文残留检查
+
+每次渲染都会写 `render_residue_check.json`：逐页比较源与成品可抽取的拉丁词数，残留率 ≥0.6 的页为高风险，≥0.3 为中风险；整体残留率 ≥0.5 或存在高风险页时 `comprehensive_quality` 判 `fail`，`quality_report.md` 顶部同步写明。它只是最小版成品检查，不替代逐页人工核对。

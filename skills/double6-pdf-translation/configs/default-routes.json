@@ -85,7 +85,33 @@
     "supported_platforms": [
       "macOS",
       "Linux"
-    ]
+    ],
+    "platform_defaults": {
+      "macOS": {
+        "task_rss_bytes": 3221225472,
+        "per_job_seconds": 120,
+        "memory_metric": "rss"
+      },
+      "Linux": {
+        "task_rss_bytes": 4294967296,
+        "per_job_seconds": 300,
+        "memory_metric": "pss"
+      }
+    },
+    "override": {
+      "cli": [
+        "--task-memory-mib",
+        "--job-timeout-seconds",
+        "--memory-metric"
+      ],
+      "env": [
+        "PAPER_TRANSLATION_TASK_MEMORY_MIB",
+        "PAPER_TRANSLATION_JOB_TIMEOUT_SECONDS",
+        "PAPER_TRANSLATION_MEMORY_METRIC"
+      ],
+      "default_max_fraction_of_physical_memory": 0.25,
+      "explicit_max_fraction_of_physical_memory": 0.5
+    }
   },
   "software_release": false,
   "published_distribution": "not_published",
@@ -95,5 +121,5 @@
     "execution_entry": "scripts/paper_translation_workflow.py",
     "selection": "read this config, classify source/task, invoke existing action directly"
   },
-  "candidate_version": "2.0.0-rc.2"
+  "candidate_version": "2.0.0-rc.3"
 }

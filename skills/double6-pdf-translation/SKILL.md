@@ -2,7 +2,7 @@
 name: double6-pdf-translation
 description: 论文和PDF英译中执行。先读 configs/default-routes.json，按源证据直接调用已有命令。清晰单栏扫描先预检和源图确认；审过再准备用单配置；冻住了只重出PDF。电子PDF和已核过的LaTeX走原路线。全文、实际PDF、复制和冷重建必须保留。旧的整篇强翻译流水线不是当前入口。
 metadata:
-  version: "2.0.0-rc.2"
+  version: "2.0.0-rc.3"
   development_revision: "110-unpublished"
   source_contract_revision: "111-20261017"
   release_status: "local-prepublication-candidate"
@@ -51,13 +51,15 @@ metadata:
 
 命令参数见 [references/input-preflight-and-reviewed-run.md](references/input-preflight-and-reviewed-run.md)。结构、字号和源页锚点见 [references/adaptive-flow-contract.md](references/adaptive-flow-contract.md)。整页验收见 [references/quality-and-delivery-contract.md](references/quality-and-delivery-contract.md)。译法见 [references/academic-translation-policy.md](references/academic-translation-policy.md)。电子版和 LaTeX 的原步骤见 [references/release-quickstart.md](references/release-quickstart.md)。
 
-资源按当前路线：一次只跑一个任务，任务进程树上限 3GiB，单次作业 120 秒，扫描新输入默认最多 2 页。模型服务另计，上限 40GiB。先做一页，确认内存正常再扩大。
+资源按当前路线：一次只跑一个任务；进程树内存上限与单作业时限按平台默认（macOS 3GiB RSS／120 秒，Linux 4GiB PSS／300 秒，且默认不超过物理内存 25%），可用 `--task-memory-mib`、`--job-timeout-seconds`、`--memory-metric` 或对应环境变量 `PAPER_TRANSLATION_TASK_MEMORY_MIB`、`PAPER_TRANSLATION_JOB_TIMEOUT_SECONDS`、`PAPER_TRANSLATION_MEMORY_METRIC` 显式调整（显式值最多物理内存 50%）。扫描新输入默认最多 2 页。模型服务另计，上限 40GiB。先做一页，确认内存正常再扩大。
+
+输入预检与失败统一输出结构化 JSON：`status`、`error_code` 和 `findings`（每项含 `code`/`severity`/`message`/`details`）；被预检拦下时退出码为 2。错误码含 `encrypted_user_password_required`、`pdf_truncated_or_corrupt`、`page_limit_exceeded`、`non_digital_pages`、`source_language_matches_target` 等，`permissions_restricted` 为警告。当前只支持英译中：源文主要是中文时 `candidate` 直接拒绝，不会静默输出中文。成品另做渲染英文残留检查，大面积未翻译判为高风险失败（`quality_status: fail`）。错误码表见[运行说明](references/release-quickstart.md)。
 
 ## 安装、配置与恢复
 
 使用 macOS/Linux、Python 3.12。从 skill 目录执行 `bash scripts/setup_venv.sh /absolute/new/venv`，随后用该环境的 Python 运行 `scripts/paper_translation_workflow.py`。详见 [运行依赖](references/runtime-dependencies.md)。
 
-新翻译必须显式提供 `--base-url`、`--model` 及所需凭据；不自动选本机服务或替换模型。库存预检需显式给定 `--catalog-url`。运行目录可通过 `PAPER_TRANSLATION_WORKSPACE` 指定；输入、输出及回执用绝对路径，输出选全新目录。联网获取源码、字体或模型须明确授权并记录来源。
+新翻译必须显式提供 `--base-url`、`--model` 及所需凭据；不自动选本机服务或替换模型。库存预检需显式给定 `--catalog-url`（不给则不探测库存，`inspect-input` 照常输出事实）。运行目录可通过 `PAPER_TRANSLATION_WORKSPACE` 指定；输入、输出及回执用绝对路径，输出选全新目录。联网获取源码、字体或模型须明确授权并记录来源。
 
 主入口电子 PDF 与可信 LaTeX 的完整输入限 1–5 页。LaTeX 保护拒绝后的完整单元修订和断点恢复见 [恢复说明](references/latex-recovery.md)。`preflight` / `deliver` 仍使用严格门；有限交付只适用于具名接受的精确 PDF 及披露的限制。缺少语义、视觉、阅读器或重建证据时保留未验证。
 

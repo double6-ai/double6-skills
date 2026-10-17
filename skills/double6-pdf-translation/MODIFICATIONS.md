@@ -18,6 +18,12 @@
 
 源论文、译稿、字体、TeX、模型权重与验证证据不包含在公开运行包中。每份文档的完整语义、实际单语/双语页面、样式链接、阅读复制和冷重建仍须执行；本次维护没有授予任意输入的自动严格交付能力。
 
+## 2.0.0-rc.3 维护改动（2026-10-17）
+
+- 新增 `scripts/pdf_input_preflight.py`、`scripts/resource_limits.py`、`scripts/render_residue_check.py`（AGPL-3.0-only 一方代码）。
+- 修改 `scripts/paper_translation_workflow.py`、`scripts/bounded_execution.py`、`scripts/scan_input_preflight.py`、`scripts/qa_pipeline.py`、`scripts/scanned_raster/constants.py` 及 `schemas/scan-input-preflight.schema.json`：结构化预检与错误码、可配置资源上限与 PSS 计量、真实错误消息收据、源语言检测、渲染英文残留检查、版本号统一。
+- 未修改 vendored PDFMathTranslate-next / BabelDOC 源码。
+
 ## 与所标上游版本有差异的实现文件
 
 以下文件包含继承的维护或本轮兼容性修改，均已增加维护日期声明，原版权与许可继续保留：
