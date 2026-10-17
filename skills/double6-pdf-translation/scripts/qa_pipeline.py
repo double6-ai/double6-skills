@@ -320,10 +320,21 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None):
         result.setdefault('issues',[]).extend(technical['issues']);result.setdefault('pending',[]).extend(technical['pending'])
         result['quality_pass']=False
         result['status']='fail' if result.get('status')=='fail' or result['issues'] else 'unverified'
-    output_dir=Path(output_dir);path=output_dir/'comprehensive_quality.json'
+    output_dir=Path(output_dir)
+    residue=render_residue_gate(source,final_pdf_from_manifest(manifest,source=source),output_dir)
+    result['render_residue_check']=residue
+    if residue.get('severity')=='high':
+        # 基于实际成品的大面积英文残留属于高风险失败，不能只记为 warn。
+        result.setdefault('issues',[]).append({'id':'render_english_residue','rule':'render_english_residue_high',
+            'severity':'high','pages':residue.get('high_pages'),'overall_residue_ratio':residue.get('overall_residue_ratio'),
+            'evidence':residue.get('report_ref')})
+        result['quality_pass']=False
+        result['status']='fail'
+    path=output_dir/'comprehensive_quality.json'
     path.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
     fields={'quality_status':result['status'],'quality_pass':result['quality_pass'],
-            'quality_delivery_blocked':not result['quality_pass'],'comprehensive_quality':file_ref(path)}
+            'quality_delivery_blocked':not result['quality_pass'],'comprehensive_quality':file_ref(path),
+            'render_residue':{k:residue.get(k) for k in ('severity','overall_residue_ratio','high_pages','medium_pages')}}
     manifest.update(fields)
     for name in ('render_manifest.json','backend_run_manifest.json'):
         existing=output_dir/name
@@ -341,5 +352,28 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None):
             # 迁移本接口旧版的两行前缀；不丢弃非本接口生成的正文。
             if len(lines)>=2 and lines[1].startswith('综合质量状态：'):
                 text=''.join(lines[2:]).lstrip('\n')
-    report.write_text(f'{prefix}\n综合质量状态：{result["status"]}；交付门：{"通过" if result["quality_pass"] else "阻止晋升"}。完整证据见 comprehensive_quality.json。\n{ending}\n\n'+text)
+    residue_line=render_residue_summary(residue)
+    report.write_text(f'{prefix}\n综合质量状态：{result["status"]}；交付门：{"通过" if result["quality_pass"] else "阻止晋升"}。完整证据见 comprehensive_quality.json。\n{residue_line}\n{ending}\n\n'+text)
     return manifest
+
+
+def render_residue_gate(source, target, output_dir):
+    """最小版渲染成品英文残留检查；检查本身出错时记为未评估，不伪造通过。"""
+    try:
+        from render_residue_check import check_render_residue
+        residue=check_render_residue(source,target)
+    except Exception as exc:  # 解析器异常类型不固定
+        residue={'status':'not_evaluated','severity':'ok','reason':f'{type(exc).__name__}: {exc}'[:300]}
+    path=Path(output_dir)/'render_residue_check.json'
+    path.write_text(json.dumps(residue,ensure_ascii=False,indent=2)+'\n')
+    residue['report_ref']=file_ref(path)
+    return residue
+
+
+def render_residue_summary(residue):
+    severity=residue.get('severity')
+    if residue.get('status')!='evaluated':
+        return f'渲染英文残留检查：未评估（{residue.get("reason","")}）。'
+    label={'high':'高风险（判定失败）','medium':'中风险','ok':'正常'}.get(severity,severity)
+    return (f'渲染英文残留检查：{label}；整体残留率 {residue.get("overall_residue_ratio")}；'
+            f'高风险页 {residue.get("high_pages") or "无"}；中风险页 {residue.get("medium_pages") or "无"}。')

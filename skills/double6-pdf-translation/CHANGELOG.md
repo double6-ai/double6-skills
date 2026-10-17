@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2.0.0-rc.3 本地发布候选 · 2026-10-17
+
+- 修复 `inspect-input` 不带 `--catalog-url` 时子进程参数含 `None` 导致的 TypeError；有界执行回执和失败收据保留脱敏、截断后的真实错误消息，不再只记异常类型名。
+- 资源上限可配置：`--task-memory-mib`、`--job-timeout-seconds`、`--memory-metric` 及对应环境变量；平台默认 macOS 3 GiB RSS／120 秒（不变），Linux 4 GiB PSS／300 秒，默认不超过物理内存 25%，显式值最多 50%。Linux 按 PSS 计量，避免 fork 子进程共享页被重复计入；回执记录实际峰值。后端超时随作业时限推导，120 秒时仍为 110/90。
+- 新增结构化输入预检（`pdf_input_preflight.py`）：分别报告用户密码加密、所有者权限限制（警告）、截断/损坏、页数超限、非原生电子页（扫描/转曲）、源语言等；`inspect-input` 与 `candidate`/`collect` 共用同一 `findings` 结构，失败时输出 JSON 并以退出码 2 结束，不再打印原始 traceback。
+- 源语言检测：源文主要为中文而目标为中文时直接拒绝（`source_language_matches_target`），不再静默输出中文。
+- 新增基于实际成品的渲染英文残留检查（`render_residue_check.py`）：大面积未翻译判为高风险，综合质量 `fail`，`quality_report.md` 顶部写明。
+- 版本统一为 2.0.0-rc.3（SKILL.md、默认路线配置、输出中的 `skill_version`）；新增本 skill 的 pytest 覆盖与 Linux 冒烟 CI。
+- 未改动：行内公式重建、表格/图内文字抽取、中译英、扫描 OCR、长文档分块。
+
 ## 2.0.0-rc.2 本地发布候选 · 2026-10-17
 
 - 纠正来源基线：同步源项目第 111 轮当前开工合同；五条路线仍称 110，旧长说明移入本地历史归档，不再作为公开包入口。
