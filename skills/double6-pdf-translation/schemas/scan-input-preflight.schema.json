@@ -43,13 +43,35 @@
           "minLength": 1
         },
         "sha256": {
-          "type": "string",
+          "type": ["string", "null"],
           "pattern": "^[0-9a-f]{64}$"
         }
       }
     },
     "page_count": {
-      "type": "integer"
+      "type": ["integer", "null"]
+    },
+    "error_code": {
+      "type": ["string", "null"]
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "severity", "message", "details"],
+        "properties": {
+          "code": {"type": "string"},
+          "severity": {"enum": ["error", "warning", "info"]},
+          "message": {"type": "string"},
+          "details": {"type": "object"}
+        }
+      }
+    },
+    "source_language": {
+      "type": ["object", "null"]
+    },
+    "digital_route": {
+      "type": "object"
     },
     "pages": {
       "type": "array"

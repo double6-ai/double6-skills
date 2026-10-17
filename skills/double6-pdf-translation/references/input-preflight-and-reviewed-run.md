@@ -2,7 +2,7 @@
 
 当前默认选择以 [configs/default-routes.json](../configs/default-routes.json) 为唯一机器配置，开工合同在 [SKILL.md](../SKILL.md)，已同步源项目第 111 轮。路线动作仍是 110 收束的五条，下文实现和参数合同继续适用。旧的整篇强翻译命令不再作为开工入口；当前副本按本目录运行说明安装。
 
-从已安装skill目录用独立环境Python。当前开发入口复用原 `paper_translation_workflow.py` 的锁、3GiB/120秒有界执行，以及原 `prepare-scan` / `trial-render`；单配置总作业上限120秒，逐步骤重新取共享锁，不在持锁时递归启动另一条重链。渲染失败仍为失败，输出不签语义、视觉、人验或strict。
+从已安装skill目录用独立环境Python。当前开发入口复用原 `paper_translation_workflow.py` 的锁与有界执行（资源上限按平台默认，可显式调整，见[运行说明](release-quickstart.md#资源上限)），以及原 `prepare-scan` / `trial-render`；单配置总作业上限120秒，逐步骤重新取共享锁，不在持锁时递归启动另一条重链。渲染失败仍为失败，输出不签语义、视觉、人验或strict。
 
 ## 新输入先核事实
 

@@ -7,6 +7,7 @@ import hashlib
 import json
 import urllib.request
 import fitz
+from pdf_input_preflight import PreflightError, finding, inspect_pdf, raise_for_blocked
 
 VERSION = '109-unpublished'
 
@@ -74,14 +75,20 @@ def inspect_input(source, *, max_pages=2, source_review=None, reuse_contract=Non
     source = Path(source).resolve()
     if source_review and reuse_contract or fresh and reuse_contract:
         raise ValueError('fresh_review_and_frozen_replay_are_distinct_routes')
-    if not 1 <= max_pages <= 20 or source.stat().st_size > 100*1024*1024:
-        raise ValueError('bounded_input_scope_exceeded')
+    if not 1 <= max_pages <= 20:
+        raise PreflightError('page_limit_exceeded', f'--max-pages 必须在 1–20 之间（当前 {max_pages}）。', max_pages=max_pages)
+    # 结构化预检：加密、截断/损坏、页数超限各自给出独立错误码，不再合并为一个含糊错误。
+    facts = inspect_pdf(source, max_pages=max_pages, require_digital=False, target_language='zh')
+    if any(f['code'] == 'page_limit_exceeded' for f in facts['findings']):
+        for f in facts['findings']:
+            if f['code'] == 'page_limit_exceeded':
+                f['message'] = (f"PDF 共 {facts['page_count']} 页，超过扫描预检 --max-pages {max_pages}（默认 2，最大 20）。"
+                                '电子 PDF 请改用 candidate --route digital_pdf（完整 1–5 页）。')
+    raise_for_blocked(facts)
     sr = ref(source)
     blockers, todos, pages = [], [], []
     with fitz.open(source) as doc:
         count = len(doc)
-        if doc.needs_pass or not 1 <= count <= max_pages:
-            raise ValueError('encrypted_or_page_scope_exceeded')
         for index, page in enumerate(doc):
             visible = hidden = 0
             for span in page.get_texttrace():
@@ -142,6 +149,12 @@ def inspect_input(source, *, max_pages=2, source_review=None, reuse_contract=Non
         todos.append('model_not_verified_but_not_required_for_frozen_replay')
     if fresh and not source_review:
         blockers.append('source_image_qualification_unconfirmed')
+    kinds = {p['page']: p['kind'] for p in facts['pages']}
+    digital_route = {'all_pages_native_text': bool(kinds) and all(k == 'native_text' for k in kinds.values()),
+                     'page_kinds': kinds,
+                     'note': 'heuristic only; candidate --route digital_pdf re-checks every page with route_pdf'}
+    if digital_route['all_pages_native_text'] and not reuse_contract and not source_review:
+        todos.append('all_pages_have_native_text_layer: if this is a digital PDF (1–5 pages), use candidate --route digital_pdf instead of scan preparation')
     return {'schema_version': 1, 'development_revision': VERSION,
         'status': 'blocked' if blockers else 'needs_source_review' if not reuse_contract and not source_review else 'ready_for_declared_route',
         'source': sr, 'page_count': count, 'pages': pages, 'qualification': qualification,
@@ -149,6 +162,30 @@ def inspect_input(source, *, max_pages=2, source_review=None, reuse_contract=Non
         'blockers': blockers, 'todos': todos, 'model_inventory': inventory,
         'model_required': fresh, 'input_modified': False, 'physical_scale_policy': 'preserve_input_media_and_crop_boxes',
         'new_OCR_MT_calls': 0, 'human_acceptance': False, 'strict_delivery': False,
+        'error_code': None, 'findings': facts['findings'], 'source_language': facts['source_language'],
+        'digital_route': digital_route, 'code_ref': ref(__file__)}
+
+
+def blocked_report(source, exc):
+    """预检失败也输出与正常报告同形的结构化 JSON，而不是原始 traceback。"""
+    source = Path(source)
+    try:
+        sr = ref(source)
+    except OSError:
+        sr = {'path': str(source.resolve()), 'sha256': None}
+    if isinstance(exc, PreflightError):
+        findings = getattr(exc, 'result', {}).get('findings') or [exc.finding]
+        code = exc.code
+    else:
+        code = 'invalid_preflight_request'
+        findings = [finding(code, f'{type(exc).__name__}: {exc}'[:500])]
+    facts = getattr(exc, 'result', {}) if isinstance(exc, PreflightError) else {}
+    return {'schema_version': 1, 'development_revision': VERSION, 'status': 'blocked',
+        'source': sr, 'page_count': facts.get('page_count'), 'pages': [], 'qualification': {},
+        'route': 'facts_only', 'blockers': [code], 'todos': [], 'model_inventory': {'status': 'not_checked'},
+        'model_required': False, 'input_modified': False, 'physical_scale_policy': 'preserve_input_media_and_crop_boxes',
+        'new_OCR_MT_calls': 0, 'human_acceptance': False, 'strict_delivery': False,
+        'error_code': code, 'findings': findings, 'source_language': facts.get('source_language'),
         'code_ref': ref(__file__)}
 
 
@@ -180,14 +217,19 @@ def main(argv=None):
     p.add_argument('--catalog-url', default=None)
     p.add_argument('--fresh', action='store_true')
     a = p.parse_args(argv)
-    result = inspect_input(a.input, max_pages=a.max_pages,
-        source_review=ref(a.source_review) if a.source_review else None,
-        reuse_contract=ref(a.reuse_contract) if a.reuse_contract else None,
-        model=a.model, catalog_url=a.catalog_url, fresh=a.fresh)
+    try:
+        result = inspect_input(a.input, max_pages=a.max_pages,
+            source_review=ref(a.source_review) if a.source_review else None,
+            reuse_contract=ref(a.reuse_contract) if a.reuse_contract else None,
+            model=a.model, catalog_url=a.catalog_url, fresh=a.fresh)
+    except (PreflightError, OSError) as exc:
+        result = blocked_report(a.input, exc)
     a.output.parent.mkdir(parents=True, exist_ok=True)
     with a.output.open('x') as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
-    print(json.dumps({'status': result['status'], 'page_count': result['page_count'], 'blockers': result['blockers'], 'output': str(a.output.resolve())}))
+    print(json.dumps({'status': result['status'], 'error_code': result.get('error_code'), 'page_count': result['page_count'],
+                      'blockers': result['blockers'], 'warnings': [x['code'] for x in result.get('findings', []) if x['severity'] == 'warning'],
+                      'output': str(a.output.resolve())}, ensure_ascii=False))
     return 2 if result['blockers'] else 0
 
 

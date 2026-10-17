@@ -12,16 +12,30 @@ from pathlib import Path
 from typing import Any, Callable
 
 import psutil
-from daily_skill_research.execution import run_command, write_failure_receipt
+from daily_skill_research.execution import _redact_text, run_command, write_failure_receipt
 
 
-def snapshot(members: list[psutil.Process] | None = None) -> dict[str, Any]:
+def _process_memory(proc: psutil.Process, metric: str) -> dict[str, Any]:
+    rss = proc.memory_info().rss
+    row = {"pid": proc.pid, "rss": rss, "name": proc.name()}
+    if metric == "pss":
+        # PSS 按共享页比例分摊；fork 出的后端子进程不再重复计入父进程共享页。
+        try:
+            row["pss"] = getattr(proc.memory_full_info(), "pss", rss)
+        except (psutil.AccessDenied, OSError, AttributeError):
+            row["pss"] = rss
+    return row
+
+
+def snapshot(members: list[psutil.Process] | None = None, *, metric: str = "rss") -> dict[str, Any]:
+    if metric not in ("rss", "pss"):
+        raise ValueError("memory metric must be rss or pss")
     own = psutil.Process()
     children = own.children(recursive=True) if members is None else members
     process_rows = []
     for proc in [own, *children]:
         try:
-            process_rows.append({"pid": proc.pid, "rss": proc.memory_info().rss, "name": proc.name()})
+            process_rows.append(_process_memory(proc, metric))
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
     codex = []
@@ -33,8 +47,12 @@ def snapshot(members: list[psutil.Process] | None = None) -> dict[str, Any]:
         except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
             continue
     vm = psutil.virtual_memory()
+    rss_sum = sum(row["rss"] for row in process_rows)
+    # task_rss 保留旧字段名，数值按 memory_metric 口径计；原始 RSS 和另记于 task_rss_sum。
+    task_memory = sum(row.get("pss", row["rss"]) for row in process_rows) if metric == "pss" else rss_sum
     return {"at": time.time(), "processes": process_rows, "codex": codex,
-            "task_rss": sum(row["rss"] for row in process_rows), "available": vm.available,
+            "memory_metric": metric, "task_rss_sum": rss_sum,
+            "task_rss": task_memory, "available": vm.available,
             "total": vm.total, "swap_used": psutil.swap_memory().used,
             "process_count": len(process_rows)}
 
@@ -109,7 +127,9 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
                 cancel_event: threading.Event | None = None,
                 observer: Callable[[], dict[str, Any]] = snapshot,
                 deadline_monotonic: float | None = None,
-                cleanup_reserve_seconds: float | None = None) -> dict[str, Any]:
+                cleanup_reserve_seconds: float | None = None,
+                memory_metric: str = "rss",
+                max_total_fraction: float = 0.25) -> dict[str, Any]:
     start = time.monotonic()
     if not 0 < interval_seconds <= 30 or not 0 < timeout_seconds <= 7200 or (rss_limit is not None and rss_limit <= 0) or max_processes < 1 or not re.fullmatch(r"[A-Za-z0-9_.-]+", operation):
         raise ValueError("bounded timeout, interval, RSS and process limits required")
@@ -118,11 +138,24 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
     monitor_path = receipt_dir / f"{operation}.resource.jsonl"
     # 重复 attempt 必须使用新目录，不能覆盖旧收据。
     stream = monitor_path.open("x", encoding="utf-8")
-    baseline = snapshot([]) if observer is snapshot else observer()
-    rss_limit = min(8 * 1024**3, int(baseline["total"] * .20)) if rss_limit is None else rss_limit
-    if rss_limit > baseline["total"] * 0.25 or rss_limit > 50 * 1024**3:
+    if memory_metric not in ("rss", "pss") or not 0 < max_total_fraction <= 0.5:
         stream.close()
-        raise ValueError("resource limit exceeds project authorization threshold")
+        raise ValueError("memory metric must be rss or pss and host fraction within (0, 0.5]")
+    default_observer = observer is snapshot
+    observe = (lambda members=None: snapshot(members, metric=memory_metric)) if default_observer else (lambda members=None: observer())
+    baseline = observe([])
+    rss_limit = min(8 * 1024**3, int(baseline["total"] * .20)) if rss_limit is None else rss_limit
+    if rss_limit > baseline["total"] * max_total_fraction or rss_limit > 50 * 1024**3:
+        stream.close()
+        raise ValueError(f"resource limit exceeds project authorization threshold: {rss_limit} bytes > "
+                         f"{max_total_fraction:.0%} of physical memory {baseline['total']} bytes")
+    peak = {"task": 0, "rss_sum": 0}
+
+    def record(sample: dict[str, Any]) -> None:
+        peak["task"] = max(peak["task"], int(sample.get("task_rss", 0)))
+        peak["rss_sum"] = max(peak["rss_sum"], int(sample.get("task_rss_sum", sample.get("task_rss", 0))))
+    # 基线与收尾样本同样计入峰值；否则短于一个采样间隔的作业峰值会记为 0。
+    record(baseline)
     deadline = min(start+timeout_seconds,deadline_monotonic) if deadline_monotonic is not None else start+timeout_seconds
     reserve = min(5,max(.1,timeout_seconds*.35)) if cleanup_reserve_seconds is None else cleanup_reserve_seconds
     if reserve <= 0 or reserve >= deadline-start:
@@ -143,6 +176,8 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
                                             timeout_seconds=max(.1,deadline-time.monotonic()+1), receipt_dir=receipt_dir)
         except Exception as exc:
             result["exception"] = type(exc).__name__
+            # 收据保留真实错误消息（脱敏、截断），不再只剩异常类型名。
+            result["exception_message"] = _redact_text(str(exc))[:500]
         finally:
             done.set()
 
@@ -157,13 +192,17 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
         if not trigger:
             worker = threading.Thread(target=execute, daemon=True)
             worker.start()
-            while not done.wait(max(.001,min(interval_seconds,max(0,work_deadline-time.monotonic())))):
+            # 启动后尽快采第一次样（50 ms），之后按 interval 采样，避免快作业完全漏采。
+            wait = min(.05, interval_seconds)
+            while not done.wait(max(.001,min(wait,max(0,work_deadline-time.monotonic())))):
+                wait = interval_seconds
                 identity, members = launched_members(identity_path, nonce)
                 for proc in members:
                     children[proc.pid] = proc
                     try:identities[proc.pid]=proc.create_time()
                     except (psutil.NoSuchProcess,psutil.AccessDenied):pass
-                current = snapshot(members) if observer is snapshot else observer()
+                current = observe(members)
+                record(current)
                 stream.write(json.dumps(current) + "\n"); stream.flush()
                 trigger = violation(current, baseline, rss_limit=rss_limit, max_processes=max_processes)
                 if time.monotonic() >= work_deadline:
@@ -196,7 +235,8 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
                 stop_children(live,deadline)
                 done.wait(max(0,min(1,deadline-time.monotonic())))
             _, members = launched_members(identity_path,nonce)
-            final = snapshot(members) if observer is snapshot else observer()
+            final = observe(members)
+            record(final)
             stream.write(json.dumps(final) + "\n"); stream.flush()
             trigger = trigger or violation(final, baseline, rss_limit=rss_limit, max_processes=max_processes)
     finally:
@@ -218,10 +258,16 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
                "resource_receipt": str(monitor_path), "command": command.as_dict() if command else None,
                "launch_receipt": str(identity_path) if identity_path.exists() else None,
                "rss_limit_bytes": rss_limit,
-               "exception": result.get("exception")}
+               "memory_metric": memory_metric,
+               "peak_task_memory_bytes": peak["task"],
+               "peak_task_rss_sum_bytes": peak["rss_sum"],
+               "exception": result.get("exception"),
+               "exception_message": result.get("exception_message")}
     if trigger or result.get("exception"):
         outcome["failure_receipt"] = write_failure_receipt(
             receipt_dir=receipt_dir, operation=operation, domain="resource",
             failure_code=trigger or "execution_exception", retryable=False,
-            detail=trigger or result.get("exception"), metadata={"resource_receipt": str(monitor_path)})
+            detail=trigger or ": ".join(filter(None, [result.get("exception"), result.get("exception_message")])),
+            metadata={"resource_receipt": str(monitor_path), "memory_metric": memory_metric,
+                      "rss_limit_bytes": rss_limit, "peak_task_memory_bytes": peak["task"]})
     return outcome

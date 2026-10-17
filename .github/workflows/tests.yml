@@ -72,3 +72,29 @@ jobs:
         env:
           PYTHONPATH: scripts
         run: python scripts/attribution_guard.py
+
+  pdf-translation-linux-smoke:
+    name: double6-pdf-translation Linux smoke (py3.12, setup_venv + pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: skills/double6-pdf-translation
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install uv
+      - name: Install exactly as documented (scripts/setup_venv.sh, hash-locked)
+        run: PDFTR_PYTHON="$(command -v python)" bash scripts/setup_venv.sh "$RUNNER_TEMP/pdftr-venv"
+      - run: uv pip install --python "$RUNNER_TEMP/pdftr-venv/bin/python" pytest
+      - name: Unit and CLI tests (no model, no network)
+        env:
+          PAPER_TRANSLATION_WORKSPACE: ${{ runner.temp }}/pdftr-ws
+        run: '"$RUNNER_TEMP/pdftr-venv/bin/python" -m pytest -q -p no:cacheprovider tests'
+      - name: Workflow CLI help for every action
+        run: |
+          PY="$RUNNER_TEMP/pdftr-venv/bin/python"
+          for action in inspect-input candidate collect review doctor run-reviewed-scan trial-render prepare-scan; do
+            "$PY" scripts/paper_translation_workflow.py "$action" --help > /dev/null
+          done
