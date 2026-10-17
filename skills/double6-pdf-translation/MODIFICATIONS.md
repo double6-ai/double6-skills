@@ -25,7 +25,7 @@
 - 评审修复：`scripts/resource_limits.py`（冻结合同权威、覆盖冲突错误码、建议合同）、`scripts/render_residue_check.py`（参考文献/代码/URL/引用剔除）、`scripts/paper_translation_workflow.py`（任意路线质量结论与退出码 3、有界输入预检、冻结预算执行）、`scripts/pdf_input_preflight.py`（页数超限短路、子进程入口）、`scripts/bounded_execution.py`（峰值含基线与收尾样本）；新增 `tests/test_rc3_review_fixes.py`。
 - 评审修复第二轮：`scripts/render_residue_check.py` 改为几何阅读顺序定位参考文献区域、逐条校验条目、字母附录结束区域、无标题严格条目连续段剔除、译文侧剔除上限；新增 `tests/test_rc3_review_round2.py`。
 - 评审修复第三轮：`scripts/render_residue_check.py` 新增正文否决、无标题参考文献强结构证据（strong/weak 分类、左边距、文末位置、全文比例上限、译文侧跟随源文）与 `excluded.headingless_runs` 审计输出；新增 `tests/test_rc3_review_round3.py`，第二轮无标题用例的正文加长到与上限相称。
-- 评审修复第四轮：`scripts/render_residue_check.py` weak 条目默认计数、仅凭编号连续或续接证据剔除，标题区域与无标题段共用逐条规则并输出逐条审计；修正以年份开头续行被拆成新条目的分组问题；新增 `tests/test_rc3_review_round4.py`。移除 `docs/evidence/` 下的验收截图及 `.gitignore` 放行规则。
+- 评审修复第四轮：`scripts/render_residue_check.py` weak 条目默认计数、仅凭编号连续或续接证据剔除，标题区域与无标题段共用逐条规则并输出逐条审计；修正以年份开头续行被拆成新条目的分组问题；新增 `tests/test_rc3_review_round4.py`。
 - 未修改 vendored PDFMathTranslate-next / BabelDOC 源码。
 
 ## 与所标上游版本有差异的实现文件
