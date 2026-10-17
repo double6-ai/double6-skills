@@ -30,7 +30,6 @@
   - weak 条目默认计数，只有正面证据才剔除：编号与紧邻条目连续，或紧接未结束条目的栏首/页首续接残段；无标题段与 References 标题区域使用同一套逐条规则。
   - 审计输出逐条决定：`excluded.headingless_runs[].entries_detail` 与 `excluded.reference_region_entries`。
   - 分组修正：`2000. 标题` 这类以年份开头的续行不再被当作 `n.` 编号而拆开条目；作者名支持非 ASCII 大写字母和行尾连字符断词；`. In …` 计为出处信号。
-  - 移除仓库中的 3 张本地验收截图，并撤销 `.gitignore` 中 `!docs/evidence/**/*.png` 放行规则；截图改在 PR 评论中单独附上。
 - 版本统一为 2.0.0-rc.3（SKILL.md、默认路线配置、输出中的 `skill_version`）；新增本 skill 的 pytest 覆盖与 Linux 冒烟 CI。
 - 未改动：行内公式重建、表格/图内文字抽取、中译英、扫描 OCR、长文档分块。
 
