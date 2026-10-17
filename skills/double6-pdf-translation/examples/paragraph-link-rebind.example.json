@@ -1,0 +1,30 @@
+{
+  "schema_version": "paragraph-link-rebind@1",
+  "source": {
+    "path": "example_inputs/candidate.pdf",
+    "sha256": "93ad344fb93d55ab387eb4118dc09feb68defa94824a776f3f4f2111c84db241"
+  },
+  "policy": {
+    "id": "glyph-centre-annotation-v1",
+    "probe_half_size_pt": 0.012,
+    "glyph_position_tolerance_pt": 0.03,
+    "maximum_changed_pages": 8,
+    "maximum_paragraph_glyphs": 10000,
+    "case_overrides_allowed": false
+  },
+  "units": [
+    {
+      "id": "PARA-N2-B3-F1",
+      "page": 2,
+      "body_size": 8.5,
+      "glyphs": {
+        "path": "example_inputs/sample_01.actual_glyphs.json",
+        "sha256": "a0bea5825d658bc10713c662fb3a1c4711762fea8c2884118e1764184f8d82f8"
+      },
+      "layer": {
+        "path": "example_inputs/sample_01_protected.pdf",
+        "sha256": "b3d51a86933af66447501dc7dfc3c8cc6e9560ae0049e4aa8a4009080e5d19b5"
+      }
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "base_version": "0.5.24",
+  "skill_candidate_version": "2.0.0_unpublished_hardening",
+  "upstream_version": "0.6.4",
+  "upstream_wheel_sha256": "e7dcdd5b8213f657af1df68e329f92d0534c9b94c53fcd82e9e04c52060cb7d0",
+  "advisory": "https://github.com/funstory-ai/BabelDOC/security/advisories/GHSA-m8gf-v64p-gfmg",
+  "authorization": "user T0–T5 goal + repository reusable repair rule",
+  "adaptations": [
+    "secure loader import targets pdfminer package",
+    "bundled data directory is pdfminer/cmap"
+  ],
+  "asset_identity": {
+    "published_files": 148,
+    "matching_vendor_files": 148,
+    "mismatches": 0
+  },
+  "files": [
+    {
+      "path": "babeldoc/pdfminer/cmapdb.py",
+      "before_sha256": "8b350854b64c222daac4b4b6b84d3eba9a27bdf0d0ef9897a259dd32e01508ec",
+      "sha256": "8a447fcb76a9865e6ac41295ed074f3fc4be815165aaa9fd53e2843a81419f98"
+    },
+    {
+      "path": "babeldoc/pdfminer/image.py",
+      "before_sha256": "5fab42d5a3c3add798aa59312158473e5fb70522f741ba45643733acdb74a252",
+      "sha256": "9fc91c37cf3e1eb32a6ebc05dcb202fca924d70ad7062f5d1100081f45d188f2"
+    },
+    {
+      "path": "babeldoc/pdfminer/cmap_secure_loader.py",
+      "before_sha256": null,
+      "sha256": "f206a652b68aa9986b1d5fdbaabbd93d289694b4e38041ab7fe25aff8dd1a947"
+    },
+    {
+      "path": "babeldoc/pdfminer/_cmap_manifest_data.py",
+      "before_sha256": null,
+      "sha256": "99667e595cda19c702b5c132d66dc88396424df0447be688419957a314d09675"
+    }
+  ],
+  "verification": {
+    "test_file": "projects/paper-translation/tests/test_babeldoc_security.py",
+    "tests_passed": 4,
+    "real_pdf_parser_smoke": "passed_one_page_CJK_source_text_extract",
+    "smoke_source_sha256": "aa7de4b0ed12f868cee31dc9d9ccdde5512bd28e15fba577336bbcd52a7fdb70"
+  },
+  "whole_upstream_upgrade": false
+}

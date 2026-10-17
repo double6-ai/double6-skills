@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "paper-translation/person-name-source-binding",
+  "title": "姓名保留的精确源范围绑定",
+  "type": "object",
+  "required": [
+    "source",
+    "source_line_id",
+    "source_ranges",
+    "source_text_sha256",
+    "source_role_review_ref",
+    "person_name_review_ref"
+  ],
+  "properties": {
+    "source": {
+      "$ref": "#/$defs/fileRef"
+    },
+    "source_line_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_ranges": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "type": "integer",
+            "minimum": 1
+          }
+        ],
+        "items": false,
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "source_text_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "source_role_review_ref": {
+      "$ref": "#/$defs/fileRef"
+    },
+    "person_name_review_ref": {
+      "$ref": "#/$defs/fileRef"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "fileRef": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$comment": "Schema校验结构；同源身份、范围先后/重叠、作者角色及独立审校接受由运行接口校验。"
+}

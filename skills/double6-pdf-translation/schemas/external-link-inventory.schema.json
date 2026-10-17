@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "candidate",
+    "annotations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "candidate": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "annotations": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "type": "object",
+        "required": [
+          "page",
+          "xref",
+          "kind",
+          "uri"
+        ],
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "xref": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "kind": {
+            "type": "integer"
+          },
+          "uri": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "kind_counts": {
+      "type": "object"
+    },
+    "unique_uris": {
+      "type": "array"
+    },
+    "unique_files": {
+      "type": "array"
+    }
+  }
+}

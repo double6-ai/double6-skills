@@ -1,20 +1,164 @@
-#!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Double6 Skills，2026-10-17：基于paper-translation维护源码整理；变更见Skill根目录MODIFICATIONS.md。
+"""check translation memory：从原入口拆出的同一实现。"""
 from __future__ import annotations
+from check_translation_context import *
 
-SCRIPT_INTERFACE = "internal-module"
-SCRIPT_INTERFACE_REASON = "Imported by check_translation.py for term policy, entity map, document memory, and repair plan builders."
+def detect_domain_term_seeds(manifest: dict[str, Any] | None = None, source: str = "") -> list[dict[str, Any]]:
+    from check_translation_core import manifest_source_text
+    text = "\n".join([source, manifest_source_text(manifest or {})]).lower()
+    matched = []
+    for seed in DOMAIN_TERM_SEEDS:
+        terms = seed.get("match_terms")
+        if not isinstance(terms, list):
+            continue
+        if any(str(term).lower() in text for term in terms):
+            matched.append(seed)
+    return matched
 
-import argparse
-import csv
-import json
-import re
-import unicodedata
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
 
-import repair_quality_issues
-from check_translation_report_runtime import *  # noqa: F401,F403
+def merge_policy_row(
+    policies: dict[str, dict[str, Any]],
+    row: dict[str, Any],
+    *,
+    source_label: str,
+    override: bool = True,
+) -> None:
+    term = str(row.get("source_term") or "").strip()
+    if not term:
+        return
+    current = policies.get(term, {})
+    merged = dict(current)
+    for key, value in row.items():
+        if value in (None, ""):
+            continue
+        if override or key not in merged or merged.get(key) in (None, ""):
+            merged[key] = value
+    if current:
+        previous = str(current.get("policy_source") or "")
+        merged["policy_source"] = f"{previous}+{source_label}" if previous else source_label
+    else:
+        merged["policy_source"] = source_label
+    merged["source_term"] = term
+    policies[term] = merged
+
+def build_term_policy(
+    glossary: list[dict[str, str]],
+    *,
+    manifest: dict[str, Any] | None = None,
+    source: str = "",
+    manual_policy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    policies: dict[str, dict[str, Any]] = {
+        str(item["source_term"]): dict(item, policy_source="default")
+        for item in DEFAULT_TERM_POLICIES
+        if item.get("source_term")
+    }
+    matched_domains = detect_domain_term_seeds(manifest, source)
+    for seed in matched_domains:
+        for row in seed.get("terms", []):
+            if isinstance(row, dict):
+                merge_policy_row(
+                    policies,
+                    {**row, "domain_id": seed.get("domain_id"), "domain_label": seed.get("label")},
+                    source_label=f"domain:{seed.get('domain_id')}",
+                    override=True,
+                )
+    for row in glossary:
+        term = (row.get("source_term") or "").strip()
+        if not term:
+            continue
+        current = policies.get(term, {})
+        merge_policy_row(
+            policies,
+            {
+                **current,
+            "source_term": term,
+            "translation": row.get("translation") or current.get("translation", ""),
+            "action": row.get("action") or current.get("action", "decide"),
+            "term_type": row.get("term_type") or current.get("term_type", ""),
+            "confidence": row.get("confidence") or current.get("confidence", "medium"),
+            "first_seen_block": row.get("first_seen_block") or current.get("first_seen_block", ""),
+            "review_status": row.get("review_status") or current.get("review_status", "needs_review"),
+            "note": row.get("note") or current.get("note", ""),
+            },
+            source_label="glossary",
+            override=True,
+        )
+    manual_terms = (manual_policy or {}).get("terms")
+    if isinstance(manual_terms, list):
+        for row in manual_terms:
+            if isinstance(row, dict):
+                merge_policy_row(policies, row, source_label="manual", override=True)
+    return {
+        "version": 1,
+        "status": "ok" if policies else "empty",
+        "matched_domain_seeds": [
+            {"domain_id": seed.get("domain_id"), "label": seed.get("label")}
+            for seed in matched_domains
+        ],
+        "term_count": len(policies),
+        "terms": sorted(policies.values(), key=lambda item: str(item.get("source_term", "")).lower()),
+        "notes": [
+            "term_policy.json 是翻译前注入 Qwen 的术语策略；合并顺序为 default < domain seed < glossary.tsv < manual policy。",
+            "字段 forbidden_translations 用于 QA 阶段发现禁用译法。",
+        ],
+    }
+
+def build_entity_map(manifest: dict[str, Any], glossary: list[dict[str, str]] | None = None) -> dict[str, Any]:
+    from check_translation_core import first_seen_block_for_policy, manifest_source_text, policy_source_location, policy_source_present
+    source_text = manifest_source_text(manifest)
+    entities: dict[str, dict[str, Any]] = {}
+    for policy in DEFAULT_ENTITY_POLICIES:
+        term = str(policy.get("source_term") or "")
+        location = policy_source_location(manifest, policy)
+        entities[term] = {
+            **policy,
+            "active": policy_source_present(source_text, policy),
+            "source_location": location,
+            "activation_policy": "if_seen",
+            "first_seen_block": first_seen_block_for_policy(policy, manifest),
+            "source_evidence": term,
+            "policy_source": "default",
+            "note": f"{policy.get('note', '')} 若源文或 PDF 页脚/机构块出现该实体，必须使用该译名。".strip(),
+        }
+    for row in glossary or []:
+        term_type = (row.get("term_type") or "").strip()
+        term = (row.get("source_term") or "").strip()
+        if term_type not in {"organization", "name", "publication"} or not term:
+            continue
+        entities.setdefault(
+            term,
+            {
+                "source_term": term,
+                "aliases": [],
+                "translation": row.get("translation") or "",
+                "entity_type": term_type,
+                "confidence": row.get("confidence") or "medium",
+                "forbidden_translations": [],
+                "first_seen_block": row.get("first_seen_block") or first_seen_block_for_policy({"source_term": term}, manifest),
+                "source_evidence": term,
+                "source_location": policy_source_location(manifest, {"source_term": term}),
+                "activation_policy": "if_seen",
+                "policy_source": "glossary",
+            },
+        )
+    return {
+        "version": 1,
+        "status": "ok" if entities else "empty",
+        "entity_count": len(entities),
+        "entities": sorted(
+            entities.values(),
+            key=lambda item: (
+                0 if item.get("active") else 1,
+                {"body": 0, "metadata": 1, "absent": 2}.get(str(item.get("source_location") or "absent"), 2),
+                str(item.get("source_term", "")).lower(),
+            ),
+        ),
+        "notes": [
+            "entity_map.json 记录论文中的机构、专名和出版物，QA 会用它区分专名误译与普通术语问题。",
+        ],
+    }
 
 
 def build_document_memory(
@@ -24,6 +168,8 @@ def build_document_memory(
     entity_map: dict[str, Any] | None = None,
     term_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    from check_translation_core import contains_term, excerpt
+    from check_translation_fidelity import build_coverage_gate
     blocks = manifest.get("blocks")
     blocks = blocks if isinstance(blocks, list) else []
     sections: dict[str, dict[str, Any]] = {}
@@ -183,226 +329,5 @@ def build_document_memory(
     }
 
 
-def build_qa_checks(issues: list[Issue]) -> dict[str, Any]:
-    checks = []
-    for issue in issues:
-        if issue.severity not in {"high", "medium"}:
-            continue
-        checks.append(
-            {
-                "status": "needs_review",
-                "severity": issue.severity,
-                "category": issue.category,
-                "rule": issue.rule or issue.category,
-                "block_id": issue.block_id or "document",
-                "page": issue.page or "global",
-                "question": f"译文是否正确处理了：{issue.title}？",
-                "source_context": issue.source_evidence,
-                "translation_context": issue.translation_evidence,
-                "source_evidence": issue.source_evidence,
-                "translation_evidence": issue.translation_evidence,
-                "suggestion": issue.suggestion,
-                "repair_type": repair_type_for_issue(issue),
-            }
-        )
-    checks.extend(build_science_qa_review_items(issues))
-    return {
-        "version": 1,
-        "status": "warn" if checks else "ok",
-        "check_count": len(checks),
-        "science_qa_count": sum(1 for item in checks if item.get("check_type") == "science_information_qa"),
-        "checks": checks,
-    }
-
-
-def build_affected_blocks(
-    issues: list[Issue],
-    manifest: dict[str, Any],
-    translation_blocks: list[dict[str, Any]],
-) -> dict[str, Any]:
-    block_info: dict[str, dict[str, Any]] = {}
-    blocks = manifest.get("blocks")
-    if isinstance(blocks, list):
-        for block in blocks:
-            if not isinstance(block, dict):
-                continue
-            block_id = str(block.get("block_id") or "")
-            if not block_id:
-                continue
-            block_info[block_id] = {
-                "page": block.get("page"),
-                "section": block.get("section"),
-                "element_type": block.get("element_type"),
-                "source_text": block.get("text", ""),
-            }
-    translation_by_block = {
-        str(record.get("block_id") or ""): record
-        for record in translation_blocks
-        if isinstance(record, dict)
-    }
-    affected_by_block: dict[str, dict[str, Any]] = {}
-    for issue in issues:
-        if issue.severity not in {"high", "medium"}:
-            continue
-        block_id = issue.block_id or "document"
-        item = affected_by_block.setdefault(
-            block_id,
-            {
-                "block_id": block_id,
-                "status": "needs_repair",
-                "repair_types": [],
-                "issues": [],
-                "page": issue.page or block_info.get(block_id, {}).get("page") or "global",
-                "section": block_info.get(block_id, {}).get("section", ""),
-                "source_text": block_info.get(block_id, {}).get("source_text", ""),
-                "previous_translation": str(translation_by_block.get(block_id, {}).get("translation") or ""),
-            },
-        )
-        repair_type = repair_type_for_issue(issue)
-        if repair_type not in item["repair_types"]:
-            item["repair_types"].append(repair_type)
-        item["issues"].append(
-            {
-                "severity": issue.severity,
-                "category": issue.category,
-                "title": issue.title,
-                "source_evidence": issue.source_evidence,
-                "translation_evidence": issue.translation_evidence,
-                "suggestion": issue.suggestion,
-            }
-        )
-    affected_blocks = sorted(
-        affected_by_block.values(),
-        key=lambda item: (str(item.get("block_id") == "document"), str(item.get("block_id"))),
-    )
-    return {
-        "version": 1,
-        "status": "warn" if affected_blocks else "ok",
-        "affected_block_count": len(affected_blocks),
-        "affected_blocks": affected_blocks,
-        "notes": [
-            "该文件由 check_translation.py 生成，用于局部修复、局部重译或人工复核。",
-            "protected_span 问题可优先运行 repair_protected_spans.py；数字事实和术语问题建议局部重译或人工修订。",
-        ],
-    }
-
-
-def repair_decision(category: str, suggestion: str) -> dict[str, bool | str]:
-    if category in {"rendering", "structure"} or "rendering" in category or "structure" in category:
-        return {
-            "auto_fixable": False,
-            "requires_rerender": True,
-            "repair_action": "rerender_or_readable_fallback",
-        }
-    if category in {"terminology", "entity_accuracy", "omission"} and suggestion:
-        return {
-            "auto_fixable": False,
-            "requires_rerender": True,
-            "repair_action": "local_retranslation_or_policy_repair",
-        }
-    return {
-        "auto_fixable": bool(suggestion),
-        "requires_rerender": False,
-        "repair_action": "text_patch_review",
-    }
-
-
-def normalize_manual_confirmations(manual_confirmations: dict[str, Any]) -> list[dict[str, Any]]:
-    raw_items = manual_confirmations.get("confirmations")
-    if raw_items is None:
-        raw_items = manual_confirmations.get("manual_confirmations")
-    if isinstance(raw_items, dict):
-        raw_items = list(raw_items.values())
-    if not isinstance(raw_items, list):
-        return []
-    items = []
-    for index, item in enumerate(raw_items, start=1):
-        if not isinstance(item, dict):
-            continue
-        category = str(item.get("category") or item.get("mqm_category") or "accuracy")
-        suggestion = str(item.get("suggested_repair") or item.get("suggestion") or item.get("repair") or item.get("repair_policy") or "")
-        decision = repair_decision(category, suggestion)
-        items.append(
-            {
-                "confirmation_id": str(item.get("confirmation_id") or item.get("id") or f"manual-{index:04d}"),
-                "case_id": str(item.get("case_id") or item.get("case") or ""),
-                "status": str(item.get("status") or "confirmed"),
-                "category": category,
-                "block_id": str(item.get("block_id") or item.get("block") or "document"),
-                "page": str(item.get("page") or "global"),
-                "source_evidence": str(item.get("source_evidence") or item.get("source") or ""),
-                "translation_evidence": str(item.get("translation_evidence") or item.get("translation") or ""),
-                "suggested_repair": suggestion,
-                "reason": str(item.get("reason") or item.get("note") or item.get("issue") or item.get("confirmation") or ""),
-                **decision,
-                "source": "manual_confirmation",
-            }
-        )
-    return items
-
-
-def build_confirmed_repair_plan(
-    manual_confirmations: dict[str, Any],
-    affected_blocks: dict[str, Any],
-    manifest: dict[str, Any],
-    translation_blocks: list[dict[str, Any]],
-) -> dict[str, Any]:
-    block_info: dict[str, dict[str, Any]] = {}
-    for block in manifest.get("blocks", []) if isinstance(manifest.get("blocks"), list) else []:
-        if isinstance(block, dict) and block.get("block_id"):
-            block_info[str(block["block_id"])] = block
-    translations = {
-        str(record.get("block_id") or ""): str(record.get("translation") or "")
-        for record in translation_blocks
-        if isinstance(record, dict)
-    }
-    repairs: dict[tuple[str, str, str], dict[str, Any]] = {}
-    for item in normalize_manual_confirmations(manual_confirmations):
-        block_id = str(item.get("block_id") or "document")
-        if block_id in block_info:
-            item["page"] = str(item.get("page") or block_info[block_id].get("page") or "global")
-            item["source_text"] = str(block_info[block_id].get("text") or "")
-            item["previous_translation"] = translations.get(block_id, "")
-        key = (block_id, str(item.get("category")), str(item.get("translation_evidence") or item.get("source_evidence")))
-        repairs[key] = item
-    for block in affected_blocks.get("affected_blocks", []) if isinstance(affected_blocks.get("affected_blocks"), list) else []:
-        if not isinstance(block, dict):
-            continue
-        block_id = str(block.get("block_id") or "document")
-        for issue in block.get("issues", []) if isinstance(block.get("issues"), list) else []:
-            if not isinstance(issue, dict):
-                continue
-            category = str(issue.get("category") or "accuracy")
-            translation_evidence = str(issue.get("translation_evidence") or "")
-            key = (block_id, category, translation_evidence or str(issue.get("source_evidence") or ""))
-            if key in repairs:
-                continue
-            suggestion = str(issue.get("suggestion") or "")
-            repairs[key] = {
-                "confirmation_id": "",
-                "case_id": "",
-                "status": "qa_detected",
-                "category": category,
-                "block_id": block_id,
-                "page": str(block.get("page") or "global"),
-                "source_evidence": str(issue.get("source_evidence") or ""),
-                "translation_evidence": translation_evidence,
-                "suggested_repair": suggestion,
-                "reason": str(issue.get("title") or ""),
-                **repair_decision(category, suggestion),
-                "source_text": str(block.get("source_text") or ""),
-                "previous_translation": str(block.get("previous_translation") or ""),
-                "source": "affected_blocks",
-            }
-    items = sorted(repairs.values(), key=lambda item: (str(item.get("source") != "manual_confirmation"), str(item.get("block_id")), str(item.get("category"))))
-    return {
-        "version": 1,
-        "status": "warn" if items else "ok",
-        "repair_count": len(items),
-        "manual_confirmation_count": sum(1 for item in items if item.get("source") == "manual_confirmation"),
-        "repairs": items,
-        "notes": [
-            "confirmed_repair_plan.json 合并人工确认和 QA 高/中风险问题；人工确认优先。",
-            "PDF 视觉/版式问题只生成重渲染或可读降级建议，不自动修改 PDF。",
-        ],
-    }
+SCRIPT_INTERFACE = "internal-module"
+SCRIPT_INTERFACE_REASON = "由兼容入口调用的职责模块，不提供独立命令。"

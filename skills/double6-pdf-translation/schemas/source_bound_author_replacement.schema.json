@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Explicit complete source author replacement contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "protocol", "source_pdf_ref", "target_pdf_ref", "role_ledger_ref", "target_role_ref", "implementation_refs"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "protocol": {"const": "source_bound_author_replacement_v1"},
+    "source_pdf_ref": {"$ref": "#/$defs/ref"},
+    "target_pdf_ref": {"$ref": "#/$defs/ref"},
+    "role_ledger_ref": {"$ref": "#/$defs/ref"},
+    "target_role_ref": {"$ref": "#/$defs/ref"},
+    "implementation_refs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/ref"}}
+  },
+  "$defs": {"ref": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}}}
+}

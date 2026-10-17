@@ -4,3 +4,13 @@ skills/double6-ppt-cli/vendor/ppt-master-core/** -text
 skills/double6-workbench-builder/references/child-learning-source/** -text
 # 主题注册表也校验 SVG 等素材的原始 SHA。
 skills/double6-workbench-builder/references/assets/** -text
+
+# PDF 2.0.0-rc.2 按精确 SHA 冻结导入，固定原始换行字节。
+skills/double6-pdf-translation/** -text
+# 以下冻结成员保留既存空白；后续格式修订须使用新的包身份。
+skills/double6-pdf-translation/references/input-preflight-and-reviewed-run.md whitespace=-blank-at-eol,-blank-at-eof
+skills/double6-pdf-translation/scripts/qa_action_bindings.py whitespace=-blank-at-eol,-blank-at-eof
+skills/double6-pdf-translation/scripts/scanned_raster/render_worker.py whitespace=-blank-at-eol,-blank-at-eof
+skills/double6-pdf-translation/vendor/babeldoc/babeldoc/format/pdf/document_il/midend/il_translator_llm_only.py whitespace=-blank-at-eol,-blank-at-eof
+skills/double6-pdf-translation/vendor/pdfmathtranslate_next/README.md whitespace=-blank-at-eol,-blank-at-eof
+skills/double6-pdf-translation/vendor/pdfmathtranslate_next/pdf2zh_next/gui.py whitespace=-blank-at-eol,-blank-at-eof

@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "sample_status": "real candidates; prior failures retained; independent target QA and user acceptance pending",
+  "default_model_changed": false,
+  "selection_reason": "30B真实hy_v3权重在现有runtime不支持；1.8B结构marker失败后LaTeX明确选已装Qwen进行新可靠性attempt；数字PDF仍显式1.8B，不做模型排名。",
+  "original_model_failure": "hy-mt2-30b-a3b-mlx HTTP400 plus explicit load failed unsupported hy_v3",
+  "latex": {
+    "pdf_url": "https://arxiv.org/pdf/1801.06704v1",
+    "pdf_sha256": "70d63131f70db4353e65ab620911bba84e3b0bbc00d5e563b53c5f58f4440ff1",
+    "source_url": "https://arxiv.org/src/1801.06704v1",
+    "source_archive_sha256": "12f7dd7162496e8e53085bc84bdfbdbd786719ba6259832865aac069c4e4a41e",
+    "main_tex": "cobham-article.tex",
+    "pages": [
+      1,
+      2,
+      3
+    ],
+    "complete_semantic_units": 27,
+    "scope": "完整三页原稿，标题/作者/机构/摘要/定理/证明/文献表。",
+    "compiler": "xelatex -no-shell-escape",
+    "cjk_font": "Songti SC",
+    "source_redistribution": "arXiv nonexclusive original; local evidence only, no third-party source/PDF/translated sample bundled",
+    "model": "qwen3.8-27b-mlx",
+    "actual_architecture": "qwen3_5",
+    "transport": {
+      "request_timeout_seconds": 110,
+      "max_attempts": 1
+    },
+    "generation_request_reasoning_effort": "none",
+    "reasoning_disabled_proven": false,
+    "actual_reasoning": "LM Studio ignores request field; v7 smoke actual929 reasoning_tokens preserved",
+    "main_tex_sha256": "d4c033b3c18cca285adfb379155949f102a70d536ea29c60ea344c56515527b3",
+    "bbl": "cobham-article.bbl",
+    "bbl_sha256": "16f1e24942f536d21cc90d35c4734fdbc53f6a6dfb39d495ed9220454a72e08c"
+  },
+  "digital": {
+    "model": "hy-mt2-1.8b",
+    "model_repository": "mlx-community/Hy-MT2-1.8B-4bit",
+    "pdf_url": "https://arxiv.org/pdf/1007.4870v3",
+    "pdf_sha256": "2d781479500906dbbadb5e4a139edd2c3dc2bb5aa38117be5aa9ff15a56ceeac",
+    "pages": [
+      1,
+      2,
+      3
+    ],
+    "scope": "官方原PDF实际完整3页全文，无裁切；包含标题/作者/摘要/证明/图内科学标签/文献表。arXiv comments2页按实际3页证据裁决。",
+    "source_visibility": "源先行独立3页可见/native角色核验完成；target质量pending。",
+    "onnx_provider": "cpu",
+    "source_redistribution": "arXiv nonexclusive local evidence only, no original/translation bundled"
+  },
+  "acquisition": "先按canonical URL、external ID与content SHA查询共享资源索引；未命中时下载上述官方URL并验证SHA。读取许可后决定本地使用，不把第三方资产放进分享包。",
+  "freeze_evidence": "projects/paper-translation/04_iterations/iteration_039_release_closure/workflow_samples/freeze_v8_02/SAMPLE_PLAN_02.json",
+  "human_accepted": false,
+  "strict_delivery": false,
+  "model_ids_explicit": {
+    "latex": "qwen3.8-27b-mlx",
+    "digital": "hy-mt2-1.8b"
+  },
+  "resource_contract": {
+    "controller_rss_bytes": 3221225472,
+    "job_seconds": 120,
+    "concurrency": 1
+  },
+  "model_provider_limits": {
+    "latex_rss_bytes": 42949672960,
+    "digital_rss_bytes": 8589934592,
+    "context": 4096,
+    "parallel": 1,
+    "speculative": false
+  },
+  "historical_digital_failure": {
+    "pdf_url": "https://mediatum.ub.tum.de/doc/1544053/1544053.pdf",
+    "full_source_sha256": "1a6355a0d4a5d9dd5c9459dcf22f91f31a6387af1fc7f517be7c553b37b46c5e",
+    "full_source_pages": 6,
+    "declared_source_pages": [
+      1,
+      2,
+      3
+    ],
+    "declared_input_sha256": "a70acb88f5b6447bd079527fefc8d3d93cfa8082ec53b39ecf6df3dcbee88606",
+    "scope": "标题/作者/摘要及完整章1–3，仅原页1–3；排除独立章4–6，不称全文。",
+    "input_preparation": "Copy original PDF objects with pinned PyMuPDF; delete_pages(3,5); save garbage=0, deflate=False. Verify every source page text/glyph/action/geometry and full pixels.",
+    "source_redistribution": "CC BY-NC-ND 3.0 printed in source; local evidence only, no source/translated PDF bundled",
+    "status": "failed_complex_Form194_clip_unsupported",
+    "failure_basis": "原PDF clip内隐藏旧模板被native backend提取；后端110秒timeout，无实际translated_pdf；禁止逐案删词或篡改源构造通过。"
+  }
+}

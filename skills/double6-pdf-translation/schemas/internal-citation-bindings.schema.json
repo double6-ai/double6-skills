@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "internal-citation-bindings@1",
+  "type": "array", "minItems": 1, "maxItems": 1000,
+  "description": "绑定必须来自实际当前GoToR及源链接对象，完整覆盖；目的页/坐标由源命名语义与实际中文唯一锚点生成。",
+  "items": {
+    "type": "object", "required": ["page", "xref", "source_xref", "target_literal"],
+    "properties": {
+      "page": {"type": "integer", "minimum": 1},
+      "xref": {"type": "integer", "minimum": 1},
+      "source_xref": {"type": "integer", "minimum": 1},
+      "target_literal": {"type": "string", "minLength": 1}
+    },
+    "not": {"anyOf": [{"required":["target_page"]},{"required":["native_point"]}]}
+  }
+}

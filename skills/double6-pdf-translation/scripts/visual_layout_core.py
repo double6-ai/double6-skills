@@ -1,44 +1,86 @@
-#!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Double6 Skills，2026-10-17：基于paper-translation维护源码整理；变更见Skill根目录MODIFICATIONS.md。
+"""visual layout core：从原入口拆出的同一实现。"""
 from __future__ import annotations
+from visual_layout_context import *
 
-SCRIPT_INTERFACE = "internal-module"
-SCRIPT_INTERFACE_REASON = "Imported by visual_layout.py and visual layout modules for shared text, bbox, and page-role helpers."
+def pdf_identity(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open('rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(block)
+    return digest.hexdigest()
 
-import json
-import re
-from pathlib import Path
-from typing import Any
-
-
-VISIBLE_LATEX_COMMAND_RE = re.compile(r"\\(?:section|subsection|subsubsection|begin|end|cite|ref|url|texttt|emph|caption)\b")
-
-
-def _load_fitz():
+def graphic_paint_profile(page: Any) -> dict[str, Any]:
+    """图像/路径的绘制边界是否落在页面内；不证明遮挡、裁剪或内容完整。"""
+    from visual_layout_extract import _load_fitz
+    fitz = _load_fitz()
+    kinds = {"fill-path", "stroke-path", "fill-image", "fill-shade"}
+    counts = {kind: {"significant": 0, "outside": 0, "outside_area": 0.0} for kind in sorted(kinds)}
+    samples = []
     try:
-        import fitz  # type: ignore
+        log = page.get_bboxlog()
+        if len(log) > 50000:
+            return {"status": "unavailable", "reason": "paint_operation_limit", "limit": 50000}
+        # bboxlog按未旋转页坐标返回，页面旋转后再与可见页比较；容忍2pt出血边。
+        visible = page.rect + (-2, -2, 2, 2)
+        for item in log:
+            kind, values = item[:2]
+            if kind not in kinds:
+                continue
+            if len(values) != 4 or not all(math.isfinite(float(v)) for v in values):
+                return {"status": "unavailable", "reason": "invalid_paint_bbox"}
+            box = fitz.Rect(values) * page.rotation_matrix
+            area = float(box.get_area())
+            if not all(math.isfinite(v) for v in [*box, area]):
+                return {"status": "unavailable", "reason": "nonfinite_transformed_paint_bbox"}
+            if box.width < 1 or box.height < 1 or area < 36:
+                continue
+            counts[kind]["significant"] += 1
+            if (box & visible).get_area() <= 0:
+                counts[kind]["outside"] += 1
+                counts[kind]["outside_area"] += area
+                if len(samples) < 12:
+                    samples.append({"kind": kind, "bbox": list(box), "area": area})
+        return {"status": "ok", "counts": counts, "outside_samples": samples,
+                "page_area": float(page.rect.get_area()), "operation_count": len(log),
+                "scope": "significant paint bboxes entirely outside page plus 2pt tolerance; not occlusion or clipping acceptance"}
+    except Exception as exc:
+        return {"status": "unavailable", "reason": type(exc).__name__}
 
-        return fitz
-    except Exception:
-        try:
-            import pymupdf as fitz  # type: ignore
 
-            return fitz
-        except Exception as exc:  # noqa: BLE001 - optional dependency failure is reported in QA manifests
-            raise RuntimeError(f"PyMuPDF unavailable: {exc}") from exc
-
+def graphic_visibility_findings(source: dict, target: dict, page_number: int | str) -> list[dict]:
+    a, b = source.get("graphic_paint"), target.get("graphic_paint")
+    if a is None and b is None:
+        return []  # 兼容已有只含文字的单元输入，不把缺少测量当作通过证据。
+    if not a or not b or a.get("status") != "ok" or b.get("status") != "ok":
+        return [{"severity": "warn", "category": "rendering", "rule": "graphic_visibility_unavailable",
+                 "page": page_number, "message": "未取得完整图形绘制边界，不能确认整图仍在可见页内。"}]
+    increases = []
+    for kind, row in b["counts"].items():
+        baseline = a["counts"].get(kind, {})
+        count_delta = row["outside"] - baseline.get("outside", 0)
+        area_delta = row["outside_area"] - baseline.get("outside_area", 0)
+        if count_delta > 0 and area_delta >= 36:
+            increases.append({"kind": kind, "additional_outside_count": count_delta, "additional_outside_area": area_delta})
+    if not increases:
+        return []
+    substantial = sum(x["additional_outside_area"] for x in increases) >= max(36, b["page_area"] * .0025)
+    return [{"severity": "blocking" if substantial else "warn", "category": "rendering",
+             "rule": "graphics_moved_outside_page", "page": page_number,
+             "message": "译文新增完全位于页外的图像或路径；对象计数及文字完整不能证明图仍可见，须核对Form坐标变换与页面。",
+             "increases": increases, "outside_samples": b["outside_samples"],
+             "limitation": "paint bbox comparison; does not detect every deleted, occluded, clipped or partially displaced figure"}]
 
 def normalize_lines(text: str) -> list[str]:
     text = text.replace("\x03", " ")
     return [re.sub(r"\s+", " ", line).strip() for line in text.splitlines() if line.strip()]
 
-
 def cjk_count(text: str) -> int:
     return len(re.findall(r"[\u4e00-\u9fff]", text))
 
-
 def ascii_word_count(text: str) -> int:
     return len(re.findall(r"\b[A-Za-z][A-Za-z-]{1,}\b", text))
-
 
 def extract_key_texts(source_pages: list[dict[str, Any]], limit: int = 12) -> list[str]:
     keys: list[str] = []
@@ -55,7 +97,6 @@ def extract_key_texts(source_pages: list[dict[str, Any]], limit: int = 12) -> li
                 return keys
     return keys
 
-
 def dominant_color_ratio(page: dict[str, Any], color: int) -> float:
     spans = page.get("spans")
     spans = spans if isinstance(spans, list) else []
@@ -64,7 +105,6 @@ def dominant_color_ratio(page: dict[str, Any], color: int) -> float:
     matches = sum(1 for span in spans if isinstance(span, dict) and int(span.get("color") or 0) == color)
     return matches / len(spans)
 
-
 def nonblack_color_ratio(page: dict[str, Any]) -> float:
     spans = page.get("spans")
     spans = spans if isinstance(spans, list) else []
@@ -72,7 +112,6 @@ def nonblack_color_ratio(page: dict[str, Any]) -> float:
         return 0.0
     matches = sum(1 for span in spans if isinstance(span, dict) and int(span.get("color") or 0) != 0)
     return matches / len(spans)
-
 
 def bbox_overlap_ratio(box_a: list[float], box_b: list[float]) -> float:
     ax0, ay0, ax1, ay1 = box_a
@@ -88,7 +127,6 @@ def bbox_overlap_ratio(box_a: list[float], box_b: list[float]) -> float:
     area_b = max((bx1 - bx0) * (by1 - by0), 1.0)
     return inter / min(area_a, area_b)
 
-
 def bbox_overlap_area(box_a: list[float], box_b: list[float]) -> float:
     ax0, ay0, ax1, ay1 = box_a
     bx0, by0, bx1, by1 = box_b
@@ -99,7 +137,6 @@ def bbox_overlap_area(box_a: list[float], box_b: list[float]) -> float:
     if x1 <= x0 or y1 <= y0:
         return 0.0
     return round((x1 - x0) * (y1 - y0), 3)
-
 
 def is_code_placeholder_span_text(text: str) -> bool:
     stripped = str(text or "").strip()
@@ -113,7 +150,6 @@ def is_code_placeholder_span_text(text: str) -> bool:
         return True
     return False
 
-
 def should_ignore_overlap_pair(span_a: dict[str, Any], span_b: dict[str, Any]) -> bool:
     text_a = re.sub(r"\s+", " ", str(span_a.get("text") or "")).strip()
     text_b = re.sub(r"\s+", " ", str(span_b.get("text") or "")).strip()
@@ -125,7 +161,6 @@ def should_ignore_overlap_pair(span_a: dict[str, Any], span_b: dict[str, Any]) -
     if text_a == text_b and len(text_a) <= 24 and HEADING_TEXT_RE.fullmatch(text_a):
         return True
     return False
-
 
 def count_overlapping_spans(page: dict[str, Any], threshold: float = 0.55) -> int:
     spans = [span for span in page.get("spans", []) if isinstance(span, dict) and isinstance(span.get("bbox"), list)]
@@ -141,7 +176,6 @@ def count_overlapping_spans(page: dict[str, Any], threshold: float = 0.55) -> in
                 break
     return count
 
-
 def total_overlapping_area(page: dict[str, Any], threshold: float = 0.55) -> float:
     spans = [span for span in page.get("spans", []) if isinstance(span, dict) and isinstance(span.get("bbox"), list)]
     total = 0.0
@@ -154,7 +188,6 @@ def total_overlapping_area(page: dict[str, Any], threshold: float = 0.55) -> flo
             if len(box_b) == 4 and bbox_overlap_ratio(box_a, box_b) >= threshold and not should_ignore_overlap_pair(span, other):
                 total += bbox_overlap_area(box_a, box_b)
     return round(total, 3)
-
 
 def overlap_pair_samples(page: dict[str, Any], threshold: float = 0.55, limit: int = 12) -> list[dict[str, Any]]:
     spans = [span for span in page.get("spans", []) if isinstance(span, dict) and isinstance(span.get("bbox"), list)]
@@ -183,7 +216,6 @@ def overlap_pair_samples(page: dict[str, Any], threshold: float = 0.55, limit: i
                     return pairs
     return pairs
 
-
 def infer_failure_stage(rule: str, category: str, message: str = "") -> str:
     value = " ".join([rule, category, message]).lower()
     if any(token in value for token in ["extract", "text_layer", "glyph", "tounicode", "ocr"]):
@@ -199,7 +231,6 @@ def infer_failure_stage(rule: str, category: str, message: str = "") -> str:
     if any(token in value for token in ["dual", "left", "right", "composite"]):
         return "composite"
     return "unknown"
-
 
 def infer_layout_role(rule: str, message: str = "") -> str:
     value = " ".join([rule, message]).lower()
@@ -220,7 +251,6 @@ def infer_layout_role(rule: str, message: str = "") -> str:
     if "example" in value or "st/" in value or "ht/" in value:
         return "example_or_parallel_text"
     return "main_text"
-
 
 def infer_cause_category(rule: str, message: str = "", failure_stage: str = "") -> str:
     value = " ".join([rule, message, failure_stage]).lower()
@@ -272,7 +302,6 @@ def infer_cause_category(rule: str, message: str = "", failure_stage: str = "") 
         return "paint_composite"
     return "needs_local_verification"
 
-
 def infer_user_feedback_layout_role(text: str) -> str:
     value = text.lower()
     if any(token in value for token in ["人名", "姓名", "citation", "引用", "作者"]):
@@ -294,7 +323,6 @@ def infer_user_feedback_layout_role(text: str) -> str:
     if any(token in value for token in ["字体", "字号", "加粗", "颜色", "换行", "溢出"]):
         return "body_or_heading_text"
     return "main_text"
-
 
 def normalize_user_visual_feedback(text: str, *, default_page: int | str = "global") -> dict[str, Any]:
     page_match = re.search(r"第\s*(\d+)\s*页|p(?:age)?\.?\s*(\d+)", text, flags=re.I)
@@ -328,7 +356,6 @@ def normalize_user_visual_feedback(text: str, *, default_page: int | str = "glob
         "repair_target": repair_target,
         "verification": ["source_vs_candidate_screenshot", "pymupdf_text_bbox_font_color", "manifest_rule_check"],
     }
-
 
 def normalize_finding(finding: dict[str, Any] | str, default_page: int | str = "global") -> dict[str, Any]:
     if isinstance(finding, str):
@@ -375,390 +402,5 @@ def normalize_finding(finding: dict[str, Any] | str, default_page: int | str = "
     }.get(rule, "复核该视觉 finding 对应页，并决定局部重渲染或可读降级交付。")
     return item
 
-
-def has_toc_heading(lines: list[str]) -> bool:
-    joined = "\n".join(lines[:40]).lower()
-    return bool(re.search(r"\b(contents|table of contents)\b|目录", joined))
-
-
-def looks_like_chapter_highlights_page(lines: list[str]) -> bool:
-    joined = "\n".join(lines[:40]).lower()
-    return bool(re.search(r"\bchapter\s+highlights\b|章节要点", joined))
-
-
-def looks_like_toc_page(lines: list[str]) -> bool:
-    if not lines:
-        return False
-    if has_toc_heading(lines):
-        return True
-    if looks_like_chapter_highlights_page(lines):
-        return False
-    numbered_lines = [line for line in lines if re.search(r"\b\d{1,3}\b", line)]
-    if len(numbered_lines) < 6:
-        return False
-    toc_markers = 0
-    for line in numbered_lines:
-        if re.search(r"\.{2,}\s*\d{1,3}\s*$", line):
-            toc_markers += 1
-        elif re.search(r"\s\d{1,3}\s*$", line) and len(line) <= 90:
-            toc_markers += 1
-    page_numbers = toc_page_numbers(lines, include_standalone=False)
-    return (
-        toc_markers >= 4
-        and toc_markers / max(len(numbered_lines), 1) >= 0.45
-        and len(page_numbers) >= 4
-        and page_numbers == sorted(page_numbers)
-    )
-
-
-def numeric_toc_lines(lines: list[str]) -> list[str]:
-    return [line for line in lines if re.search(r"\b\d{1,3}\b", line)]
-
-
-def toc_page_numbers(lines: list[str], *, include_standalone: bool = True) -> list[int]:
-    numbers: list[int] = []
-    for line in lines:
-        compact = line.strip()
-        if include_standalone and re.fullmatch(r"\d{1,3}", compact):
-            numbers.append(int(compact))
-            continue
-        if re.fullmatch(r"(?i)chapter\s+\d{1,3}", compact):
-            continue
-        match = re.search(r"(?:\.{2,}|\s)(\d{1,3})\s*$", compact)
-        if match:
-            numbers.append(int(match.group(1)))
-    return numbers
-
-
-def parse_page_selection(selection: str | None) -> list[int] | None:
-    if selection is None:
-        return None
-    raw = str(selection).strip()
-    if not raw or raw.lower() == "auto":
-        return None
-    pages: list[int] = []
-    for part in raw.split(","):
-        item = part.strip()
-        if not item:
-            continue
-        if "-" in item:
-            start_raw, end_raw = item.split("-", 1)
-            start = int(start_raw)
-            end = int(end_raw)
-            if start <= 0 or end <= 0 or end < start:
-                raise ValueError(f"invalid page range: {item}")
-            pages.extend(range(start, end + 1))
-        else:
-            page = int(item)
-            if page <= 0:
-                raise ValueError(f"invalid page number: {item}")
-            pages.append(page)
-    deduped: list[int] = []
-    seen: set[int] = set()
-    for page in pages:
-        if page not in seen:
-            deduped.append(page)
-            seen.add(page)
-    return deduped
-
-
-def directory_order_findings(source_page: dict[str, Any], translated_page: dict[str, Any]) -> list[dict[str, Any]]:
-    source_lines = normalize_lines(str(source_page.get("text") or ""))
-    translated_lines = normalize_lines(str(translated_page.get("text") or ""))
-    if looks_like_chapter_highlights_page(source_lines) or looks_like_chapter_highlights_page(translated_lines):
-        return []
-    if not looks_like_toc_page(source_lines) and not looks_like_toc_page(translated_lines):
-        return []
-    source_numbers = numeric_toc_lines(source_lines)
-    translated_numbers = numeric_toc_lines(translated_lines)
-    source_page_numbers = toc_page_numbers(source_lines)
-    translated_page_numbers = toc_page_numbers(translated_lines)
-    evidence = {
-        "source_numeric_line_count": len(source_numbers),
-        "translated_numeric_line_count": len(translated_numbers),
-        "toc_line_preservation_ratio": round(len(translated_numbers) / max(len(source_numbers), 1), 3),
-        "source_page_number_count": len(source_page_numbers),
-        "translated_page_number_count": len(translated_page_numbers),
-        "source_page_number_samples": source_page_numbers[:12],
-        "translated_page_number_samples": translated_page_numbers[:12],
-        "source_numeric_line_samples": source_numbers[:8],
-        "translated_numeric_line_samples": translated_numbers[:8],
-    }
-    if len(source_numbers) >= 4 and len(translated_numbers) < max(2, len(source_numbers) // 2):
-        return [{"rule": "toc_line_count_dropped", **evidence}, {"rule": "toc_alignment_drift", **evidence}]
-    if (
-        len(source_page_numbers) >= 4
-        and len(translated_page_numbers) < max(2, len(source_page_numbers) // 2)
-    ):
-        return [{"rule": "toc_page_number_count_dropped", **evidence}, {"rule": "toc_alignment_drift", **evidence}]
-    if len(translated_page_numbers) >= 3 and translated_page_numbers != sorted(translated_page_numbers):
-        return [{"rule": "toc_numeric_order_unstable", **evidence}, {"rule": "toc_alignment_drift", **evidence}]
-    return []
-
-
-def directory_order_warnings(source_page: dict[str, Any], translated_page: dict[str, Any]) -> list[str]:
-    return [item["rule"] for item in directory_order_findings(source_page, translated_page)]
-
-
-def _local_bbox_center(span: dict[str, Any]) -> tuple[float, float] | None:
-    bbox = span.get("bbox")
-    if not isinstance(bbox, list) or len(bbox) != 4:
-        return None
-    try:
-        return ((float(bbox[0]) + float(bbox[2])) / 2.0, (float(bbox[1]) + float(bbox[3])) / 2.0)
-    except (TypeError, ValueError):
-        return None
-
-
-def has_near_acceptable_duplicate_span(
-    text: str,
-    small_span: dict[str, Any],
-    spans: list[dict[str, Any]],
-    threshold: float,
-) -> bool:
-    small_center = _local_bbox_center(small_span)
-    if small_center is None:
-        return False
-    for candidate in spans:
-        if candidate is small_span:
-            continue
-        candidate_text = re.sub(r"\s+", " ", str(candidate.get("text") or "")).strip()
-        if candidate_text != text or float(candidate.get("size") or 0) < threshold:
-            continue
-        candidate_center = _local_bbox_center(candidate)
-        if candidate_center is None:
-            continue
-        if abs(candidate_center[0] - small_center[0]) <= 45 and abs(candidate_center[1] - small_center[1]) <= 10:
-            return True
-    return False
-
-
-def is_allowed_compact_label(text: str) -> bool:
-    stripped = text.strip()
-    if not stripped:
-        return False
-    if "@" in stripped or "://" in stripped or stripped.lower().startswith(("doi", "http")):
-        return True
-    if re.fullmatch(r"\d+(?:\.\d+)?%?", stripped):
-        return True
-    if re.fullmatch(r"[A-Za-z0-9_.%+-]+\.[A-Za-z]{2,}(?:\.[A-Za-z]{2,})?", stripped):
-        return True
-    if re.fullmatch(r"(?:AI|ML|NLP|GPU|CPU|API|LLM|GPT|R&D|EU|US|UK|OECD|UN|GDP|STEM)", stripped):
-        return True
-    if re.fullmatch(r"(?:OpenAI|GPT|ChatGPT)\s+o?\d+[A-Za-z]*", stripped):
-        return True
-    return False
-
-
-def is_neutral_compact_label(text: str) -> bool:
-    stripped = text.strip()
-    if not stripped:
-        return False
-    if re.fullmatch(r"[A-Z][A-Za-z'’.-]{1,24}", stripped):
-        return True
-    if re.search(r"\bvs\.?\b", stripped, re.IGNORECASE) and re.search(
-        r"\b(?:HT|MT|NMT|LLM|GPT|AI)\b",
-        stripped,
-        re.IGNORECASE,
-    ):
-        return True
-    return False
-
-
-def small_font_stats(page: dict[str, Any], threshold: float = 6.0) -> dict[str, Any]:
-    spans = [span for span in page.get("spans", []) if isinstance(span, dict)]
-    small = []
-    ignored = []
-    for span in spans:
-        text = str(span.get("text") or "").strip()
-        if not (
-            isinstance(span.get("size"), (int, float))
-            and float(span.get("size") or 0) > 0
-            and float(span.get("size") or 0) < threshold
-            and text
-        ):
-            continue
-        if (
-            text == "\x03"
-            or re.fullmatch(r"\d{1,3}", text)
-            or is_allowed_compact_label(text)
-            or is_neutral_compact_label(text)
-            or has_near_acceptable_duplicate_span(text, span, spans, threshold)
-        ):
-            ignored.append(span)
-        else:
-            small.append(span)
-    total_chars = sum(len(str(span.get("text") or "")) for span in spans)
-    small_chars = sum(len(str(span.get("text") or "")) for span in small)
-    return {
-        "threshold": threshold,
-        "span_count": len(spans),
-        "small_font_span_count": len(small),
-        "ignored_small_font_span_count": len(ignored),
-        "small_font_char_ratio": round(small_chars / max(total_chars, 1), 3),
-        "small_font_samples": [str(span.get("text") or "")[:40] for span in small[:8]],
-        "ignored_small_font_samples": [str(span.get("text") or "")[:40] for span in ignored[:8]],
-    }
-
-
-HEADING_TEXT_RE = re.compile(
-    r"^(?:摘要|引言|文献综述|方法|结果|讨论|结论|参考文献|目录|贡献者|概览|章节要点|"
-    r"数据可用性|注释|致谢|作者贡献|利益冲突|伦理批准|知情同意|附加信息|"
-    r"第一章|第二章|第三章|第四章|第五章|第六章|第七章|研究与开发|技术性能|负责任的人工智能|经济|科学|医学|教育|"
-    r"Abstract|Introduction|Literature Review|Methods?|Results?|Discussion|Conclusions?|References|Contents|"
-    r"Data availability|Notes|Acknowledgements|Author contributions|Competing interests|Ethics approval|Informed consent|Additional information|"
-    r"Contributors|Overview|Chapter Highlights|Chapter\s+\d+|Research and Development|Technical Performance|Responsible AI|Economy|Science|Medicine|Education)$",
-    re.I,
-)
-
-
-def tiny_heading_spans(page: dict[str, Any], threshold: float = 6.0) -> list[dict[str, Any]]:
-    samples: list[dict[str, Any]] = []
-    spans = page.get("spans", []) if isinstance(page.get("spans"), list) else []
-    for span in spans:
-        if not isinstance(span, dict):
-            continue
-        text = re.sub(r"\s+", " ", str(span.get("text") or "")).strip()
-        size = float(span.get("size") or 0)
-        if text and 0 < size < threshold and HEADING_TEXT_RE.fullmatch(text):
-            if has_near_acceptable_duplicate_span(text, span, spans, threshold):
-                continue
-            samples.append({"text": text, "size": round(size, 2), "bbox": span.get("bbox")})
-    return samples
-
-
-HEADING_TRANSLATION_PAIRS = {
-    "abstract": "摘要",
-    "introduction": "引言",
-    "literature review": "文献综述",
-    "methods": "方法",
-    "method": "方法",
-    "results": "结果",
-    "result": "结果",
-    "discussion": "讨论",
-    "conclusion": "结论",
-    "conclusions": "结论",
-    "references": "参考文献",
-    "chapter 1": "第一章",
-    "chapter 2": "第二章",
-    "chapter 3": "第三章",
-    "chapter 4": "第四章",
-    "chapter 5": "第五章",
-    "chapter 6": "第六章",
-    "chapter 7": "第七章",
-    "research and development": "研究与开发",
-    "technical performance": "技术性能",
-    "responsible ai": "负责任的人工智能",
-    "economy": "经济",
-    "science": "科学",
-    "medicine": "医学",
-    "education": "教育",
-}
-
-LATIN_PERSON_NAME_RE = re.compile(r"^(?:[A-Z][A-Za-z'’.-]+|[A-Z]\.)(?:\s+(?:[A-Z][A-Za-z'’.-]+|[A-Z]\.)){1,4}$")
-LATIN_NAME_EXCLUDE_WORDS = {
-    "chapter",
-    "research",
-    "development",
-    "introduction",
-    "science",
-    "medicine",
-    "education",
-    "economy",
-    "responsible",
-    "technical",
-    "performance",
-    "public",
-    "opinion",
-    "policy",
-    "governance",
-    "ai",
-    "index",
-    "report",
-    "contributors",
-    "the",
-    "of",
-    "and",
-    "by",
-    "national",
-    "affiliation",
-    "sector",
-    "organization",
-    "geographic",
-    "distribution",
-    "north",
-    "south",
-    "east",
-    "west",
-    "central",
-    "latin",
-    "america",
-    "australia",
-    "brazil",
-    "canada",
-    "denmark",
-    "europe",
-    "finland",
-    "france",
-    "germany",
-    "india",
-    "israel",
-    "italy",
-    "japan",
-    "netherlands",
-    "asia",
-    "africa",
-    "middle",
-    "united",
-    "states",
-    "kingdom",
-    "arab",
-    "emirates",
-    "saudi",
-    "arabia",
-    "singapore",
-    "spain",
-    "sweden",
-    "switzerland",
-    "korea",
-    "zeki",
-    "data",
-    "using",
-}
-LATIN_PERSON_NAME_EXCLUDE_PHRASES = {
-    "Geographic Distribution",
-    "North America",
-    "Latin America",
-    "United States",
-    "United Kingdom",
-    "United Arab",
-    "United Arab Emirates",
-    "Arab Emirates",
-    "Saudi Arabia",
-    "South Korea",
-    "Australia",
-    "Brazil",
-    "Canada",
-    "Denmark",
-    "Finland",
-    "France",
-    "Germany",
-    "India",
-    "Israel",
-    "Italy",
-    "Japan",
-    "Netherlands",
-    "Singapore",
-    "Spain",
-    "Sweden",
-    "Switzerland",
-    "Zeki Data",
-    "Using Zeki",
-}
-
-CHART_TITLE_TRANSLATION_REQUIREMENTS = {
-    "by sector and organization": ["部门", "组织"],
-    "by national affiliation": ["国家", "地区"],
-}
-
-NATURE_PUBLISHER_BADGE_REGION = [465.0, 112.0, 575.0, 165.0]
+SCRIPT_INTERFACE = "internal-module"
+SCRIPT_INTERFACE_REASON = "由兼容入口调用的职责模块，不提供独立命令。"

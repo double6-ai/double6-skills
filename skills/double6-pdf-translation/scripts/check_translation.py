@@ -1,126 +1,98 @@
-#!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Double6 Skills，2026-10-17：基于paper-translation维护源码整理；变更见Skill根目录MODIFICATIONS.md。
+"""兼容入口；实现按职责拆分，公开函数名称与命令保持。"""
 from __future__ import annotations
+from check_translation_context import *
+from check_translation_core import (
+    load_glossary,
+    load_json,
+    load_translation_blocks,
+    contains_term,
+    normalize_quality_text,
+    should_use_document_translation,
+    block_translation_or_document,
+    policy_source_present,
+    policy_translation_ok,
+    manifest_source_text,
+    metadata_source_text,
+    policy_source_location,
+    first_seen_block_for_policy,
+    expected_translation_alternatives,
+    excerpt,
+    block_page_map,
+    enrich_issue_locations,
+    normalize_percent,
+)
+from check_translation_terms import (
+    extract_percentages,
+    check_bad_acronym_translation,
+    check_bad_acronym_translation_blocks,
+    check_glossary,
+    check_glossary_by_blocks,
+    check_default_term_policies,
+    check_term_policy,
+    check_entity_policies,
+    check_entity_map_policies,
+)
+from check_translation_residue import (
+    protected_values,
+    term_policy_terms,
+    entity_policy_terms,
+    is_allowed_technical_residue,
+    classify_english_residue,
+    is_likely_allowed_english_phrase,
+    strip_role_passthrough_lines,
+    check_untranslated_english,
+    check_translation_metadata_leak,
+    check_sections,
+)
+from check_translation_fidelity import (
+    check_faithfulness_markers,
+    has_reference_context,
+    extract_protected_reference_values,
+    check_citation_claim_drift,
+    check_quantitative_fidelity,
+    check_block_faithfulness,
+    check_source_extraction_quality,
+    page_tail_map_from_manifest,
+    build_intra_page_continuity,
+    build_coverage_gate,
+    check_source_coverage,
+    check_protected_spans,
+)
+from check_translation_gates import (
+    gate_status,
+    check_translation_blocks,
+    check_render_manifest,
+    collect_issues,
+)
+from check_translation_reports import (
+    render_quality_report,
+    build_review_focus,
+    build_science_qa_review_items,
+    build_quality_report,
+    build_alignment_report,
+)
+from check_translation_memory import (
+    detect_domain_term_seeds,
+    merge_policy_row,
+    build_term_policy,
+    build_entity_map,
+    build_document_memory,
+)
+from check_translation_repairs import (
+    build_qa_checks,
+    repair_type_for_issue,
+    build_affected_blocks,
+    repair_decision,
+    normalize_manual_confirmations,
+    build_confirmed_repair_plan,
+    build_parser,
+    main,
+)
 
-import argparse
-import csv
-import json
-import re
-import unicodedata
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
-
-import repair_quality_issues
-from check_translation_memory import *  # noqa: F401,F403
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Check an academic paper translation for terminology and structure risks.")
-    parser.add_argument("--source", required=True, help="Source Markdown/text path.")
-    parser.add_argument("--translation", required=True, help="Translation Markdown/text path.")
-    parser.add_argument("--glossary", help="Glossary TSV path.")
-    parser.add_argument("--source-manifest", help="source_manifest.json path. Defaults to beside source.")
-    parser.add_argument("--protected-spans", help="protected_spans.json path. Defaults to beside source.")
-    parser.add_argument("--translation-blocks", help="translation_blocks.jsonl path. Defaults to beside translation.")
-    parser.add_argument("--render-manifest", help="render_manifest.json path. Defaults to beside translation.")
-    parser.add_argument("--output", help="Quality report path. Defaults to quality_report.md beside the translation.")
-    return parser
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    source_path = Path(args.source)
-    translation_path = Path(args.translation)
-    glossary_path = Path(args.glossary) if args.glossary else None
-    manifest_path = Path(args.source_manifest) if args.source_manifest else source_path.with_name("source_manifest.json")
-    protected_spans_path = Path(args.protected_spans) if args.protected_spans else source_path.with_name("protected_spans.json")
-    translation_blocks_path = Path(args.translation_blocks) if args.translation_blocks else translation_path.with_name("translation_blocks.jsonl")
-    render_manifest_path = Path(args.render_manifest) if args.render_manifest else translation_path.with_name("render_manifest.json")
-    output_path = Path(args.output) if args.output else translation_path.with_name("quality_report.md")
-
-    source = source_path.read_text(encoding="utf-8", errors="replace")
-    translation = translation_path.read_text(encoding="utf-8", errors="replace")
-    glossary = load_glossary(glossary_path)
-    manifest = load_json(manifest_path)
-    manifest["coverage_gate"] = manifest.get("coverage_gate") if isinstance(manifest.get("coverage_gate"), dict) else build_coverage_gate(manifest, translation)
-    protected_spans = load_json(protected_spans_path)
-    translation_blocks = load_translation_blocks(translation_blocks_path)
-    render_manifest = load_json(render_manifest_path)
-    term_policy = build_term_policy(glossary, manifest=manifest, source=source)
-    entity_map = build_entity_map(manifest, glossary)
-    issues = collect_issues(
-        source,
-        translation,
-        glossary,
-        manifest=manifest,
-        protected_spans=protected_spans,
-        translation_blocks=translation_blocks,
-        render_manifest=render_manifest,
-    )
-    report = render_quality_report(issues)
-    output_path.write_text(report, encoding="utf-8")
-    output_path.with_name("alignment_report.json").write_text(
-        json.dumps(build_alignment_report(manifest, translation_blocks), ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    output_path.with_name("document_memory.json").write_text(
-        json.dumps(
-            build_document_memory(manifest, glossary, entity_map=entity_map, term_policy=term_policy),
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    output_path.with_name("term_policy.json").write_text(
-        json.dumps(term_policy, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    output_path.with_name("entity_map.json").write_text(
-        json.dumps(entity_map, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    output_path.with_name("qa_checks.json").write_text(
-        json.dumps(build_qa_checks(issues), ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    affected_blocks = build_affected_blocks(issues, manifest, translation_blocks)
-    output_path.with_name("affected_blocks.json").write_text(
-        json.dumps(affected_blocks, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    output_path.with_name("confirmed_repair_plan.json").write_text(
-        json.dumps(
-            build_confirmed_repair_plan(
-                load_json(output_path.with_name("manual_confirmations.json")),
-                affected_blocks,
-                manifest,
-                translation_blocks,
-            ),
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    repaired_translation, qa_repair_plan = repair_quality_issues.repair_translation(
-        translation,
-        affected_blocks,
-        repair_quality_issues.DEFAULT_RESIDUE_TRANSLATIONS,
-    )
-    repaired_path = output_path.with_name("translation.qa_repaired.md")
-    qa_repair_plan_path = output_path.with_name("qa_repair_plan.json")
-    repaired_path.write_text(repaired_translation, encoding="utf-8")
-    qa_repair_plan.update(
-        {
-            "input_translation": str(translation_path),
-            "affected_blocks": str(output_path.with_name("affected_blocks.json")),
-            "output_translation": str(repaired_path),
-        }
-    )
-    qa_repair_plan_path.write_text(json.dumps(qa_repair_plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(str(output_path))
-    return 0
-
+from legacy_module_api import bind_legacy_exports
+bind_legacy_exports(globals(), {'load_glossary': 'check_translation_core', 'load_json': 'check_translation_core', 'load_translation_blocks': 'check_translation_core', 'contains_term': 'check_translation_core', 'normalize_quality_text': 'check_translation_core', 'should_use_document_translation': 'check_translation_core', 'block_translation_or_document': 'check_translation_core', 'policy_source_present': 'check_translation_core', 'policy_translation_ok': 'check_translation_core', 'manifest_source_text': 'check_translation_core', 'metadata_source_text': 'check_translation_core', 'policy_source_location': 'check_translation_core', 'first_seen_block_for_policy': 'check_translation_core', 'expected_translation_alternatives': 'check_translation_core', 'excerpt': 'check_translation_core', 'block_page_map': 'check_translation_core', 'enrich_issue_locations': 'check_translation_core', 'normalize_percent': 'check_translation_core', 'extract_percentages': 'check_translation_terms', 'check_bad_acronym_translation': 'check_translation_terms', 'check_bad_acronym_translation_blocks': 'check_translation_terms', 'check_glossary': 'check_translation_terms', 'check_glossary_by_blocks': 'check_translation_terms', 'check_default_term_policies': 'check_translation_terms', 'check_term_policy': 'check_translation_terms', 'check_entity_policies': 'check_translation_terms', 'check_entity_map_policies': 'check_translation_terms', 'protected_values': 'check_translation_residue', 'term_policy_terms': 'check_translation_residue', 'entity_policy_terms': 'check_translation_residue', 'is_allowed_technical_residue': 'check_translation_residue', 'classify_english_residue': 'check_translation_residue', 'is_likely_allowed_english_phrase': 'check_translation_residue', 'strip_role_passthrough_lines': 'check_translation_residue', 'check_untranslated_english': 'check_translation_residue', 'check_translation_metadata_leak': 'check_translation_residue', 'check_sections': 'check_translation_residue', 'check_faithfulness_markers': 'check_translation_fidelity', 'has_reference_context': 'check_translation_fidelity', 'extract_protected_reference_values': 'check_translation_fidelity', 'check_citation_claim_drift': 'check_translation_fidelity', 'check_quantitative_fidelity': 'check_translation_fidelity', 'check_block_faithfulness': 'check_translation_fidelity', 'check_source_extraction_quality': 'check_translation_fidelity', 'page_tail_map_from_manifest': 'check_translation_fidelity', 'build_intra_page_continuity': 'check_translation_fidelity', 'build_coverage_gate': 'check_translation_fidelity', 'check_source_coverage': 'check_translation_fidelity', 'check_protected_spans': 'check_translation_fidelity', 'gate_status': 'check_translation_gates', 'check_translation_blocks': 'check_translation_gates', 'check_render_manifest': 'check_translation_gates', 'collect_issues': 'check_translation_gates', 'render_quality_report': 'check_translation_reports', 'build_review_focus': 'check_translation_reports', 'build_science_qa_review_items': 'check_translation_reports', 'build_quality_report': 'check_translation_reports', 'build_alignment_report': 'check_translation_reports', 'detect_domain_term_seeds': 'check_translation_memory', 'merge_policy_row': 'check_translation_memory', 'build_term_policy': 'check_translation_memory', 'build_entity_map': 'check_translation_memory', 'build_document_memory': 'check_translation_memory', 'build_qa_checks': 'check_translation_repairs', 'repair_type_for_issue': 'check_translation_repairs', 'build_affected_blocks': 'check_translation_repairs', 'repair_decision': 'check_translation_repairs', 'normalize_manual_confirmations': 'check_translation_repairs', 'build_confirmed_repair_plan': 'check_translation_repairs', 'build_parser': 'check_translation_repairs', 'main': 'check_translation_repairs'}, ['check_translation_context', 'check_translation_core', 'check_translation_terms', 'check_translation_residue', 'check_translation_fidelity', 'check_translation_gates', 'check_translation_reports', 'check_translation_memory', 'check_translation_repairs'])
 
 if __name__ == "__main__":
     raise SystemExit(main())
