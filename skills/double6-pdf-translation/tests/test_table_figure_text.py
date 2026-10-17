@@ -140,7 +140,7 @@ def test_isac_table_method_names_stay_source(label):
         assert paragraph.layout_label == 'compact_label'
 
 
-@pytest.mark.parametrize('label', ['MNIST', 'EMNIST', 'BCGC', 'GFRC', 'i.i.d.'])
+@pytest.mark.parametrize('label', ['MNIST', 'EMNIST', 'BCGC', 'GFRC', 'i.i.d.', 'non-i.i.d.'])
 def test_dataset_and_scheme_names_stay_source(label):
     for paragraph in by_text(run(NAMES_TABLE), label):
         assert paragraph.layout_label == 'compact_label'
@@ -242,3 +242,33 @@ def test_baseline_anchor_never_moves_text_down_or_far_up():
         paragraph.source_baseline = anchor
         units, _ = _typesetter()._layout_typesetting_units(_units('Coal', 10.02), box, 1.0, 1.5, paragraph)
         assert [u.box.y for u in units] == [u.box.y for u in plain]
+
+
+# ---------------------------------------------------------------- 短词翻译范围
+
+@pytest.mark.parametrize('label,value,expected', [
+    ('fallback_line', 'Coal', True),    # USGS Table 1 行名
+    ('fallback_line', 'Rate', True),    # arXiv:2610.21653 Table I 表头第一行
+    ('fallback_line', 'Loss', True),
+    ('fallback_line', 'Cost', True),
+    ('fallback_line', 'ESS', False),    # 全大写缩写仍按最短长度跳过
+    ('fallback_line', '2019', False),
+    ('fallback_line', '(a)', False),
+    ('plain text', 'Coal', False),      # 正文角色不放宽
+    ('compact_label', 'Coal', False),
+    ('cover_year', '2025', True),
+    ('diagram_node', 'AI', True),
+])
+def test_short_table_words_bypass_min_text_length(label, value, expected):
+    from babeldoc.format.pdf.document_il.utils import paragraph_helper
+    bypass = getattr(paragraph_helper, 'bypasses_min_text_length', None)
+    assert bypass is not None, 'bypasses_min_text_length helper missing'
+    assert bypass(NS(layout_label=label, unicode=value)) is expected
+
+
+def test_released_usgs_coal_row_reaches_translation():
+    from babeldoc.format.pdf.document_il.utils import paragraph_helper
+    bypass = getattr(paragraph_helper, 'bypasses_min_text_length', None)
+    assert bypass is not None
+    coal = by_text(run(USGS_TABLE), 'Coal')[0]
+    assert translatable(coal) and bypass(coal)
