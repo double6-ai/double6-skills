@@ -272,3 +272,22 @@ def test_released_usgs_coal_row_reaches_translation():
     assert bypass is not None
     coal = by_text(run(USGS_TABLE), 'Coal')[0]
     assert translatable(coal) and bypass(coal)
+
+
+# ---------------------------------------------------------------- 放开范围
+
+LEGEND = 'arxiv2505.23884-p3-fig1-legend.json'
+
+
+@pytest.mark.parametrize('label', ['Ours Linear', 'Ours Nonlinear', 'Original TTT-Linear', 'Mamba2'])
+def test_chart_legend_entries_outside_tables_and_nodes_keep_source(label):
+    # 白底绘图区里的图例多是方法名，且排得很紧；第一次真实回归中把它们送去翻译，
+    # 译文在硬可读下限下放不下，整份文档被阻断。只在表格区与有色填充节点内放开。
+    for paragraph in by_text(run(LEGEND), label):
+        assert paragraph.layout_label == 'compact_label'
+
+
+def test_coloured_fill_detection_ignores_white_plot_areas():
+    from babeldoc.format.pdf.document_il.midend.table_figure_text import figure_nodes
+    assert figure_nodes(load_page(LEGEND)[1]) == []
+    assert len(figure_nodes(load_page('arxiv2610.21759-p4-fig2.json')[1])) >= 2

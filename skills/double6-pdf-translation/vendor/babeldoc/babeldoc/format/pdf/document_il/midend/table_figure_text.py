@@ -97,6 +97,52 @@ def record_source_baselines(finder, page, paragraphs) -> None:
 
 # ------------------------------------------------------------------ 图内节点
 
+_RGB = re.compile(r"(?<![\d.])([\d.]+) ([\d.]+) ([\d.]+) (?:rg|scn|sc)\b")
+_GRAY = re.compile(r"(?<![\d.])([\d.]+) g\b")
+_CMYK = re.compile(r"(?<![\d.])([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+) k\b")
+
+
+def _is_coloured_fill(curve) -> bool:
+    """有色（非白、非浅灰、非纯黑）填充：流程图节点。白色/浅灰底板（图表绘图区、图例框）不算。"""
+    text = getattr(curve.graphic_state, "passthrough_per_char_instruction", "") or ""
+    colours = [tuple(map(float, m)) for m in _RGB.findall(text)]
+    colours += [(float(g),) * 3 for g in _GRAY.findall(text)]
+    for c, m, y, k in (tuple(map(float, x)) for x in _CMYK.findall(text)):
+        colours.append(((1 - c) * (1 - k), (1 - m) * (1 - k), (1 - y) * (1 - k)))
+    return any(min(rgb) < 0.9 and max(rgb) > 0.05 for rgb in colours)
+
+
+def figure_nodes(page):
+    crop = page.cropbox.box if page.cropbox and page.cropbox.box else (page.mediabox.box if page.mediabox else None)
+    if crop is None:
+        return []
+    page_area = max((crop.x2 - crop.x) * (crop.y2 - crop.y), 1.0)
+    nodes = []
+    for curve in page.pdf_curve or []:
+        b = curve.box
+        if not b or not curve.fill_background:
+            continue
+        w, h = b.x2 - b.x, b.y2 - b.y
+        if w >= 40 and h >= 20 and w * h < 0.25 * page_area and _is_coloured_fill(curve):
+            nodes.append(b)
+    return nodes
+
+
+def table_regions(page):
+    return [l.box for l in page.page_layout or []
+            if l.box is not None and (l.class_name or "").lower() in {"table", "table_body", "table_cell"}]
+
+
+def _in_scope(finder, paragraph, nodes, tables) -> bool:
+    """只在表格区域内、或填充节点内/紧贴节点上下的标签上放开翻译；图表绘图区与图例保持原行为。"""
+    b = paragraph.box
+    cx, cy = (b.x + b.x2) / 2, (b.y + b.y2) / 2
+    if any(t.x <= cx <= t.x2 and t.y <= cy <= t.y2 for t in tables):
+        return True
+    _, size = _dominant(finder, paragraph)
+    pad = 0.8 * (size or 8.0)
+    return any(n.x - 2 <= b.x and b.x2 <= n.x2 + 2 and max(n.y - b.y2, b.y - n.y2, 0.0) <= pad for n in nodes)
+
 def _same_baseline_sibling(finder, paragraph, members, size):
     base = estimate_baseline(finder, paragraph)
     base = paragraph.box.y if base is None else base
@@ -111,18 +157,7 @@ def _same_baseline_sibling(finder, paragraph, members, size):
 
 
 def merge_figure_node_lines(finder, page, paragraphs) -> list[str]:
-    crop = page.cropbox.box if page.cropbox and page.cropbox.box else (page.mediabox.box if page.mediabox else None)
-    if crop is None:
-        return []
-    page_area = max((crop.x2 - crop.x) * (crop.y2 - crop.y), 1.0)
-    nodes = []
-    for curve in page.pdf_curve or []:
-        b = curve.box
-        if not b or not curve.fill_background:
-            continue
-        w, h = b.x2 - b.x, b.y2 - b.y
-        if w >= 40 and h >= 20 and w * h < 0.25 * page_area:
-            nodes.append(b)
+    nodes = figure_nodes(page)
     merged_receipts = []
     used = set()
     for node in sorted(nodes, key=lambda b: (b.x2 - b.x) * (b.y2 - b.y)):
@@ -256,10 +291,18 @@ def _neighbours(finder, a, b) -> bool:
 def release_natural_compact_labels(finder, page, paragraphs, prior_labels) -> list[str]:
     released = []
     pending = []
+    nodes = figure_nodes(page)
+    tables = table_regions(page)
     for paragraph in paragraphs:
-        if paragraph.layout_label != "compact_label" or id(paragraph) not in prior_labels:
+        if paragraph.layout_label != "compact_label" or id(paragraph) not in prior_labels or paragraph.box is None:
             continue
         text = _text(finder, paragraph)
+        if CAPTION.match(text) and is_natural_label(text):
+            paragraph.layout_label = prior_labels[id(paragraph)] or "fallback_line"
+            released.append(text)
+            continue
+        if not _in_scope(finder, paragraph, nodes, tables):
+            continue
         if is_natural_label(text):
             paragraph.layout_label = prior_labels[id(paragraph)] or "fallback_line"
             released.append(text)
