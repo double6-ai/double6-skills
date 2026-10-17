@@ -32,6 +32,7 @@ CODES: dict[str, tuple[str, str]] = {
     'source_language_mixed': ('warning', '源文中英混合比例较高，语言判定不确定；请确认源文主体是英文。'),
     'source_language_unknown': ('info', '可抽取文字过少，无法判定源语言（常见于扫描件或文字转曲）。'),
     'page_load_failed': ('error', '部分页面无法解析。'),
+    'preflight_guard_stopped': ('error', '输入预检子进程超出内存或时限预算被停止。'),
 }
 
 _CJK = re.compile(r'[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]')
@@ -172,6 +173,8 @@ def inspect_pdf(path, *, max_pages: int | None = DIGITAL_MAX_PAGES, target_langu
                                     f'PDF 共 {count} 页，超过当前路线上限 {max_pages} 页；电子 PDF 主入口只接受完整 1–{DIGITAL_MAX_PAGES} 页，'
                                     '长文档请先按完整语义单元拆分。',
                                     page_count=count, max_pages=max_pages))
+            # 页数一旦确定超限即短路：不再逐页解析（版面分类与语言抽样都只在范围内执行）。
+            return summarize(findings, **facts)
         texts, failed = [], []
         for index in range(count):
             try:
@@ -199,9 +202,33 @@ def inspect_pdf(path, *, max_pages: int | None = DIGITAL_MAX_PAGES, target_langu
     return summarize(findings, **facts)
 
 
+def main(argv=None) -> int:
+    """有界子进程入口：只写结构化报告；阻断与否由调用方读取报告决定。"""
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(description='structured PDF input preflight (read-only)')
+    parser.add_argument('--input', type=Path, required=True)
+    parser.add_argument('--max-pages', type=int, default=DIGITAL_MAX_PAGES)
+    parser.add_argument('--target-language', default='zh')
+    parser.add_argument('--require-digital', action='store_true')
+    parser.add_argument('--output', type=Path, required=True)
+    args = parser.parse_args(argv)
+    report = inspect_pdf(args.input, max_pages=args.max_pages, target_language=args.target_language,
+                         require_digital=args.require_digital)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    with args.output.open('x', encoding='utf-8') as stream:
+        stream.write(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
+    return 0
+
+
 def raise_for_blocked(result: dict[str, Any]) -> None:
     if result['status'] == 'blocked':
         first = next(f for f in result['findings'] if f['severity'] == 'error')
         exc = PreflightError(first['code'], first['message'], **first['details'])
         exc.result = result
         raise exc
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

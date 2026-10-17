@@ -154,6 +154,8 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
     def record(sample: dict[str, Any]) -> None:
         peak["task"] = max(peak["task"], int(sample.get("task_rss", 0)))
         peak["rss_sum"] = max(peak["rss_sum"], int(sample.get("task_rss_sum", sample.get("task_rss", 0))))
+    # 基线与收尾样本同样计入峰值；否则短于一个采样间隔的作业峰值会记为 0。
+    record(baseline)
     deadline = min(start+timeout_seconds,deadline_monotonic) if deadline_monotonic is not None else start+timeout_seconds
     reserve = min(5,max(.1,timeout_seconds*.35)) if cleanup_reserve_seconds is None else cleanup_reserve_seconds
     if reserve <= 0 or reserve >= deadline-start:
@@ -190,7 +192,10 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
         if not trigger:
             worker = threading.Thread(target=execute, daemon=True)
             worker.start()
-            while not done.wait(max(.001,min(interval_seconds,max(0,work_deadline-time.monotonic())))):
+            # 启动后尽快采第一次样（50 ms），之后按 interval 采样，避免快作业完全漏采。
+            wait = min(.05, interval_seconds)
+            while not done.wait(max(.001,min(wait,max(0,work_deadline-time.monotonic())))):
+                wait = interval_seconds
                 identity, members = launched_members(identity_path, nonce)
                 for proc in members:
                     children[proc.pid] = proc
@@ -231,6 +236,7 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
                 done.wait(max(0,min(1,deadline-time.monotonic())))
             _, members = launched_members(identity_path,nonce)
             final = observe(members)
+            record(final)
             stream.write(json.dumps(final) + "\n"); stream.flush()
             trigger = trigger or violation(final, baseline, rss_limit=rss_limit, max_processes=max_processes)
     finally:

@@ -22,6 +22,7 @@
 
 - 新增 `scripts/pdf_input_preflight.py`、`scripts/resource_limits.py`、`scripts/render_residue_check.py`（AGPL-3.0-only 一方代码）。
 - 修改 `scripts/paper_translation_workflow.py`、`scripts/bounded_execution.py`、`scripts/scan_input_preflight.py`、`scripts/qa_pipeline.py`、`scripts/scanned_raster/constants.py` 及 `schemas/scan-input-preflight.schema.json`：结构化预检与错误码、可配置资源上限与 PSS 计量、真实错误消息收据、源语言检测、渲染英文残留检查、`candidate` 质量失败退出码 3（附失败原因）、版本号统一。
+- 评审修复：`scripts/resource_limits.py`（冻结合同权威、覆盖冲突错误码、建议合同）、`scripts/render_residue_check.py`（参考文献/代码/URL/引用剔除）、`scripts/paper_translation_workflow.py`（任意路线质量结论与退出码 3、有界输入预检、冻结预算执行）、`scripts/pdf_input_preflight.py`（页数超限短路、子进程入口）、`scripts/bounded_execution.py`（峰值含基线与收尾样本）；新增 `tests/test_rc3_review_fixes.py`。
 - 未修改 vendored PDFMathTranslate-next / BabelDOC 源码。
 
 ## 与所标上游版本有差异的实现文件

@@ -32,7 +32,11 @@ ENV_METRIC = 'PAPER_TRANSLATION_MEMORY_METRIC'
 
 
 class ResourceLimitError(ValueError):
-    pass
+    """资源参数错误；``code`` 进入结构化输出的 ``error_code``。"""
+
+    def __init__(self, message: str, code: str = 'resource_limit_invalid'):
+        super().__init__(message)
+        self.code = code
 
 
 def platform_key(platform: str | None = None) -> str:
@@ -87,7 +91,8 @@ def resolve_limits(*, memory_mib: int | None = None, timeout_seconds: int | None
             if base['task_rss_bytes'] > total_memory * EXPLICIT_TOTAL_FRACTION:
                 raise ResourceLimitError(
                     f"task_memory_limit_exceeds_host_authorization: {base['task_rss_bytes'] // MIB} MiB > "
-                    f"{int(EXPLICIT_TOTAL_FRACTION * 100)}% of physical memory ({total_memory // MIB} MiB)")
+                    f"{int(EXPLICIT_TOTAL_FRACTION * 100)}% of physical memory ({total_memory // MIB} MiB)",
+                    'task_memory_limit_exceeds_host_authorization')
         elif base['task_rss_bytes'] > total_memory * DEFAULT_TOTAL_FRACTION:
             base['task_rss_bytes'] = int(total_memory * DEFAULT_TOTAL_FRACTION) // MIB * MIB
             clamped = True
@@ -97,7 +102,72 @@ def resolve_limits(*, memory_mib: int | None = None, timeout_seconds: int | None
 
 
 def contract_from_limits(limits: Mapping[str, Any]) -> dict[str, Any]:
-    return {'task_rss_bytes': limits['task_rss_bytes'], 'per_job_seconds': limits['per_job_seconds'], 'concurrency': 1}
+    return {'task_rss_bytes': limits['task_rss_bytes'], 'per_job_seconds': limits['per_job_seconds'], 'concurrency': 1,
+            'memory_metric': limits['memory_metric']}
+
+
+def recommended_contract(platform: str | None = None) -> dict[str, Any]:
+    """本平台冻结 FREEZE 时建议写入的资源合同（显式含计量口径）。"""
+    base = PLATFORM_DEFAULTS.get(platform_key(platform), FALLBACK_DEFAULT)
+    return contract_from_limits(base)
+
+
+def _requested_overrides(memory_mib, timeout_seconds, memory_metric, environ) -> dict[str, tuple[Any, str]]:
+    requested: dict[str, tuple[Any, str]] = {}
+    if memory_mib is not None:
+        requested['task_rss_bytes'] = (_int(memory_mib, 'memory_mib') * MIB, 'cli --task-memory-mib')
+    elif environ.get(ENV_MEMORY):
+        requested['task_rss_bytes'] = (_int(environ[ENV_MEMORY], ENV_MEMORY) * MIB, 'env ' + ENV_MEMORY)
+    if timeout_seconds is not None:
+        requested['per_job_seconds'] = (_int(timeout_seconds, 'timeout_seconds'), 'cli --job-timeout-seconds')
+    elif environ.get(ENV_SECONDS):
+        requested['per_job_seconds'] = (_int(environ[ENV_SECONDS], ENV_SECONDS), 'env ' + ENV_SECONDS)
+    if memory_metric is not None:
+        requested['memory_metric'] = (memory_metric, 'cli --memory-metric')
+    elif environ.get(ENV_METRIC):
+        requested['memory_metric'] = (environ[ENV_METRIC].strip().lower(), 'env ' + ENV_METRIC)
+    return requested
+
+
+def limits_from_frozen_contract(contract: Any, *, memory_mib: int | None = None, timeout_seconds: int | None = None,
+                                memory_metric: str | None = None, platform: str | None = None,
+                                environ: Mapping[str, str] | None = None,
+                                total_memory: int | None = None) -> dict[str, Any]:
+    """FREEZE 绑定的动作以冻结的 ``resource_contract`` 为唯一权威预算。
+
+    - 实际执行的内存上限、单作业时限和计量口径全部取自冻结合同；
+      合同未写 ``memory_metric`` 时按其原始含义 ``rss`` 解释（旧 3 GiB/120 s 合同）。
+    - 命令行或环境变量给出的覆盖值必须与冻结值完全相同，否则以
+      ``resource_override_conflicts_with_freeze`` 拒绝；要换预算请重新冻结。
+    - 冻结内存仍须不超过物理内存 50%。
+    """
+    environ = os.environ if environ is None else environ
+    validated = validate_resource_contract(contract)
+    frozen = {'task_rss_bytes': validated['task_rss_bytes'], 'per_job_seconds': validated['per_job_seconds'],
+              'memory_metric': validated.get('memory_metric', 'rss')}
+    requested = _requested_overrides(memory_mib, timeout_seconds, memory_metric, environ)
+    conflicts = [f'{key}: requested {value} via {origin}, frozen {frozen[key]}'
+                 for key, (value, origin) in requested.items() if value != frozen[key]]
+    if conflicts:
+        raise ResourceLimitError(
+            'resource_override_conflicts_with_freeze: ' + '; '.join(conflicts)
+            + '. The frozen resource_contract is authoritative for this action; remove the override '
+              'or re-freeze with the intended resource_contract.', 'resource_override_conflicts_with_freeze')
+    if total_memory is None:
+        try:
+            import psutil
+            total_memory = psutil.virtual_memory().total
+        except Exception:
+            total_memory = None
+    if total_memory and frozen['task_rss_bytes'] > total_memory * EXPLICIT_TOTAL_FRACTION:
+        raise ResourceLimitError(
+            f"task_memory_limit_exceeds_host_authorization: frozen {frozen['task_rss_bytes'] // MIB} MiB > "
+            f"{int(EXPLICIT_TOTAL_FRACTION * 100)}% of physical memory ({total_memory // MIB} MiB)",
+            'task_memory_limit_exceeds_host_authorization')
+    return {**frozen, 'concurrency': 1, 'platform': platform_key(platform),
+            'source': {key: 'freeze' for key in frozen},
+            'overrides_matching_freeze': sorted(requested), 'clamped_to_host_fraction': False,
+            'max_total_fraction': EXPLICIT_TOTAL_FRACTION}
 
 
 def validate_resource_contract(contract: Any) -> dict[str, Any]:
