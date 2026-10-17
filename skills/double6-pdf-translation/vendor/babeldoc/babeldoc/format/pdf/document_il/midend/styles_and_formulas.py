@@ -215,6 +215,20 @@ class StylesAndFormulas:
         # Return Euclidean distance
         return (dx * dx + dy * dy) ** 0.5
 
+    @staticmethod
+    def _stroke_box(box: Box, half_width: float = 0.25) -> Box:
+        """Give a zero-height/zero-width stroke box a nominal line width."""
+        x, y, x2, y2 = box.x, box.y, box.x2, box.y2
+        if y2 - y < 2 * half_width:
+            mid = (y + y2) / 2
+            y, y2 = mid - half_width, mid + half_width
+        if x2 - x < 2 * half_width:
+            mid = (x + x2) / 2
+            x, x2 = mid - half_width, mid + half_width
+        if (x, y, x2, y2) == (box.x, box.y, box.x2, box.y2):
+            return box
+        return Box(x=x, y=y, x2=x2, y2=y2)
+
     def _collect_element_formula_candidates(
         self, page: Page
     ) -> tuple[list, dict, dict]:
@@ -251,6 +265,10 @@ class StylesAndFormulas:
         for curve_idx, curve in enumerate(page.pdf_curve):
             if not curve.box:
                 continue
+            # Double6 PR #2: 分式线等水平/竖直线段的外框高度（或宽度）为 0，
+            # 面积比恒为 0，从未被归入公式，公式随译文移动后线段仍留在原处，
+            # 与正文重叠。只对退化外框补上 0.5pt 线宽再做同样的包含判定。
+            curve_box = self._stroke_box(curve.box)
 
             candidates = []
             for formula_idx, (formula, paragraph_xobj_id) in enumerate(all_formulas):
@@ -262,13 +280,13 @@ class StylesAndFormulas:
                     continue
 
                 # Level 1: Exact IoU matching (zero tolerance) - highest priority
-                if self._is_element_contained_exact(curve.box, formula.box):
-                    iou = calculate_iou_for_boxes(curve.box, formula.box)
+                if self._is_element_contained_exact(curve_box, formula.box):
+                    iou = calculate_iou_for_boxes(curve_box, formula.box)
                     candidates.append((formula_idx, iou, "iou_exact"))
                 # Level 2: Tolerant IoU matching (with tolerance) - distance sorted
-                elif is_element_contained_in_formula(curve.box, formula.box):
+                elif is_element_contained_in_formula(curve_box, formula.box):
                     distance = self._calculate_element_formula_distance(
-                        curve.box, formula.box
+                        curve_box, formula.box
                     )
                     # Convert distance to score (closer = higher score)
                     # Score range: 0.5-0.9 to ensure lower than exact IoU
