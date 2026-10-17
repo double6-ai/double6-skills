@@ -1,0 +1,302 @@
+{
+  "schema_version": 1,
+  "status": "source_metadata_example_unaccepted",
+  "version": "2.0.0",
+  "paper_bytes_bundled": false,
+  "font_bytes_bundled": false,
+  "model_weights_bundled": false,
+  "paths_relative_to": "caller-owned sample directory",
+  "latex": {
+    "title": "A more reasonable proof of Cobham’s theorem",
+    "arxiv_id": "1801.06704v1",
+    "official_pdf_url": "https://arxiv.org/pdf/1801.06704v1",
+    "official_source_url": "https://arxiv.org/src/1801.06704v1",
+    "pdf": {
+      "path": "samples/latex/source.pdf",
+      "sha256": "70d63131f70db4353e65ab620911bba84e3b0bbc00d5e563b53c5f58f4440ff1"
+    },
+    "source_archive": {
+      "path": "samples/latex/source.tar.gz",
+      "sha256": "12f7dd7162496e8e53085bc84bdfbdbd786719ba6259832865aac069c4e4a41e"
+    },
+    "source_files": [
+      {
+        "path": "samples/latex/project/cobham-article.tex",
+        "sha256": "d4c033b3c18cca285adfb379155949f102a70d536ea29c60ea344c56515527b3"
+      },
+      {
+        "path": "samples/latex/project/cobham-article.bbl",
+        "sha256": "16f1e24942f536d21cc90d35c4734fdbc53f6a6dfb39d495ed9220454a72e08c"
+      }
+    ],
+    "semantic_scope": "完整三页v1，包括标题、作者/机构、摘要、正文和文献表；27个可翻译完整语义单元",
+    "acquisition_commands": [
+      "mkdir -p samples/latex/project",
+      "curl --fail --location https://arxiv.org/pdf/1801.06704v1 --output samples/latex/source.pdf",
+      "curl --fail --location https://arxiv.org/src/1801.06704v1 --output samples/latex/source.tar.gz",
+      "shasum -a 256 samples/latex/source.pdf samples/latex/source.tar.gz",
+      "tar -xzf samples/latex/source.tar.gz -C samples/latex/project",
+      "shasum -a 256 samples/latex/project/cobham-article.tex samples/latex/project/cobham-article.bbl"
+    ],
+    "asset_permission": "论文/TeX只作本地验证输入，原文再分发条款另行核对；源码包不包含这些字节",
+    "whole_original_paper": true,
+    "recovery_sample": {
+      "whole_original_paper": false,
+      "semantic_scope": "由同一官方v1 TeX派生完整标题、作者及机构/联系方式前置材料和完整abstract；原subjclass/keywords保留，正文/文献表明确排除。",
+      "construction": "冻结原始TeX开头至唯一完整abstract环境结尾，保留前缀只追加maketitle及end{document}，重新编译匹配源PDF；不用旧译unit。",
+      "status": "derived_source_and_matching_english_pdf_frozen_translation_pending",
+      "g3_full_paper_case_replaced": false,
+      "identity_freeze_rule": "实际源tex及匹配English PDF分别核SHA；重新编译产生不同PDF字节时须新freeze，不能沿用本例PDF SHA。",
+      "source_tex": {
+        "path": "samples/recovery/source.tex",
+        "sha256": "1b3f360ca8821be60ca9e4ba514adf6f77eb4931e1051335fa22ba9d2f90decc"
+      },
+      "matching_source_pdf": {
+        "path": "samples/recovery/source.pdf",
+        "sha256": "be71a2c077b66cb9e15a68fa30674aa17c68f50157454f1cf9dcc12721337074",
+        "pages": 1
+      },
+      "constructor_sha256": "fbeec4e62830771cf99b6afbbdd182181f987f5d5ff26c32e66a0cdb1ea6adb6",
+      "derivation_sha256": "19c52e79fb455566614bfdaf5bac3b22c34d5dedd3edd5c2c899fac0d818ab94",
+      "independent_source_scope_sha256": "975d422f753d5acd197ea20d56b7616609669f3e178391c74c124b63b296084b",
+      "route_usage": [
+        "latex_verified",
+        "digital_pdf"
+      ],
+      "candidate_pdf_generated": false
+    }
+  },
+  "digital_pdf": {
+    "title": "Short proof of Rayleigh’s theorem and extensions",
+    "author": "Olivier Bernardi",
+    "arxiv_id": "1007.4870v3",
+    "official_pdf_url": "https://arxiv.org/pdf/1007.4870v3",
+    "source_pdf": {
+      "path": "samples/digital/1007.4870v3.pdf",
+      "sha256": "2d781479500906dbbadb5e4a139edd2c3dc2bb5aa38117be5aa9ff15a56ceeac",
+      "pages": 3
+    },
+    "whole_original_paper": true,
+    "semantic_scope": "官方v3实际完整三页，包括标题、作者、摘要、正文/证明、图和文献表；abs页comments的2页不覆盖实际PDF页数。",
+    "acquisition_commands": [
+      "mkdir -p samples/digital",
+      "curl --fail --location --max-time 45 --max-filesize 8388608 https://arxiv.org/pdf/1007.4870v3 --output samples/digital/1007.4870v3.pdf",
+      "shasum -a 256 samples/digital/1007.4870v3.pdf"
+    ],
+    "source_review": "独立源先行完整三页可见性/科学字形检查已记录；源码示例不宣称译稿质量或发布接受。",
+    "asset_permission": "官方原件及译稿仅本地验证；非独占获取不授予再分发许可，源码包仅含公开URL/SHA/获得命令。",
+    "status": "frozen_source_translation_candidate_unaccepted"
+  },
+  "acceptance": {
+    "human_accepted": false,
+    "strict_delivery": false,
+    "release_accepted": false
+  },
+  "source_matching_rule": "下载后先逐项核SHA；网络服务返回不同字节时停止复用旧freeze，保存新来源证据并重新冻结，不能忽略SHA差异。",
+  "model_service": {
+    "routes": {
+      "latex_verified": {
+        "model_id": "paper-translation-qwen-no-thinking-20261012-01",
+        "api_contract": "lmstudio_native_chat_v1",
+        "native_model_key": "qwen/qwen3.8-27b",
+        "selected_variant": "@8bit",
+        "official_definition_url": "https://lmstudio.ai/models/qwen/qwen3.8-27b",
+        "official_definition_revision": "4",
+        "official_model_yaml_sha256": "792da9bd63eaefe1db045ddd142e1e20f2593bed06d5786f047383b336c33793",
+        "weight_repository": "lmstudio-community/Qwen3.8-27B-MLX-8bit",
+        "native_architecture": "qwen3_5",
+        "runtime_format": "mlx",
+        "quantization": "8bit",
+        "instance_config": {
+          "context_length": 4096,
+          "parallel": 1
+        },
+        "generation_parameters": {
+          "reasoning": "off",
+          "stream": false,
+          "store": false,
+          "temperature": 0.7,
+          "top_p": 1.0,
+          "repeat_penalty": 1.0,
+          "max_output_tokens": 2048
+        },
+        "sampling_profile": "top_k omitted; actual provider default unknown",
+        "speculative_actual": "unknown",
+        "speculative_request": {
+          "mtp": false,
+          "simple": "unrequested",
+          "draft_model": "unrequested"
+        },
+        "request_vs_observation": {
+          "requested_reasoning": "off",
+          "complete_unit_probe_input_tokens": 224,
+          "complete_unit_probe_output_tokens": 171,
+          "complete_unit_probe_reasoning_tokens": 0,
+          "probe_outcome_sha256": "1b415586e4a921e4a2fa09ce753d4b9f010c626fd1eb0569f48b293b7ab3b539",
+          "scope": "one complete protected source unit; whole-paper semantic/visual acceptance pending",
+          "whole_paper_quality_proven": false
+        },
+        "fingerprint_sha256": "a6770a4116a1dc2cb7f3ff46a1cb01709136e8ac00b50babce3d4ea0f6a24d3b",
+        "fingerprint_scope": "freeze_v13, external actual served service and all asset SHA rechecked; final release source freeze pending",
+        "transport_contract": {
+          "request_timeout_seconds": 110,
+          "max_attempts": 1
+        },
+        "choice_reason": "保护结构失败、旧OpenAI接口忽略reasoning设置及旧完整unit超时保留后，采用独立官方definition和实际原生off接口；不作跨模型能力排名。"
+      },
+      "digital_pdf": {
+        "model_id": "paper-translation-qwen-no-thinking-20261012-01",
+        "api_contract": "lmstudio_native_chat_v1",
+        "native_model_key": "qwen/qwen3.8-27b",
+        "selected_variant": "@8bit",
+        "official_definition_url": "https://lmstudio.ai/models/qwen/qwen3.8-27b",
+        "official_definition_revision": "4",
+        "official_model_yaml_sha256": "792da9bd63eaefe1db045ddd142e1e20f2593bed06d5786f047383b336c33793",
+        "weight_repository": "lmstudio-community/Qwen3.8-27B-MLX-8bit",
+        "native_architecture": "qwen3_5",
+        "runtime_format": "mlx",
+        "quantization": "8bit",
+        "instance_config": {
+          "context_length": 4096,
+          "parallel": 1
+        },
+        "generation_parameters": {
+          "reasoning": "off",
+          "stream": false,
+          "store": false,
+          "temperature": 0.7,
+          "top_p": 1.0,
+          "repeat_penalty": 1.0,
+          "max_output_tokens": 2048
+        },
+        "sampling_profile": "top_k omitted; actual provider default unknown",
+        "speculative_actual": "unknown",
+        "speculative_request": {
+          "mtp": false,
+          "simple": "unrequested",
+          "draft_model": "unrequested"
+        },
+        "request_vs_observation": {
+          "requested_reasoning": "off",
+          "complete_unit_probe_input_tokens": 224,
+          "complete_unit_probe_output_tokens": 171,
+          "complete_unit_probe_reasoning_tokens": 0,
+          "probe_outcome_sha256": "1b415586e4a921e4a2fa09ce753d4b9f010c626fd1eb0569f48b293b7ab3b539",
+          "scope": "one complete protected source unit; whole-paper semantic/visual acceptance pending",
+          "whole_paper_quality_proven": false
+        },
+        "fingerprint_sha256": "a6770a4116a1dc2cb7f3ff46a1cb01709136e8ac00b50babce3d4ea0f6a24d3b",
+        "fingerprint_scope": "freeze_v13, external actual served service and all asset SHA rechecked; final release source freeze pending",
+        "transport_contract": {
+          "request_timeout_seconds": 110,
+          "max_attempts": 1
+        },
+        "choice_reason": "保护结构失败、旧OpenAI接口忽略reasoning设置及旧完整unit超时保留后，采用独立官方definition和实际原生off接口；不作跨模型能力排名。",
+        "routing_contract": {
+          "selection": "explicit_pdf_backend_only",
+          "complete_native_pages_required": true,
+          "latex_discovery": "disabled",
+          "scan_or_mixed": "rejected"
+        },
+        "proxy_quality_contract": {
+          "adapter": "source_bound_native",
+          "required": true
+        }
+      }
+    },
+    "fingerprint_required": [
+      "served_configuration",
+      "native_service_metadata",
+      "explicit external model asset SHA manifest"
+    ],
+    "prior_30b_attempt": {
+      "model_id": "hy-mt2-30b-a3b-mlx",
+      "status": "environment_load_failed",
+      "reason": "LM Studio MLX loader reports unsupported model type",
+      "model_capability_evaluated": false
+    },
+    "prior_latex_1_8b_attempt": {
+      "model_id": "hy-mt2-1.8b",
+      "status": "protected_TOKEN_validation_failed",
+      "automatic_full_unit_repair_attempts": 1,
+      "cross_model_ranking": false
+    },
+    "default_skill_model_unchanged": "hy-mt2-30b-a3b-mlx",
+    "choice": "每条路线明确传入并冻结自己的实际模型；历史30B环境故障和1.8B结构失败保留，不能将其它模型实测归给30B。模型服务/权重为调用方显式外部依赖，公开metadata不含权重或私人服务文件路径。",
+    "prior_v7_route_configuration": {
+      "latex_verified": {
+        "model_id": "qwen3.8-27b-mlx",
+        "source": "external explicit OpenAI-compatible local service; actual served/native fingerprint and full external assets SHA frozen separately",
+        "choice_reason": "1.8B有限LaTeX保护TOKEN多次结构失败且一次完整unit自返修失败后，协调者明确冻结Qwen重新实测；不作模型能力排名",
+        "served_publisher": "lmstudio-community",
+        "native_architecture": "qwen3_5",
+        "runtime_format": "mlx",
+        "quantization": "8bit",
+        "generation_parameters": {
+          "temperature": 0.7,
+          "top_p": 1.0,
+          "top_k": -1,
+          "repetition_penalty": 1.0,
+          "max_tokens": 4096,
+          "reasoning_effort": "none"
+        },
+        "request_vs_observation": {
+          "requested_reasoning_effort": "none",
+          "smoke_observed_reasoning_tokens": 929,
+          "smoke_observed_completion_tokens": 1104,
+          "native_reasoning_off_probe": "HTTP 400: model does not expose reasoning configuration",
+          "reasoning_disabled_proven": false,
+          "scope": "v7 smoke observation; full candidate results separately frozen"
+        },
+        "transport_contract": {
+          "request_timeout_seconds": 110,
+          "max_attempts": 1
+        }
+      },
+      "digital_pdf": {
+        "model_id": "hy-mt2-1.8b",
+        "served_publisher": "mlx-community",
+        "native_architecture": "hunyuan_v1_dense",
+        "runtime_format": "mlx",
+        "quantization": "4bit",
+        "generation_parameters": {
+          "temperature": 0.7,
+          "top_p": 1.0,
+          "top_k": -1,
+          "repetition_penalty": 1.0,
+          "max_tokens": 4096
+        }
+      }
+    },
+    "prior_digital_1_8b_attempt": {
+      "model_id": "hy-mt2-1.8b",
+      "status": "real_source_protocol_and_translation_failures_preserved",
+      "successful_release_candidate": false,
+      "cross_model_ranking": false
+    }
+  },
+  "resource_contract": {
+    "candidate_rss_bytes": 3221225472,
+    "provider_rss_bytes": 42949672960,
+    "per_job_seconds": 120,
+    "concurrency": 1,
+    "resource_revision": 2,
+    "prior_2gib_stops_preserved": true
+  },
+  "prior_digital_sample": {
+    "official_pdf_url": "https://mediatum.ub.tum.de/doc/1544053/1544053.pdf",
+    "full_source_sha256": "1a6355a0d4a5d9dd5c9459dcf22f91f31a6387af1fc7f517be7c553b37b46c5e",
+    "frozen_subset_sha256": "a70acb88f5b6447bd079527fefc8d3d93cfa8082ec53b39ecf6df3dcbee88606",
+    "status": "failed_backend_timeout_unsupported_complex_Form_clip",
+    "actual_source_pages": [
+      1,
+      2,
+      3
+    ],
+    "smoke_page": 1,
+    "candidate_pdf_generated": false,
+    "reason": "Form194 clip外旧模板文本进入完整native trace，源可见文字边界不等同未裁剪trace；真实后端110秒超时。保留失败，不计入成功E2E。",
+    "historical_subset_rule": "重裁可能因新document ID产生不同字节SHA；须冻结实际新SHA并重新核对源页身份。P015保留为历史失败，当前G4明确采用上述具名派生一页完整前置材料和摘要。",
+    "permission": "历史本地证据，不捆绑源件或译稿"
+  }
+}

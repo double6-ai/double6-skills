@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "example_only": true,
+  "quality_pass": false,
+  "strict_delivery": false,
+  "scope": "完整标签80–88：数字和未链接连接符均需实际绑定",
+  "binding": {
+    "source_id": "source-verified-complete-range",
+    "label": "80–88",
+    "source_script": "superscript",
+    "source_label_indices": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "target_label_indices": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "source_host_anchor_index": 0,
+    "target_host_anchor_index": 0
+  },
+  "requires": [
+    "current_source_target_PDF_SHA",
+    "independent_complete_source_inventory",
+    "actual_native_measurements",
+    "frozen_case_policy",
+    "font_ink_and_full_page_review"
+  ],
+  "unverified_does_not_pass": true
+}

@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "综合质量审校包（候选）",
+  "type": "object",
+  "required": [
+    "source",
+    "target",
+    "standard",
+    "reviewer_id",
+    "requirements_ref",
+    "source_inventory_ref",
+    "declared_pages",
+    "results",
+    "content_inputs",
+    "visual_inputs",
+    "assets_links_inputs"
+  ],
+  "$defs": {
+    "ref": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  },
+  "properties": {
+    "source": {
+      "$ref": "#/$defs/ref"
+    },
+    "target": {
+      "$ref": "#/$defs/ref"
+    },
+    "standard": {
+      "$ref": "#/$defs/ref"
+    },
+    "requirements_ref": {
+      "$ref": "#/$defs/ref"
+    },
+    "source_inventory_ref": {
+      "$ref": "#/$defs/ref"
+    },
+    "reviewer_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "declared_pages": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "results": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "source",
+          "target",
+          "standard_sha256",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "source_inventory",
+              "roles",
+              "coverage",
+              "paragraphs",
+              "captions",
+              "spacing",
+              "semantics",
+              "visual",
+              "assets_links"
+            ]
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "fail",
+              "unverified",
+              "not_applicable"
+            ]
+          },
+          "source": {
+            "$ref": "#/$defs/ref"
+          },
+          "target": {
+            "$ref": "#/$defs/ref"
+          },
+          "standard_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ref"
+            }
+          }
+        }
+      }
+    },
+    "content_inputs": {
+      "type": "object",
+      "required": [
+        "elements_ref",
+        "translations_ref",
+        "bindings_ref",
+        "role_review_ref",
+        "semantic_review_ref",
+        "protected_bindings_ref"
+      ],
+      "properties": {
+        "elements_ref": {
+          "$ref": "#/$defs/ref"
+        },
+        "translations_ref": {
+          "$ref": "#/$defs/ref"
+        },
+        "bindings_ref": {
+          "$ref": "#/$defs/ref"
+        },
+        "role_review_ref": {
+          "$ref": "#/$defs/ref"
+        },
+        "semantic_review_ref": {
+          "$ref": "#/$defs/ref"
+        },
+        "protected_bindings_ref": {
+          "$ref": "#/$defs/ref"
+        },
+        "mixed_review_ref": {
+          "$ref": "#/$defs/ref",
+          "description": "可选的独立逐字符混合内容审查；完整源/译/标准/授权与实际成品绑定，未决片段继续阻断覆盖"
+        }
+      }
+    },
+    "visual_inputs": {
+      "type": "object",
+      "required": [
+        "regions_ref",
+        "review_ref"
+      ],
+      "properties": {
+        "regions_ref": {
+          "$ref": "#/$defs/ref"
+        },
+        "review_ref": {
+          "$ref": "#/$defs/ref"
+        }
+      }
+    },
+    "assets_links_inputs": {
+      "type": "object",
+      "required": [
+        "native_links_ref"
+      ],
+      "properties": {
+        "native_links_ref": {
+          "$ref": "#/$defs/ref"
+        }
+      }
+    },
+    "script_styles_bindings_ref": {
+      "$ref": "#/$defs/ref",
+      "description": "独立源scope有适用项时必需；源scope随requirements_ref冻结。无项须独立理由及实际源无相反信号。"
+    }
+  },
+  "description": "身份、授权、实际内容、源先行范围与裁图由运行时重新核验；Schema通过不构成质量接受。"
+}

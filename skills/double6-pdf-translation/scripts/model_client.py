@@ -4,13 +4,11 @@ import json
 import os
 import time
 import http.client
+import hashlib
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any
-
-SCRIPT_INTERFACE = "internal-module"
-SCRIPT_INTERFACE_REASON = "Imported by translation CLI scripts for OpenAI-compatible local model calls and API key handling."
+from typing import Any, Callable
 
 HYMT2_30B_OFFICIAL_GENERATION_DEFAULTS: dict[str, Any] = {
     "temperature": 0.7,
@@ -26,11 +24,6 @@ def should_apply_hymt2_official_generation_defaults(model: str) -> bool:
     if value in {"0", "false", "False"}:
         return False
     return "hy-mt2-30b-a3b" in model.lower()
-
-
-def is_deepseek_chat_target(endpoint: str, model: str, provider: str | None = None) -> bool:
-    value = f"{provider or ''} {endpoint} {model}".lower()
-    return "deepseek" in value or "api.deepseek.com" in value
 
 
 def infer_chat_provider(endpoint: str, provider: str | None = None) -> str:
@@ -51,7 +44,7 @@ def parse_api_key_text(text: str, env_name: str | None = None) -> str:
         if isinstance(data, dict):
             if env_name and isinstance(data.get(env_name), str):
                 return data[env_name].strip()
-            for key in ["api_key", "key"]:
+            for key in ["api_key", "key", "DEEPSEEK_API_KEY"]:
                 if isinstance(data.get(key), str):
                     return data[key].strip()
     except json.JSONDecodeError:
@@ -66,6 +59,10 @@ def parse_api_key_text(text: str, env_name: str | None = None) -> str:
 
 
 def resolve_api_key(api_key_env: str | None = None, api_key_file: str | None = None) -> str | None:
+    if api_key_env:
+        env_value = os.environ.get(api_key_env)
+        if env_value:
+            return env_value
     if api_key_file:
         path = Path(api_key_file).expanduser()
         if path.exists():
@@ -89,13 +86,20 @@ def post_chat(
     temperature: float | None = None,
     extra_body: dict[str, Any] | None = None,
     response_format: dict[str, Any] | None = None,
+    max_attempts: int = 3,
+    attempt_callback: Callable[[dict[str, Any]], None] | None = None,
+    response_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
+    if type(max_attempts) is not int or not 1 <= max_attempts <= 3:
+        raise ValueError('1–3 transport attempts required')
     provider_name = infer_chat_provider(endpoint, provider)
     headers = {"Content-Type": "application/json"}
     if provider_name in {"openai", "openai_compatible", "deepseek"}:
         api_key = resolve_api_key(api_key_env, api_key_file)
+        if not api_key and ("localhost" in endpoint or "127.0.0.1" in endpoint):
+            api_key = os.environ.get("LOCAL_TRANSLATION_API_KEY", "local-dummy")
         if not api_key:
-            key_hint = api_key_file or "explicit API key file"
+            key_hint = api_key_env or api_key_file or "API key"
             raise RuntimeError(f"Missing API key for {provider_name}: {key_hint}")
         headers["Authorization"] = f"Bearer {api_key}"
         payload: dict[str, Any] = {
@@ -113,8 +117,6 @@ def post_chat(
             payload["response_format"] = response_format
         if extra_body:
             payload.update(extra_body)
-        if is_deepseek_chat_target(endpoint, model, provider):
-            payload.setdefault("thinking", {"type": "disabled"})
         if should_apply_hymt2_official_generation_defaults(model):
             for key, value in HYMT2_30B_OFFICIAL_GENERATION_DEFAULTS.items():
                 payload.setdefault(key, value)
@@ -128,33 +130,56 @@ def post_chat(
             payload.update(extra_body)
 
     last_error: Exception | None = None
-    for attempt in range(1, 4):
+    encoded = json.dumps(payload).encode('utf-8')
+    request_sha = hashlib.sha256(encoded).hexdigest()
+    def event(phase: str, attempt: int, started: float, **detail: Any) -> None:
+        if attempt_callback:
+            attempt_callback({'phase':phase,'attempt':attempt,'max_attempts':max_attempts,
+                'request_timeout_seconds':request_timeout_seconds,'request_sha256':request_sha,
+                'elapsed_seconds':time.monotonic()-started,**detail})
+    for attempt in range(1, max_attempts + 1):
         body = ""
+        started = time.monotonic()
+        event('start', attempt, started)
         request = urllib.request.Request(
             endpoint,
-            data=json.dumps(payload).encode("utf-8"),
+            data=encoded,
             headers=headers,
             method="POST",
         )
         try:
             with urllib.request.urlopen(request, timeout=request_timeout_seconds) as response:
                 body = response.read().decode("utf-8")
-            return json.loads(body)
+            value = json.loads(body)
+            if response_callback:
+                response_callback(body)
+            event('success', attempt, started, response_sha256=hashlib.sha256(body.encode()).hexdigest())
+            return value
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             last_error = RuntimeError(f"HTTP {exc.code}: {detail}")
+            event('error', attempt, started, error_type=type(exc).__name__, http_status=exc.code)
         except urllib.error.URLError as exc:
             last_error = RuntimeError(f"Request failed: {exc}")
+            event('timeout' if isinstance(exc.reason, TimeoutError) else 'error', attempt, started,
+                  error_type=type(exc).__name__)
         except http.client.IncompleteRead as exc:
             partial = exc.partial or b""
             last_error = RuntimeError(f"Incomplete response read: {len(partial)} bytes")
+            event('error', attempt, started, error_type=type(exc).__name__)
         except TimeoutError as exc:
             last_error = RuntimeError(f"Request timed out: {exc}")
+            event('timeout', attempt, started, error_type=type(exc).__name__)
         except json.JSONDecodeError:
             last_error = RuntimeError(f"Response is not valid JSON: {body[:500]}")
-        if attempt < 3:
+            event('error', attempt, started, error_type='JSONDecodeError')
+        except BaseException as exc:
+            event('abort', attempt, started, error_type=type(exc).__name__, reason='interrupted')
+            raise
+        if attempt < max_attempts:
             time.sleep(attempt * 2)
     assert last_error is not None
+    event('abort', attempt, started, reason='attempts_exhausted', error_type=type(last_error).__name__)
     raise last_error
 
 

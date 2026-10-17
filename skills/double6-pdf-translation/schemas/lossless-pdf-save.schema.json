@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lossless-object-save@1",
+  "type": "object",
+  "required": ["policy", "input_path", "input_sha256", "output_path", "expected_pages"],
+  "additionalProperties": false,
+  "properties": {
+    "policy": {"const": "lossless_object_save_v1"},
+    "input_path": {"type": "string", "minLength": 1},
+    "input_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "output_path": {"type": "string", "minLength": 1},
+    "expected_pages": {"type": "integer", "minimum": 1, "maximum": 20}
+  }
+}

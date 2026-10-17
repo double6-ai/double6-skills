@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Explicit reviewed raw OCR source plan / unconfirmed seed",
+  "type": "object",
+  "required": [
+    "source",
+    "rawOCR",
+    "regions"
+  ],
+  "properties": {
+    "source": {
+      "$ref": "#/$defs/ref"
+    },
+    "rawOCR": {
+      "$ref": "#/$defs/ref"
+    },
+    "complete_source_review_confirmed": {
+      "type": "boolean"
+    },
+    "source_confirmation": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "blank_page_confirmations": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "regions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/region"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "complete_source_review_confirmed"
+        ],
+        "properties": {
+          "complete_source_review_confirmed": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "regions": {
+            "items": {
+              "required": [
+                "complete_source",
+                "confirmation"
+              ],
+              "properties": {
+                "confirmation": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "raw_blocks": {
+                        "minItems": 2
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "join_confirmation"
+                    ],
+                    "properties": {
+                      "join_confirmation": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "source_bbox"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "original_layout_bbox"
+                        ]
+                      }
+                    ]
+                  },
+                  "then": {
+                    "required": [
+                      "geometry_confirmation"
+                    ],
+                    "properties": {
+                      "geometry_confirmation": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "ref": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "box": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "number"
+      }
+    },
+    "region": {
+      "type": "object",
+      "required": [
+        "page",
+        "raw_blocks",
+        "role"
+      ],
+      "properties": {
+        "page": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "raw_blocks": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "role": {
+          "enum": [
+            "body",
+            "heading",
+            "single_line_metadata",
+            "protected"
+          ]
+        },
+        "complete_source": {
+          "type": "string"
+        },
+        "confirmation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "join_confirmation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "geometry_confirmation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_bbox": {
+          "$ref": "#/$defs/box"
+        },
+        "original_layout_bbox": {
+          "$ref": "#/$defs/box"
+        },
+        "preserve_hyphen_before_raw_blocks": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}

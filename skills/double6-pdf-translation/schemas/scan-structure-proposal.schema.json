@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scan-structure-proposal@1",
+  "title": "待审OCR源角色与排版提案",
+  "type": "object",
+  "required": ["policy", "parameters", "roles", "complete_page_inventory", "source", "rawOCR", "code", "automatic_semantic_grouping", "automatic_crosspage_confirmation"],
+  "properties": {
+    "policy": {"const": "raw_ocr_structure_proposal_v1"},
+    "parameters": {"type": "object", "required": ["version", "typography", "protected_padding_pt"]},
+    "source": {"$ref": "#/$defs/ref"},
+    "rawOCR": {"$ref": "#/$defs/ref"},
+    "code": {"$ref": "#/$defs/ref"},
+    "automatic_semantic_grouping": {"const": false},
+    "automatic_crosspage_confirmation": {"const": false},
+    "roles": {"type": "array", "items": {"type": "object", "required": ["id", "role", "source_page", "source_column", "source_bbox", "raw_ocr_bbox", "original_layout_bbox", "alignment", "requires_review"], "properties": {"id": {"type": "string"}, "role": {"enum": ["body", "heading", "single_line_metadata", "protected"]}, "source_page": {"type": "integer", "minimum": 1}, "source_column": {"type": "integer", "minimum": 1}, "source_bbox": {"$ref": "#/$defs/box"}, "raw_ocr_bbox": {"$ref": "#/$defs/box"}, "original_layout_bbox": {"$ref": "#/$defs/box"}, "alignment": {"enum": ["left", "center", "right", "justify"]}, "requires_review": {"type": "boolean"}, "first_line_indent_pt": {"type": ["number", "null"]}}}},
+    "complete_page_inventory": {"type": "array", "minItems": 1}
+  },
+  "$defs": {
+    "ref": {"type": "object", "required": ["path", "sha256"], "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+    "box": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "number"}}
+  }
+}

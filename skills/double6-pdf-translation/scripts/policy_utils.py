@@ -6,9 +6,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-SCRIPT_INTERFACE = "internal-module"
-SCRIPT_INTERFACE_REASON = "Imported by policy, translation, and repair scripts for shared JSON/text normalization helpers."
-
 
 DEFAULT_RESIDUE_TRANSLATIONS: dict[str, str] = {
     "overwhelmingly": "压倒性地",
@@ -55,17 +52,16 @@ TERM_REPLACEMENT_HINTS: dict[str, list[tuple[str, str]]] = {
     "Contents": [("Contents", "目录")],
     "Chapter Highlights": [("Chapter Highlights", "章节要点")],
     "Brookings": [("Brookings", "布鲁金斯学会")],
-    "Schmidt Sciences": [("Schmidt Sciences", "施密特科学")],
     "Stanford University": [("Stanford University", "斯坦福大学")],
     "Northeastern University": [("Northeastern University", "东北大学")],
-    "SRI International": [("SRI International", "斯坦福研究院国际")],
-    "UNSW Sydney": [("UNSW Sydney", "新南威尔士大学悉尼分校")],
+    "SRI International": [("斯坦福研究院国际", "SRI International")],
+    "UNSW Sydney": [("新南威尔士大学悉尼分校", "悉尼新南威尔士大学")],
     "University of Minnesota": [("University of Minnesota", "明尼苏达大学")],
     "University of Southern California": [("University of Southern California", "南加州大学")],
     "EU": [("EU", "欧盟")],
     "Google Translate": [("Google 翻译", "谷歌翻译"), ("Google翻译", "谷歌翻译")],
-    "Yolanda Gil": [("约兰达·吉尔（Yolanda Gil）", "Yolanda Gil"), ("约兰达·吉尔", "Yolanda Gil")],
-    "Raymond Perrault": [("雷蒙德·佩罗（Raymond Perrault）", "Raymond Perrault"), ("雷蒙德·佩罗", "Raymond Perrault")],
+    "Yolanda Gil": [("Yolanda Gil", "约兰达·吉尔（Yolanda Gil）")],
+    "Raymond Perrault": [("Raymond Perrault", "雷蒙德·佩罗（Raymond Perrault）")],
     "rapid globalized world": [("全球快速全球化的背景下", "全球化进程加速的当下")],
     "Sub-corpus": [("Sub-corpus", "子语料库")],
     "Number of texts": [("Number of texts", "文本数量")],
@@ -81,7 +77,6 @@ PROTECTED_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("url", re.compile(r"https?://[^\s)>\]]+")),
     ("doi", re.compile(r"(?i)\b10\.\d{4,9}/[-._;()/:A-Z0-9]+")),
     ("citation", re.compile(r"\[[0-9,\-\s]{1,30}\]")),
-    ("placeholder", re.compile(r"\{v\d+\}")),
     ("inline_code", re.compile(r"`[^`\n]{1,200}`")),
     ("model_name", re.compile(r"\b(?:OpenAI-o1|ChatGPT-4o|GPT-4o|GPT-o1|LLM-o1|LLM-4o)\b")),
 ]
@@ -212,26 +207,60 @@ def compact_policy_items(items: list[dict[str, Any]], *, limit: int = 12) -> lis
     return lines
 
 
+def policy_item_is_active(item: dict[str, Any]) -> bool:
+    """停用或原文缺席项不得进入模型上下文，包括已有译名的条目。"""
+    if item.get("active") is False or item.get("enabled") is False:
+        return False
+    status = str(item.get("status") or item.get("claim_status") or "").lower()
+    if status in {"inactive", "absent", "rejected", "disabled"}:
+        return False
+    absent = {"absent", "not_found", "inactive"}
+    if str(item.get("source_location") or "").lower() in absent:
+        return False
+    locations = item.get("source_locations")
+    return not (isinstance(locations, list) and locations and
+                {str(value).lower() for value in locations} <= absent)
+
+
 def source_matches_policy_item(source_text: str, item: dict[str, Any]) -> bool:
     candidates = [str(item.get("source_term") or item.get("source") or item.get("value") or "")]
     aliases = item.get("aliases")
     if isinstance(aliases, list):
         candidates.extend(str(alias) for alias in aliases if alias)
-    source_lower = source_text.lower()
-    return any(candidate and candidate.lower() in source_lower for candidate in candidates)
+    def normalize(value: str) -> str:
+        # BabelDOC 的样式边界和换行可把已激活机构名切成 Human- Centered。
+        value = re.sub(r"</?style\b[^>]*>", "", value, flags=re.I)
+        value = re.sub(r"(?<=[A-Za-z])-\s+(?=[A-Za-z])", "-", value)
+        return re.sub(r"\s+", " ", value).strip().lower()
+
+    source_lower = normalize(source_text)
+    for candidate in candidates:
+        if not candidate:
+            continue
+        # 短拉丁缩写不能命中另一个单词的子串，例如 EU / neutral。
+        candidate = normalize(candidate)
+        if not candidate:
+            continue
+        escaped = re.escape(candidate)
+        prefix = r"(?<![a-z0-9_])" if re.match(r"[a-z0-9_]", candidate, re.I) else ""
+        suffix = r"(?![a-z0-9_])" if re.search(r"[a-z0-9_]$", candidate, re.I) else ""
+        if re.search(prefix + escaped + suffix, source_lower):
+            return True
+    return False
 
 
 def prioritize_policy_items(items: list[dict[str, Any]], source_text: str, *, limit: int) -> list[dict[str, Any]]:
     matched: list[dict[str, Any]] = []
     rest: list[dict[str, Any]] = []
     for item in items:
-        if not isinstance(item, dict):
+        if not isinstance(item, dict) or not policy_item_is_active(item):
             continue
         if source_matches_policy_item(source_text, item):
             matched.append(item)
         else:
             rest.append(item)
-    selected = matched + rest
+    # 分段翻译只注入该段实际出现的策略；无分段输入时保留文档级有效策略。
+    selected = matched if source_text.strip() else rest
     return selected[:limit]
 
 
@@ -249,13 +278,41 @@ def build_policy_context_prompt(context: dict[str, Any] | None, source_text: str
         "Paper-level terminology, entity, and protected-span constraints:",
         "Use listed translations consistently when the source segment contains the term. Do not output explanations.",
         "Translate ordinary English prose completely; keep only protected spans, code, URLs, emails, citations, model/system names, or explicitly approved terms in English.",
+        "Keep supplied formatting-placeholder identifiers and citation labels attached to the corresponding translated phrases. Do not add spaces to imitate alignment or paragraph indentation.",
     ]
     lines.extend(compact_policy_items(entities, limit=10))
     lines.extend(compact_policy_items(terms, limit=16))
     if isinstance(coverage_gate, dict) and coverage_gate.get("boundary") == "sample_boundary":
-        lines.append("- This input may be a trimmed document excerpt; translate only the provided text faithfully.")
+        lines.append("- This input may be a trimmed evaluation sample; translate only the provided text faithfully.")
     return "\n".join(lines).strip()
 
+
+
+def policy_note_leaks(source_text: str, translated_text: str, context: dict[str, Any] | None) -> list[str]:
+    """仅识别当前策略中被逐字印入译文且源文没有的长说明，不删除文本。"""
+    if not context:
+        return []
+    source_prose = re.sub(r"<[^>]+>", "", str(source_text or ""))
+    # 源文原本就在说明翻译操作时，中文说明可能是忠实译文，不能按逐字策略匹配拒绝。
+    if re.search(r"\b(?:before|when)\s+translat(?:ing|ion)\b|\b(?:if|when)\s+(?:uncertain|unsure)\b|\b(?:translation|terminology)\s+(?:instructions?|guidelines?|policy)\b|翻译前|不确定时|译法说明|翻译指令", source_prose, re.I):
+        return []
+    compact = lambda value: re.sub(r"\s+", "", str(value or ""))
+    source, target = compact(source_text), compact(translated_text)
+    leaks = []
+    for key, list_key in (("term_policy", "terms"), ("entity_map", "entities")):
+        collection = context.get(key)
+        if not isinstance(collection, dict):
+            continue
+        for item in collection.get(list_key, []):
+            if not isinstance(item, dict) or not policy_item_is_active(item):
+                continue
+            if not source_matches_policy_item(source_text, item):
+                continue
+            note = str(item.get("note") or "").strip()
+            normalized_note = compact(note)
+            if len(normalized_note) >= 12 and normalized_note not in source and normalized_note in target and note not in leaks:
+                leaks.append(note)
+    return leaks
 
 def protected_values(text: str) -> list[str]:
     values: list[str] = []

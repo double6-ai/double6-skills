@@ -1,101 +1,19 @@
-#!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Double6 Skills，2026-10-17：基于paper-translation维护源码整理；变更见Skill根目录MODIFICATIONS.md。
+"""visual layout semantic：从原入口拆出的同一实现。"""
 from __future__ import annotations
-
-SCRIPT_INTERFACE = "internal-module"
-SCRIPT_INTERFACE_REASON = "Imported by visual_layout.py for semantic layout reports and paragraph label audits."
-
-import json
-import re
-from pathlib import Path
-from typing import Any
-
-
-from visual_layout_core import *  # noqa: F401,F403
-from visual_layout_core import _load_fitz
-from visual_layout_findings import *  # noqa: F401,F403
-from visual_layout_analyzer import *  # noqa: F401,F403
-from visual_layout_analyzer import _page_region_metrics
-
-def extract_pdf_text_pages(path: Path) -> list[dict[str, Any]]:
-    fitz = _load_fitz()
-    pages: list[dict[str, Any]] = []
-    with fitz.open(str(path)) as doc:  # type: ignore[attr-defined]
-        for page_index, page in enumerate(doc):
-            pages.append({"page": page_index + 1, "text": page.get_text("text")})
-    return pages
-
-
-def reference_tail_from_explicit_heading(lines: list[str]) -> str:
-    """只从独立 References/参考文献标题之后截取，避免把正文中的词触发成参考文献误报。"""
-    for index, line in enumerate(lines):
-        normalized = line.strip().strip(":：").lower()
-        if normalized in {"references", "参考文献"}:
-            return "\n".join(lines[index + 1 :])
-    return ""
-
-
-REFERENCE_BODY_IGNORE_LINES = {
-    "data availability",
-    "数据可用性",
-    "notes",
-    "注释",
-    "published online",
-    "在线发表",
-    "received",
-    "收稿日期",
-    "accepted",
-    "录用日期",
-}
-
-
-def is_policy_preserved_metadata_line(line: str) -> bool:
-    value = re.sub(r"\s+", " ", str(line or "")).strip()
-    if not value:
-        return False
-    has_email = bool(re.search(r"[A-Za-z0-9_.%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}", value))
-    if has_email and not re.search(r"@\s*$|@\s+|\.ed\s+u\b|\.edu\.\s+hk\b", value, re.I):
-        if "香港理工大学" in value or "Hong Kong Polytechnic University" in value or "邮箱" in value or "email" in value.lower():
-            return True
-    if re.search(r"^HUMANITIES\s+AND\s+SOCIAL\s+SCIENCES\s+COMMUNICATIONS\b", value, re.I) and not re.search(r"[\u4e00-\u9fff]", value):
-        return True
-    if re.search(r"^https://doi\.org/10\.1057/s41599", value, re.I) and not re.search(r"[\u4e00-\u9fff]", value):
-        return True
-    return False
-
-
-def reference_body_text_for_translation_check(ref_tail: str) -> str:
-    body_lines: list[str] = []
-    for line in normalize_lines(ref_tail):
-        stripped = line.strip().strip(":：")
-        lowered = stripped.lower()
-        if lowered in REFERENCE_BODY_IGNORE_LINES or stripped in REFERENCE_BODY_IGNORE_LINES:
-            continue
-        if any(lowered.startswith(prefix) for prefix in ["published online", "received", "accepted"]):
-            continue
-        if stripped.startswith(("在线发表", "收稿日期", "录用日期")):
-            continue
-        body_lines.append(line)
-    return "\n".join(body_lines)
-
-
-def looks_like_references_page(lines: list[str]) -> bool:
-    joined = "\n".join(lines)
-    years = len(re.findall(r"(?:19|20)\d{2}", joined))
-    doi_or_url = len(re.findall(r"https?://|doi\.org|arXiv", joined, flags=re.I))
-    author_markers = len(re.findall(r"\b[A-Z][A-Za-z'’-]+,\s+[A-Z][A-Za-z'’. -]{1,30}|\bet\s+al\.?", joined))
-    journal_markers = len(re.findall(r"\b(?:Transl|Linguist|Commun|Comput|Survey|Press|Rev\.|Journal|Machine Transl)\b", joined, flags=re.I))
-    return years >= 5 and doi_or_url >= 1 and (author_markers >= 3 or journal_markers >= 3)
-
+from visual_layout_context import *
 
 def semantic_layout_findings_for_pages(pages: list[dict[str, Any]], *, target_pdf_role: str = "translated_pdf") -> list[dict[str, Any]]:
+    from visual_layout_core import cjk_count, normalize_finding, normalize_lines
+    from visual_layout_density import is_latextrans_embedded_case_figure_text
+    from visual_layout_extract import reference_body_text_for_translation_check, reference_tail_from_explicit_heading
     findings: list[dict[str, Any]] = []
     for page in pages:
         page_number = page.get("page")
         text = str(page.get("text") or "")
         lines = normalize_lines(text)
         joined = "\n".join(lines)
-        ref_tail = reference_tail_from_explicit_heading(lines)
-        in_references_page = bool(ref_tail) or looks_like_references_page(lines)
         short_header_residue = [
             line
             for line in lines
@@ -226,10 +144,8 @@ def semantic_layout_findings_for_pages(pages: list[dict[str, Any]], *, target_pd
             line
             for line in lines
             if len(line) <= 140
-            and re.search(r"(?:\bHUMA\b|HUMANITIES|polyu\.edu|stanford\.ed\s+u|doi\.org|s41599)", line, flags=re.I)
+            and re.search(r"(?:HUMA|HUMANITIES|polyu\.edu|stanford\.ed\s+u|doi\.org|s41599)", line, flags=re.I)
             and re.search(r"[\u4e00-\u9fff]", line)
-            and not in_references_page
-            and not is_policy_preserved_metadata_line(line)
         ]
         if metadata_mixed_lines:
             findings.append(
@@ -507,25 +423,6 @@ def semantic_layout_findings_for_pages(pages: list[dict[str, Any]], *, target_pd
                     }
                 )
             )
-        translated_person_patterns = [
-            r"约兰达·吉尔\s*（\s*Yolanda\s+Gil\s*）",
-            r"雷蒙德·佩罗\s*（\s*Ray(?:mond)?\s+Perrault\s*）",
-            r"[一-龥·]{2,12}\s*（\s*(?:Yolanda\s+Gil|Ray(?:mond)?\s+Perrault|Loredana\s+Fattorini|Sha\s+Sajadieh|Vanessa\s+Parli)\s*）",
-        ]
-        if any(re.search(pattern, joined, re.I) for pattern in translated_person_patterns):
-            findings.append(
-                normalize_finding(
-                    {
-                        "severity": "warn",
-                        "category": "semantic_layout",
-                        "rule": "person_name_translated_with_parenthetical_english",
-                        "page": page_number,
-                        "target_pdf_role": target_pdf_role,
-                        "message": "AI Index 人员姓名被音译成中文名加括号英文；默认策略应保留英文姓名原样。",
-                        "evidence": joined[:360],
-                    }
-                )
-            )
         if re.search(r"([\u4e00-\u9fff·]{2,})（\1（[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)+））", joined):
             findings.append(
                 normalize_finding(
@@ -540,36 +437,38 @@ def semantic_layout_findings_for_pages(pages: list[dict[str, Any]], *, target_pd
                     }
                 )
             )
+        ref_tail = reference_tail_from_explicit_heading(lines)
+        in_references_page = bool(ref_tail)
         institution_line_pattern = re.compile(
             r"\b(?:University|International|Institute|Brookings|Sciences|Sydney|JPMorgan|OECD)\b"
         )
-        institution_hits = len(institution_line_pattern.findall(joined))
+        from layout_role_policy import INSTITUTION_TRANSLATIONS
+        approved_english = [source for source, target in INSTITUTION_TRANSLATIONS.items() if source == target]
+        institution_lines = list(lines)
+        for source in approved_english:
+            institution_lines = [re.sub(r"\b"+re.escape(source)+r"\b", "", line, flags=re.I)
+                                 for line in institution_lines]
+        institution_text = "\n".join(institution_lines)
+        institution_hits = len(institution_line_pattern.findall(institution_text))
         has_mixed_institution_line = bool(
-            re.search(r"\b(?:University|International|Institute|Brookings|Sciences|Sydney)\b[^\n]{0,80}[\u4e00-\u9fff]", joined)
-            or re.search(r"[\u4e00-\u9fff][^\n]{0,80}\b(?:University|International|Institute|Brookings|Sciences|Sydney)\b", joined)
+            re.search(r"\b(?:University|International|Institute|Brookings|Sciences|Sydney)\b[^\n]{0,80}[\u4e00-\u9fff]", institution_text)
+            or re.search(r"[\u4e00-\u9fff][^\n]{0,80}\b(?:University|International|Institute|Brookings|Sciences|Sydney)\b", institution_text)
         )
         standalone_institution_lines = [
             line
-            for line in lines
-            if len(line) <= 120 and institution_line_pattern.search(line) and cjk_count(line) == 0
+            for line, pending in zip(lines, institution_lines)
+            if len(line) <= 120 and institution_line_pattern.search(pending) and cjk_count(line) == 0
         ]
         report_org_context = any(
             line.strip().lower() in {"chair", "co-chair", "members", "organizations"}
             or line.strip() in {"主席", "联合主席", "成员", "机构"}
             for line in lines
         )
-        roster_affiliation_context = (
-            report_org_context
-            and institution_hits >= 3
-            and any(re.search(r"\b(?:Chair|Co-Chair|Members|Organizations)\b|主席|联合主席|成员|机构", line, re.I) for line in lines)
-            and not re.search(r"\b(?:stanford\.ed\s+u|polyu\.edu\.\s+hk)\b", joined, re.I)
-        )
         if (
-            institution_hits >= 3
+            (institution_hits >= 3 or (report_org_context and len(standalone_institution_lines) >= 2))
             and cjk_count(joined) >= 20
             and (has_mixed_institution_line or (report_org_context and len(standalone_institution_lines) >= 2))
             and not in_references_page
-            and not roster_affiliation_context
         ):
             findings.append(
                 normalize_finding(
@@ -644,7 +543,7 @@ def semantic_layout_findings_for_pages(pages: list[dict[str, Any]], *, target_pd
                         }
                     )
                 )
-        if re.search(r"黄颖琪|张安德瑞|安德鲁·凯·范", joined) and not in_references_page:
+        if re.search(r"黄颖琪|张安德瑞|安德鲁·凯·范", joined):
             findings.append(
                 normalize_finding(
                     {
@@ -702,6 +601,7 @@ def semantic_layout_findings_for_pages(pages: list[dict[str, Any]], *, target_pd
 
 
 def build_semantic_layout_report(translated_pdf: Path, *, target_pdf_role: str = "translated_pdf") -> dict[str, Any]:
+    from visual_layout_extract import extract_pdf_text_pages
     try:
         pages = extract_pdf_text_pages(translated_pdf)
         findings = semantic_layout_findings_for_pages(pages, target_pdf_role=target_pdf_role)
@@ -716,275 +616,5 @@ def build_semantic_layout_report(translated_pdf: Path, *, target_pdf_role: str =
         return {"version": 1, "status": "unavailable", "reason": f"semantic_layout_check_unavailable: {exc}", "findings": []}
 
 
-def build_dual_visual_report(
-    source_pdf: Path | None,
-    mono_translated_pdf: Path | None,
-    standard_dual_pdf: Path | None,
-    backend_dual_pdf: Path | None,
-    output_dir: Path,
-    layout: str = "en-left-zh-right",
-) -> dict[str, Any]:
-    if not source_pdf or not mono_translated_pdf or not standard_dual_pdf or not source_pdf.exists() or not mono_translated_pdf.exists() or not standard_dual_pdf.exists():
-        return {"version": 1, "status": "unavailable", "reason": "missing_source_mono_or_standard_dual_pdf", "findings": []}
-    fitz = _load_fitz()
-    findings: list[dict[str, Any]] = []
-    page_metrics: list[dict[str, Any]] = []
-
-    normalized_layout = layout.replace("_", "-")
-
-    def inspect_dual(path: Path, role: str, delivery_blocking: bool, inspected_layout: str) -> None:
-        with fitz.open(str(source_pdf)) as source_doc, fitz.open(str(mono_translated_pdf)) as mono_doc, fitz.open(str(path)) as dual_doc:  # type: ignore[attr-defined]
-            for page_index in range(min(len(source_doc), len(mono_doc), len(dual_doc))):
-                source_full = _page_region_metrics(source_doc, page_index, "full")
-                mono_full = _page_region_metrics(mono_doc, page_index, "full")
-                left = _page_region_metrics(dual_doc, page_index, "left")
-                right = _page_region_metrics(dual_doc, page_index, "right")
-                translated_side = left if inspected_layout == "zh-left-en-right" else right
-                source_side = right if inspected_layout == "zh-left-en-right" else left
-                page_metrics.append(
-                    {
-                        "role": role,
-                        "page": page_index + 1,
-                        "source_full": source_full,
-                        "mono_translated_full": mono_full,
-                        "dual_left": left,
-                        "dual_right": right,
-                        "layout": inspected_layout,
-                    }
-                )
-                source_nonempty = source_full["text_chars"] >= 30 or source_full["nonwhite_ratio"] >= 0.025
-                translated_nonempty = mono_full["text_chars"] >= 20 or mono_full["cjk_count"] >= 8
-                translated_side_low = (
-                    translated_side["text_chars"] < max(20, int(mono_full["text_chars"] * 0.08))
-                    and translated_side["cjk_count"] < 8
-                    and translated_side["nonwhite_ratio"] < max(0.012, float(mono_full["nonwhite_ratio"]) * 0.25)
-                )
-                if source_nonempty and translated_nonempty and translated_side_low:
-                    findings.append(
-                        normalize_finding(
-                            {
-                                "severity": "blocking" if delivery_blocking else "warn",
-                                "category": "rendering",
-                                "rule": "blank_or_low_content_page",
-                                "page": page_index + 1,
-                                "target_pdf_role": role,
-                                "delivery_blocking": delivery_blocking,
-                                "message": "双语 PDF 中文侧文本/CJK 覆盖极低，疑似中文侧空白。",
-                                "evidence": json.dumps(
-                                    {
-                                        "mono_text_chars": mono_full["text_chars"],
-                                        "mono_cjk_count": mono_full["cjk_count"],
-                                        "translated_side": "left" if inspected_layout == "zh-left-en-right" else "right",
-                                        "translated_text_chars": translated_side["text_chars"],
-                                        "translated_cjk_count": translated_side["cjk_count"],
-                                        "translated_nonwhite_ratio": translated_side["nonwhite_ratio"],
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                            }
-                        )
-                    )
-                source_side_delta = abs(float(source_side["nonwhite_ratio"]) - float(source_full["nonwhite_ratio"]))
-                mean_delta = max(abs(float(source_side["mean_rgb"][idx]) - float(source_full["mean_rgb"][idx])) for idx in range(3))
-                if source_nonempty and (source_side_delta >= 0.18 or mean_delta >= 55):
-                    findings.append(
-                        normalize_finding(
-                            {
-                                "severity": "blocking" if delivery_blocking else "warn",
-                                "category": "rendering",
-                                "rule": "dual_background_shift",
-                                "page": page_index + 1,
-                                "target_pdf_role": role,
-                                "delivery_blocking": delivery_blocking,
-                                "message": "双语 PDF 英文侧背景/像素分布与源页差异过大，可能出现背景漂移或侧栏异常。",
-                                "evidence": json.dumps(
-                                    {
-                                        "source_nonwhite_ratio": source_full["nonwhite_ratio"],
-                                        "source_side": "right" if inspected_layout == "zh-left-en-right" else "left",
-                                        "dual_source_nonwhite_ratio": source_side["nonwhite_ratio"],
-                                        "source_mean_rgb": source_full["mean_rgb"],
-                                        "dual_source_mean_rgb": source_side["mean_rgb"],
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                            }
-                        )
-                    )
-
-    try:
-        if normalized_layout in {"zh-left-en-right", "en-left-zh-right"}:
-            inspect_dual(standard_dual_pdf, "standard_delivery", True, normalized_layout)
-        if backend_dual_pdf and backend_dual_pdf.exists() and backend_dual_pdf != standard_dual_pdf:
-            # BabelDOC native dual is English-left unless --dual-translate-first
-            # was requested for zh-left-en-right.
-            backend_inspected_layout = (
-                "zh-left-en-right" if normalized_layout == "zh-left-en-right" else "en-left-zh-right"
-            )
-            inspect_dual(backend_dual_pdf, "backend_intermediate", False, backend_inspected_layout)
-        semantic = build_semantic_layout_report(mono_translated_pdf, target_pdf_role="mono_translated_pdf")
-        if semantic.get("findings"):
-            findings.extend(semantic["findings"])
-    except Exception as exc:  # noqa: BLE001
-        return {"version": 1, "status": "unavailable", "reason": f"dual_visual_check_unavailable: {exc}", "findings": []}
-    delivery_findings = [item for item in findings if item.get("delivery_blocking") and item.get("severity") == "blocking"]
-    return {
-        "version": 1,
-        "status": "warn" if findings else "ok",
-        "delivery_status": "blocking" if delivery_findings else "ok",
-        "standard_dual_pdf": str(standard_dual_pdf),
-        "backend_dual_pdf": str(backend_dual_pdf) if backend_dual_pdf else None,
-        "layout": normalized_layout,
-        "page_metrics": page_metrics,
-        "semantic_layout_report": semantic,
-        "findings": findings,
-    }
-
-
-def build_paragraph_label_audit(translated_pdf: Path | None, output_dir: Path, pages: list[int] | None = None) -> dict[str, Any]:
-    if not translated_pdf or not translated_pdf.exists():
-        return {"version": 1, "status": "unavailable", "reason": "missing_translated_pdf", "paragraphs": [], "overlap_pairs": []}
-    preview_dir = output_dir / "visual_pages"
-    try:
-        extracted = extract_pdf_pages(translated_pdf, preview_dir, "audit_translated", max_pages=5, pages=pages)
-    except Exception as exc:  # noqa: BLE001 - 审计产物不能让主流程在测试/降级 PDF 上失败
-        return {
-            "version": 1,
-            "status": "unavailable",
-            "reason": f"paragraph_label_audit_unavailable: {exc}",
-            "translated_pdf": str(translated_pdf),
-            "paragraphs": [],
-            "overlap_pairs": [],
-        }
-    paragraphs: list[dict[str, Any]] = []
-    overlaps: list[dict[str, Any]] = []
-    for page in extracted:
-        page_number = page.get("page")
-        for span in page.get("spans", []):
-            if not isinstance(span, dict):
-                continue
-            text = str(span.get("text") or "")
-            label = "ordinary_text"
-            if is_allowed_compact_label(text) or is_neutral_compact_label(text):
-                label = "allowed_compact_label"
-            elif re.search(r"(?:\\[A-Za-z]+|[A-Za-z]+_[A-Za-z0-9_]+)", text):
-                label = "code_like_span"
-            elif 0 < float(span.get("size") or 0) < 6:
-                label = "small_font_span"
-            paragraphs.append(
-                {
-                    "page": page_number,
-                    "bbox": span.get("bbox"),
-                    "layout_label": label,
-                    "xobj_id": None,
-                    "debug_id": None,
-                    "unicode_sample": text[:120],
-                    "scale": None,
-                    "participates_translation": label != "allowed_compact_label",
-                    "participates_typesetting": True,
-                    "source": "pymupdf_post_render",
-                }
-            )
-        for pair in overlap_pair_samples(page):
-            pair["page"] = page_number
-            overlaps.append(pair)
-    return {
-        "version": 1,
-        "status": "warn" if overlaps else "ok",
-        "audit_source": "pymupdf_post_render",
-        "translated_pdf": str(translated_pdf),
-        "pages": pages or "auto",
-        "paragraph_count": len(paragraphs),
-        "overlap_pair_count": len(overlaps),
-        "paragraphs": paragraphs[:1000],
-        "overlap_pairs": overlaps[:200],
-    }
-
-
-def build_visual_layout_report(
-    source_pdf: Path | None,
-    translated_pdf: Path | None,
-    output_dir: Path,
-    *,
-    max_pages: int = 3,
-    pages: list[int] | None = None,
-) -> dict[str, Any]:
-    if not source_pdf or not translated_pdf or not source_pdf.exists() or not translated_pdf.exists():
-        return {
-            "version": 1,
-            "status": "unavailable",
-            "reason": "missing_source_or_translated_pdf",
-            "findings": [],
-        }
-    preview_dir = output_dir / "visual_pages"
-    try:
-        effective_pages = pages or infer_default_visual_check_pages(source_pdf, max_pages=max_pages)
-        source_pages = extract_pdf_pages(source_pdf, preview_dir, "source", max_pages=max_pages, pages=effective_pages)
-        translated_pages = extract_pdf_pages(translated_pdf, preview_dir, "translated", max_pages=max_pages, pages=effective_pages)
-        report = analyze_visual_pages(
-            source_pages,
-            translated_pages,
-            full_translated_text=extract_pdf_full_text(translated_pdf),
-        )
-        source_page_count = pdf_page_count(source_pdf)
-        translated_page_count = pdf_page_count(translated_pdf)
-        if source_page_count is not None and translated_page_count is not None and source_page_count != translated_page_count:
-            report["findings"].append(
-                normalize_finding(
-                    {
-                        "severity": "blocking",
-                        "category": "rendering",
-                        "rule": "page_count_drift_full_pdf",
-                        "page": "document",
-                        "source_page_count": source_page_count,
-                        "translated_page_count": translated_page_count,
-                        "message": "源/译 PDF 总页数不一致，主版式交付存在页数漂移风险。",
-                    }
-                )
-            )
-            report["status"] = "warn"
-        health = text_layer_health(translated_pages)
-        if health["status"] != "ok":
-            report["findings"].append(
-                normalize_finding(
-                    {
-                        "severity": "warn",
-                        "category": "rendering",
-                        "rule": "text_layer_glyph_risk",
-                        "page": "document",
-                        "evidence": json.dumps(health, ensure_ascii=False),
-                        "message": "译文 PDF 文本层存在可疑乱码或 ToUnicode 抽取风险。",
-                    }
-                )
-            )
-            report["status"] = "warn"
-        coverage = build_full_document_coverage_report(source_pdf, translated_pdf)
-        if coverage.get("findings"):
-            report["findings"].extend(coverage["findings"])
-            report["status"] = "warn"
-        semantic = build_semantic_layout_report(translated_pdf, target_pdf_role="translated_pdf")
-        if semantic.get("findings"):
-            report["findings"].extend(semantic["findings"])
-            report["status"] = "warn"
-        report.update(
-            {
-                "source_pdf": str(source_pdf),
-                "translated_pdf": str(translated_pdf),
-                "source_page_count": source_page_count,
-                "translated_page_count": translated_page_count,
-                "text_layer_health": health,
-                "full_document_coverage": coverage,
-                "semantic_layout_report": semantic,
-                "visual_check_pages": effective_pages or "auto",
-                "preview_dir": str(preview_dir),
-                "source_pages": [{"page": item["page"], "preview_path": item["preview_path"]} for item in source_pages],
-                "translated_pages": [{"page": item["page"], "preview_path": item["preview_path"]} for item in translated_pages],
-            }
-        )
-        return report
-    except Exception as exc:  # noqa: BLE001 - 视觉检查不能阻断翻译主路径
-        return {
-            "version": 1,
-            "status": "unavailable",
-            "reason": f"visual_check_unavailable: {exc}",
-            "findings": [],
-        }
+SCRIPT_INTERFACE = "internal-module"
+SCRIPT_INTERFACE_REASON = "由兼容入口调用的职责模块，不提供独立命令。"

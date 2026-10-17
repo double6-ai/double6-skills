@@ -1,0 +1,23 @@
+{
+  "schema_version": "native-uri-host-rebind@1",
+  "source": {
+    "path": "example_inputs/unfamiliar_native_beutl.pdf",
+    "sha256": "453fb0f1dacf0ff40471761f7f3f58ae989ad905463d9e668025162ed89dc47f"
+  },
+  "target": {
+    "path": "example_inputs/adaptive.zh.candidate.pdf",
+    "sha256": "be4fc62fdcac009675fdb7829da78c6fea64bf0e0ced86b354368145b764f4b4"
+  },
+  "pages": [
+    1,
+    2
+  ],
+  "policy": {
+    "id": "source-uri-label-padding-v1",
+    "maximum_pages": 5,
+    "maximum_padding_pt": 3.0,
+    "continuous_fragment_tolerance_pt": 0.03,
+    "saved_position_tolerance_pt": 0.03,
+    "case_overrides_allowed": false
+  }
+}

@@ -1,0 +1,23 @@
+# 原生引用字色的有限修复经验（2026-10-10）
+
+适用场景：已有原生译文只需恢复具名引用成员的源字色，并要求其它实际字形字段完全不变。当前真实案例为陌生原生论文声明两页；不声明任意PDF自动准备、整篇语义或严格交付能力。Skill2.0.0仍未发布。
+
+## 症状和原因
+
+通过HTML色span重建候选时，源RGB被量化为8位数值，55成员最大绝对误差0.0037231966853141785；重排同时引入8字形的16个origin/bbox x字段微差，最大0.000030517578125pt。对应冻结RGB1e-6、其它字段exact0要求真实失败，旧候选和回执保留，不能放宽门槛。
+
+## 实际正确做法
+
+从现有1149候选的原生文字和leaf Form文本流做逐成员定位。4个Form的完整GID序列须唯一匹配当前全页native数组，55成员恰好归属13个完整show；同时冻结字体/编码/CID映射、原stream SHA及同页唯一调用，未知或跨页复用拒绝。部分show、重复成员、未知operator、ExtGState或未证明字体映射不可自动进入写回。
+
+仅拆分完整拥有show的颜色段，保留原定位/kerning数值字节及所有未改操作，写源RGB后恢复原fill状态；不经过全stream数值重序列化或重新Story排版。字体绑定在JSON冻结后tuple/list可能不同，只规范化容器表示，字体属性、xref、编码、CID映射和数值仍精确核对。
+
+本例的保存候选c69a94fab70e8f3ecb13b090fdab73ae91078f814defced4d33d158ae0fac0e9逐页冷读通过：55RGB误差0，其它3165原生字形字段精确不变，源8URI/目标25点击框的完整A/NM/URI与基线一致。新144dpi整页和13引用/邻行atlas经具名D有限审校通过，整包正式结果仍unverified、0接口issues/14pending，末句跨声明两页的语义继续U。
+
+## 验证和能力边界
+
+保存后以实际新SHA冷读每页，核对全文字符序列、GID/font/size/origin/bbox/opacity/order、非选区颜色、页面范围和全部链接动作/点击框；再用新SHA真实PNG检查指定颜色、括号、邻行与首字可见性。只读fixture控制不能替代实际保存核验和独立视觉接受。expected文本中不绘制的空白与实际native分开记录；本例8处raw预期空白差异未被宣称为原始UTF8全文相等。
+
+拟共享utility只接受CIDFontType2/Identity-H identity剖面，11个fixture控制通过，但真实案例字体被该guard拒绝。因此未安装该utility；不能盲称CID=GID或放宽Subtype以取得采用。本例采用的是已冻结且全GID序列实际唯一匹配的case实现，不扩展到未经证明的Type0/CFF映射。
+
+直接证据入口：项目04_iterations/iteration_038_qa_hardening/team_handoff_1154/regression/stage02/native_stream_color_candidate_02/result.json、native_stream_color_actual_p1_02/result.json、native_stream_color_actual_p2_02/result.json、native_formal_eval_01/comprehensive_quality.json；独立证据由independent/stage02/NATIVE_NEW_TARGET_CURRENT_REFS.json导航。阶段采用决策与失败见coordinator/stage02记录及coordinator/stage02_shared_helper_actual_p2_01.outcome.json。完整原文、输入/输出SHA与范围以这些回执为准。

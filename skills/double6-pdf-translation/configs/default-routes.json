@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "development_revision": "110-unpublished",
+  "entry_script": "scripts/paper_translation_workflow.py",
+  "selection": "classify input and task from source evidence; no automatic scan default for everyPDF",
+  "defaults": {
+    "scan_new_input": "inspect-input",
+    "scan_reviewed_reprepare": "run-reviewed-scan",
+    "scan_frozen_rebuild": "trial-render",
+    "digital_pdf": "collect",
+    "latex_verified": "candidate"
+  },
+  "routes": {
+    "scan_new_input": {
+      "input_family": "scanned_pdf",
+      "supported_scope": "existing finite clear single-column image scan; qualification unknown until bound source-image review",
+      "action": "inspect-input",
+      "requires": [
+        "bound_source_image_review_before_fresh",
+        "complete_work_and_script_kind_confirmation",
+        "existing_OCR_sourceplan_roles_and_full_semantic_review_before_render"
+      ],
+      "next_existing_entry": "prepare-scan",
+      "default_max_pages": 2
+    },
+    "scan_reviewed_reprepare": {
+      "input_family": "scanned_pdf",
+      "action": "run-reviewed-scan",
+      "config_schema": "schemas/reviewed-scan-run.schema.json",
+      "requires": [
+        "existing_frozen_preparation_parent_SHA_chain"
+      ],
+      "model_network_required": false
+    },
+    "scan_frozen_rebuild": {
+      "input_family": "scanned_pdf",
+      "action": "trial-render",
+      "requires": [
+        "exact_frozen_source_contract_code_refs"
+      ],
+      "repeat_preparation": false,
+      "model_network_required": false
+    },
+    "digital_pdf": {
+      "input_family": "native_digital_pdf",
+      "action": "collect",
+      "fixed_arguments": [
+        "--route",
+        "digital_pdf"
+      ],
+      "existing_route_unchanged": true,
+      "reference": "references/release-quickstart.md"
+    },
+    "latex_verified": {
+      "input_family": "verified_latex",
+      "action": "candidate",
+      "fixed_arguments": [
+        "--route",
+        "latex_verified"
+      ],
+      "existing_route_unchanged": true,
+      "reference": "references/release-quickstart.md"
+    }
+  },
+  "quality_requirements": [
+    "complete_source_groups_and_roles",
+    "full_semantic_review_and_required_body_repairs",
+    "actual_mono_and_dual_pages",
+    "actual_glyph_font_style_links_protection",
+    "ordinary_reader_and_real_wholeparagraph_copy",
+    "frozen_cold_rebuild",
+    "only_inherit_when_source_target_actual_content_and_standard_unchanged"
+  ],
+  "source_policy": {
+    "physical_scale": "preserve_input_media_crop_boxes",
+    "hidden_OCR": "report_and_require_explicit_route_decision",
+    "handwriting_complete_work": "UNKNOWN_until_bound_source_image_review",
+    "auto_model_fallback": false
+  },
+  "runtime": {
+    "concurrency": 1,
+    "task_rss_bytes": 3221225472,
+    "per_job_seconds": 120,
+    "same_workspace_required": false,
+    "supported_platforms": [
+      "macOS",
+      "Linux"
+    ]
+  },
+  "software_release": false,
+  "published_distribution": "not_published",
+  "consumer": {
+    "type": "skill_agent",
+    "instruction_source": "SKILL.md",
+    "execution_entry": "scripts/paper_translation_workflow.py",
+    "selection": "read this config, classify source/task, invoke existing action directly"
+  },
+  "candidate_version": "2.0.0-rc.2"
+}

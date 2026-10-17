@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source",
+    "target",
+    "bindings",
+    "dependencies",
+    "policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "remote-destination-audit@1"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "bindings": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "source_page",
+          "source_xref",
+          "target_page",
+          "target_xref"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "source_page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "source_xref": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "target_page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "target_xref": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "before_target_xref": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "bridge_action_and_NM_exact": {
+            "const": true
+          },
+          "previous_actual_ref": {
+            "type": "object",
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^/"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 8,
+      "propertyNames": {
+        "pattern": "^[^/\\\\]+$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^/"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "policy": {
+      "const": {
+        "id": "frozen-remote-xyz-dependency-v1",
+        "maximum_pages": 20,
+        "maximum_annotations": 1000,
+        "coordinate_tolerance_pt": 0.001,
+        "zoom_zero_equals_null": true,
+        "case_overrides_allowed": false
+      }
+    }
+  }
+}
