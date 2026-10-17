@@ -38,7 +38,7 @@ EVENT_INTENTS = {
 }
 RESPONSIVE_DEVICE_TARGET = "responsive_both"
 RESPONSIVE_DEVICE_LABEL = "手机、平板与电脑自适应（含横竖屏）"
-SENSITIVE_DATA_POLICIES = {"synthetic_or_redacted", "real_data_local_only_with_explicit_consent"}
+SENSITIVE_DATA_POLICIES = {"synthetic_or_redacted", "self_owned_local_only", "real_data_local_only_with_explicit_consent"}
 CONTENT_SOURCE_MODES = {"generic_non_claimed", "user_provided_or_official_verified"}
 QUESTION_LIMIT_PER_SCENE = 5
 
@@ -935,7 +935,7 @@ def _validate_product(value: dict[str, Any], requirements: dict[str, Any], event
     if privacy_decision and privacy_decision.get("status") == "confirmed" and policy.get("sensitive_data") != privacy_decision.get("value"):
         raise ContractError("data_policy 必须与已确认的数据边界一致")
     if not privacy_decision and privacy_default and policy.get("sensitive_data") != privacy_default.get("value"):
-        raise ContractError("未显式授权真实敏感数据时，data_policy 必须采用合成或脱敏默认值")
+        raise ContractError("未显式授权真实敏感数据时，data_policy 必须采用安全默认值（合成/脱敏，或本人自用健康记录的 self_owned_local_only）")
     if policy.get("sensitive_data") == "real_data_local_only_with_explicit_consent":
         required_consent = {
             "explicit_consent": True,

@@ -540,12 +540,7 @@ def _child(product: dict[str, Any], template: dict[str, Any], capabilities: list
 # data-personal-today-focus
 # data-personal-quick-capture
 # data-personal-attention
-CREATOR_WEEK = [
-    ("一", "长文", "公众号"), ("二", "短帖 ×2", "X / 即刻"), ("三", "图文", "小红书"), ("四", "短视频", "视频号 / 抖音"),
-    ("五", "数字复盘", "全平台"), ("六", "回评论", "不新发"), ("日", "休息", "攒素材"),
-]
-
-CREATOR_PLATFORMS = [("📕", "小红书"), ("🟢", "公众号"), ("🎬", "视频号 / 抖音"), ("✖️", "X / 即刻")]
+from .platforms import DEFAULT_PLATFORMS as CREATOR_PLATFORMS, DEFAULT_WEEK as CREATOR_WEEK, creator_platforms  # noqa: E402
 
 READING_SHELF = [("📥", "想读", "先收进来，不急着读"), ("📖", "在读", "一次只读 1–2 本"), ("✅", "读完", "当天写一张读书卡"), ("🗂️", "已做笔记", "证据卡能被引用")]
 
@@ -637,11 +632,14 @@ def _creator(product: dict[str, Any], template: dict[str, Any], capabilities: li
         "</aside></section>"
     )
     pipeline = _module_tiles(rows, {row['id']: emoji for row, emoji in zip(rows, emojis)})
-    week = ''.join(f"<div data-weekday='{index}'><small>周{day}</small><strong>{_e(kind)}</strong><small>{_e(where)}</small></div>" for index, (day, kind, where) in enumerate(CREATOR_WEEK))
-    platforms = ''.join(f"<span class='platform-chip'><i aria-hidden='true'>{icon}</i>{_e(name)}</span>" for icon, name in CREATOR_PLATFORMS)
+    chips, week_rows, from_request = creator_platforms(product)
+    week = ''.join(f"<div data-weekday='{index}'><small>周{day}</small><strong>{_e(kind)}</strong><small>{_e(where)}</small></div>" for index, (day, kind, where) in enumerate(week_rows))
+    platforms = ''.join(f"<span class='platform-chip'><i aria-hidden='true'>{icon}</i>{_e(name)}</span>" for icon, name in chips)
+    platform_heading = "你的平台" if from_request else "常用平台"
+    platform_attr = "request" if from_request else "default"
     resources = ("<section class='creator-resources dashboard-panel'><h2>内容流水线</h2>"
                  f"<div class='all-modules-grid'>{pipeline}</div><h3>建议的一周发布节奏</h3><div class='week-rhythm'>{week}</div>"
-                 f"<h3>常用平台</h3><div class='platform-row'>{platforms}</div><p>排期只保存在本机，到点后在平台上人工发布。</p></section>")
+                 f"<h3>{platform_heading}</h3><div class='platform-row' data-creator-platforms='{platform_attr}'>{platforms}</div><p>排期只保存在本机，到点后在平台上人工发布。</p></section>")
     end = dashboard.rfind('</section>')
     dashboard = dashboard[:end] + resources + dashboard[end:]
     return _base_result(

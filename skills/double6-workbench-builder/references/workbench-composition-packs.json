@@ -576,9 +576,9 @@
           "id": "r-seed-content-topic-1",
           "module_id": "content-topics",
           "values": {
-            "title": "为什么工作台不能先让人填表",
+            "title": "这周最想讲清楚的一件事",
             "stage": "进行中",
-            "next_action": "写完读者问题和验收标准"
+            "next_action": "写清读者问题，再写开头"
           }
         },
         {
@@ -586,18 +586,18 @@
           "module_id": "content-briefs",
           "values": {
             "topic": "今晚这一篇任务书",
-            "audience": "自己做内容、却总在记选题的人",
-            "reader_problem": "打开工具先被要求记一条，做不成今晚那篇",
+            "audience": "对这个话题有疑问的读者",
+            "reader_problem": "读者在这件事上最常卡住的一步",
             "evidence": "本机合成观察，待核验",
             "format": "图文",
-            "acceptance": "首页能直接推进这一篇，而不是先填来源箱"
+            "acceptance": "开头三句话说清读者为什么要看下去"
           }
         },
         {
           "id": "r-seed-content-prod-1",
           "module_id": "content-production",
           "values": {
-            "title": "为什么工作台不能先让人填表",
+            "title": "这周最想讲清楚的一件事",
             "details": "先写 80 字开头，再决定要不要进人工发布",
             "due": "{{today}}"
           }
@@ -2617,18 +2617,7 @@
         "log_today_meal",
         "checkin_today"
       ],
-      "tonight_seeds": [
-        {
-          "id": "r-seed-fitness-meal-1",
-          "module_id": "fitness-food",
-          "values": {
-            "title": "早餐 燕麦牛奶",
-            "date": "{{today}}",
-            "calories": 320,
-            "notes": "合成开箱。热量是自己填的估计。"
-          }
-        }
-      ],
+      "tonight_seeds": [],
       "execution_projection": {
         "projection_version": "double6_execution_projection_v1",
         "today_module_ids": [
