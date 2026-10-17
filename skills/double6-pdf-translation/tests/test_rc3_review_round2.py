@@ -133,9 +133,11 @@ def test_round2_prose_after_heading_is_not_excluded(tmp_path):
 
 
 def test_round2_target_exclusion_capped_by_source(tmp_path):
-    # 源文是正文；译文把同页内容换成英文“伪参考文献”。译文侧剔除不得超过源文同页剔除量。
+    # 源文是正文；译文把同页内容换成带 References 标题的英文“伪参考文献”。译文侧剔除不得超过源文同页剔除量。
+    # （第三轮起译文侧的无标题剔除只在源文已接受的页上生效，故这里用带标题的区域验证上限。）
     source_page = Page(); flow(source_page, 50, 545, 50, [(EN_PARA, 'helv')] * 4)
-    target_page = Page(); flow(target_page, 50, 545, 50, [(r, 'helv') for r in REFS])
+    target_page = Page(); y = flow(target_page, 50, 545, 50, [('References', 'hebo')])
+    flow(target_page, 50, 545, y, [(r, 'helv') for r in REFS])
     result = check_render_residue(save(tmp_path / 's.pdf', [source_page]), save(tmp_path / 't.pdf', [target_page]))
     row = result['pages'][0]
     assert row['target_exclusion_capped_words'] > 100 and row['severity'] != 'ok', row
