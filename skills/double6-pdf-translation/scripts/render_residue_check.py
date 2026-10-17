@@ -15,7 +15,9 @@
 （编号、年份、作者/首字母、出版物/DOI/页码等特征，且虚词比例低）。
 - 有 References/参考文献 等标题时，标题之后（阅读顺序）通过校验的条目被剔除，直到附录类标题
   （Appendix、附录、A/A.1/B 等字母编号标题）为止；标题之后的普通正文仍然计数。
-- 没有标题时，只剔除连续 ≥3 条、按更严格阈值通过校验的条目。
+- 句子式正文（指标枚举、多个小数/年份/叙述式引用、第一人称、谓语动词、句首连接词）一律否决。
+- 没有标题时需要强结构证据（宁可误报不可漏判）：≥3 条编号/作者开头且含年份与出处的条目、左边距一致、
+  位于文末或节末、全文剔除不超过源文英文词一半；译文侧只在源文已接受的页上剔除；候选段写入审计记录。
 - 译文侧的剔除量不得超过源文同页剔除量（×1.2 + 20 词），超出部分加回计数，防止译文用伪条目躲避检查。
 """
 from __future__ import annotations
@@ -56,7 +58,8 @@ MONO_FONT = re.compile(r'mono|courier|consol|code|menlo|inconsolata|cour\b', re.
 
 # 文献条目特征。
 LEADING_MARKER = re.compile(r'^\s*(?:\[\d{1,4}\]|\(\d{1,4}\)|\d{1,4}\.\s)')
-YEAR = re.compile(r'(?<![\d.])(?:19|20)\d{2}[a-z]?(?![\d])')
+# 年份：不把 arXiv 编号（2010.11929）的前四位算作年份。
+YEAR = re.compile(r'(?<![\d.:/])(?:19|20)\d{2}[a-z]?(?!\d|\.\d)')
 AUTHOR = re.compile(r"\b[A-Z]\.(?:\s?[A-Z]\.)*\s?[A-Z][a-zA-Z'\-]+|\b[A-Z][a-zA-Z'\-]+,\s(?:[A-Z]\.\s?)+|\bet\s+al\b|"
                     r"(?:\b[A-Z][a-zA-Z'\-]+(?:\s+[A-Z]\.?)*\s+[A-Z][a-zA-Z'\-]+,\s+){2,}")
 VENUE = re.compile(r'\b(?:proceedings|proc\.|conference|journal|transactions|symposium|workshop|arxiv|preprint|doi|'
@@ -69,6 +72,32 @@ STOPWORDS = frozenset(
     'over under about after before through during without within very most much many some any all no one two us '
     'you he she his her i me my your'.split())
 MAX_ENTRY_LINES = 10
+# 无标题参考文献（第三轮收紧）：只有强结构证据才剔除，宁可误报不可漏判。
+ENTRY_MARKER = re.compile(r'^\s*(?:\[\d{1,4}\]|\d{1,4}\.\s)')
+AUTHOR_LEAD = re.compile(r"^\s*(?:[A-Z][\w'\u2019\-]+,\s+(?:[A-Z]\.\s?)+|(?:[A-Z]\.\s?){1,3}[A-Z][\w'\u2019\-]+)")
+NAME_TOKEN = re.compile(r"^(?:[A-Z][\w'\u2019\-]*\.?|and|et|al\.?|&|van|von|der|den|de|da|del|di|du|la|le)$")
+# 正文否决：出现任一硬否决，或软信号合计 ≥2，该块就不是文献条目。
+HARD_METRIC = re.compile(
+    r'%|\u00b1|\+/-|\b(?:accuracy|acc|bleu|rouge(?:-\w+)?|f1|perplexity|ppl|psnr|ssim|mAP|auc|wer|cer|top-?[15]|error rate|'
+    r'win rate|speedup|score)\b[^.;]{0,12}?\d|\d(?:\.\d+)?\s*(?:points?|bleu|f1|db)\b', re.IGNORECASE)
+SHORT_DECIMAL = re.compile(r'(?<![\w:./-])\d{1,3}\.\d{1,2}(?![\w./-])')
+NARRATIVE_CITE = re.compile(r'\b[A-Z][a-z]+(?:\s+et\s+al\.?|\s+and\s+[A-Z][a-z]+)?,?\s+\((?:19|20)\d{2}[a-z]?\)')
+ET_AL = re.compile(r'\bet\s+al\b')
+PRONOUN = re.compile(r'\b(?:we|our|ours|us)\b', re.IGNORECASE)
+BE_HAVE = re.compile(r'\b(?:is|are|was|were|has|have|had|been|being)\b')
+RESEARCH_VERB = re.compile(
+    r'(?<![\w-])(?:propose[sd]?|introduce[sd]?|show(?:s|ed|n)?|demonstrate[sd]?|presented|found|find|trained|train|'
+    r'evaluate[sd]?|used|use[s]?|achieve[sd]?|reported|report|obtain(?:s|ed)?|reached|studied|extended|applied|observed|'
+    r'improved|improving|reduced|compared|outperform(?:s|ed)?|released|matched|fit|cast|follow(?:s|ed)?|adopt(?:s|ed)?)\b')
+SENTENCE_START = re.compile(
+    r'(?:^|[.;!?]\s+)(?:We|Our|This|These|Those|They|It|Its|Their|However|Moreover|Furthermore|Finally|Overall|Notably|'
+    r'Specifically|Compared|Similarly|Additionally|Here|Thus|Hence|Following|In contrast)\b')
+HEADINGLESS_ENTRY_STOPWORDS = 0.30
+HEADINGLESS_MAX_ENTRY_WORDS = 90
+HEADINGLESS_MAX_ENTRY_LINES = 8
+HEADINGLESS_MARGIN_TOLERANCE = 3.0
+HEADINGLESS_MAX_DOCUMENT_FRACTION = 0.5
+SHORT_GROUP_WORDS = 6
 # 虚词比例阈值：实测文献条目 0.10–0.29，英文正文 0.40–0.50（含夹带引用的正文）。
 REGION_ENTRY_STOPWORDS = 0.33
 STRICT_ENTRY_STOPWORDS = 0.32
@@ -152,14 +181,67 @@ def citation_features(text: str) -> dict[str, Any]:
     return features
 
 
+def prose_veto(text: str) -> list[str]:
+    """句子式正文的否决理由（空表示不否决）：指标枚举、多个年份/叙述式引用、第一人称、谓语动词、句首连接词。"""
+    reasons = []
+    if HARD_METRIC.search(text):
+        reasons.append('metric')
+    if len(SHORT_DECIMAL.findall(text)) >= 2:
+        reasons.append('decimals')
+    if len(YEAR.findall(text)) >= 3:
+        reasons.append('many_years')
+    if len(NARRATIVE_CITE.findall(text)) >= 2 or len(ET_AL.findall(text)) >= 2:
+        reasons.append('narrative_citations')
+    soft = (min(len(PRONOUN.findall(text)), 2) + len(BE_HAVE.findall(text)) + len(RESEARCH_VERB.findall(text))
+            + 2 * len(SENTENCE_START.findall(text)) + (1 if ';' in text else 0))
+    if soft >= 2:
+        reasons.append('sentence_like')
+    return reasons
+
+
+def entry_lead(text: str) -> str | None:
+    """条目开头的结构证据：[n] / n. 编号，或作者开头（Surname, X. / X. Surname / 作者列表后紧跟年份）。"""
+    if ENTRY_MARKER.match(text):
+        return 'marker'
+    if AUTHOR_LEAD.match(text):
+        return 'author'
+    match = YEAR.search(text)
+    if match and match.start() <= 400:
+        prefix = text[:match.start()].strip().rstrip('(').strip()
+        tokens = [t.strip(',;:') for t in prefix.split()]
+        tokens = [t for t in tokens if t]
+        if (len(tokens) >= 2 and prefix[-1:] in '.,' and (',' in prefix or ' and ' in prefix or '&' in prefix)
+                and all(NAME_TOKEN.match(t) for t in tokens)):
+            return 'author_list'
+    return None
+
+
 def is_citation_entry(text: str, lines: int, *, strict: bool) -> bool:
-    """单个条目是否像参考文献条目；普通正文（虚词比例高、无文献结构）一律不算。"""
+    """参考文献标题之后的单个条目是否像文献条目；普通正文（虚词比例高、句子式、指标枚举）一律不算。"""
     f = citation_features(text)
-    if f['words'] < 4 or lines > MAX_ENTRY_LINES or f['words'] > MAX_ENTRY_WORDS:
+    if f['words'] < 4 or lines > MAX_ENTRY_LINES or f['words'] > MAX_ENTRY_WORDS or prose_veto(text):
         return False
     if strict:
         return f['year'] and f['score'] >= 4 and f['stopword_ratio'] <= STRICT_ENTRY_STOPWORDS
     return f['score'] >= 3 and f['stopword_ratio'] <= REGION_ENTRY_STOPWORDS
+
+
+def headingless_entry_class(group: dict[str, Any]) -> str:
+    """无标题参考文献的逐块分类：strong（编号/作者开头 + 年份 + 出处信号）、weak（只缺年份或出处之一，
+    或栏/页首的续接残段）、short（页码等极短组）、break（其它，包括被否决的正文）。"""
+    text = group['text']
+    f = citation_features(text)
+    if f['words'] < SHORT_GROUP_WORDS and not prose_veto(text):
+        return 'short'
+    if (f['words'] > HEADINGLESS_MAX_ENTRY_WORDS or len(group['rows']) > HEADINGLESS_MAX_ENTRY_LINES
+            or f['stopword_ratio'] > HEADINGLESS_ENTRY_STOPWORDS or prose_veto(text)):
+        return 'break'
+    lead = entry_lead(text)
+    if lead and f['year'] and f['venue']:
+        return 'strong'
+    if (lead or group.get('column_start')) and (f['year'] or f['venue']):
+        return 'weak'
+    return 'break'
 
 
 def _is_end_heading(row: dict[str, Any], body_size: float, gap_before: float) -> bool:
@@ -199,15 +281,105 @@ def _page_groups(page) -> list[dict[str, Any]]:
         else:
             groups[-1]['rows'].append(row)
         prev = row
+    seen_columns: set[str] = set()
     for group in groups:
         group['text'] = ' '.join(r['text'] for r in group['rows'])
         group['code'] = sum(r['code'] for r in group['rows'])
         group['page'] = page.number + 1
+        column = group['rows'][0]['col']
+        group['column_start'] = column not in seen_columns
+        group['x0'] = group['rows'][0]['x0']
+        seen_columns.add(column)
     return groups
 
 
-def split_counted_text(document) -> tuple[list[str], list[dict[str, int]], list[int]]:
-    """逐页返回计数文本与剔除统计；参考文献区按阅读顺序跨页延续，直到附录类标题。"""
+def _preview(text: str) -> str:
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text if len(text) <= 100 else text[:97] + '...'
+
+
+def _mark_headingless_runs(pages: list[list[dict[str, Any]]], allowed_pages: set[int] | None) -> list[dict[str, Any]]:
+    """无标题参考文献：只剔除同时满足以下全部条件的连续条目段，否则照常计数（宁可误报）。
+
+    - 段内每块逐一分类（headingless_entry_class），被否决的正文或其它非条目块立即打断连续段；
+    - 至少 3 条 strong，且 strong 占条目的 2/3 以上，strong 条目的虚词比例均值 ≤ 0.27；
+    - strong 条目首行左边距一致（同栏内相差 ≤ 3pt）；
+    - 位于文档末尾或节末：段后直到文档结束或下一个附录类标题之间只有极短组；
+    - 源文侧：全文剔除量不超过源文英文词总数的一半；译文侧：只在源文已接受的页上接受。
+    """
+    sequence = [g for groups in pages for g in groups]
+    total_words = sum(len(LATIN_WORD.findall(g['text'])) for g in sequence)
+    runs: list[dict[str, Any]] = []
+    current: list[dict[str, Any]] = []
+
+    def close(index: int) -> None:
+        nonlocal current
+        members = current
+        current = []
+        strong = [g for g in members if g['_class'] == 'strong']
+        if not strong:
+            return
+        tail = sequence[index:]
+        after = next((g for g in tail if not (g['_class'] == 'short' and g['kind'] is None)), None)
+        record = {'pages': sorted({g['page'] for g in members}), 'entries': len(members), 'strong_entries': len(strong),
+                  'weak_entries': len(members) - len(strong),
+                  'excluded_words': sum(len(LATIN_WORD.findall(g['text'])) for g in members),
+                  'first_entry': _preview(members[0]['text']), 'last_entry': _preview(members[-1]['text']),
+                  'members': members}
+        margins: dict[str, list[float]] = {}
+        for g in strong:
+            margins.setdefault(g['rows'][0]['col'], []).append(g['x0'])
+        mean_stop = sum(citation_features(g['text'])['stopword_ratio'] for g in strong) / len(strong)
+        if len(strong) < HEADINGLESS_MIN_RUN:
+            reason = 'too_few_strong_entries'
+        elif len(strong) * 3 < len(members) * 2:
+            reason = 'weak_entries_dominate'
+        elif mean_stop > HEADINGLESS_RUN_MEAN_STOPWORDS:
+            reason = 'high_stopword_ratio'
+        elif any(max(xs) - min(xs) > HEADINGLESS_MARGIN_TOLERANCE for xs in margins.values()):
+            reason = 'inconsistent_margin'
+        elif after is not None and after['kind'] != 'end_heading':
+            reason = 'not_at_document_or_section_end'
+        elif allowed_pages is not None and not set(record['pages']) <= allowed_pages:
+            reason = 'no_matching_source_run'
+        else:
+            reason = 'accepted'
+        record['reason'] = reason
+        runs.append(record)
+
+    for index, group in enumerate(sequence):
+        free = group['exclude'] is None and not group['in_region'] and group['kind'] is None
+        group['_class'] = headingless_entry_class(group) if free else 'break'
+        if group['_class'] in ('strong', 'weak'):
+            current.append(group)
+        elif group['_class'] == 'short' and current:
+            continue
+        elif current:
+            close(index)
+    if current:
+        close(len(sequence))
+    if allowed_pages is None:
+        accepted_words = sum(r['excluded_words'] for r in runs if r['reason'] == 'accepted')
+        if accepted_words > HEADINGLESS_MAX_DOCUMENT_FRACTION * total_words:
+            for record in runs:
+                if record['reason'] == 'accepted':
+                    record['reason'] = 'exceeds_document_fraction'
+    for record in runs:
+        record['accepted'] = record['reason'] == 'accepted'
+        if record['accepted']:
+            for g in record.pop('members'):
+                g['exclude'] = 'reference_entries_headingless'
+        else:
+            record.pop('members')
+            record['excluded_words'] = 0
+    return runs
+
+
+def split_counted_text(document, allowed_pages: set[int] | None = None):
+    """逐页返回计数文本、剔除统计、参考文献所在页与无标题参考文献审计记录。
+
+    参考文献区按阅读顺序跨页延续，直到附录类标题；allowed_pages 不为 None 时（译文侧），
+    无标题参考文献只在这些页上接受。"""
     pages = [_page_groups(page) for page in document]
     in_region = False
     for groups in pages:
@@ -220,26 +392,7 @@ def split_counted_text(document) -> tuple[list[str], list[dict[str, int]], list[
             elif in_region and is_citation_entry(group['text'], len(group['rows']), strict=False):
                 group['exclude'] = 'reference_section'
             group['in_region'] = in_region
-    # 无标题的参考文献：由逐条通过校验的条目组成的连续段（跨页续接的条目残段只需满足普通阈值），
-    # 段内至少 3 条满足严格阈值（含年份）且整段虚词比例更低时才剔除；页码等极短组随段剔除，不打断连续段。
-    run: list[dict[str, Any]] = []
-    passengers: list[dict[str, Any]] = []
-    sequence = [g for groups in pages for g in groups] + [None]
-    for group in sequence:
-        free = group is not None and group['exclude'] is None and not group['in_region'] and group['kind'] is None
-        if free and len(LATIN_WORD.findall(group['text'])) < 4:
-            if run:
-                passengers.append(group)
-            continue
-        if free and is_citation_entry(group['text'], len(group['rows']), strict=False):
-            run.append(group)
-            continue
-        strict_count = sum(1 for g in run if is_citation_entry(g['text'], len(g['rows']), strict=True))
-        mean_stop = (sum(citation_features(g['text'])['stopword_ratio'] for g in run) / len(run)) if run else 1.0
-        if strict_count >= HEADINGLESS_MIN_RUN and mean_stop <= HEADINGLESS_RUN_MEAN_STOPWORDS:
-            for item in run + passengers:
-                item['exclude'] = 'reference_entries_headingless'
-        run, passengers = [], []
+    audit = _mark_headingless_runs(pages, allowed_pages)
     counted_pages, excluded_pages, reference_pages = [], [], []
     for groups in pages:
         counted, stats = [], {'reference_section': 0, 'reference_entries_headingless': 0, 'code': 0}
@@ -258,7 +411,7 @@ def split_counted_text(document) -> tuple[list[str], list[dict[str, int]], list[
             page_text = pattern.sub(' ', page_text)
         counted_pages.append(page_text)
         excluded_pages.append(stats)
-    return counted_pages, excluded_pages, reference_pages
+    return counted_pages, excluded_pages, reference_pages, audit
 
 
 def _norm_lines(text: str) -> list[str]:
@@ -298,8 +451,9 @@ def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh')
         # mono 成品与源页一一对应；页数不一致时只比较共同页并记录。
         count = min(len(source), len(target))
         result['page_count_source'], result['page_count_target'] = len(source), len(target)
-        source_text, source_excluded, source_refs = split_counted_text(source)
-        target_text, target_excluded, target_refs = split_counted_text(target)
+        source_text, source_excluded, source_refs, source_runs = split_counted_text(source)
+        accepted_pages = {page for run in source_runs if run['accepted'] for page in run['pages']}
+        target_text, target_excluded, target_refs, target_runs = split_counted_text(target, accepted_pages)
         for index in range(count):
             source_ex, target_ex = sum(source_excluded[index].values()), sum(target_excluded[index].values())
             allowed = int(source_ex * TARGET_EXCLUSION_SLACK[0]) + TARGET_EXCLUSION_SLACK[1]
@@ -315,6 +469,12 @@ def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh')
             'rules': ['reference_section', 'reference_entries_headingless', 'code'] + [name for name, _ in INLINE_EXCLUSIONS],
             'target_exclusion_cap': {'factor': TARGET_EXCLUSION_SLACK[0], 'slack_words': TARGET_EXCLUSION_SLACK[1]},
             'reference_section_pages': {'source': source_refs, 'target': target_refs},
+            'headingless_runs': {'source': source_runs, 'target': target_runs},
+            'headingless_rules': {'max_document_fraction': HEADINGLESS_MAX_DOCUMENT_FRACTION,
+                                  'min_strong_entries': HEADINGLESS_MIN_RUN,
+                                  'max_entry_stopword_ratio': HEADINGLESS_ENTRY_STOPWORDS,
+                                  'max_run_mean_stopword_ratio': HEADINGLESS_RUN_MEAN_STOPWORDS,
+                                  'margin_tolerance_pt': HEADINGLESS_MARGIN_TOLERANCE},
             'source_words': sum(sum(p.values()) for p in source_excluded[:count]),
             'target_words': sum(sum(p.values()) for p in target_excluded[:count]),
         }

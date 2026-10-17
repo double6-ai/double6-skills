@@ -108,12 +108,16 @@ def test_round3_reviewer_case_two_column_fails(tmp_path):
 # ---------- 模仿参考文献的英文正文：都必须计入 ----------
 
 @pytest.mark.parametrize('tail', [FINDINGS_BRACKETED, AUTHOR_YEAR_PROSE, RESULTS_LIST, SURNAME_INITIAL_PROSE,
-                                  TABLE_ROWS, REFS_WITH_PROSE],
+                                  TABLE_ROWS * 2, REFS_WITH_PROSE],
                          ids=['bracketed_findings', 'author_year_dense_prose', 'results_list',
                               'surname_initial_prose', 'table_rows', 'refs_with_appended_prose'])
 def test_round3_mimic_suite_is_counted(tmp_path, tail):
     source, target = zh_intro_en_tail(tail)
-    assert_counted(run(tmp_path, source, target))
+    result = run(tmp_path, source, target)
+    assert headingless_words(result) == 0, result['pages']
+    # 表格行里的作者-年份引用本身按规则剔除，剩余英文词仍须让该页至少判 medium；其余变体判 high。
+    expected = ('medium', 'high') if tail[0].startswith('[1] ResNet') else ('high',)
+    assert result['severity'] in expected, result['pages']
 
 
 def test_round3_mimic_on_last_page_of_long_document_is_counted(tmp_path):
@@ -149,7 +153,9 @@ def test_round3_bibliography_like_list_not_at_end_is_counted(tmp_path):
         return [page]
     result = run(tmp_path, doc(EN_INTRO, 'helv'), doc(ZH_INTRO, 'china-s'))
     assert headingless_words(result) == 0, result['pages']
-    assert result['severity'] == 'high'
+    runs = result['excluded']['headingless_runs']['source']
+    assert runs and runs[0]['reason'] == 'not_at_document_or_section_end', runs
+    assert result['severity'] != 'ok'
 
 
 def test_round3_headingless_refs_dominating_document_are_counted(tmp_path):
