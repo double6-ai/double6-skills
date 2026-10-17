@@ -1222,6 +1222,14 @@ class PdfParagraph:
             "type": "Attribute",
         },
     )
+    # 单行源段落的原文基线（PDF 坐标）；排版时译文首行按它对齐，避免表格行整体下移。
+    source_baseline: float | None = field(
+        default=None,
+        metadata={
+            "name": "sourceBaseline",
+            "type": "Attribute",
+        },
+    )
     render_order: int | None = field(
         default=None,
         metadata={

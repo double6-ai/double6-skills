@@ -41,6 +41,7 @@ from babeldoc.format.pdf.document_il.utils.paragraph_helper import (
     is_placeholder_only_paragraph,
 )
 from babeldoc.format.pdf.document_il.utils.paragraph_helper import (
+    bypasses_min_text_length,
     is_pure_numeric_paragraph,
 )
 from babeldoc.format.pdf.document_il.utils.style_helper import GRAY80
@@ -857,7 +858,7 @@ class ILTranslator:
             return
 
         visible = re.sub(r"\s+", "", str(paragraph.unicode or ""))
-        if paragraph.layout_label != "cover_year" and re.fullmatch(r"20\d{2}", visible):
+        if paragraph.layout_label not in {"cover_year", "year_label"} and re.fullmatch(r"20\d{2}", visible):
             paragraph.layout_label = "cover_year"
 
         # Skip pure numeric paragraphs
@@ -1287,7 +1288,7 @@ class ILTranslator:
             getattr(translate_input, "original_placeholder_tokens", None),
         )
         text = translate_input.unicode
-        if paragraph.layout_label not in {"cover_year", "diagram_node"} and len(text) < self.translation_config.min_text_length:
+        if not bypasses_min_text_length(paragraph) and len(text) < self.translation_config.min_text_length:
             logger.debug(
                 f"Text too short to translate, skip. Text: {text}. Paragraph id: {paragraph.debug_id}."
             )
