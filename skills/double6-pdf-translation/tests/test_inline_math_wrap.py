@@ -226,3 +226,17 @@ def test_subscript_comma_does_not_split_formula():
                                             il.PdfFont(font_id='M', name='CMMI10')], pdf_paragraph=[paragraph])
     _stage({}).process_page(page)
     assert _formulas(page) == ['Mi,j=1']
+
+
+def test_zero_height_fraction_bar_moves_with_its_inline_formula():
+    # 真实几何（arXiv 2610.21231 p4 Example 3）：x²/ν² 的分式线外框高度为 0，
+    # 修复前面积比恒为 0、永远不归入公式，公式随译文移动后分式线留在原处压住正文。
+    data, page = load(ROOT / 'tests/fixtures/inline_math/arxiv2610.21231-p4-a.json')
+    bar = il.PdfCurve(box=il.Box(x=434.6, y=231.6, x2=443.0, y2=231.6), xobj_id=data['xobj_id'])
+    long_rule = il.PdfCurve(box=il.Box(x=312.0, y=231.6, x2=565.0, y2=231.6), xobj_id=data['xobj_id'])
+    page.pdf_curve = [bar, long_rule]
+    _stage(data['has_char']).process_page(page)
+    owners = [comp.pdf_formula for comp in page.pdf_paragraph[0].pdf_paragraph_composition
+              if comp.pdf_formula is not None and bar in (comp.pdf_formula.pdf_curve or [])]
+    assert len(owners) == 1 and 'ν' in ''.join(c.char_unicode or '' for c in owners[0].pdf_character)
+    assert page.pdf_curve == [long_rule]  # 跨栏长线不会被当成公式的一部分
