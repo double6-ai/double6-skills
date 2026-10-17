@@ -53,7 +53,14 @@ metadata:
 
 资源按当前路线：一次只跑一个任务；进程树内存上限与单作业时限按平台默认（macOS 3GiB RSS／120 秒，Linux 4GiB PSS／300 秒，且默认不超过物理内存 25%），可用 `--task-memory-mib`、`--job-timeout-seconds`、`--memory-metric` 或对应环境变量 `PAPER_TRANSLATION_TASK_MEMORY_MIB`、`PAPER_TRANSLATION_JOB_TIMEOUT_SECONDS`、`PAPER_TRANSLATION_MEMORY_METRIC` 显式调整（显式值最多物理内存 50%）。扫描新输入默认最多 2 页。模型服务另计，上限 40GiB。先做一页，确认内存正常再扩大。
 
-输入预检与失败统一输出结构化 JSON：`status`、`error_code` 和 `findings`（每项含 `code`/`severity`/`message`/`details`）；被预检拦下时退出码为 2。错误码含 `encrypted_user_password_required`、`pdf_truncated_or_corrupt`、`page_limit_exceeded`、`non_digital_pages`、`source_language_matches_target` 等，`permissions_restricted` 为警告。当前只支持英译中：源文主要是中文时 `candidate` 直接拒绝，不会静默输出中文。成品另做渲染英文残留检查，大面积未翻译判为高风险失败（`quality_status: fail`）。错误码表见[运行说明](references/release-quickstart.md)。
+输入预检与失败统一输出结构化 JSON：`status`、`error_code` 和 `findings`（每项含 `code`/`severity`/`message`/`details`）；被预检拦下时退出码为 2。错误码含 `encrypted_user_password_required`、`pdf_truncated_or_corrupt`、`page_limit_exceeded`、`non_digital_pages`、`source_language_matches_target` 等，`permissions_restricted` 为警告。当前只支持英译中：源文主要是中文时 `candidate` 直接拒绝，不会静默输出中文。成品另做渲染英文残留检查，大面积未翻译判为高风险失败（`quality_status: fail`），此时 `candidate` 仍写出译文，但以退出码 3 结束并在 JSON 中列出失败原因。错误码表见[运行说明](references/release-quickstart.md)。
+
+| 退出码 | 含义 |
+|---|---|
+| 0 | 成功；`candidate` 的质量结论为 `pass`/`warn`/`unverified` |
+| 1 | 其它失败（如资源超限停止、后端失败），见 `status`/`stop_reason`/`exception` |
+| 2 | 被输入预检或合同校验拦下（`status: blocked`，见 `error_code`/`findings`），不产生译文 |
+| 3 | 仅 `candidate`：译文照常写出，但综合质量判 `fail`；结果 JSON 含 `quality_gate: fail`、`quality_fail_summary`、`quality_fail_reasons`（检查项、页码、残留比例与逐页等级）、`render_residue_pages` 和 `output_files` |
 
 ## 安装、配置与恢复
 
