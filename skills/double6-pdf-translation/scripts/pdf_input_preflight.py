@@ -28,13 +28,17 @@ CODES: dict[str, tuple[str, str]] = {
     'page_limit_exceeded': ('error', '页数超出当前路线允许的范围。'),
     'empty_document': ('error', 'PDF 没有任何页面。'),
     'non_digital_pages': ('error', '存在非原生电子页（扫描图像页或无文字层页）；电子 PDF 路线要求全部页面为原生文字层。'),
-    'source_language_matches_target': ('error', '源文主要语言已经是目标语言（中文）；当前版本只支持英译中，不会静默输出中文原文。'),
-    'source_language_mixed': ('warning', '源文中英混合比例较高，语言判定不确定；请确认源文主体是英文。'),
+    'source_language_matches_target': ('error', '源文主要语言已经是目标语言；当前版本支持英译中（en→zh）与中译英（zh→en），不会静默输出原文。'),
+    'target_language_unsupported': ('error', '目标语言不受支持；当前版本只支持 zh（英译中）与 en（中译英）。'),
+    'source_language_mixed': ('warning', '源文中英混合比例较高，语言判定不确定；请确认源文主体语言与所选翻译方向一致。'),
     'source_language_unknown': ('info', '可抽取文字过少，无法判定源语言（常见于扫描件或文字转曲）。'),
     'page_load_failed': ('error', '部分页面无法解析。'),
     'preflight_guard_stopped': ('error', '输入预检子进程超出内存或时限预算被停止。'),
 }
 
+# 支持的目标语言及其对应源语言：zh 目标 = 英译中，en 目标 = 中译英。
+SUPPORTED_TARGETS = {'zh': 'en', 'en': 'zh'}
+LANGUAGE_NAMES = {'zh': '中文', 'en': '英文'}
 _CJK = re.compile(r'[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]')
 _LATIN_WORD = re.compile(r'[A-Za-z]{2,}')
 
@@ -136,6 +140,8 @@ def inspect_pdf(path, *, max_pages: int | None = DIGITAL_MAX_PAGES, target_langu
     facts: dict[str, Any] = {'input': str(path), 'page_count': None, 'max_pages': max_pages,
                              'pages': [], 'source_language': None, 'encryption': None,
                              'target_language': target_language}
+    if target_language not in SUPPORTED_TARGETS:
+        return summarize([finding('target_language_unsupported', target_language=target_language)], **facts)
     if not path.is_file():
         return summarize([finding('input_not_found', path=str(path))], **facts)
     if path.stat().st_size > MAX_INPUT_BYTES:
@@ -193,8 +199,11 @@ def inspect_pdf(path, *, max_pages: int | None = DIGITAL_MAX_PAGES, target_langu
             findings.append(finding('non_digital_pages', pages=[{'page': p['page'], 'kind': p['kind']} for p in non_digital]))
         language = detect_language('\n'.join(texts))
         facts['source_language'] = language
-        if language['language'] == 'zh' and target_language == 'zh':
-            findings.append(finding('source_language_matches_target', **language))
+        if language['language'] == target_language:
+            name = LANGUAGE_NAMES[target_language]
+            findings.append(finding('source_language_matches_target',
+                                    f'源文主要语言已经是目标语言（{name}）；当前版本支持英译中（en→zh）与中译英（zh→en），'
+                                    f'不会静默输出{name}原文。', target_language=target_language, **language))
         elif language['language'] == 'mixed':
             findings.append(finding('source_language_mixed', **language))
         elif language['language'] == 'unknown':
@@ -210,7 +219,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description='structured PDF input preflight (read-only)')
     parser.add_argument('--input', type=Path, required=True)
     parser.add_argument('--max-pages', type=int, default=DIGITAL_MAX_PAGES)
-    parser.add_argument('--target-language', default='zh')
+    parser.add_argument('--target-language', default='zh', choices=sorted(SUPPORTED_TARGETS))
     parser.add_argument('--require-digital', action='store_true')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args(argv)

@@ -305,6 +305,25 @@ $text_to_translate"""
 )
 
 
+_CJK_IDEOGRAPH = re.compile(r"[\u2e80-\u2fdf\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+_CJK_TARGET_CODES = ("ZH", "JA", "JP", "KO", "KR", "CN", "HK", "TW")
+
+
+def _cjk_source_latin_target(config) -> bool:
+    lang_in = str(getattr(config, "lang_in", "") or "").upper()
+    lang_out = str(getattr(config, "lang_out", "") or "").upper()
+    return lang_in.startswith("ZH") and bool(lang_out) and not any(code in lang_out for code in _CJK_TARGET_CODES)
+
+
+def passes_min_text_length(paragraph, text, config) -> bool:
+    """最短长度过滤。中译英时汉字词通常只有 2–4 个字（“荣誉组”“样本量”），按字符数的
+    最短长度是为英文设计的；含汉字的短段落照常翻译，否则会作为中文残留留在英文译文里。"""
+    text = str(text or "")
+    if bypasses_min_text_length(paragraph) or len(text) >= config.min_text_length:
+        return True
+    return _cjk_source_latin_target(config) and bool(_CJK_IDEOGRAPH.search(text))
+
+
 class RichTextPlaceholder:
     def __init__(
         self,
@@ -872,6 +891,14 @@ class ILTranslator:
         if is_placeholder_only_paragraph(paragraph):
             return None
 
+        # 中文源 → 非 CJK 目标（中译英）：不含汉字的段落（未识别为公式的公式碎片、
+        # 英文专名/参考文献、数字标签）本身已是目标语言或不可翻译，保留原字形不送翻译，
+        # 避免用拉丁字体重排公式碎片。英译中不进入此分支。
+        if _cjk_source_latin_target(self.translation_config) and not _CJK_IDEOGRAPH.search(
+            str(paragraph.unicode or "")
+        ):
+            return None
+
         # Extract original placeholder-like tokens from the raw paragraph text
         original_placeholder_tokens: dict[str, int] = {}
 
@@ -1291,7 +1318,7 @@ class ILTranslator:
             getattr(translate_input, "original_placeholder_tokens", None),
         )
         text = translate_input.unicode
-        if not bypasses_min_text_length(paragraph) and len(text) < self.translation_config.min_text_length:
+        if not passes_min_text_length(paragraph, text, self.translation_config):
             logger.debug(
                 f"Text too short to translate, skip. Text: {text}. Paragraph id: {paragraph.debug_id}."
             )

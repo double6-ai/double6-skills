@@ -106,6 +106,29 @@ DEFAULT_SYSTEM_PROMPT = (
     "'overwhelmingly' into natural Chinese unless they are protected spans, code, URLs, emails, or approved names."
 )
 
+# 中译英（--target-language en）默认提示词；英译中默认提示词保持逐字不变。
+DEFAULT_SYSTEM_PROMPT_EN = (
+    "You are a professional, authentic machine translation engine. "
+    "Translate Chinese academic PDFs into fluent, natural academic English while preserving "
+    "formulas, citations, URLs, named entities, terminology, and layout-sensitive placeholders. "
+    "Only output the translated result without additional explanation. "
+    "Do not leave Chinese characters in the output: translate all Chinese prose, headings, captions and table text "
+    "into English unless they are protected spans, code, URLs, emails, or approved names. "
+    "Keep the English concise, because it must fit the space of the original Chinese layout."
+)
+
+SUPPORTED_TARGET_LANGUAGES = ("zh", "en")
+# 目标语言 -> 源语言（pdf2zh --lang-in / --lang-out）。
+TARGET_SOURCE_LANGUAGE = {"zh": "en", "en": "zh"}
+
+
+def resolve_system_prompt(prompt: str, target_language: str = "zh") -> str:
+    """只在调用方未自定义提示词时按目标语言替换默认值。"""
+    if target_language == "en" and prompt == DEFAULT_SYSTEM_PROMPT:
+        return DEFAULT_SYSTEM_PROMPT_EN
+    return prompt
+
+
 PROTECTED_CHECK_VALUES = [
     "LLMs",
     "AI sovereignty",
@@ -148,7 +171,7 @@ PDF_DIRECT_REPAIR_RESOLUTIONS = {
     "Correspondence and requests for materials should be addressed to Andrew Kay Fan Cheung.": "nature_page14_correspondence_pdf_direct_text_repair",
 }
 
-__all__ = ['Any', 'DEFAULT_API_KEY', 'DEFAULT_BASE_URL', 'DEFAULT_CLI_MAX_TOKENS', 'DEFAULT_HYMT2_TEMPERATURE', 'DEFAULT_HYMT_COMPAT_PROXY_PORT', 'DEFAULT_LATEX_DOCKER_IMAGE', 'DEFAULT_LATEX_PROJECT_MODE', 'DEFAULT_LATEX_RENDER_MODE', 'DEFAULT_LOCAL_MAX_CONCURRENCY', 'DEFAULT_MODEL', 'DEFAULT_PDF2ZH_BACKEND', 'DEFAULT_REASONING_EFFORT', 'DEFAULT_SYSTEM_PROMPT', 'DEFAULT_TRANSLATOR_MODE', 'LATEX_BAD_NAME_HINTS', 'LATEX_MAIN_NAME_HINTS', 'LATEX_REFLOW_LINES_PER_PAGE', 'LATEX_REFLOW_LINE_WIDTH_CJK', 'LATEX_SOURCE_HINT_ENV', 'LATEX_SOURCE_ROOTS_ENV', 'NON_BLOCKING_BACKEND_FAILURE_CLASSES', 'PDF_DIRECT_REPAIR_RESOLUTIONS', 'PROTECTED_CHECK_TRANSLATIONS', 'PROTECTED_CHECK_VALUES', 'Path', 'ProxyConfig', 'SimpleNamespace', 'annotations', 'argparse', 'build_babeldoc_il_layout_map', 'build_bilingual_pdf', 'build_block_bridge', 'build_layout_structure_gate', 'build_pdf_rerender_plan', 'build_poppler_text_bbox_audit', 'build_pymupdf_layout_audit', 'build_structured_visual_candidates', 'build_structured_writeback_manifest', 'build_visual_repair_pdf', 'check_translation', 'extract_terms', 'json', 'layout_role_policy', 'math', 'os', 'policy_utils', 'prepare_paper_source', 're', 'render_readable_pdf', 'repair_quality_issues', 'shlex', 'shutil', 'start_hymt_compat_proxy', 'subprocess', 'sys', 'time', 'visual_layout']
+__all__ = ['Any', 'DEFAULT_API_KEY', 'DEFAULT_BASE_URL', 'DEFAULT_CLI_MAX_TOKENS', 'DEFAULT_HYMT2_TEMPERATURE', 'DEFAULT_HYMT_COMPAT_PROXY_PORT', 'DEFAULT_LATEX_DOCKER_IMAGE', 'DEFAULT_LATEX_PROJECT_MODE', 'DEFAULT_LATEX_RENDER_MODE', 'DEFAULT_LOCAL_MAX_CONCURRENCY', 'DEFAULT_MODEL', 'DEFAULT_PDF2ZH_BACKEND', 'DEFAULT_REASONING_EFFORT', 'DEFAULT_SYSTEM_PROMPT', 'DEFAULT_SYSTEM_PROMPT_EN', 'SUPPORTED_TARGET_LANGUAGES', 'TARGET_SOURCE_LANGUAGE', 'resolve_system_prompt', 'DEFAULT_TRANSLATOR_MODE', 'LATEX_BAD_NAME_HINTS', 'LATEX_MAIN_NAME_HINTS', 'LATEX_REFLOW_LINES_PER_PAGE', 'LATEX_REFLOW_LINE_WIDTH_CJK', 'LATEX_SOURCE_HINT_ENV', 'LATEX_SOURCE_ROOTS_ENV', 'NON_BLOCKING_BACKEND_FAILURE_CLASSES', 'PDF_DIRECT_REPAIR_RESOLUTIONS', 'PROTECTED_CHECK_TRANSLATIONS', 'PROTECTED_CHECK_VALUES', 'Path', 'ProxyConfig', 'SimpleNamespace', 'annotations', 'argparse', 'build_babeldoc_il_layout_map', 'build_bilingual_pdf', 'build_block_bridge', 'build_layout_structure_gate', 'build_pdf_rerender_plan', 'build_poppler_text_bbox_audit', 'build_pymupdf_layout_audit', 'build_structured_visual_candidates', 'build_structured_writeback_manifest', 'build_visual_repair_pdf', 'check_translation', 'extract_terms', 'json', 'layout_role_policy', 'math', 'os', 'policy_utils', 'prepare_paper_source', 're', 'render_readable_pdf', 'repair_quality_issues', 'shlex', 'shutil', 'start_hymt_compat_proxy', 'subprocess', 'sys', 'time', 'visual_layout']
 
 SCRIPT_INTERFACE = "internal-module"
 SCRIPT_INTERFACE_REASON = "由兼容入口调用的职责模块，不提供独立命令。"

@@ -311,7 +311,7 @@ def audit_technical_receipt(manifest, *, source_ref, target_ref):
     except (ValueError,OSError,KeyError,TypeError,json.JSONDecodeError):
         return {'issues':[],'pending':[{'rule':'quality_technical_evidence_missing_changed_or_invalid'}]}
 
-def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None):
+def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, target_language='zh'):
     """每条渲染路线都会写综合结果；技术渲染status单独保留。"""
     result=evaluate_quality_packet(source,final_pdf_from_manifest(manifest,source=source),review_ref=review_ref)
     technical=audit_technical_receipt(manifest,source_ref=file_ref(source),target_ref=result.get('target'))
@@ -321,11 +321,12 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None):
         result['quality_pass']=False
         result['status']='fail' if result.get('status')=='fail' or result['issues'] else 'unverified'
     output_dir=Path(output_dir)
-    residue=render_residue_gate(source,final_pdf_from_manifest(manifest,source=source),output_dir)
+    residue=render_residue_gate(source,final_pdf_from_manifest(manifest,source=source),output_dir,target_language=target_language)
     result['render_residue_check']=residue
     if residue.get('severity')=='high':
-        # 基于实际成品的大面积英文残留属于高风险失败，不能只记为 warn。
-        result.setdefault('issues',[]).append({'id':'render_english_residue','rule':'render_english_residue_high',
+        # 基于实际成品的大面积源语言残留（英译中=英文，中译英=中文）属于高风险失败，不能只记为 warn。
+        rule=residue.get('check','render_english_residue')
+        result.setdefault('issues',[]).append({'id':rule,'rule':rule+'_high',
             'severity':'high','pages':residue.get('high_pages'),'overall_residue_ratio':residue.get('overall_residue_ratio'),
             'evidence':residue.get('report_ref')})
         result['quality_pass']=False
@@ -357,11 +358,11 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None):
     return manifest
 
 
-def render_residue_gate(source, target, output_dir):
+def render_residue_gate(source, target, output_dir, target_language='zh'):
     """最小版渲染成品英文残留检查；检查本身出错时记为未评估，不伪造通过。"""
     try:
         from render_residue_check import check_render_residue
-        residue=check_render_residue(source,target)
+        residue=check_render_residue(source,target,target_language=target_language)
     except Exception as exc:  # 解析器异常类型不固定
         residue={'status':'not_evaluated','severity':'ok','reason':f'{type(exc).__name__}: {exc}'[:300]}
     path=Path(output_dir)/'render_residue_check.json'
@@ -372,8 +373,9 @@ def render_residue_gate(source, target, output_dir):
 
 def render_residue_summary(residue):
     severity=residue.get('severity')
+    name='渲染中文残留检查' if residue.get('check')=='render_chinese_residue' else '渲染英文残留检查'
     if residue.get('status')!='evaluated':
-        return f'渲染英文残留检查：未评估（{residue.get("reason","")}）。'
+        return f'{name}：未评估（{residue.get("reason","")}）。'
     label={'high':'高风险（判定失败）','medium':'中风险','ok':'正常'}.get(severity,severity)
-    return (f'渲染英文残留检查：{label}；整体残留率 {residue.get("overall_residue_ratio")}；'
+    return (f'{name}：{label}；整体残留率 {residue.get("overall_residue_ratio")}；'
             f'高风险页 {residue.get("high_pages") or "无"}；中风险页 {residue.get("medium_pages") or "无"}。')
