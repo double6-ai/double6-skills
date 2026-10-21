@@ -83,7 +83,8 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 | `permissions_restricted` | warning | 所有者权限限制（禁止修改/复制等）；请确认有权翻译 |
 | `page_limit_exceeded` | error | 超出当前路线页数（电子 PDF 1–5 页；扫描预检 `--max-pages`，默认 2、最大 20） |
 | `non_digital_pages` | error | 电子 PDF 路线遇到扫描图像页、文字转曲页或路由判为需复核的页 |
-| `source_language_matches_target` | error | 源文主要是中文；当前只支持英译中 |
+| `source_language_matches_target` | error | 源文主要语言已经是目标语言（英译中时源文为中文，中译英时源文为英文） |
+| `target_language_unsupported` | error | `--target-language` 不是 `zh`（英译中）或 `en`（中译英） |
 | `source_language_mixed` / `source_language_unknown` | warning / info | 中英混合或可抽取文字过少 |
 | `page_load_failed` | error | 部分页面无法解析 |
 | `resource_limit_invalid` | error | 资源参数越界 |
@@ -120,3 +121,19 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
   - 紧接在未结束的已剔除条目之后的栏首/页首残段会作为 `continuation` 剔除，即使其内容其实是正文；
   - 这些剔除都逐条列在 `entries_detail` / `reference_region_entries` 中，复核时请查看。
 - 误报路径：被否决的真实条目（标题含 `It's`、多个年份或谓语动词）、缺出处信号且无编号的条目、作者名格式特殊的条目会计数；无标题参考文献超过全文一半、不在文末或左边距不一致时整段计数，可能判 medium/high。
+
+## 中译英（`--target-language en`）
+
+`candidate`/`collect` 加 `--target-language en` 把中文电子版 PDF 译成英文（只支持 `--route digital_pdf`；默认 `zh` 为英译中，命令行与回执不变）。后端以 `--lang-in zh --lang-out en` 调用，默认提示词换成中译英版本（自定义提示词不替换），英译中方向的默认术语表（译法含汉字的条目）不注入提示词。
+
+排版差异（只在中文源 → 非 CJK 目标时生效，英译中逐像素不变）：
+- 抽取中文源文时，字距调整/两端对齐造成的汉字间隙不补空格（间隙 < 0.5 字高）；表格单元格之间的大间隙照常补空格；
+- 不含汉字的段落（公式碎片、英文专名、数字）保留原字形，不送翻译；含汉字的短标签（表头“样本量”、组名）照常翻译；
+- 英文译文按整词宽度断行；单行段落（标题、图注）放不下时先借用右侧空白，到可读下限仍放不下时再借用右侧、下方空白。
+
+成品检查改为渲染中文残留检查（`render_chinese_residue`）：逐页比较源/译文可抽取汉字数，页残留率 ≥0.30 为高风险、≥0.10 为中风险，整体 ≥0.25 或存在高风险页判 `fail`（退出码 3）；源页汉字少于 100 不评估。另记录整句原样残留行数和全角中文标点数，并检测源文保留字形（未翻译的公式碎片，非 Noto 字体）与英文译文字形压叠，≥10 个字符的页写入 `retained_glyph_overlap_pages` 并把等级提到中风险（提示人工复核，不单独判失败）。
+
+已知局限：
+- Word/WPS 公式等以 Form XObject 绘制的行内变量在原坐标保留，英文正文变长后可能与之压叠（上述检测会提示）；
+- Type3 字体的源文（如网页打印 PDF）英文无法沿用粗体；无 Unicode 映射的公式字形会在译文中缺失；
+- 中文参考文献不剔除，按残留计数；图片里的中文不翻译（需要 OCR）。
