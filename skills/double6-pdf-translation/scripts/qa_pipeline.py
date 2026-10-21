@@ -335,7 +335,8 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, ta
     path.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
     fields={'quality_status':result['status'],'quality_pass':result['quality_pass'],
             'quality_delivery_blocked':not result['quality_pass'],'comprehensive_quality':file_ref(path),
-            'render_residue':{k:residue.get(k) for k in ('severity','overall_residue_ratio','high_pages','medium_pages')}}
+            'render_residue':{k:residue.get(k) for k in ('severity','overall_residue_ratio','high_pages','medium_pages','retained_glyph_overlap_pages')
+                              if k!='retained_glyph_overlap_pages' or k in residue}}
     manifest.update(fields)
     for name in ('render_manifest.json','backend_run_manifest.json'):
         existing=output_dir/name
@@ -377,5 +378,8 @@ def render_residue_summary(residue):
     if residue.get('status')!='evaluated':
         return f'{name}：未评估（{residue.get("reason","")}）。'
     label={'high':'高风险（判定失败）','medium':'中风险','ok':'正常'}.get(severity,severity)
-    return (f'{name}：{label}；整体残留率 {residue.get("overall_residue_ratio")}；'
+    text = (f'{name}：{label}；整体残留率 {residue.get("overall_residue_ratio")}；'
             f'高风险页 {residue.get("high_pages") or "无"}；中风险页 {residue.get("medium_pages") or "无"}。')
+    if residue.get('retained_glyph_overlap_pages'):
+        text += f'源文保留字形（未翻译公式碎片）与译文压叠页 {residue["retained_glyph_overlap_pages"]}，需人工复核。'
+    return text
