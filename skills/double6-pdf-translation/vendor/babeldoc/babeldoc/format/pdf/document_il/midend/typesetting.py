@@ -1,4 +1,4 @@
-# Double6 Skills 维护版本（2026-10-18）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
+# Double6 Skills 维护版本（2026-10-22）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 from __future__ import annotations
 
 import copy
@@ -905,6 +905,7 @@ class Typesetting:
                         ):
                             fonts[xobj.xobj_id][font.font_id] = font
 
+            self._assign_baseline_ceilings(page)
             # 处理每个段落
             for paragraph in page.pdf_paragraph:
                 all_paragraphs.append(paragraph)
@@ -1466,9 +1467,21 @@ class Typesetting:
             logger.warning(
                 f"Failed to adjust paragraph positions on page {page.page_number}: {e}"
             )
+        self._assign_baseline_ceilings(page)
         # 开始实际的渲染过程
         for paragraph in page.pdf_paragraph:
             self.render_paragraph(paragraph, page, fonts)
+
+    @staticmethod
+    def _assign_baseline_ceilings(page):
+        from .table_figure_text import assign_baseline_ceilings
+        try:
+            assign_baseline_ceilings(page)
+        except Exception as e:  # 几何异常时不上移（source_ceiling 置 0 余量），不阻断排版
+            logger.warning(f"Failed to assign baseline ceilings on page {page.page_number}: {e}")
+            for paragraph in page.pdf_paragraph:
+                if getattr(paragraph, "source_baseline", None) is not None and paragraph.box:
+                    paragraph.source_ceiling = paragraph.box.y2
 
     def add_watermark(self, page: il_version_1.Page):
         page_width = page.cropbox.box.x2 - page.cropbox.box.x
@@ -1778,13 +1791,19 @@ class Typesetting:
             current_y=reviewed['page_height']-metadata['source_first_baseline']
         # 单行表格/图内文字：首行落到原文基线。源字框下沿含下伸部，直接从框底排会让
         # 整行下移约 0.3 em 压到下一行。只上移、最多半个行高，上边界同步放宽同样距离。
+        # 上移量再受 source_ceiling 限制（正上方相邻行/表格线渲染后不会低于的位置，见
+        # table_figure_text.assign_baseline_ceilings）：放宽后的上边界不越过它，行顶越界即报不合身。
         top_limit = box.y2
         anchor = getattr(paragraph, "source_baseline", None) if reviewed is None else None
         if anchor is not None:
             lift = float(anchor) - current_y
             if 0 < lift <= 0.5 * first_line_height:
-                current_y = float(anchor)
-                top_limit = box.y2 + lift
+                ceiling = getattr(paragraph, "source_ceiling", None)
+                if ceiling is not None:
+                    lift = min(lift, max(0.0, float(ceiling) - box.y2))
+                if lift > 0:
+                    current_y += lift
+                    top_limit = box.y2 + lift
         # box.y -= avg_height * (line_spacing - 1.01) # line_spacing 已被替换为 line_skip
         line_height = 0
         current_line_heights = []  # 存储当前行所有元素的高度
