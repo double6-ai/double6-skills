@@ -1,4 +1,4 @@
-# Double6 Skills 维护版本（2026-10-17）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
+# Double6 Skills 维护版本（2026-10-22）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 from __future__ import annotations
 
 import copy
@@ -41,6 +41,7 @@ from babeldoc.format.pdf.document_il.utils.paragraph_helper import (
     is_placeholder_only_paragraph,
 )
 from babeldoc.format.pdf.document_il.utils.paragraph_helper import (
+    bypasses_min_text_length,
     is_pure_numeric_paragraph,
 )
 from babeldoc.format.pdf.document_il.utils.style_helper import GRAY80
@@ -68,6 +69,9 @@ def _strip_protected_passthrough_tokens(text: str) -> str:
     )
     stripped = re.sub(r"[\\{}()[\].,;:，。！？、…\s_\-=+*/|<>\"'“”‘’]+", "", stripped)
     return stripped
+
+
+CONTEXT_RELEASED_IDENTITY = "context_released_source_identity"
 
 
 def classify_same_as_input_result(text: str) -> str:
@@ -857,7 +861,7 @@ class ILTranslator:
             return
 
         visible = re.sub(r"\s+", "", str(paragraph.unicode or ""))
-        if paragraph.layout_label != "cover_year" and re.fullmatch(r"20\d{2}", visible):
+        if paragraph.layout_label not in {"cover_year", "year_label"} and re.fullmatch(r"20\d{2}", visible):
             paragraph.layout_label = "cover_year"
 
         # Skip pure numeric paragraphs
@@ -1287,7 +1291,7 @@ class ILTranslator:
             getattr(translate_input, "original_placeholder_tokens", None),
         )
         text = translate_input.unicode
-        if paragraph.layout_label not in {"cover_year", "diagram_node"} and len(text) < self.translation_config.min_text_length:
+        if not bypasses_min_text_length(paragraph) and len(text) < self.translation_config.min_text_length:
             logger.debug(
                 f"Text too short to translate, skip. Text: {text}. Paragraph id: {paragraph.debug_id}."
             )
@@ -1308,6 +1312,13 @@ class ILTranslator:
         if allow_dropcap_placeholder_loss:
             translated_text = strip_translated_dropcap_prefix(input_unicode, translated_text)
             tracker.set_output(translated_text)
+        if translated_text.strip() == input_unicode.strip() and getattr(paragraph, "context_released", None):
+            # 仅凭上下文放行的单词标签（可能是专名）：原样返回即保留原文字形，不是未翻译失败。
+            if hasattr(tracker, "set_writeback_status"):
+                tracker.set_writeback_status("preserved", CONTEXT_RELEASED_IDENTITY)
+            _safe_set_paragraph_attr(paragraph, "writeback_status", "preserved")
+            _safe_set_paragraph_attr(paragraph, "writeback_reason", CONTEXT_RELEASED_IDENTITY)
+            return True
         if translated_text == input_unicode:
             if llm_translate_tracker := tracker.last_llm_translate_tracker():
                 classification = classify_same_as_input_result(input_unicode)

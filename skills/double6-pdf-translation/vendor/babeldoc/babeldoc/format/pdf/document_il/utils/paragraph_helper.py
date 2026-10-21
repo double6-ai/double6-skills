@@ -1,3 +1,4 @@
+# Double6 Skills 维护版本（2026-10-18）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 import logging
 import re
 
@@ -36,11 +37,12 @@ def is_cid_paragraph(paragraph: il_version_1.PdfParagraph):
     return cid_count > len(chars) * 0.8
 
 
-NUMERIC_PATTERN = re.compile(r"^-?\d+(\.\d+)?$")
+# 允许千分位分组（26,900 / 1,617），表格数值同样原样保留。
+NUMERIC_PATTERN = re.compile(r"^-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?$")
 
 
 def is_pure_numeric_paragraph(paragraph) -> bool:
-    """只检查段落是否为纯数字（支持整数、小数、负数）"""
+    """只检查段落是否为纯数字（支持整数、小数、负数与千分位分组）"""
 
     if not paragraph or not getattr(paragraph, "unicode", None):
         return False
@@ -50,6 +52,22 @@ def is_pure_numeric_paragraph(paragraph) -> bool:
         return False
 
     return bool(NUMERIC_PATTERN.match(text))
+
+
+SHORT_LABEL_ROLES = {"fallback_line", "chart_label", "table_cell", "table_header", "axis_label", "legend"}
+SHORT_WORD_PATTERN = re.compile(r"[A-Za-z][a-z]{2,}")
+
+
+def bypasses_min_text_length(paragraph) -> bool:
+    """表格/图内的 3-4 字母普通词（Coal、Rate、Loss、Cost）也要翻译，否则与同表译文混排。
+
+    全大写缩写、数字、符号不在此列，仍按 min_text_length 跳过。
+    """
+    label = getattr(paragraph, "layout_label", None)
+    if label in {"cover_year", "diagram_node"}:
+        return True
+    text = (getattr(paragraph, "unicode", None) or "").strip()
+    return label in SHORT_LABEL_ROLES and bool(SHORT_WORD_PATTERN.fullmatch(text))
 
 
 def is_placeholder_only_paragraph(paragraph: il_version_1.PdfParagraph) -> bool:
