@@ -281,3 +281,25 @@ def test_english_word_break_extent_counts_word_once_for_latin_target():
     # CJK 目标语言（英译中）保持原式，逐像素不变。
     assert english_word_break_extent(True, 5.0, 30.0) == 35.0
     assert english_word_break_extent(False, 5.0, 0.0) == 5.0
+
+
+# ---------- 中译英成品：源文保留字形与英文译文压叠的提示 ----------
+
+def test_retained_glyph_overlap_is_flagged_for_review_not_failed(tmp_path):
+    import re
+    from render_residue_check import page_retained_glyph_overlap
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), 'Consider a planar array of antennas along the axis', fontname='helv', fontsize=11)
+    page.insert_text((72, 100), 'MNxzMNxzMNxzMN', fontname='tiro', fontsize=11)  # 原坐标保留的公式变量压在译文上
+    page.insert_text((72, 300), 'MNxz', fontname='tiro', fontsize=11)  # 不相交的保留字形
+    path = tmp_path / 'overlap.pdf'
+    doc.save(path)
+    with fitz.open(path) as reopened:
+        row = page_retained_glyph_overlap(reopened[0], re.compile('Helvetica'))
+    assert row['overlapping_glyphs'] >= 10 and row['flagged'] and row['retained_glyphs'] == 18
+    assert row['samples'][0]['font'].startswith('Times')
+    source = make_pdf(tmp_path / 's.pdf', [(ZH * 2, True)])
+    result = check_render_residue(source, path, target_language='en')
+    # 默认按 Noto 字体识别译文；这里没有 Noto 字形，不应误报
+    assert result['retained_glyph_overlap_pages'] == [] and result['severity'] == 'ok'

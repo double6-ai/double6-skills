@@ -5,7 +5,8 @@
 中译英（target_language='en'）：逐页比较源/译文可抽取的 CJK 汉字数，残留率 r = 译文汉字 / 源文汉字。
 英文译文里合理保留的汉字几乎为零（不像英译中要保留人名、公式变量），阈值因此更严：
 页 r≥0.30 为 high、r≥0.10 为 medium，全文 r≥0.25 为 high；源页汉字少于 100 不评估。
-另记录整句原样残留（≥12 个汉字的源文行原样出现在译文中）和全角中文标点数，供人工复核。
+另记录整句原样残留（≥12 个汉字的源文行原样出现在译文中）和全角中文标点数，供人工复核；
+并检测源文保留字形（未翻译的公式碎片）与英文译文字形的压叠（≥10 个字符的页记为 medium，提示复核）。
 以下为英译中检查说明。
 
 逐页比较源 PDF 与译文 PDF 中可抽取的拉丁词数量：残留率 r = 译文拉丁词 / 源文拉丁词。
@@ -544,6 +545,47 @@ def page_chinese_residue(source_text: str, target_text: str) -> dict[str, Any]:
             'evaluated': evaluated, 'severity': severity}
 
 
+# 中译英时英文译文用 babeldoc 自带的 Noto 字体排版；源文保留字形（未翻译的公式碎片、变量）仍是原字体。
+TRANSLATED_FONT_PATTERN = re.compile(r'Noto', re.IGNORECASE)
+OVERLAP_MIN_FRACTION = 0.5
+OVERLAP_PAGE_MIN_CHARS = 10
+
+
+def _glyph_boxes(page):
+    import fitz
+
+    boxes = []
+    for block in page.get_text('rawdict')['blocks']:
+        for line in block.get('lines', []):
+            for span in line['spans']:
+                for char in span['chars']:
+                    if char['c'].isalnum():
+                        boxes.append((span['font'], char['c'], fitz.Rect(char['bbox'])))
+    return boxes
+
+
+def page_retained_glyph_overlap(page, translated_font_pattern=TRANSLATED_FONT_PATTERN) -> dict[str, Any]:
+    """源文保留字形与英文译文字形相互压叠的字符数（启发式，只用于提示人工复核）。"""
+    boxes = _glyph_boxes(page)
+    translated = [b for b in boxes if translated_font_pattern.search(b[0])]
+    retained = [b for b in boxes if not translated_font_pattern.search(b[0])]
+    samples, count = [], 0
+    for font, char, rect in retained:
+        area = rect.get_area()
+        if area <= 0:
+            continue
+        for _, other_char, other in translated:
+            inter = rect & other
+            if not inter.is_empty and inter.get_area() > OVERLAP_MIN_FRACTION * min(area, other.get_area()):
+                count += 1
+                if len(samples) < 5:
+                    samples.append({'retained': char, 'font': font, 'translated': other_char,
+                                    'bbox': [round(v, 1) for v in rect]})
+                break
+    return {'retained_glyphs': len(retained), 'overlapping_glyphs': count, 'samples': samples,
+            'flagged': count >= OVERLAP_PAGE_MIN_CHARS}
+
+
 def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
     """中译英：基于最终 PDF 的中文残留检查（不依赖 translation blocks 自报）。"""
     import fitz
@@ -563,6 +605,7 @@ def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
         for index in range(count):
             row = page_chinese_residue(source[index].get_text(), target[index].get_text())
             row['page'] = index + 1
+            row['retained_glyph_overlap'] = page_retained_glyph_overlap(target[index])
             result['pages'].append(row)
     evaluated = [p for p in result['pages'] if p['evaluated']]
     total_source = sum(p['source_cjk_chars'] for p in evaluated)
@@ -570,10 +613,14 @@ def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
     overall = total_target / total_source if total_source else 0.0
     high_pages = [p['page'] for p in evaluated if p['severity'] == 'high']
     medium_pages = [p['page'] for p in evaluated if p['severity'] == 'medium']
-    severity = 'high' if (evaluated and overall >= ZH_DOCUMENT_HIGH) or high_pages else 'medium' if medium_pages else 'ok'
+    overlap_pages = [p['page'] for p in result['pages'] if p['retained_glyph_overlap']['flagged']]
+    # 压叠是启发式信号：只把总体等级提到 medium（提示人工复核），不单独判定失败。
+    severity = ('high' if (evaluated and overall >= ZH_DOCUMENT_HIGH) or high_pages
+                else 'medium' if medium_pages or overlap_pages else 'ok')
+    result['thresholds'].update(overlap_min_fraction=OVERLAP_MIN_FRACTION, overlap_page_min_chars=OVERLAP_PAGE_MIN_CHARS)
     result.update(status='evaluated' if evaluated else 'not_evaluated', overall_residue_ratio=round(overall, 4),
-                  high_pages=high_pages, medium_pages=medium_pages, severity=severity,
-                  quality_fail=severity == 'high')
+                  high_pages=high_pages, medium_pages=medium_pages, retained_glyph_overlap_pages=overlap_pages,
+                  severity=severity, quality_fail=severity == 'high')
     return result
 
 
