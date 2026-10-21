@@ -1,4 +1,4 @@
-# Double6 Skills 维护版本（2026-10-17）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
+# Double6 Skills 维护版本（2026-10-18）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 import logging
 import copy
 import json
@@ -283,6 +283,7 @@ class ParagraphFinder:
         )
 
     def process_page(self, page: Page):
+        self._current_page_number = page.page_number
         layout_index, layout_map = build_layout_index(page)
         # 预处理公式布局的标签
         self._preprocess_formula_layouts(page)
@@ -344,6 +345,11 @@ class ParagraphFinder:
 
         directory_name_ids = self._split_portrait_directory_labels(page, paragraphs)
 
+        # 图内填充节点里的多行标题/说明先合成一个翻译单元，再参与角色判定。
+        from .table_figure_text import merge_figure_node_lines, record_source_baselines, release_natural_compact_labels
+        merge_figure_node_lines(self, page, paragraphs)
+        compact_prior_labels = {}
+
         page_height = 0.0
         if page.cropbox and page.cropbox.box:
             page_height = page.cropbox.box.y2 - page.cropbox.box.y
@@ -362,7 +368,11 @@ class ParagraphFinder:
             elif layout_sensitive_label:
                 paragraph.layout_label = layout_sensitive_label
             elif self._looks_like_compact_label_paragraph(paragraph):
+                compact_prior_labels[id(paragraph)] = paragraph.layout_label
                 paragraph.layout_label = "compact_label"
+
+        # 紧凑标签只保护名称/标识符；自然语言的表头、行名、图内短语照常翻译。
+        release_natural_compact_labels(self, page, paragraphs, compact_prior_labels)
 
         self._join_dialogue_line_fragments(paragraphs)
         self._separate_toc_page_numbers(paragraphs)
@@ -380,6 +390,7 @@ class ParagraphFinder:
         self._classify_academic_metadata(page, paragraphs)
         from .diagram_nodes import group_diagram_nodes
         group_diagram_nodes(self, page, paragraphs)
+        record_source_baselines(self, page, page.pdf_paragraph)
 
         # 第六步：对每一行的字符进行排序
         # self._sort_characters_in_lines(page)
@@ -1621,7 +1632,8 @@ class ParagraphFinder:
                 return "running_header"
             return "running_header"
         if re.fullmatch(r"20\d{2}", normalized):
-            return "cover_year"
+            # 只有首页的独立年份按封面年份处理；正文表头的年份原样保留。
+            return "cover_year" if getattr(self, "_current_page_number", 0) in (0, None) else "year_label"
         if re.fullmatch(r"(?:Artificial|Intelligence Index Report|Artificial Intelligence)", normalized, flags=re.IGNORECASE):
             return "report_heading"
         if re.search(r"\bArtificial Intelligence Index Report\b", normalized, flags=re.IGNORECASE):
