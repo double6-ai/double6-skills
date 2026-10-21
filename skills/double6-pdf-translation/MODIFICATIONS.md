@@ -26,6 +26,7 @@
 - 修改 `midend/typesetting.py`：有 `source_baseline` 时译文首行落在原文基线（只上移、最多半行，上边界同步放宽）。
 - 修改 `midend/il_translator.py`、`midend/il_translator_llm_only.py`：`year_label` 不再被改标为封面年份；最短长度判定改用 `bypasses_min_text_length`。
 - 修改 `utils/paragraph_helper.py`：`NUMERIC_PATTERN` 接受千分位分组；新增 `bypasses_min_text_length`；补维护文件头。
+- 评审第 1 轮（2026-10-22）：`table_figure_text.py` 新增 `assign_baseline_ceilings`、同类标签判定与 `context_released` 标记，`ORG_SUFFIX` 收窄为法律实体后缀；`il_version_1.py` 新增可选属性 `source_ceiling`（`sourceCeiling`）、`context_released`（`contextReleased`）；`typesetting.py` 在预处理与逐页渲染前计算上移上限并按它夹住上移量；`il_translator.py` 对 `context_released` 段落的原样返回保留原文（`preserved`）；`scripts/pdf_translation_tracking.py` 不把该状态计为未翻译失败。上述文件头日期更新为 2026-10-22。
 - 以上 vendored 文件头维护日期更新为 2026-10-18。
 - 新增 `tests/test_table_figure_text.py` 与 `tests/fixtures/table_figure_text/`（真实文档裁剪后的逐字符几何 JSON，不含 PDF）。
 - 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py` 更新为 2.0.0-rc.5。
