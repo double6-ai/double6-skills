@@ -1,4 +1,4 @@
-# Double6 Skills 维护版本（2026-10-17）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
+# Double6 Skills 维护版本（2026-10-22）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 from dataclasses import dataclass
 from dataclasses import field
 
@@ -1219,6 +1219,30 @@ class PdfParagraph:
         default=None,
         metadata={
             "name": "pageHeight",
+            "type": "Attribute",
+        },
+    )
+    # 单行源段落的原文基线（PDF 坐标）；排版时译文首行按它对齐，避免表格行整体下移。
+    source_baseline: float | None = field(
+        default=None,
+        metadata={
+            "name": "sourceBaseline",
+            "type": "Attribute",
+        },
+    )
+    # 锚定上移的上限（PDF 坐标）：正上方相邻行/表格线渲染后不会低于的位置。上移后的译文行顶不越过它。
+    source_ceiling: float | None = field(
+        default=None,
+        metadata={
+            "name": "sourceCeiling",
+            "type": "Attribute",
+        },
+    )
+    # 仅凭同栏/同行上下文放行翻译的单词标签；模型原样返回时按原文保留，不记为未翻译。
+    context_released: bool | None = field(
+        default=None,
+        metadata={
+            "name": "contextReleased",
             "type": "Attribute",
         },
     )
