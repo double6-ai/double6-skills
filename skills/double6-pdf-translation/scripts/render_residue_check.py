@@ -1,6 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Double6 Skills，2026-10-17：2.0.0-rc.3 新增；变更见Skill根目录MODIFICATIONS.md。
-"""基于实际渲染成品的英文残留检查（最小版）。
+"""基于实际渲染成品的源语言残留检查（最小版）：英译中查英文残留，中译英查中文残留。
+
+中译英（target_language='en'）：逐页比较源/译文可抽取的 CJK 汉字数，残留率 r = 译文汉字 / 源文汉字。
+英文译文里合理保留的汉字几乎为零（不像英译中要保留人名、公式变量），阈值因此更严：
+页 r≥0.30 为 high、r≥0.10 为 medium，全文 r≥0.25 为 high；源页汉字少于 100 不评估。
+另记录整句原样残留（≥12 个汉字的源文行原样出现在译文中）和全角中文标点数，供人工复核。
+以下为英译中检查说明。
 
 逐页比较源 PDF 与译文 PDF 中可抽取的拉丁词数量：残留率 r = 译文拉丁词 / 源文拉丁词。
 正常英译中保留人名、引用、公式变量等，实测 r≈0.05–0.15；整页未翻译时 r≈1。
@@ -510,8 +516,72 @@ def page_residue(source_text: str, target_text: str, target_extra_words: int = 0
             'evaluated': evaluated, 'severity': severity}
 
 
+ZH_MIN_SOURCE_CHARS = 100
+ZH_PAGE_HIGH = 0.30
+ZH_PAGE_MEDIUM = 0.10
+ZH_DOCUMENT_HIGH = 0.25
+ZH_VERBATIM_MIN_CHARS = 12
+# 中文残留计数含康熙部首/部首补充与兼容汉字：部分中文 PDF 字体把常用字映射到这些码位。
+CJK_WIDE = re.compile(r'[\u2e80-\u2fdf\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]')
+CJK_PUNCT = re.compile(r'[\u3000-\u303f\uff01\uff08\uff09\uff0c\uff1a\uff1b\uff1f]')
+
+
+def page_chinese_residue(source_text: str, target_text: str) -> dict[str, Any]:
+    source_chars = len(CJK_WIDE.findall(source_text))
+    target_chars = len(CJK_WIDE.findall(target_text))
+    candidates = [re.sub(r'\s+', '', line) for line in source_text.splitlines()]
+    candidates = [line for line in candidates if len(CJK_WIDE.findall(line)) >= ZH_VERBATIM_MIN_CHARS]
+    joined = re.sub(r'\s+', '', target_text)
+    verbatim = sum(1 for line in candidates if line in joined)
+    ratio = target_chars / source_chars if source_chars else 0.0
+    evaluated = source_chars >= ZH_MIN_SOURCE_CHARS
+    severity = (('high' if ratio >= ZH_PAGE_HIGH else 'medium' if ratio >= ZH_PAGE_MEDIUM else 'ok')
+                if evaluated else 'not_evaluated')
+    return {'source_cjk_chars': source_chars, 'target_cjk_chars': target_chars,
+            'target_cjk_punctuation': len(CJK_PUNCT.findall(target_text)),
+            'target_latin_words': len(LATIN_WORD.findall(target_text)), 'residue_ratio': round(ratio, 4),
+            'verbatim_source_lines': verbatim, 'source_lines_checked': len(candidates),
+            'evaluated': evaluated, 'severity': severity}
+
+
+def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
+    """中译英：基于最终 PDF 的中文残留检查（不依赖 translation blocks 自报）。"""
+    import fitz
+
+    result: dict[str, Any] = {'schema_version': 1, 'check': 'render_chinese_residue', 'target_language': 'en',
+                              'source': str(source_pdf), 'target': str(target_pdf) if target_pdf else None,
+                              'thresholds': {'page_high': ZH_PAGE_HIGH, 'page_medium': ZH_PAGE_MEDIUM,
+                                             'document_high': ZH_DOCUMENT_HIGH, 'min_source_chars': ZH_MIN_SOURCE_CHARS,
+                                             'verbatim_min_chars': ZH_VERBATIM_MIN_CHARS},
+                              'pages': []}
+    if not target_pdf or not Path(target_pdf).is_file():
+        result.update(status='not_evaluated', severity='ok', reason='target_pdf_missing')
+        return result
+    with fitz.open(source_pdf) as source, fitz.open(target_pdf) as target:
+        count = min(len(source), len(target))
+        result['page_count_source'], result['page_count_target'] = len(source), len(target)
+        for index in range(count):
+            row = page_chinese_residue(source[index].get_text(), target[index].get_text())
+            row['page'] = index + 1
+            result['pages'].append(row)
+    evaluated = [p for p in result['pages'] if p['evaluated']]
+    total_source = sum(p['source_cjk_chars'] for p in evaluated)
+    total_target = sum(p['target_cjk_chars'] for p in evaluated)
+    overall = total_target / total_source if total_source else 0.0
+    high_pages = [p['page'] for p in evaluated if p['severity'] == 'high']
+    medium_pages = [p['page'] for p in evaluated if p['severity'] == 'medium']
+    severity = 'high' if (evaluated and overall >= ZH_DOCUMENT_HIGH) or high_pages else 'medium' if medium_pages else 'ok'
+    result.update(status='evaluated' if evaluated else 'not_evaluated', overall_residue_ratio=round(overall, 4),
+                  high_pages=high_pages, medium_pages=medium_pages, severity=severity,
+                  quality_fail=severity == 'high')
+    return result
+
+
 def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh') -> dict[str, Any]:
     import fitz
+
+    if target_language == 'en':
+        return check_chinese_residue(source_pdf, target_pdf)
 
     result: dict[str, Any] = {'schema_version': 1, 'check': 'render_english_residue', 'target_language': target_language,
                               'source': str(source_pdf), 'target': str(target_pdf) if target_pdf else None,
@@ -519,7 +589,7 @@ def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh')
                                              'document_high': DOCUMENT_HIGH, 'min_source_words': MIN_SOURCE_WORDS},
                               'pages': []}
     if target_language != 'zh':
-        result.update(status='not_applicable', severity='ok', reason='only_en_to_zh_supported')
+        result.update(status='not_applicable', severity='ok', reason='unsupported_target_language')
         return result
     if not target_pdf or not Path(target_pdf).is_file():
         result.update(status='not_evaluated', severity='ok', reason='target_pdf_missing')
@@ -576,8 +646,9 @@ def main(argv=None):
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--target', type=Path, required=True)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--target-language', choices=('zh', 'en'), default='zh')
     args = parser.parse_args(argv)
-    result = check_render_residue(args.source, args.target)
+    result = check_render_residue(args.source, args.target, target_language=args.target_language)
     text = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:
         args.output.write_text(text + '\n', encoding='utf-8')

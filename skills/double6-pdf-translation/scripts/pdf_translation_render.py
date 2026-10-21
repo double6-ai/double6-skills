@@ -124,7 +124,9 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
     glossary_path = write_glossary(output_dir, prepare_manifest)
     quality_artifacts = enrich_quality_artifacts(output_dir, prepare_manifest, glossary_path)
     context_file = output_dir / "document_memory.json"
-    args.custom_system_prompt = build_backend_system_prompt(args.custom_system_prompt, output_dir)
+    target_language = getattr(args, "target_language", "zh") or "zh"
+    args.custom_system_prompt = build_backend_system_prompt(
+        resolve_system_prompt(args.custom_system_prompt, target_language), output_dir, target_language=target_language)
     args.resolved_pdf_layout_profile = resolve_pdf_layout_profile(args, input_pdf)
     original_base_url = args.base_url
     skip_pdf_backend = (

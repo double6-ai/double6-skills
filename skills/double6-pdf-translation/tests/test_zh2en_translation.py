@@ -213,10 +213,10 @@ def test_justified_chinese_prose_extracts_without_inter_character_spaces():
     assert 'Tukey HSD' in text  # 拉丁词之间的真实空格保留
 
 
-@pytest.mark.parametrize('index,expected', [(0, '所示。忽略耦合的指向性参考值为'), (1, '中URA 所在的平面）的')])
+@pytest.mark.parametrize('index,expected', [(0, '所示。忽略耦合的指向性参考值为'), (1, '中 URA 所在的平面）的')])
 def test_letter_spaced_chinese_lines_get_no_dummy_spaces(index, expected):
     # 真实两端对齐/字距调整行：原规则按间距中位数补空格，会得到“所 示 。忽 略 耦 合的”，
-    # 中译英请求与缓存键都被污染。
+    # 中译英请求与缓存键都被污染。中英交界（中 URA）仍按原规则补空格。
     import unicodedata
     from babeldoc.format.pdf.document_il.utils.layout_helper import _add_space_dummy_chars_to_list, get_char_unicode_string
     chars = _chars(JUSTIFIED[index])

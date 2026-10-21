@@ -187,6 +187,10 @@ def candidate_command(args, freeze):
                '--local-max-concurrency', '1', '--timeout', str(timeouts['timeout']), '--openai-timeout', str(timeouts['openai_timeout']),
                '--latex-render-timeout', str(timeouts['timeout']), '--latex-translate-timeout', str(timeouts['openai_timeout']),
                '--latex-compile-timeout', '45', '--hymt-compat-proxy', 'auto', '--strict-delivery-gates']
+    target_language = getattr(args, 'target_language', 'zh')
+    if target_language != 'zh':
+        # 只有非默认方向才追加参数，英译中命令行与既有回执保持逐字不变。
+        command += ['--target-language', target_language]
     if freeze.get('model_fingerprint_ref') and bound_json(freeze['model_fingerprint_ref']).get('api_contract')=='lmstudio_native_chat_v1':
         command+=['--translation-transport','lmstudio_native_chat_v1','--translator-mode','openai']
     if args.route == 'latex_verified':
@@ -752,6 +756,8 @@ def main(argv=None):
             p.add_argument('--base-url', required=True)
             p.add_argument('--smoke', action='store_true')
             p.add_argument('--cjk-font', default='Songti SC')
+            p.add_argument('--target-language', choices=('zh', 'en'), default='zh',
+                           help='目标语言：zh=英译中（默认），en=中译英')
             p.add_argument('--source-cache-context',type=Path)
             p.add_argument('--source-cache-context-sha256')
         else:
@@ -807,13 +813,13 @@ def structured_failure(args, exc):
     return result
 
 
-def bounded_input_preflight(input_pdf, receipts, *, require_digital):
+def bounded_input_preflight(input_pdf, receipts, *, require_digital, target_language='zh'):
     """在有界子进程中解析 PDF（内存/时限受监控）；页数超限时子进程不再逐页解析。"""
     receipt_dir = Path(receipts) / 'input-preflight'
     report_path = receipt_dir / 'input_preflight_report.json'
     receipt_dir.mkdir(parents=True, exist_ok=True)
     command = [sys.executable, str(SCRIPT_DIR / 'pdf_input_preflight.py'), '--input', str(Path(input_pdf).resolve()),
-               '--max-pages', str(DIGITAL_MAX_PAGES), '--target-language', 'zh', '--output', str(report_path)]
+               '--max-pages', str(DIGITAL_MAX_PAGES), '--target-language', target_language, '--output', str(report_path)]
     if require_digital:
         command.append('--require-digital')
     outcome = run_bounded(command, cwd=SCRIPT_DIR, receipt_dir=receipt_dir, operation='input-preflight',
@@ -838,7 +844,8 @@ def candidate_input_preflight(args):
     receipts = Path(args.receipts)
     receipts.mkdir(parents=True, exist_ok=True)
     path = receipts / 'WORKFLOW_INPUT_PREFLIGHT.json'
-    report = bounded_input_preflight(args.input, receipts, require_digital=args.route == 'digital_pdf')
+    report = bounded_input_preflight(args.input, receipts, require_digital=args.route == 'digital_pdf',
+                                     target_language=getattr(args, 'target_language', 'zh'))
     if not path.exists():
         write_new(path, report)
     if report['status'] == 'blocked':

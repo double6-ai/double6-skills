@@ -344,15 +344,34 @@ def _peer_label(finder, paragraph) -> bool:
     return bool(letters) and letters[0].isupper()
 
 
+CJK_IDEOGRAPH = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+CJK_TARGET_CODES = ("ZH", "JA", "JP", "KO", "KR", "CN", "HK", "TW")
+
+
+def _cjk_source_latin_target(finder) -> bool:
+    """中译英等方向：源文是中文、目标语言不是 CJK。"""
+    config = getattr(finder, "translation_config", None)
+    lang_in = str(getattr(config, "lang_in", "") or "").upper()
+    lang_out = str(getattr(config, "lang_out", "") or "").upper()
+    return lang_in.startswith("ZH") and bool(lang_out) and not any(code in lang_out for code in CJK_TARGET_CODES)
+
+
 def release_natural_compact_labels(finder, page, paragraphs, prior_labels) -> list[str]:
     released = []
     pending = []
     nodes = figure_nodes(page)
     tables = table_regions(page)
+    cjk_source = _cjk_source_latin_target(finder)
     for paragraph in paragraphs:
         if paragraph.layout_label != "compact_label" or id(paragraph) not in prior_labels or paragraph.box is None:
             continue
         text = _text(finder, paragraph)
+        if cjk_source and CJK_IDEOGRAPH.search(text):
+            # 中文源文的短标签（表头、组名、图内坐标/图例、“附录A”）是自然语言而不是标识符；
+            # 英文启发式（大小写/虚词）对汉字不适用。只在中文源→非 CJK 目标时放行，英译中不变。
+            paragraph.layout_label = prior_labels[id(paragraph)] or "fallback_line"
+            released.append(text)
+            continue
         if CAPTION.match(text) and is_natural_label(text):
             paragraph.layout_label = prior_labels[id(paragraph)] or "fallback_line"
             released.append(text)

@@ -1,4 +1,4 @@
-# Double6 Skills 维护版本（2026-10-17）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
+# Double6 Skills 维护版本（2026-10-22）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 import logging
 import math
 import re
@@ -280,6 +280,8 @@ def get_char_unicode_string(chars: list[PdfCharacter | str]) -> str:
 
         # 如果两个字符都是 PdfCharacter，检查间距
         if i < len(chars) - 1 and isinstance(chars[i + 1], PdfCharacter):
+            if _is_cjk_no_space_pair(chars[i], chars[i + 1]):
+                continue  # 汉字/中文标点之间（含跨行）不补空格
             distance = chars[i + 1].box.x - chars[i].box.x2
             if distance >= median_distance or Layout.is_newline(  # 间距大于中位数
                 chars[i],
@@ -490,6 +492,38 @@ def _get_last_char_from_composition(
     return None
 
 
+_CJK_NO_SPACE_RANGES = (
+    (0x2E80, 0x2FDF),  # CJK 部首补充、康熙部首（部分字体把常用字映射到这里）
+    (0x3000, 0x303F),  # CJK 标点
+    (0x3400, 0x4DBF),
+    (0x4E00, 0x9FFF),
+    (0xF900, 0xFAFF),
+    (0xFF00, 0xFFEF),  # 全角形式（全角标点）
+)
+
+
+def _is_cjk_no_space_char(text: str | None) -> bool:
+    if not text or len(text) != 1:
+        return False
+    code = ord(text)
+    return any(start <= code <= end for start, end in _CJK_NO_SPACE_RANGES)
+
+
+# 同一行内汉字间隙小于半个字高时视为字距（两端对齐/字距调整），不是分隔；
+# 更大的间隙（表格相邻单元格、栏间）仍按原规则补空格。
+CJK_NO_SPACE_MAX_GAP_EM = 0.5
+
+
+def _is_cjk_no_space_pair(curr_char: PdfCharacter, next_char: PdfCharacter) -> bool:
+    """两侧都是汉字/中文标点、且为字距或跨行续接时不插入空格；中英交界处保持原规则。"""
+    if not (_is_cjk_no_space_char(curr_char.char_unicode) and _is_cjk_no_space_char(next_char.char_unicode)):
+        return False
+    if Layout.is_newline(curr_char, next_char):
+        return True
+    height = max(curr_char.box.y2 - curr_char.box.y, next_char.box.y2 - next_char.box.y, 0.0)
+    return next_char.box.x - curr_char.box.x2 < CJK_NO_SPACE_MAX_GAP_EM * height
+
+
 def _add_space_dummy_chars_to_list(chars: list[PdfCharacter]) -> None:
     """
     在字符列表中的适当位置添加表示空格的 dummy 字符。
@@ -524,6 +558,11 @@ def _add_space_dummy_chars_to_list(chars: list[PdfCharacter]) -> None:
         next_char = chars[i + 1]
 
         distance = next_char.box.x - curr_char.box.x2
+        if _is_cjk_no_space_pair(curr_char, next_char):
+            # 中文排版（两端对齐/字距）里汉字之间的间隙不是词间空格；插入空格会把
+            # 中文源文切成“大 多 数”，中译英请求与缓存键都会被污染。
+            i += 1
+            continue
         if distance >= median_distance or Layout.is_newline(curr_char, next_char):
             if distance < 0:
                 distance = -distance

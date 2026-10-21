@@ -1,4 +1,4 @@
-# Double6 Skills 维护版本（2026-10-18）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
+# Double6 Skills 维护版本（2026-10-22）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 import copy
 import json
 import logging
@@ -317,7 +317,7 @@ class ILTranslatorLLMOnly:
             return False
 
         # Minimum length check
-        if not bypasses_min_text_length(paragraph) and len(paragraph.unicode) < self.translation_config.min_text_length:
+        if not il_translator.passes_min_text_length(paragraph, paragraph.unicode, self.translation_config):
             return False
 
         # Body text check if requested
@@ -586,10 +586,7 @@ class ILTranslatorLLMOnly:
                 continue
 
             # Check minimum length - advance progress bar if filtered out
-            if (
-                not bypasses_min_text_length(paragraph)
-                and len(paragraph.unicode) < self.translation_config.min_text_length
-            ):
+            if not il_translator.passes_min_text_length(paragraph, paragraph.unicode, self.translation_config):
                 if pbar:
                     pbar.advance(1)
                 continue

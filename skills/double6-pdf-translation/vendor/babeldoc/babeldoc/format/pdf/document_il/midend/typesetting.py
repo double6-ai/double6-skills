@@ -860,6 +860,18 @@ class TypesettingUnit:
             return [], [], []
 
 
+def english_word_break_extent(is_cjk: bool, unit_width: float, lookahead_width: float) -> float:
+    """英文断行检查用的“当前词剩余宽度”。
+
+    lookahead_width 是到下一个可断点为止的前视宽度，不可断时已包含当前单元。
+    CJK 目标语言沿用原式（当前单元计两次，英译中排版保持逐像素不变）；
+    拉丁目标语言按整词实际宽度判断，否则会把单词拆成“c|ontext”。
+    """
+    if is_cjk or lookahead_width <= 0:
+        return unit_width + lookahead_width
+    return lookahead_width
+
+
 class Typesetting:
     stage_name = "Typesetting"
 
@@ -1033,6 +1045,7 @@ class Typesetting:
         final_typeset_units = None
         floor_typeset_units = None
         dialogue_width_checked = False
+        latin_expand_stage = 0
 
         while scale >= min_scale:
             try:
@@ -1085,9 +1098,35 @@ class Typesetting:
                         paragraph.box = expanded_box
                     continue
 
+            # 拉丁目标语言的单行段落（标题、图注、表头）：先借用右侧空白，再缩字。
+            # 中文标题框只有中文宽度，英文译文常常长一倍；直接缩字会得到很小的标题。
+            if (not self.is_cjk and latin_expand_stage == 0
+                    and self._is_single_source_line(box, typesetting_units)):
+                latin_expand_stage = 1
+                expanded_box = self._latin_target_expanded_box(box, page, 0)
+                if expanded_box is not None:
+                    box = expanded_box
+                    if apply_layout:
+                        paragraph.box = expanded_box
+                    continue
+
             # 必须实际尝试下限，不能用固定步长跨过它，再把失败试排
             # 误当成下限字号的结果。下限已试过仍失败时结束搜索。
             if scale <= min_scale:
+                # 拉丁目标语言（如中译英）：译文通常比中文源文长得多，紧贴中文
+                # 宽度的标题/图注框在可读下限也放不下。先借用右侧、再借用下方
+                # 的实际空白（与其它段落/字符/图形不相交），再按原规则拒绝。
+                # CJK 目标语言不进入此分支，英译中排版保持不变。
+                expanded_box = None
+                while expanded_box is None and not self.is_cjk and latin_expand_stage < 2:
+                    expanded_box = self._latin_target_expanded_box(box, page, latin_expand_stage)
+                    latin_expand_stage += 1
+                if expanded_box is not None:
+                    box = expanded_box
+                    if apply_layout:
+                        paragraph.box = expanded_box
+                    scale = max(initial_scale, readable_floor)
+                    continue
                 break
             scale = max(min_scale, scale - (0.05 if scale > 0.6 else 0.1))
 
@@ -1180,6 +1219,28 @@ class Typesetting:
 
         # 最后返回最小缩放因子
         return min_scale, final_typeset_units
+
+    @staticmethod
+    def _is_single_source_line(box: Box, typesetting_units) -> bool:
+        heights = [unit.height for unit in typesetting_units if getattr(unit, "height", 0)]
+        if not heights:
+            return False
+        return (box.y2 - box.y) < 1.8 * max(heights)
+
+    def _latin_target_expanded_box(self, box: Box, page, stage: int) -> Box | None:
+        """stage 0 向右、stage 1 向下扩展到最近的阻挡物；没有可用空白时返回 None。"""
+        try:
+            if stage == 0:
+                max_x = self.get_max_right_space(box, page) - 5
+                if max_x > box.x2 + 1:
+                    return Box(x=box.x, y=box.y, x2=max_x, y2=box.y2)
+            elif stage == 1:
+                min_y = self.get_max_bottom_space(box, page) + 2
+                if min_y < box.y - 1:
+                    return Box(x=box.x, y=min_y, x2=box.x2, y2=box.y2)
+        except Exception:
+            return None
+        return None
 
     @staticmethod
     def _readable_scale_floor(paragraph: il_version_1.PdfParagraph) -> float:
@@ -1877,6 +1938,10 @@ class Typesetting:
                 )
             else:
                 width_before_next_break_point = 0
+            # 见 english_word_break_extent：拉丁目标语言按整词宽度判断，英译中保持原式。
+            english_word_extent = english_word_break_extent(
+                self.is_cjk, unit_width, width_before_next_break_point
+            )
 
             # 开括号/引号必须预留后续词所需的空间。英语换行检查本身
             # 也计入首字符宽度，因此这里用同样的前视量，避免括号留下而词移走。
@@ -1908,7 +1973,7 @@ class Typesetting:
                 or (numeric_width and current_x + numeric_width > box.x2)
                 or (
                     use_english_line_break
-                    and current_x + unit_width + width_before_next_break_point > box.x2
+                    and current_x + english_word_extent > box.x2
                 )
                 or (
                     opening_width
