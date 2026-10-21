@@ -291,3 +291,176 @@ def test_coloured_fill_detection_ignores_white_plot_areas():
     from babeldoc.format.pdf.document_il.midend.table_figure_text import figure_nodes
     assert figure_nodes(load_page(LEGEND)[1]) == []
     assert len(figure_nodes(load_page('arxiv2610.21759-p4-fig2.json')[1])) >= 2
+
+
+# ---------------------------------------------------------------- 评审第 1 轮（33918b3）
+
+def relabelled(name, *pairs):
+    """在真实夹具几何上把一行文字换成不长于它的另一段文字（逐字复用原字框，多余的字删去）。"""
+    data = json.loads((FIXTURES / name).read_text(encoding='utf-8'))
+    for old, new in pairs:
+        assert len(new) <= len(old), (old, new)
+        stream = ''.join(row[0] for row in data['chars'])
+        start = stream.find(old)
+        assert start >= 0, old
+        rows = [list(row) for row in data['chars'][start:start + len(new)]]
+        for row, ch in zip(rows, new):
+            row[0] = ch
+        data['chars'][start:start + len(old)] = rows
+    chars = []
+    for serial, row in enumerate(data['chars']):
+        u, *g, font_id, size, vertical, xobj_id, render_order = row
+        chars.append(il.PdfCharacter(
+            pdf_style=il.PdfStyle(font_id=font_id, font_size=size, graphic_state=il.GraphicState()),
+            box=_box(g[:4]), visual_bbox=il.VisualBbox(box=_box(g[4:8])), vertical=vertical, scale=1.0,
+            pdf_character_id=serial, char_unicode=u, xobj_id=xobj_id, render_order=render_order))
+    _, page = load_page(name)
+    page.pdf_character = chars
+    finder = ParagraphFinder.__new__(ParagraphFinder)
+    finder.translation_config = NS(**data['config'])
+    finder.process_page(page)
+    return page
+
+
+# P1：基线锚定不得让译文排版单元侵入相邻行；侵入时 fit 不能报 True。
+
+def _anchored(box, anchor=None, label='fallback_line'):
+    paragraph = il.PdfParagraph(box=box, layout_label=label, first_line_indent=False, debug_id=str(box.y))
+    if anchor is not None:
+        paragraph.source_baseline = anchor
+    return paragraph
+
+
+def _assign_ceilings(page):
+    from babeldoc.format.pdf.document_il.midend import table_figure_text
+    assign = getattr(table_figure_text, 'assign_baseline_ceilings', None)
+    if assign is not None:
+        assign(page)
+
+
+def _layout(paragraph, text='煤炭开采', size=10.02):
+    return _typesetter()._layout_typesetting_units(_units(text, size), paragraph.box, 1.0, 1.5, paragraph)
+
+
+def _intersects(a, b):
+    return any(min(u.box.x2, v.box.x2) - max(u.box.x, v.box.x) > 0.01
+               and min(u.box.y2, v.box.y2) - max(u.box.y, v.box.y) > 0.01 for u in a for v in b)
+
+
+def _dense_page(paragraphs):
+    return il.Page(page_number=1, cropbox=il.Cropbox(box=il.Box(0, 0, 612, 792)),
+                   mediabox=il.Mediabox(box=il.Box(0, 0, 612, 792)), pdf_paragraph=paragraphs,
+                   pdf_character=[], pdf_curve=[], page_layout=[])
+
+
+def test_baseline_lift_never_intrudes_into_dense_previous_line():
+    # 自造几何：两行源框只隔 0.71 pt（与评审复现的密集行相同量级）。上一行没有锚点（多行段/普通行），
+    # 下一行要上移约 2.9 pt 才落到原文基线。
+    upper = _anchored(il.Box(x=51.0, y=700.0, x2=219.0, y2=710.55))
+    lower = _anchored(il.Box(x=51.0, y=688.74, x2=219.0, y2=699.29), anchor=692.0)
+    _assign_ceilings(_dense_page([upper, lower]))
+    up_units, up_fit = _layout(upper)
+    low_units, low_fit = _layout(lower)
+    assert up_units and low_units
+    assert not (up_fit and low_fit and _intersects(up_units, low_units)), (
+        min(u.box.y for u in up_units), max(u.box.y2 for u in low_units))
+    # 上移被夹住时仍要上移到夹住的位置，而不是退回框底
+    assert max(u.box.y2 for u in low_units) <= upper.box.y + 0.01
+
+
+def test_baseline_lift_clamp_propagates_through_a_stack_of_anchored_rows():
+    # 三行等距密排，三行都有锚点：每一行的上移量都受上一行（已夹住后的）实际下沿限制。
+    rows = [_anchored(il.Box(x=51.0, y=700.0 - 11.26 * k, x2=219.0, y2=710.55 - 11.26 * k),
+                      anchor=703.26 - 11.26 * k) for k in range(3)]
+    rows.insert(0, _anchored(il.Box(x=51.0, y=711.26, x2=219.0, y2=721.81)))   # 顶上一行无锚点
+    _assign_ceilings(_dense_page(rows))
+    laid = [_layout(row) for row in rows]
+    for (a, fa), (b, fb) in zip(laid, laid[1:]):
+        assert not (fa and fb and _intersects(a, b))
+
+
+def test_usgs_rows_keep_source_baseline_after_neighbour_clamp():
+    # 夹住上移不能把已修好的 USGS 表格行重新压回框底：上一行同样上移，空间够。
+    page = run(USGS_TABLE)
+    _assign_ceilings(page)
+    for label in ('Metals', 'Industrial minerals'):
+        row = by_text(page, label)[0]
+        units, fit = _layout(row, '金属')
+        assert fit and abs(min(u.box.y for u in units) - row.source_baseline) <= 0.05, label
+
+
+# P2a：上下文放行不能吃掉专名保护；模型原样返回专名时不能判为未翻译。
+
+def test_capitalised_name_next_to_lowercase_text_is_not_context_released():
+    # 评审复现：小写的 dataset 与 Amazon 相邻。小写词不是同类行标签；紧挨小写文字的首字母大写词
+    # 更像专名（英文里普通名词不在小写短语旁大写），不能借它的上下文放行。
+    page = relabelled(USGS_TABLE, ('Total mine production (million dollars):', 'dataset'),
+                      ('Industrial minerals', 'dataset'), ('Metals', 'Amazon'))
+    amazon = by_text(page, 'Amazon')
+    assert all(p.layout_label == 'compact_label' for p in amazon), [p.layout_label for p in amazon]
+
+
+def _post_translate_identity(paragraph):
+    from babeldoc.format.pdf.document_il.midend.il_translator import ILTranslator, ParagraphTranslateTracker
+    translator = ILTranslator.__new__(ILTranslator)
+    tracker = ParagraphTranslateTracker()
+    tracker.new_llm_translate_tracker()
+    source = text(paragraph)
+    before = list(paragraph.pdf_paragraph_composition)
+    applied = translator.post_translate_paragraph(paragraph, tracker, NS(unicode=source, placeholders=[]), source)
+    return applied, tracker, before
+
+
+def test_identical_answer_for_context_released_name_keeps_source_without_rejection():
+    # Amazon 在一列首字母大写的普通行名里（真实几何），按上下文送去翻译；模型正确地原样返回时，
+    # 应当保留原文字形，不记为 rejected / same_as_input 失败。
+    page = relabelled(USGS_TABLE, ('Metals', 'Amazon'))
+    amazon = by_text(page, 'Amazon')[0]
+    assert translatable(amazon)
+    applied, tracker, before = _post_translate_identity(amazon)
+    assert applied is True
+    assert getattr(tracker, 'writeback_status', None) != 'rejected', getattr(tracker, 'writeback_reason', None)
+    assert amazon.pdf_paragraph_composition == before
+
+
+def test_identical_answer_for_context_released_name_is_not_a_tracking_failure(tmp_path):
+    sys.path.insert(0, str(ROOT / 'scripts'))
+    from pdf_translation_tracking import extract_tracking_failures
+    page = relabelled(USGS_TABLE, ('Metals', 'Amazon'))
+    amazon = by_text(page, 'Amazon')[0]
+    _, tracker, _ = _post_translate_identity(amazon)
+    row = {'input': 'Amazon', 'output': tracker.output or 'Amazon', 'pdf_unicode': 'Amazon', 'page': 1,
+           'layout_role': amazon.layout_label, 'writeback_status': getattr(tracker, 'writeback_status', None),
+           'writeback_reason': getattr(tracker, 'writeback_reason', None),
+           'llm_translate_trackers': [t.to_dict() for t in tracker.llm_translate_trackers]}
+    path = tmp_path / 'translate_tracking.json'
+    path.write_text(json.dumps({'page': [{'paragraph': [row]}]}), encoding='utf-8')
+    assert extract_tracking_failures(path) == []
+
+
+def test_ordinary_identical_answer_is_still_rejected():
+    # 收窄：只有「仅凭上下文放行」的标签允许原样返回；自身就是自然短语的行名原样返回仍是失败。
+    page = run(USGS_TABLE)
+    row = by_text(page, 'Industrial minerals')[0]
+    applied, tracker, _ = _post_translate_identity(row)
+    assert applied is False and tracker.writeback_status == 'rejected'
+
+
+# P2b：普通表头里的 Group/Company 等普通名词不能被当成机构名直通。
+
+@pytest.mark.parametrize('label', ['Control Group', 'Treatment Group'])
+def test_generic_group_headers_are_translated(label):
+    page = relabelled(USGS_TABLE, ('Total mine production (million dollars):', 'Control Group'),
+                      ('Industrial minerals', 'Treatment Group'))
+    for paragraph in by_text(page, label):
+        assert translatable(paragraph), (label, paragraph.layout_label)
+
+
+@pytest.mark.parametrize('label,expected', [
+    ('Control Group', True), ('Treatment Group', True), ('Age Group', True), ('Research Institute', True),
+    ('Acme Inc.', False), ('Globex Corp', False), ('Initech LLC', False), ('Siemens GmbH', False),
+    ('Umbrella Ltd', False), ('Meta AI', False),
+])
+def test_institution_rule_only_fires_on_legal_entity_suffixes(label, expected):
+    from babeldoc.format.pdf.document_il.midend.table_figure_text import is_natural_label
+    assert is_natural_label(label) is expected
