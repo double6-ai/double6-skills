@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-# Double6 Skills，2026-10-17：基于paper-translation维护源码整理；变更见Skill根目录MODIFICATIONS.md。
+# Double6 Skills，2026-10-22：基于paper-translation维护源码整理；变更见Skill根目录MODIFICATIONS.md。
 """pdf translation tracking：从原入口拆出的同一实现。"""
 from __future__ import annotations
 from run_pdf_translation_context import *
@@ -194,6 +194,9 @@ def extract_tracking_failures(tracking_path: Path | None) -> list[dict[str, Any]
         writeback_reason = str(paragraph.get("writeback_reason") or "")
         layout_role = paragraph.get("layout_role") or paragraph.get("layout_label")
         layout_role_text = str(layout_role or "").lower()
+        if same_as_input and writeback_status == "preserved" and writeback_reason == "context_released_source_identity":
+            # 仅凭上下文放行的单词标签，模型原样返回（专名）后按原文保留，不是未翻译。
+            continue
         translated_not_written = (
             writeback_status in {"rejected", "needs_region_rerender", "chart_region_rerender_required"}
             and re.search(r"[\u4e00-\u9fff]", output)

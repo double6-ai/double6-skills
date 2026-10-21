@@ -18,11 +18,24 @@
 
 源论文、译稿、字体、TeX、模型权重与验证证据不包含在公开运行包中。每份文档的完整语义、实际单语/双语页面、样式链接、阅读复制和冷重建仍须执行；本次维护没有授予任意输入的自动严格交付能力。
 
-## 2.0.0-rc.4 维护改动（2026-10-18）
+## 2.0.0-rc.6 维护改动（2026-10-22）
 
 - 修改 vendored BabelDOC `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/styles_and_formulas.py`：公式分组在栏内视觉折行处断开；`merge_overlapping_formulas` 不跨折行合并、不合并中间夹正文的不相邻公式；按逗号拆分公式时保留下标/上标逗号；零高度/零宽度线段（分式线）按 0.5pt 线宽参与公式包含判定。文件头维护日期更新为 2026-10-18。
 - 新增 `tests/test_inline_math_wrap.py` 与 `tests/fixtures/inline_math/`（真实 arXiv CC BY 4.0 论文的单段字符几何 JSON，不含 PDF）。
-- 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py` 更新为 2.0.0-rc.4。
+- 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py` 更新为 2.0.0-rc.6（原 rc.4，合并到 rc.5 之上后改号）。
+
+## 2.0.0-rc.5 维护改动（2026-10-18）
+
+- 新增 vendored BabelDOC `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/table_figure_text.py`：填充节点内多行合并、紧凑标签翻译范围判定、单行源基线记录。
+- 修改 `midend/paragraph_finder.py`：调用上述三步；非首页独立年份标为 `year_label` 而非 `cover_year`。
+- 修改 `il_version_1.py`：`PdfParagraph` 新增可选属性 `source_baseline`（`sourceBaseline`）。
+- 修改 `midend/typesetting.py`：有 `source_baseline` 时译文首行落在原文基线（只上移、最多半行，上边界同步放宽）。
+- 修改 `midend/il_translator.py`、`midend/il_translator_llm_only.py`：`year_label` 不再被改标为封面年份；最短长度判定改用 `bypasses_min_text_length`。
+- 修改 `utils/paragraph_helper.py`：`NUMERIC_PATTERN` 接受千分位分组；新增 `bypasses_min_text_length`；补维护文件头。
+- 评审第 1 轮（2026-10-22）：`table_figure_text.py` 新增 `assign_baseline_ceilings`、同类标签判定与 `context_released` 标记，`ORG_SUFFIX` 收窄为法律实体后缀；`il_version_1.py` 新增可选属性 `source_ceiling`（`sourceCeiling`）、`context_released`（`contextReleased`）；`typesetting.py` 在预处理与逐页渲染前计算上移上限并按它夹住上移量；`il_translator.py` 对 `context_released` 段落的原样返回保留原文（`preserved`）；`scripts/pdf_translation_tracking.py` 不把该状态计为未翻译失败。上述文件头日期更新为 2026-10-22。
+- 以上 vendored 文件头维护日期更新为 2026-10-18。
+- 新增 `tests/test_table_figure_text.py` 与 `tests/fixtures/table_figure_text/`（真实文档裁剪后的逐字符几何 JSON，不含 PDF）。
+- 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py` 更新为 2.0.0-rc.5。
 
 ## 2.0.0-rc.3 维护改动（2026-10-17）
 
