@@ -1,4 +1,4 @@
-# Double6 Skills 维护版本（2026-10-18）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
+# Double6 Skills 维护版本（2026-10-22）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 """表格与图内文字：节点内折行合并、紧凑标签的翻译范围、单行源基线。
 
 三件事都只看源 PDF 的几何与文字本身，不按文档名或具体词表分支：
@@ -7,10 +7,13 @@
   连续单行，合成一个翻译单元。原先逐行成段，半数行被当作紧凑标签留英文。
 * ``release_natural_compact_labels``：紧凑标签原本一律原样保留，用来保护图中的数据集名、方法名、
   型号。自然语言短语（含小写实词、功能词、冒号字段名、图表题注或多词标题式短语）改为正常翻译；
-  单个首字母大写词只在与可翻译文字同栈/同行时随上下文翻译。含全大写缩写、数字、驼峰、URL
+  单个首字母大写词只在与大写起首的可翻译标签同栈/同行时随上下文翻译，并标记 context_released：
+  模型原样返回（专名）时保留原文，不记为未翻译。含全大写缩写、数字、驼峰、URL
   或机构后缀而没有自然语言信号的标签继续原样保留。
 * ``record_source_baselines``：给表格行一类单行段落记录原文基线（字形可见框下沿的中位数）。
   源字框下沿包含下伸部，按它回写会让整行下移约 0.3 em，压到下一行。
+* ``assign_baseline_ceilings``：排版前按页给锚定段落算上移上限，上移后的行顶不越过正上方相邻行
+  渲染后的下沿或表格线。
 """
 from __future__ import annotations
 
@@ -27,8 +30,10 @@ FUNCTION_WORDS = {
     "of", "and", "to", "by", "for", "the", "in", "on", "with", "that", "from", "per", "or", "but", "at", "as",
     "into", "over", "under", "between", "than", "via", "a", "an",
 }
-ORG_SUFFIX = re.compile(
-    r"\b(?:Inc|Ltd|Corp|LLC|Labs?|University|Institute|College|Group|Company|GmbH|Univ)\b\.?")
+# 只认法律实体后缀：它们只出现在机构名里。Group/Company/Institute/University/Lab 这类词同时是普通名词
+# （Control Group、Age Group、Research Institute），按普通标签判断；带缩写的机构名（Meta AI、MIT CSAIL）
+# 仍由「含全大写缩写」规则保留。
+ORG_SUFFIX = re.compile(r"\b(?:Inc|Ltd|Corp|LLC|LLP|PLC|GmbH)\b\.?")
 # 小写点缩写（i.i.d.、non-i.i.d.、e.g.）是术语记号，译后常比格子宽得多，保持原样。
 HARD_IDENTIFIER = re.compile(r"https?://|www\.|@|_|\\|[a-z][A-Z]|\(cid:\d+\)|(?<![A-Za-z])(?:[a-z]\.){2,}")
 CAPTION = re.compile(r"^(?:fig(?:ure)?|table|tab|chart|exhibit)\.?\s*(?:[0-9]+|[IVXLC]+)\b", re.IGNORECASE)
@@ -84,6 +89,50 @@ def estimate_baseline(finder, paragraph):
     if not paragraph.box.y - 0.01 <= baseline <= paragraph.box.y + 0.45 * size:
         return None
     return baseline
+
+
+def _overlaps_x(a, b) -> bool:
+    return min(a.x2, b.x2) - max(a.x, b.x) > 0.01
+
+
+def _valid_box(b) -> bool:
+    return b is not None and None not in (b.x, b.y, b.x2, b.y2)
+
+
+def assign_baseline_ceilings(page) -> None:
+    """给有源基线的单行段落算上移上限 ``source_ceiling``。
+
+    障碍物取正上方（底边不低于本段中线）且横向重叠的：其他段落、未入段的原文字符、细横线（表格线）。
+    每个障碍物用它渲染后**一定不会低于**的位置：
+
+    * 无锚点段落、字符、表格线：源框底边（排版合身时译文不低于框底）。
+    * 有锚点段落：min(源基线, 框底 + 它自己的上移余量)。上移只向上、且被自己的上限夹住，所以它的
+      实际下沿不低于这个值。自上而下计算，上一行被夹住时下一行的上限随之下降。
+
+    本段上移后的行顶 = 框顶 + 上移量，上移量不超过 ``ceiling - 框顶``，因此与上方任何障碍物都不相交。
+    """
+    paragraphs = [p for p in page.pdf_paragraph or [] if _valid_box(p.box)]
+    floors = {id(p): p.box.y for p in paragraphs}
+    fixed = [c.box for c in page.pdf_character or [] if _valid_box(c.box)]
+    fixed += [c.box for c in page.pdf_curve or []
+              if _valid_box(c.box) and c.box.y2 - c.box.y <= 1.5 and c.box.x2 - c.box.x >= 3.0]
+    anchored = [p for p in paragraphs if getattr(p, "source_baseline", None) is not None and not p.vertical]
+    for paragraph in sorted(anchored, key=lambda p: -p.box.y2):
+        box = paragraph.box
+        middle = (box.y + box.y2) / 2
+        ceiling = None
+        for other in paragraphs:
+            if other is not paragraph and other.box.y >= middle and _overlaps_x(other.box, box):
+                floor = floors[id(other)]
+                ceiling = floor if ceiling is None else min(ceiling, floor)
+        for other in fixed:
+            if other.y >= middle and _overlaps_x(other, box):
+                ceiling = other.y if ceiling is None else min(ceiling, other.y)
+        paragraph.source_ceiling = None if ceiling is None else round(ceiling, 3)
+        anchor = float(paragraph.source_baseline)
+        if anchor <= middle:
+            room = float("inf") if ceiling is None else max(0.0, ceiling - box.y2)
+            floors[id(paragraph)] = max(box.y, min(anchor, box.y + room))
 
 
 def record_source_baselines(finder, page, paragraphs) -> None:
@@ -288,6 +337,13 @@ def _neighbours(finder, a, b) -> bool:
     return centre_dy <= 0.6 * fs and horizontal_gap <= 4 * fs
 
 
+def _peer_label(finder, paragraph) -> bool:
+    """同类行/列标签：首个字母大写。紧挨小写文字的首字母大写词更像专名（Amazon dataset），
+    英文普通名词不会在小写短语旁单独大写；只有在大写起首的同类标签之间，大写才是标签格式。"""
+    letters = [ch for ch in _text(finder, paragraph) if ch.isalpha()]
+    return bool(letters) and letters[0].isupper()
+
+
 def release_natural_compact_labels(finder, page, paragraphs, prior_labels) -> list[str]:
     released = []
     pending = []
@@ -315,8 +371,10 @@ def release_natural_compact_labels(finder, page, paragraphs, prior_labels) -> li
         for paragraph in list(pending):
             if paragraph.box is None:
                 continue
-            if any(_neighbours(finder, paragraph, other) for other in anchors if other is not paragraph):
+            if any(_neighbours(finder, paragraph, other) for other in anchors
+                   if other is not paragraph and _peer_label(finder, other)):
                 paragraph.layout_label = prior_labels[id(paragraph)] or "fallback_line"
+                paragraph.context_released = True
                 pending.remove(paragraph)
                 anchors.append(paragraph)
                 released.append(_text(finder, paragraph))
