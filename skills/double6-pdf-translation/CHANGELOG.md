@@ -8,6 +8,10 @@
   - 根因三：译文首行按源字框下沿排版，而源字框下沿包含下伸部，单行表格行整体下移约 0.3 em（Arial 10pt 下 2.7pt）压到下一行。新增 IL 字段 `PdfParagraph.source_baseline`，单行表格/图内段落的译文首行落在原文基线上（只上移、最多半行）。
   - 根因四：带千分位的数字（26,900）不算纯数字，被送去翻译并以回退字体缩小重排；非首页的独立年份（表头 2019）被当作封面年份翻译。现在千分位数字与非首页年份原样保留。
   - 表格/图内角色中 3–4 个字母的普通词（Coal、Rate、Loss、Cost）不再因最短长度被跳过。
+- 评审第 1 轮修正（PR #18 @ 33918b3）：
+  - 基线锚定的上移量受正上方相邻行限制：排版前按页为每个锚定段落计算 `source_ceiling`（正上方段落、未入段字符、细表格线渲染后不会低于的位置；有锚点的上一行按「min(源基线, 框底 + 自身余量)」自上而下传递），上移后的行顶不越过它，越过即报不合身，不再出现「两行都 fit=True 却重叠」。USGS 图 1 中紧贴下划线的「净出口／净进口」行不再压线；表格行仍落在原文基线。
+  - 上下文放行收窄并保护专名：单个首字母大写词只借大写起首的同类标签放行（紧挨小写文字如 dataset 的 Amazon 视为专名，继续原样保留）；借上下文放行的词标记 `context_released`，模型原样返回时保留原文字形（writeback `preserved` / `context_released_source_identity`），不记为未翻译或回退失败。自身就是自然短语的标签原样返回仍判失败。
+  - 机构名规则只认法律实体后缀（Inc、Ltd、Corp、LLC、LLP、PLC、GmbH）；Group、Company、Institute、University、Lab 同时是普通名词，表头 Control Group、Treatment Group 现在照常翻译，带缩写的机构名（Meta AI）仍由缩写规则保留。
 - 新增真实文档几何夹具与回归测试 `tests/test_table_figure_text.py`（USGS 公有领域；arXiv CC BY 4.0：2610.21653、2610.21759、2610.20087），来源与许可见 `tests/fixtures/table_figure_text/README.md`，仓库仍不提交 PDF。
 - 版本统一为 2.0.0-rc.5（SKILL.md、默认路线配置、输出中的 `skill_version`）。本版本与 rc.4（行内公式，PR #17）相互独立，合并顺序不同时版本号需随之调整。
 - 未改动：以矢量轮廓绘制的图内文字（需要 OCR）、表格整体重排、中译英、扫描 OCR、长文档分块。
