@@ -1228,19 +1228,74 @@ class Typesetting:
         return (box.y2 - box.y) < 1.8 * max(heights)
 
     def _latin_target_expanded_box(self, box: Box, page, stage: int) -> Box | None:
-        """stage 0 向右、stage 1 向下扩展到最近的阻挡物；没有可用空白时返回 None。"""
+        """stage 0 向右、stage 1 向下扩展到最近的阻挡物；没有可用空白时返回 None。
+
+        阻挡物除段落、字符、图片外，还包括矢量路径（表格线、单元格/节点边框）、Form XObject
+        与版面分析的表格区域：扩展框不得越过它们，也不得借越过它们获得“放得下”。
+        """
         try:
             if stage == 0:
-                max_x = self.get_max_right_space(box, page) - 5
+                max_x = min(self.get_max_right_space(box, page), self._latin_vector_right_limit(box, page)) - 5
                 if max_x > box.x2 + 1:
                     return Box(x=box.x, y=box.y, x2=max_x, y2=box.y2)
             elif stage == 1:
-                min_y = self.get_max_bottom_space(box, page) + 2
+                min_y = max(self.get_max_bottom_space(box, page), self._latin_vector_bottom_limit(box, page)) + 2
                 if min_y < box.y - 1:
                     return Box(x=box.x, y=min_y, x2=box.x2, y2=box.y2)
         except Exception:
             return None
         return None
+
+    @staticmethod
+    def _latin_expansion_obstacles(page) -> tuple[list[Box], list[Box]]:
+        """（矢量/表单阻挡框，表格区域框）。只供拉丁目标语言扩框使用，英译中排版不调用。"""
+        obstacles = [item.box for item in [*(page.pdf_curve or []), *(getattr(page, "pdf_form", None) or [])]
+                     if getattr(item, "box", None) is not None]
+        tables = [layout.box for layout in getattr(page, "page_layout", None) or []
+                  if layout.box is not None and (layout.class_name or "").lower() in {"table", "table_body", "table_cell"}]
+        return obstacles, tables
+
+    def _latin_vector_right_limit(self, box: Box, page) -> float:
+        limit = float("inf")
+        eps = 0.5
+        obstacles, tables = self._latin_expansion_obstacles(page)
+        for other in obstacles:
+            if other.y >= box.y2 - eps or other.y2 <= box.y + eps:
+                continue  # 没有垂直重叠
+            if other.x >= box.x2 - eps:
+                limit = min(limit, other.x)  # 右侧的竖线、边框或图形
+            elif other.x <= box.x + eps and other.x2 >= box.x2 - eps:
+                limit = min(limit, max(other.x2, box.x2))  # 包住本段的单元格/节点框：右边框
+            elif other.x2 >= box.x2 - eps:
+                limit = min(limit, max(other.x2, box.x2))  # 与本段右缘相交的路径：不越过其右缘
+        cx, cy = (box.x + box.x2) / 2, (box.y + box.y2) / 2
+        for region in tables:
+            if region.x <= cx <= region.x2 and region.y <= cy <= region.y2:
+                limit = min(limit, max(region.x2, box.x2))  # 表格内的段落不越出表格区域
+            elif region.x >= box.x2 - eps and not (region.y >= box.y2 or region.y2 <= box.y):
+                limit = min(limit, region.x)  # 不扩入右侧表格
+        return limit
+
+    def _latin_vector_bottom_limit(self, box: Box, page) -> float:
+        limit = float("-inf")
+        eps = 0.5
+        obstacles, tables = self._latin_expansion_obstacles(page)
+        for other in obstacles:
+            if other.x >= box.x2 - eps or other.x2 <= box.x + eps:
+                continue  # 没有水平重叠
+            if other.y2 <= box.y + eps:
+                limit = max(limit, other.y2)  # 下方的横线、边框或图形
+            elif other.y2 >= box.y2 - eps and other.y <= box.y + eps:
+                limit = max(limit, min(other.y, box.y))  # 包住本段的单元格/节点框：下边框
+            elif other.y <= box.y + eps:
+                limit = max(limit, min(other.y, box.y))  # 与本段下缘相交的路径：不越过其下缘
+        cx, cy = (box.x + box.x2) / 2, (box.y + box.y2) / 2
+        for region in tables:
+            if region.x <= cx <= region.x2 and region.y <= cy <= region.y2:
+                limit = max(limit, min(region.y, box.y))
+            elif region.y2 <= box.y + eps and not (region.x >= box.x2 or region.x2 <= box.x):
+                limit = max(limit, region.y2)  # 不扩入下方表格
+        return limit
 
     @staticmethod
     def _readable_scale_floor(paragraph: il_version_1.PdfParagraph) -> float:

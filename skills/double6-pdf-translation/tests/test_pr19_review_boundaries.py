@@ -245,3 +245,109 @@ def test_retained_glyph_overlap_fails_closed(tmp_path):
         rrc.TRANSLATED_FONT_PATTERN = original
     assert result['retained_glyph_overlap_pages'] == [1]
     assert result['severity'] == 'high' and result['quality_fail']
+
+
+def test_vector_glyph_loss_fails_closed(tmp_path):
+    """输出侧兜底：源页字形大小的填充矢量路径（公式字形）在成品中成批丢失时判 high。"""
+    from render_residue_check import check_render_residue
+    source = _pdf(tmp_path, 'src.pdf', vector=True)
+    target = zh.make_pdf(tmp_path / 'tgt.pdf', [('Consider an array of antennas arranged at equal spacing along two directions.', False)])
+    result = check_render_residue(source, target, target_language='en')
+    assert result['vector_glyph_loss_pages'] == [1]
+    assert result['severity'] == 'high' and result['quality_fail']
+    same = check_render_residue(source, source, target_language='en')
+    assert same['vector_glyph_loss_pages'] == []
+
+
+# ---------- 补充用例：修复不改变默认英译中、不放宽受保护内容 ----------
+
+def test_qwen_adapter_command_and_context_are_direction_scoped(tmp_path):
+    import policy_utils
+    from pdf_translation_commands import build_qwen_cli_command
+    from run_pdf_translation_context import DEFAULT_SYSTEM_PROMPT
+    args = zh._backend_args(tmp_path, '--model', 'qwen/qwen3.6-35b-a3b')
+    args.base_url = 'http://127.0.0.1:9/v1'
+    args.custom_system_prompt = DEFAULT_SYSTEM_PROMPT
+    assert '--target-language' not in build_qwen_cli_command(args), '英译中适配器命令行必须保持不变'
+    args.target_language = 'en'
+    assert build_qwen_cli_command(args).split()[-2:] == ['--target-language', 'en']
+    context = {'term_policy': {'terms': [{'source_term': 'Stanford University', 'translation': '斯坦福大学'},
+                                         {'source_term': '注意力', 'translation': 'attention'}]}}
+    zh_prompt = policy_utils.build_policy_context_prompt(context)
+    en_prompt = policy_utils.build_policy_context_prompt(context, target_language='en')
+    assert '斯坦福大学' in zh_prompt and 'ordinary English prose' in zh_prompt
+    assert '斯坦福大学' not in en_prompt and '注意力 => attention' in en_prompt and 'Chinese prose' in en_prompt
+    # 英译中修补照旧生效
+    assert policy_utils.apply_source_aware_replacements('Stanford University', '我们与 Stanford University 合作') == \
+        q_default_repair('Stanford University', '我们与 Stanford University 合作')
+
+
+def q_default_repair(source, translated):
+    import qwen_pdf2zh_cli_translator as q
+    args = q.build_parser().parse_args(['--base-url', 'http://127.0.0.1:9/v1', '--model', 'qwen'])
+    assert q.resolve_target_language(args) == 'zh'
+    return q.apply_source_aware_replacements(source, translated, q.resolve_target_language(args))
+
+
+def test_same_as_input_classification_keeps_protected_and_en2zh_behaviour():
+    from babeldoc.format.pdf.document_il.midend.il_translator import classify_same_as_input_result as c
+    # 受保护内容（占位符、URL、引用、邮箱）在两个方向都仍放行
+    for text in ['{v1} https://example.org/paper [3]', 'a.b@example.org {v2}', '`x = y` (12)']:
+        assert c(text, 'zh') == 'protected_or_passthrough' and c(text) == 'protected_or_passthrough'
+    # 英译中默认分类不变：中文剩余文本不视为未翻译英文
+    assert c('本文研究翻译系统。') == 'protected_or_passthrough' and c('本文研究翻译系统。', 'en') == 'protected_or_passthrough'
+    assert c('We study translation.') == 'ordinary_same_as_input'
+    # 中译英：含汉字的剩余文本是未翻译正文
+    assert c('本文研究翻译系统。', 'zh') == 'ordinary_same_as_input'
+    assert c('{v1} 图 3', 'zh') == 'ordinary_same_as_input'
+
+
+def test_short_page_residue_rules_do_not_flag_translated_output(tmp_path):
+    from render_residue_check import check_render_residue
+    text, source = short_source(tmp_path)
+    english = zh.make_pdf(tmp_path / 'en.pdf', [('This paper studies the reliability of translation systems on mathematical papers.', False)])
+    ok = check_render_residue(source, english, target_language='en')
+    assert ok['severity'] == 'ok' and not ok['quality_fail'] and ok['evaluation_scope'] == 'document'
+    page = ok['pages'][0]
+    assert page['evaluated'] is False and page['short_page_verbatim'] is False
+    bad = check_render_residue(source, source, target_language='en')
+    assert bad['short_page_verbatim_pages'] == [1] and bad['high_pages'] == [1]
+
+
+def _expansion_page(para, curves=(), layouts=()):
+    return il.Page(page_number=1, cropbox=il.Cropbox(box=il.Box(x=0, y=0, x2=300, y2=300)), pdf_paragraph=[para],
+                   pdf_character=[], pdf_figure=[], pdf_curve=list(curves), pdf_form=[], page_layout=list(layouts))
+
+
+def test_latin_downward_expansion_stops_at_rule_and_table_region():
+    stage = table._typesetter()
+    stage.is_cjk = False
+    box = il.Box(x=50, y=200, x2=90, y2=212)
+    para = il.PdfParagraph(box=box, layout_label='plain text', first_line_indent=False)
+    rule = il.PdfCurve(box=il.Box(x=40, y=180, x2=200, y2=180.5))
+    down = stage._latin_target_expanded_box(box, _expansion_page(para, [rule]), 1)
+    assert down is not None and down.y >= 180.5
+    # 被单元格矩形包住：向右不越过矩形右边框、向下不越过下边框
+    cell = il.PdfCurve(box=il.Box(x=45, y=190, x2=120, y2=216))
+    right = stage._latin_target_expanded_box(box, _expansion_page(para, [cell]), 0)
+    assert right is not None and right.x2 <= 120
+    assert stage._latin_target_expanded_box(box, _expansion_page(para, [cell]), 1).y >= 190
+    # 表格区域：表格内段落不越出区域；表格外段落不扩入右侧表格
+    region = il.PageLayout(box=il.Box(x=40, y=150, x2=110, y2=230), class_name='table', id=1, conf=1.0)
+    inside = stage._latin_target_expanded_box(box, _expansion_page(para, [], [region]), 0)
+    assert inside is not None and inside.x2 <= 110
+    other = il.PageLayout(box=il.Box(x=150, y=190, x2=280, y2=230), class_name='table', id=2, conf=1.0)
+    outside = stage._latin_target_expanded_box(box, _expansion_page(para, [], [other]), 0)
+    assert outside is not None and outside.x2 <= 150
+
+
+def test_target_route_check_only_restricts_english_target():
+    import paper_translation_workflow as wf
+    from pdf_input_preflight import PreflightError
+    for action, route in (('candidate', 'latex_verified'), ('candidate', 'digital_pdf')):
+        wf.check_target_language_route(NS(action=action, route=route, target_language='zh'))
+    wf.check_target_language_route(NS(action='candidate', route='digital_pdf', target_language='en'))
+    for action, route in (('candidate', 'latex_verified'), ('collect', 'digital_pdf')):
+        with pytest.raises(PreflightError) as caught:
+            wf.check_target_language_route(NS(action=action, route=route, target_language='en'))
+        assert caught.value.code == 'target_language_route_unsupported'

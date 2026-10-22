@@ -144,6 +144,10 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
         'adapter':'source_bound_native' if getattr(args,'translation_transport','openai_compatible')=='lmstudio_native_chat_v1' else 'hymt_compat',
         'transport':getattr(args,'translation_transport','openai_compatible'),
     }
+    if target_language != "zh" and should_enable_hymt_compat_proxy(args) and not skip_pdf_backend:
+        # HY-MT 兼容代理与源绑定原生传输只会译成简体中文（纯中文段落原样返回），中译英时直接拒绝。
+        raise ValueError("target_language_backend_unsupported: --target-language en does not support the HY-MT compat proxy "
+                         "or lmstudio_native_chat_v1 transport; use an OpenAI-compatible model or the Qwen CLI adapter")
     if should_enable_hymt_compat_proxy(args) and not skip_pdf_backend:
         proxy_config = ProxyConfig(
             model=args.model,

@@ -106,16 +106,8 @@ DEFAULT_SYSTEM_PROMPT = (
     "'overwhelmingly' into natural Chinese unless they are protected spans, code, URLs, emails, or approved names."
 )
 
-# 中译英（--target-language en）默认提示词；英译中默认提示词保持逐字不变。
-DEFAULT_SYSTEM_PROMPT_EN = (
-    "You are a professional, authentic machine translation engine. "
-    "Translate Chinese academic PDFs into fluent, natural academic English while preserving "
-    "formulas, citations, URLs, named entities, terminology, and layout-sensitive placeholders. "
-    "Only output the translated result without additional explanation. "
-    "Do not leave Chinese characters in the output: translate all Chinese prose, headings, captions and table text "
-    "into English unless they are protected spans, code, URLs, emails, or approved names. "
-    "Keep the English concise, because it must fit the space of the original Chinese layout."
-)
+# 中译英（--target-language en）默认提示词；定义在 policy_utils，供 Qwen CLI 适配器子进程识别目标语言。
+DEFAULT_SYSTEM_PROMPT_EN = policy_utils.DEFAULT_SYSTEM_PROMPT_EN
 
 SUPPORTED_TARGET_LANGUAGES = ("zh", "en")
 # 目标语言 -> 源语言（pdf2zh --lang-in / --lang-out）。
