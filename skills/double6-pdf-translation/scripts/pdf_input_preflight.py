@@ -182,6 +182,54 @@ def _has_cjk_row(chars) -> bool:
     return False
 
 
+def _char_lines(chars) -> list[list[tuple[int, int, int, int]]]:
+    """把字符 bbox 按行聚类（纵向中心相差不到半个字高为同一行），每行返回其中汉字的 bbox 列表。"""
+    cjk = sorted((bbox for char, bbox in chars.elements() if _CJK.match(char)), key=lambda b: (b[1] + b[3]) / 2)
+    lines: list[list[tuple[int, int, int, int]]] = []
+    for bbox in cjk:
+        last = lines[-1] if lines else None
+        if last:
+            ref = last[-1]
+            if abs((ref[1] + ref[3]) - (bbox[1] + bbox[3])) / 2 <= 0.5 * max(ref[3] - ref[1], bbox[3] - bbox[1], 1):
+                last.append(bbox)
+                continue
+        lines.append([bbox])
+    return lines
+
+
+# 带中文的 Form 是“行内公式（含中文下标/短标签）”还是“正文载体”的结构判据：
+# Form 绘制的文字是单行、落在一条由 Form 之外的文字构成的中文宿主行的纵向带内、与宿主行的汉字左右紧邻，
+# 且宽度只占宿主行的一小段，则它是嵌在中文行里的局部对象（行内 Form）；否则（多行、独占一行、无宿主行、
+# 与宿主行等宽，如整页外壳、正文块、图注块、行外标签）是正文载体。
+HOST_ADJACENT_GAP = 1.5      # 与宿主行汉字的水平间隙 <= 1.5 个宿主字高
+HOST_SINGLE_LINE = 1.6       # Form 文字总高 <= 1.6 个宿主字高（单行）
+HOST_MAX_WIDTH_CHARS = 4.0   # Form 文字宽 <= max(4 个宿主字高, 宿主行汉字跨度的一半)
+
+
+def _hosted_in_cjk_line(attributable, outside) -> bool:
+    """attributable（Form 绘制的字符）是否作为局部对象嵌在 outside（Form 之外的字符）构成的中文行里。"""
+    boxes = list(attributable.elements())
+    if not boxes:
+        return False
+    fx0 = min(b[0] for _, b in boxes); fy0 = min(b[1] for _, b in boxes)
+    fx1 = max(b[2] for _, b in boxes); fy1 = max(b[3] for _, b in boxes)
+    cy = (fy0 + fy1) / 2
+    for line in _char_lines(outside):
+        if len(line) < 2:
+            continue
+        y0 = min(b[1] for b in line); y1 = max(b[3] for b in line)
+        h = max(max(b[3] - b[1] for b in line), 1)
+        if not (y0 <= cy <= y1) or fy1 - fy0 > HOST_SINGLE_LINE * h:
+            continue
+        span = max(b[2] for b in line) - min(b[0] for b in line)
+        if fx1 - fx0 > max(HOST_MAX_WIDTH_CHARS * h, 0.5 * span):
+            continue
+        gap = min(min(abs(b[0] - fx1), abs(fx0 - b[2])) if (b[2] <= fx0 or b[0] >= fx1) else 0 for b in line)
+        if gap <= HOST_ADJACENT_GAP * h:
+            return True
+    return False
+
+
 def _inside_row(cx: float, cy: float, rows) -> tuple[float, float, float, float] | None:
     for row in rows:
         x0, y0, x1, y1 = row
@@ -207,8 +255,9 @@ def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> d
     """定位一页中文正文行内的 Form XObject 字形与矢量路径字形（结构证据，只读，不改源文件）。
 
     按嵌套层级区分两类 Form：
-    - 正文载体 Form：它（连同其内层）绘制的文字里有中文（同一行 >= 2 个汉字），例如整页外壳、正文块；
-    - 行内对象 Form：不绘制中文正文，例如 Word/WPS 公式里的变量。
+    - 行内对象 Form：它（连同其内层）绘制的文字里没有中文行（同一行 >= 2 个汉字），例如 Word/WPS 公式里的变量；
+      或者虽有中文，但按 ``_hosted_in_cjk_line`` 是嵌在 Form 之外中文宿主行里的单行局部对象（带中文下标/短标签的公式）；
+    - 正文载体 Form：其余带中文行的 Form，例如整页外壳、正文块、图注块、行外标签。
     只清空行内对象 Form（正文载体保留，即使它包着行内对象 Form），清空前后的文字差集即为行内 Form 字形；
     中文正文行取自清空后的页面（页面级正文 + 正文载体中的正文）。外层外壳因此不会让内层变量被丢掉。
     ``objects`` 列出每个对象的类型、字符与 bbox，供成品门逐个核对是否丢失或与译文压叠。
@@ -221,6 +270,7 @@ def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> d
     scratch = fitz.open()
     body_forms: list[int] = []
     inline_forms: list[int] = []
+    hosted_cjk_forms: list[int] = []
     try:
         scratch.insert_pdf(doc, from_page=page_index, to_page=page_index)
         tree = _form_tree(scratch[0])
@@ -230,10 +280,14 @@ def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> d
             scratch.update_stream(xref, b'')
             attributable = original - Counter(_char_keys(scratch[0]))
             scratch.update_stream(xref, saved)
-            if _has_cjk_row(attributable):
-                body_forms.append(xref)
-            else:
+            if not _has_cjk_row(attributable):
                 inline_forms.append(xref)
+            elif _hosted_in_cjk_line(attributable, original - attributable):
+                # 带中文下标/短标签的行内公式（如 “M最大”）：仍是行内对象，变量照常计入。
+                inline_forms.append(xref)
+                hosted_cjk_forms.append(xref)
+            else:
+                body_forms.append(xref)
         for xref in inline_forms:
             # 只改内存中的临时副本：清空行内对象 Form 的内容流，正文载体 Form 保留。
             scratch.update_stream(xref, b'')
@@ -264,7 +318,7 @@ def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> d
     xobject_inline = sum(1 for o in objects if o['kind'] == 'xobject_text')
     vector_inline = sum(1 for o in objects if o['kind'] == 'vector_glyph')
     result = {'page': page_index + 1, 'cjk_rows': len(rows), 'form_xobjects': len(forms), 'page_in_form': page_in_form,
-              'body_forms': len(body_forms), 'inline_forms': len(inline_forms),
+              'body_forms': len(body_forms), 'inline_forms': len(inline_forms), 'hosted_cjk_forms': len(hosted_cjk_forms),
               'xobject_text_glyphs': xobject_inline, 'vector_glyphs': vector_inline,
               'samples': objects[:5],
               'flagged': xobject_inline + vector_inline >= INLINE_OBJECT_PAGE_MIN}
