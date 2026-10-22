@@ -149,4 +149,3 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 FREEZE 的 `route` 为 `scanned_ocr`，`routing_contract` 须逐字等于 `paper_translation_workflow.OCR_ROUTING`，不得带 `source_cache_contract`，`implementation_refs` 应包含 `scripts/ocr_route.py`。推荐资源合同：`{"task_rss_bytes": 5368709120, "per_job_seconds": 120, "concurrency": 1, "memory_metric": "rss"}`（`resource_limits.RSS_CONTRACT`；rc.8 由 3 GiB 调为 5 GiB）；OCR 与后端共享同一单任务时限。
 
 回执：`receipts/ocr/OCR_MANIFEST.json`（逐页渲染图、识别文字、背景图、行明细、每个 tesseract 进程身份）、`receipts/ocr-reconstruct/`（有界执行资源采样与回收结论）、`receipts/reconstructed-input/`（重建源电子预检）、`receipts/candidate/`（后端）。`WORKFLOW_CANDIDATE.json` 的 `ocr` 字段汇总引擎身份、逐页结论、重建源 sha256；`ocr_stage` 指出停在哪一步。支持/拒绝矩阵与错误码见 [ocr-route.md](ocr-route.md)。
-

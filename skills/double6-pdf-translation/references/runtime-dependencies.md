@@ -63,4 +63,3 @@ bash scripts/setup_venv.sh /absolute/new/venv
 | 重建源中文字体：PyMuPDF 内置 `china-s`（Droid Sans Fallback） | 随 PyMuPDF 1.25.2（锁定依赖） | Apache-2.0（字体）；PyMuPDF 本身 AGPL-3.0 | PyMuPDF / Android Open Source Project |
 
 `OCR_MANIFEST.json` 记录实际运行的引擎版本横幅、`tessdata` 目录及每个语言数据文件的大小与 sha256，便于复核。没有使用任何付费 API、云 OCR 或密钥。其它发行版的 Tesseract 5.x 可用，但识别结果和置信度会随版本与语言数据变化；本版只在上表版本上测量过。
-
