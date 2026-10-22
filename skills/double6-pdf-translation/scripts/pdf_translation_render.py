@@ -4,6 +4,24 @@
 from __future__ import annotations
 from run_pdf_translation_context import *
 
+def load_document_term_context(args: argparse.Namespace) -> dict[str, Any] | None:
+    """分块翻译的整份文档术语上下文：路径与 SHA-256 必须同时给出且一致；未给出时返回 None（单份翻译不变）。"""
+    path = getattr(args, "document_term_context", None)
+    digest = getattr(args, "document_term_context_sha256", None)
+    if not path and not digest:
+        return None
+    if not path or not digest:
+        raise ValueError("document term context path and SHA-256 required together")
+    import hashlib
+    data = Path(path).read_bytes()
+    if hashlib.sha256(data).hexdigest() != digest:
+        raise ValueError("document term context changed")
+    context = json.loads(data.decode("utf-8"))
+    if not isinstance(context, dict) or context.get("protocol") != "document_term_context_v1":
+        raise ValueError("unknown document term context protocol")
+    return context
+
+
 def _run_render(args: argparse.Namespace) -> dict[str, Any]:
     from pdf_translation_artifacts import build_standard_bilingual_output, collect_pdfs, enrich_quality_artifacts, extract_pdf_text, maybe_build_visual_repair_output, mirror_latex_direct_bilingual_output, relocate_backend_dual_intermediate, render_qa_repaired_pdf, run_quality_check, select_pdf_outputs, write_glossary, write_layout_map, write_translation_artifacts
     from pdf_translation_backend_quality import annotate_backend_quality_origin, copy_backend_tracking_artifact, enrich_translation_cache_stats, fallback_to_text_path, maybe_run_cloud_layout, parse_backend_quality, parse_translation_cache_stats, refine_backend_quality_with_retry_failures, resolve_backend_quality_with_pdf_direct_repairs
@@ -125,8 +143,10 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
     quality_artifacts = enrich_quality_artifacts(output_dir, prepare_manifest, glossary_path)
     context_file = output_dir / "document_memory.json"
     target_language = getattr(args, "target_language", "zh") or "zh"
+    document_context = load_document_term_context(args)
     args.custom_system_prompt = build_backend_system_prompt(
-        resolve_system_prompt(args.custom_system_prompt, target_language), output_dir, target_language=target_language)
+        resolve_system_prompt(args.custom_system_prompt, target_language), output_dir, target_language=target_language,
+        **({'document_context': document_context} if document_context is not None else {}))
     args.resolved_pdf_layout_profile = resolve_pdf_layout_profile(args, input_pdf)
     original_base_url = args.base_url
     skip_pdf_backend = (

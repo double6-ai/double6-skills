@@ -194,6 +194,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="--bilingual-render-mode=raster 时的页面栅格化 DPI。",
     )
     parser.add_argument("--pages", help="Optional pdf2zh page range for smoke tests or partial PDF translation.")
+    parser.add_argument("--document-term-context", type=Path, default=None,
+                        help="分块翻译：整份文档的术语/专名上下文（chunked-candidate 生成并冻结），每块提示词共用。")
+    parser.add_argument("--document-term-context-sha256", default=None, help="--document-term-context 的 SHA-256（必填）。")
     parser.add_argument(
         "--route-only",
         action="store_true",
