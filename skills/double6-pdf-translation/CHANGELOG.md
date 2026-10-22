@@ -48,8 +48,22 @@
   - 修复：`OwnedDiscoveryError` 携带已核验的启动身份（nonce、父 PID、根 PID + create_time、进程组）与已确认成员；`run_bounded` 始终保留它们。新增 `reclaim_owned_tree`，不依赖全机进程枚举的后备回收：已确认成员逐个按 PID + create_time 核验后 SIGTERM，超时 SIGKILL；`bounded_launch` 以 setsid 新建进程组（pgid == 根 PID），整组发信号前核对组长：create_time 相符才视为本次的组；组长 PID 被其它进程复用即判原组已空（内核在组内仍有进程时不会复用该 ID），不发信号；组长已退出时先 `killpg(pgid, 0)` 探测，并在每次整组发信号前再次核对组长 PID 未被复用；组长状态无法查询时不发信号、记为未核实。
   - 独立核实与回执：运行结束时再做一次核实，回执 `cleanup` 字段给出 `verified_dead`（每个 PID 的 create_time 与证据 dead/zombie/pid_reused）、`unverified`（still_alive / state_unknown / group_not_empty / group_state_unknown / group_leader_identity_unverifiable）、`process_group`（pgid、组长状态、发过的信号、`empty_verified` 由 `killpg(pgid,0)==ESRCH` 核实）、`alive_before`、`signalled`、`signal_errors`、`not_covered`、`passes`；另有 `launch_identity`。无法确认时 `status=cleanup_unconfirmed`、失败回执 `failure_code=owned_tree_cleanup_unconfirmed`（`metadata.stop_reason` 保留原停止原因），工作流 `error_code=owned_tree_cleanup_unconfirmed`、退出码 1。正常完成路径同样核实进程组为空。资源门与预算未改。
   - 测试检查真实进程死亡（PID + create_time，`os.kill(pid,0)` 交叉核对）、停止后写文件不再增长、回执完整：首次发现失败（PID 列表失败、`children()` 失败两种）、已采样若干次后失败、根进程已退出而同组孙进程仍在写、中间进程退出后被重新挂接的同组孙进程；负例：同时运行的无关进程（自己的会话、与测试同组）不被回收；伪造身份（PID 指向无关进程但 create_time 不符）不发任何信号；信号被拒时报告 `cleanup_unconfirmed` 并列出未核实对象。
+- 评审第 9 轮修正（PR #19 @ 244a721）。评审用例 `tests/test_pr19_review9_cleanup_boundaries.py` 原样加入（只改路径），回归测试见 `tests/test_pr19_review9_whole_tree.py`：
+  - 缺陷：所属枚举失败时，若子进程 setsid 脱离了启动进程组且从未被发现，它不在已确认成员里，原进程组也已空。第 8 轮只在 `not_covered` 写一句备注，回执却给出 `cleanup.confirmed=true`、`unverified=[]`，该子进程仍在写文件。
+  - 修复（整树核实与已确认成员/原进程组分开记录）：
+    - 回执新增 `cleanup.tree_scope`，字段为 `known_members_reclaimed`、`original_group_empty_verified`、`enumeration_failed_during_run`、`whole_tree_verified`、`basis`、`reason`、`recovery_enumeration.scans`、`assumptions`；另有 `cleanup.recovered_members`。`not_covered` 字段删除。
+    - 运行期间只要有一次所属枚举失败，回收时就做恢复扫描：信号前、信号后各一次，结束时再做一次核实。
+    - 恢复扫描先用 `psutil.pids()`，失败再用独立的完整枚举（Linux 读 `/proc`，其它 POSIX 用 `ps -A`）。
+    - 只回收正面核验为本次任务的进程：create_time 不早于根进程，且满足下列之一：
+      - 环境里带本次启动 nonce（`PAPER_TRANSLATION_BOUNDED_OWNERS`）；
+      - 仍在本次启动进程组内（组长 PID 未被复用）；
+      - 父进程链连到已核验成员。
+    - 归属读不到的同用户新进程不发信号，记为 `ownership_unknown`。
+    - 以下三种情况都判 `whole_tree_verified=false`：恢复扫描不完整（`descendant_enumeration_incomplete`）、存在归属未知进程（`ownership_unverifiable`）、所属进程仍存活（`owned_process_still_alive`）。此时 `unverified` 写入 `{"scope": "whole_tree", ...}` 条目，`status=cleanup_unconfirmed`，`error_code=owned_tree_cleanup_unconfirmed`，退出码 1。
+    - 正常运行（没有枚举失败）不做扫描，行为不变。
+  - 第 8 轮测试 `test_root_exited_descendant_in_group_reclaimed` 不再要求"必须发过组信号"，只断言安全结果：真实死亡、停止写入、原进程组为空、无关进程存活。逐 PID 终止后组已空时不发组信号是正确行为。只有组回收才能覆盖的场景（同组成员从未被发现、完整枚举也失败）另写测试，验证该成员真实死亡。
 - 新增 `tests/test_zh2en_translation.py` 与 `tests/fixtures/zh2en/`（arXiv:2512.18979、2510.26803 CC BY 4.0，arXiv:2601.14329 CC0 1.0 的真实逐字符几何与正文），仓库不提交 PDF。
-- 已知局限：行内公式由 Form XObject 或矢量路径绘制的中文 PDF 不支持中译英（预检拒绝）；另一字体（如 Times）的孤立单字母（Word 里常见的“A 公司”写法）与事后补画的字母仍判 needs_review（拒绝）；文字层公式由后端丢弃时只能在成品门判失败（退出码 3），无法修复；`text_layer_math_loss` 不核对位置，后端把变量留下但挪了位置时由重叠门而非本门判定，未与其它字形重叠的挪位不会被本门发现；以正文字体孤立重排的 a/A/I 变量没有字体证据，判丢失（可能误判，失败关闭）；译文里本来就有的同字符独立字母（如 “type x”）可以顶替丢失的变量，仍可能漏判；Codex 熔断只能基于成功读到的非本任务进程，读不到的进程不计入（扫描不完整会记在资源回执里）；所属进程树枚举失败时，后备回收只覆盖已确认成员与启动进程组；离开该进程组（自行 setsid/setpgid）的后代只能靠全机枚举发现，此时回执 `cleanup.not_covered` 写明未覆盖；组长已退出、组也已空之后，在探测与发信号之间该 ID 被新进程组复用的极短竞态窗口无法完全排除（每次发信号前都重新核对组长）；后备回收只在 POSIX 上可用；正文 Form 的英文译文超出 Form 裁剪框时会被截断（第 6 轮证据：右栏“…number of”、续表标签只剩“Table”），现有成品门不检测；Type3 字体源文不沿用粗体；中文参考文献按残留计数；图片内中文不翻译；本版本译文验证使用本地回放答案，未用真实模型验证。
+- 已知局限：行内公式由 Form XObject 或矢量路径绘制的中文 PDF 不支持中译英（预检拒绝）；另一字体（如 Times）的孤立单字母（Word 里常见的“A 公司”写法）与事后补画的字母仍判 needs_review（拒绝）；文字层公式由后端丢弃时只能在成品门判失败（退出码 3），无法修复；`text_layer_math_loss` 不核对位置，后端把变量留下但挪了位置时由重叠门而非本门判定，未与其它字形重叠的挪位不会被本门发现；以正文字体孤立重排的 a/A/I 变量没有字体证据，判丢失（可能误判，失败关闭）；译文里本来就有的同字符独立字母（如 “type x”）可以顶替丢失的变量，仍可能漏判；Codex 熔断只能基于成功读到的非本任务进程，读不到的进程不计入（扫描不完整会记在资源回执里）；所属进程树枚举失败时，后备回收只覆盖已确认成员与启动进程组；离开该进程组（自行 setsid/setpgid）的后代靠回收时的恢复扫描（启动 nonce / 父进程链）发现，扫描也失败时整次清理报告为 `cleanup_unconfirmed`（`tree_scope.whole_tree_verified=false`）；同时离开进程组、清掉 `PAPER_TRANSLATION_BOUNDED_OWNERS`、且在被观察到之前父进程已退出的后代无法识别（正常路径同样如此，回执 `tree_scope.assumptions` 写明）；以 setuid 等方式换了用户的后代不在恢复扫描的归属判定范围内；归属读不到的同用户新进程会让结果保守地变为未确认；组长已退出、组也已空之后，在探测与发信号之间该 ID 被新进程组复用的极短竞态窗口无法完全排除（每次发信号前都重新核对组长）；后备回收只在 POSIX 上可用；正文 Form 的英文译文超出 Form 裁剪框时会被截断（第 6 轮证据：右栏“…number of”、续表标签只剩“Table”），现有成品门不检测；Type3 字体源文不沿用粗体；中文参考文献按残留计数；图片内中文不翻译；本版本译文验证使用本地回放答案，未用真实模型验证。
 - 未改动：扫描 OCR、长文档分块。
 
 ## 2.0.0-rc.6 本地发布候选 · 2026-10-22
