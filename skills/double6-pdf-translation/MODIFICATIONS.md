@@ -31,7 +31,8 @@
   - 上述文件头维护日期更新为 2026-10-22。
 - 评审第 1 轮修正：`scripts/qwen_pdf2zh_cli_translator.py`（`--target-language`、目标语言感知的修补/重试/术语）、`scripts/policy_utils.py`（`DEFAULT_SYSTEM_PROMPT_EN` 移入、`normalize_target_language`、`policy_item_matches_target`）、`scripts/pdf_input_preflight.py`（`inline_object_math`、`zh2en_inline_object_math_unsupported`、`target_language_route_unsupported`）、`scripts/paper_translation_workflow.py`（`check_target_language_route`）、`scripts/pdf_translation_render.py`（中译英拒绝 HY-MT 兼容代理/原生传输）、`scripts/render_residue_check.py`（短页整句残留、整份文件评估、压叠与矢量字形丢失判 high）、`scripts/qa_pipeline.py`（独立规则码）。
 - 评审第 2 轮修正：`scripts/pdf_input_preflight.py`（行内结构对象阈值 1、`with_objects` 定位明细、整页 Form 处理）、`scripts/render_residue_check.py`（`page_inline_object_damage` 逐对象核对丢失/压叠，压叠阈值 1 个字符）、`scripts/qa_pipeline.py`（`inline_object_damage_high`）。
-- 新增 `tests/test_zh2en_translation.py`、`tests/fixtures/zh2en/`、`tests/test_pr19_review_boundaries.py`、`tests/test_pr19_review2_sparse_math.py`。
+- 评审第 3 轮修正：`scripts/pdf_input_preflight.py`（`inline_object_math` 逐个 Form 归类为正文 Form/行内 Form，只清空行内 Form 求差集；新增 `_form_tree`、`_has_cjk_row` 与 `body_forms`/`inline_forms` 计数）。
+- 新增 `tests/test_zh2en_translation.py`、`tests/fixtures/zh2en/`、`tests/test_pr19_review_boundaries.py`、`tests/test_pr19_review2_sparse_math.py`、`tests/test_pr19_review3_wrapped_form.py`。
 - 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py` 更新为 2.0.0-rc.7。
 
 ## 2.0.0-rc.6 维护改动（2026-10-22）

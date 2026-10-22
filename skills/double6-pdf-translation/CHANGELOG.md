@@ -17,8 +17,11 @@
   - `--route latex_verified`、`collect` 与 `--target-language en` 组合：两者的译者固定译成简体中文，现在在预检和任何模型调用前以 `target_language_route_unsupported`（退出码 2）拒绝；后端遇到中译英 + HY-MT 兼容代理/原生传输时报 `target_language_backend_unsupported`。
   - 行内对象公式（失败关闭，不是修复）：中文正文行内的变量/公式若由 Form XObject 文字（Word/WPS 公式，例如 arXiv:2510.26803）或字形大小的填充矢量路径（MathJax/网页打印公式，例如中文维基 Transformer 页）绘制，排版引擎无法让它们随英文重排，会与译文压叠或被丢弃。预检按结构证据检测（清空 Form XObject 内容流前后的文字差集、字形大小的填充路径，且中心落在同一文本块的中文行内部），中译英时以 `zh2en_inline_object_math_unsupported`（退出码 2）在翻译前拒绝。成品兜底：源文保留字形与译文压叠（`retained_glyph_overlap_high`）、矢量路径公式字形成批丢失（`vector_glyph_loss_high`，每页少 ≥3 个且 ≥25%）都判 `fail`（退出码 3），不再只记中风险。
 - 评审第 2 轮修正（PR #19 @ f14bb7e，反例测试 `tests/test_pr19_review2_sparse_math.py`）：上一轮的预检要求每页 ≥3 个行内对象、成品门要求压叠 ≥10 字符或矢量字形少 ≥3 个，中文正文行内只有 1–2 个矢量公式字形或 Form XObject 变量（如单个 M）时两道门都放行，“少于 3 个由成品检查兜底”的说法不成立。
-  - 预检：中文正文行内定位到 **1 个**行内结构对象即以 `zh2en_inline_object_math_unsupported` 拒绝；整页被包进 Form XObject 时改用原页中文行定位矢量字形，不把 Form 内正文当作行内对象。
+  - 预检：中文正文行内定位到 **1 个**行内结构对象即以 `zh2en_inline_object_math_unsupported` 拒绝；整页被包进 Form XObject 时改用原页中文行定位矢量字形，不把 Form 内正文当作行内对象（此处理在第 3 轮改为逐个 Form 分类，见下条）。
   - 成品门（绕过预检时的独立兜底）：逐个核对源页已定位的结构对象——矢量字形在原位（±1.5pt）找不到即“丢失”，与译文字形相交超过 30% 即“压叠”；Form XObject 变量在原位找不到同字符即“丢失”，与其它字形相交超过 50% 即“压叠”。任何一个都判 high（`inline_object_damage_high`，退出码 3），不依赖整页净计数和字体名。源文保留字形与 Noto 译文压叠的阈值也从 10 个字符降为 1 个。
+- 评审第 3 轮修正（PR #19 @ 82fb369，反例测试 `tests/test_pr19_review3_wrapped_form.py`）：第 2 轮的整页 Form 处理只要页内存在 Form 且清空全部 Form 后找不到中文行，就把 Form XObject 字形整体置空；无损地把整页再包进一层 Form 后，嵌套在里面的行内 Form 变量会被这一层包装隐藏，预检与成品门同时放行。
+  - 预检改为逐个 Form 归类：对每个 Form（含嵌套层级）单独清空其内容流，求它负责绘制的字形；这些字形里有同一行的 ≥2 个汉字即为“正文 Form”（`body_forms`），否则为“行内 Form”（`inline_forms`）。只清空行内 Form 来求中文行与 Form XObject 字形差集，外层正文包装不再导致内层变量被丢弃；矢量字形仍按（正文 Form 保留后的）中文行定位。成品门复用同一函数，因此同样修正。
+  - 回归：纯正文整页 Form、单层/双层包装、页面正文与 Form 正文混排（有/无嵌套变量）、包装页内的矢量字形、包装页内的图形与正文行外公式均有测试。
   - 不在中文行内的小图标、行首项目符号、行外图形 XObject、文字层公式不受影响；17、18 号及全部英文语料定位数为 0。
 - 新增 `tests/test_zh2en_translation.py` 与 `tests/fixtures/zh2en/`（arXiv:2512.18979、2510.26803 CC BY 4.0，arXiv:2601.14329 CC0 1.0 的真实逐字符几何与正文），仓库不提交 PDF。
 - 已知局限：行内公式由 Form XObject 或矢量路径绘制的中文 PDF 不支持中译英（预检拒绝）；Type3 字体源文不沿用粗体；中文参考文献按残留计数；图片内中文不翻译；本版本译文验证使用本地回放答案，未用真实模型验证。
