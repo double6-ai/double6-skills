@@ -1,5 +1,27 @@
 # 变更记录
 
+## 2.0.0-rc.8 本地发布候选 · 2026-10-22
+
+- 新增扫描件 / 混合 PDF 的常规 OCR 路线 `candidate --route scanned_ocr`（基线 item 4）。原 `digital_pdf` 路线遇到扫描页一律在预检以 `scanned_pdf_route_required` 拒绝，`scanned_raster` 只能整页重绘、不产生可翻译文字层；现在可把扫描页 OCR 重建为带文字层的数字 PDF，再走**原有**数字后端、全部质量门和严格验收。
+  - 引擎：Tesseract 5.5.0（Apache-2.0）+ tessdata_fast `chi_sim`/`eng`/`osd` 4.1.0（Apache-2.0），本机运行、免费、无 API、无密钥。缺少引擎时 `doctor` 报 `ocr_engine_status=missing`，只影响本路线，不影响 `digital_pdf` 主路线；本路线以 `ocr_engine_unavailable`（退出码 2）拒绝。
+  - 流程：`ocr_route.py` 在既有有界执行（`run_bounded`，操作名 `ocr-reconstruct`）下运行，tesseract 子进程计入本任务 RSS、按 PID + create_time / nonce / 父链核验并回收；重建 PDF（扫描页 = 清理后的背景 + 可见文字层，数字页原样复制）→ 对重建 PDF 做数字预检（要求 digital）→ `_execute-digital --ocr-manifest --ocr-manifest-sha256` 绑定 OCR 清单 → 原数字后端与全部门。OCR 与翻译共用同一冻结合同：120 s 时限、RSS 任务上限（本版调为 5 GiB，见下条）、重任务并发 1。
+  - 质量：`comprehensive_quality` 在 OCR 路线上封顶为 `unverified`（`cap_ocr_quality`，原值记在 `quality_status_before_ocr_cap`）；OCR 生成的文字层不是质量验收，仍需独立质量包。
+  - 失败关闭（退出码 2，稳定错误码，见 `references/ocr-route.md`）：页面 < 0.97×最低 DPI（`ocr_resolution_too_low`）、有格线或列间隙表格（`ocr_table_unsupported`；格线检测在 OSD 之前）、公式/数学符号（`ocr_formula_unsupported`）、识别不确定（`ocr_low_confidence`：单页 > 2 行或 > 3% 字符不确定；某行有可读词置信度 < 50 时须多遍识别一致才采用）、语言不符、无扫描页、方向无法确定、倾斜 > 1°、竖排、文字压在图形/印章上、页内原生与扫描混排、分块扫描、矢量化文字等（共 17 个错误码）。不靠删公式、遮挡正文、降阈值或只记风险来过门。
+  - 多遍核对：弱行第 2 遍按行裁切 psm 7，前两遍不一致时第 3 遍 1.5 倍放大；任意两遍一致即采用（一致不等于正确，见限制）。正文行字号上限防止乱码行被画成大号标题（本轮实测 “L,拒收方式: USER R” 被当成标题导致回写失败）。
+- **RSS 任务内存上限 3 GiB → 5 GiB（5,368,709,120 B；用户决定，PR #20 第 2 轮）**。计量口径仍为 RSS（任务进程树逐进程 RSS 之和），120 s、并发 1 不变，其它资源门（进程数、系统内存压力、swap 增长、Codex 熔断、时限、整树回收与身份核验）不变。
+  - 单一来源 `scripts/resource_limits.py::RSS_TASK_LIMIT_BYTES`（`RSS_CONTRACT` 为对应合同）。这是**所有路线共用**的 RSS 上限，不是 OCR 专用：macOS 平台默认（未冻结时）由 3 GiB 调为 5 GiB，`doctor` 在 macOS 上推荐的合同随之变化；`scanned_ocr` 推荐冻结合同为 `RSS_CONTRACT`。`configs/default-routes.json`、命令行帮助、SKILL.md、release-quickstart、ocr-route 同步。
+  - 不变：Linux 平台默认仍为 4 GiB **PSS**／300 s（不是 RSS 上限）；平台默认最多物理内存 25%（16 GiB 的 Mac 默认被夹到 4 GiB），冻结值最多 50%（5 GiB 需要 ≥ 10 GiB 物理内存，否则 `task_memory_limit_exceeds_host_authorization`）；旧 FREEZE 里的 3 GiB/120 s 合同（`LEGACY_CONTRACT`）照常接受并**按冻结值 3 GiB 执行**，要用 5 GiB 须重新冻结。`examples/` 中的历史发布样本记录保留当时的 3 GiB 值。
+  - 原因与实测：pdf2zh 后端进程树 RSS 合计 2.5–3.3 GB（写时复制共享页按 RSS 重复计入；PSS 2.25–2.85 GiB），3 GiB 下真实扫描件 en-01 三次全被内存门停止、en-03 三次停两次。5 GiB 合同下（新冻结合同、新运行目录）en-01、en-03 各 3/3 通过，en-02、zh-01、zh-02、zh-03 各 1/1 通过；后端 RSS 合计峰值最高 3,336,155,136 B，距 5 GiB 余 2,032,553,984 B（约 1.89 GiB，37.9%）。数字路线英译中 7 份、中译英 17/18 在 5 GiB 合同下与基线逐像素相同，05/16 照旧失败关闭。
+- **扫描页上下标 / 叠排分式在覆盖原图之前拒绝（PR #20 review 1，P1）**。此前 300 dpi 栅格页上的 `x²` 被 OCR 读成 `x?`，文字门看不到数学证据，原像素被覆盖、重建 PDF 写成 `x?`。新增图像几何门（`ocr_route.line_script_evidence` / `fraction_bar_evidence`）：逐行连通域 → 基线与 x 高 → 抬高/压低的小字形，只有 OCR 在同一词里确实读出的引号、撇号、`*`、`°`（抬高）或词尾逗号/分号（压低）且形状吻合时才算标点；叠排分式按“短细横线 + 上下紧贴字形”判定。命中则整页以既有稳定错误码 `ocr_formula_unsupported`（`details.evidence = image_geometry`）拒绝，错误码集合不变。复用电子路线 `_math_like_glyphs` 的字号比/基线偏移思路与框线门的二值化、OpenCV 连通域，无新依赖。真实扫描 en-01..03、zh-01..03 结论不变，拒绝样例错误码不变。已知局限：脚注上标号与上标序数词同样被拒；单字母/数字后的撇号不作解释；上标与相邻字形粘连时会漏判；汉字行里紧贴汉字的小号上下标按汉字笔画放过（详见 `references/ocr-route.md`；后两条已在 review 2 修正/收窄，见下条）。
+- **汉字旁的数学上下标在覆盖原图之前拒绝（PR #20 review 2，P1）**。此前汉字行里最近 OCR 词是汉字的小字形被当作汉字笔画放过：`估计量甲²…` 被读成 `甲-`、`估计量甲₂…` 被读成 `甲,` 并覆盖原图。现在不再按“最近词是汉字”跳过，改看汉字方块规则性（小部件能否与紧邻的 1–2 个簇拼成 0.75–1.1 字高的方块，且高 ≤ 0.4 字高）与标点形状（汉字行标点高 ≤ 0.4、抬高记号宽 ≤ 0.26 字高，汉字之间的 `，` 照常可作解释，记号按个数分给各自的词）；新增粘连上下标检测（拉丁行：高出升部线的边缘墨迹、边缘纯下标列；汉字行：边缘纯下标列、高出汉字顶端 ≥ 0.12 字高的边缘纯上标列）与带圈序号检测（`①` 被 OCR 改写为 `中`）。命中照旧以 `ocr_formula_unsupported`（`details.evidence = image_geometry`，带可疑框）拒绝，错误码集合不变，其它门不变。真实扫描 en-01..03、zh-01..03 结论不变，拒绝矩阵不变；中文标点、常用字、`［1］` 式序号原样通过。剩余漏判按实测写在 `references/ocr-route.md`（粘连且高出汉字顶端 < 0.12 字高的汉字行上标等）。
+- vendored BabelDOC `pdf_creater.py`：字体子集化 / 清理保存辅助进程改用 spawn 上下文。fork 出的辅助进程按 RSS 计入父进程约 2.5 GB 的共享页，任务 RSS 合计曾测到 5.9 GB；spawn 子进程只计自身。数字路线输出不变（回归像素比对见 PR）。
+- 已知限制（如实列出）：
+  - 内存：后端进程树（工作流 + `_execute-digital` + pdf2zh 父进程约 319 MB + pdf2zh 子进程 2.0–2.6 GB）RSS 合计 2.5–3.3 GB。3 GiB 合同下 en-01 三次都被 `task_memory_limit` 停止、en-03 三次过一次（这些历史结果保留原值）；上限调为 5 GiB 后均通过，余量约 1.89 GiB。pdf2zh 闲置父进程（约 319 MB）未缩小。
+  - 严格页门会拒绝很多真实中文公文页（miit 794 号文 9 页中只有 p2、p6 可用，其余因低置信或表格拒绝）。
+  - 多遍一致不等于正确：例如“接入”被两遍都识别为“撑人”并采用；“（三）”误识为“(=)”保留；孤立的不确定短行（“用。”→“Fil.”）仍可能写出。这些都在 `comprehensive_quality=unverified` 之下交付，需人工复核。
+  - 不支持：上列失败关闭的版面；长文分块。繁体、手写未测试，不作支持声明。
+- 版本号：2.0.0-rc.8。
+
 ## 2.0.0-rc.7 本地发布候选 · 2026-10-22
 
 - 新增中译英（基线问题 F4）：`candidate --route digital_pdf` 加 `--target-language en`（默认 `zh` 英译中，命令行与回执逐字不变）。

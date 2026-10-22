@@ -20,6 +20,7 @@ bash scripts/setup_venv.sh /absolute/new/venv
 | RapidOCR 1.4.4 | 已有后端及可选 OCR；模型/字体下载与来源单独声明 |
 | XeLaTeX 与所需 TeX 包 | 仅可信 LaTeX 路线，调用方显式准备 |
 | Poppler | 可选独立文字框诊断 |
+| Tesseract OCR 5.x（CLI）与 tessdata_fast `chi_sim`/`eng`/`osd` | 仅 `candidate --route scanned_ocr`；系统包安装，不随 skill 分发；缺失只阻断该路线，不算主路线失败 |
 | MinerU 4.0.4、其模型及服务 | 可选扫描实验，不在默认环境安装；无此能力时可使用明确提供的已有 OCR，不宣称 OCR 已完成 |
 | 模型服务、API key、字体、源论文 | 调用方明确提供与冻结，不随 skill 分发 |
 
@@ -47,3 +48,18 @@ bash scripts/setup_venv.sh /absolute/new/venv
 本地无鉴权兼容服务由后端 SDK 要求一个非空字段时，命令适配器使用明确的 `local-no-auth` 占位值；它不是凭据。远程后端缺少密钥会明确停止。实际上游 HTTP 请求在未配置密钥时不发送 `Bearer None`。
 
 安装脚本在哈希锁定安装后实际导入主路径原生模块，最多等待 180 秒；该步骤不载入翻译模型、不发送翻译请求。安装完成后的论文任务仍按各自冻结合同计算资源与时限。
+
+## OCR 路线第三方声明（rc.8，`--route scanned_ocr`）
+
+以下组件由运行者通过系统包管理器安装，不随 Skill 再分发；本 Skill 只以子进程方式调用 `tesseract` 命令行，不链接其库。
+
+| 组件 | 核对版本（Debian trixie 包） | 许可证 | 来源 |
+| --- | --- | --- | --- |
+| Tesseract OCR 引擎（`tesseract-ocr`、`libtesseract5`） | 5.5.0-1+b1（`tesseract 5.5.0`） | Apache-2.0（个别构建脚本 MIT） | https://github.com/tesseract-ocr/tesseract |
+| Leptonica 图像库（`libleptonica6`，Tesseract 的依赖） | 1.84.1-4 | Leptonica 许可（BSD 2 条款式） | https://github.com/DanBloomberg/leptonica |
+| 语言数据 `chi_sim.traineddata`（`tesseract-ocr-chi-sim`） | 1:4.1.0-2，2,469,156 字节 | Apache-2.0（上游 tessdata_fast） | https://github.com/tesseract-ocr/tessdata_fast |
+| 语言数据 `eng.traineddata`（`tesseract-ocr-eng`） | 1:4.1.0-2，4,113,088 字节 | Apache-2.0（上游 tessdata_fast） | 同上 |
+| 方向与文字检测 `osd.traineddata`（`tesseract-ocr-osd`） | 1:4.1.0-2，10,562,727 字节 | Apache-2.0（上游 tessdata_fast） | 同上 |
+| 重建源中文字体：PyMuPDF 内置 `china-s`（Droid Sans Fallback） | 随 PyMuPDF 1.25.2（锁定依赖） | Apache-2.0（字体）；PyMuPDF 本身 AGPL-3.0 | PyMuPDF / Android Open Source Project |
+
+`OCR_MANIFEST.json` 记录实际运行的引擎版本横幅、`tessdata` 目录及每个语言数据文件的大小与 sha256，便于复核。没有使用任何付费 API、云 OCR 或密钥。其它发行版的 Tesseract 5.x 可用，但识别结果和置信度会随版本与语言数据变化；本版只在上表版本上测量过。
