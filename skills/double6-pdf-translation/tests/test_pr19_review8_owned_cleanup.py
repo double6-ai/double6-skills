@@ -181,17 +181,23 @@ def test_root_exited_descendant_in_group_reclaimed(monkeypatch, tmp_path):
     _break_after_marker(monkeypatch, marker)
     idents = []
     try:
+        # 评审第 9 轮 P2：只断言安全结果（真实死亡、停止写入、原进程组为空、无关进程存活），
+        # 不再要求必须走“整组发信号”这一步（逐 PID 终止后组已空时不发组信号是正确行为）。
+        own = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], start_new_session=True)
+        same = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+        others = [{'pid': p.pid, 'created_at': psutil.Process(p.pid).create_time()} for p in (own, same)]
         result, marker, log = _run(tmp_path, 'root_exits')
         data = json.loads(marker.read_text())
-        idents = [data['grandchild']]
-        assert result['status'] == 'stopped', result
+        idents = [data['grandchild']] + others
         assert result['stop_reason'] in ('owned_process_monitor_unavailable', 'owned_descendants_after_command'), result
         assert not _alive(data['grandchild'])
         before, after = _no_growth(log)
         assert before == after and before > 0
         cleanup = result['cleanup']
-        assert cleanup['confirmed'] is True and cleanup['process_group']['empty_verified'] is True, cleanup
-        assert cleanup['process_group']['signalled'], cleanup
+        assert result['status'] == 'stopped' and cleanup['confirmed'] is True, cleanup
+        assert cleanup['process_group']['empty_verified'] is True, cleanup
+        assert all(_alive(o) for o in others), 'unrelated process was signalled'
+        assert data['grandchild']['pid'] not in [row.get('pid') for row in cleanup['unverified']], cleanup
     finally:
         _cleanup(idents)
 
