@@ -251,8 +251,139 @@ def _wait(predicate: Callable[[], bool], timeout: float) -> bool:
         time.sleep(0.02)
 
 
+OWNER_ENV = "PAPER_TRANSLATION_BOUNDED_OWNERS"
+WHOLE_TREE_ASSUMPTIONS = [
+    "a descendant is found if it stays in the launch process group, keeps the inherited launch nonce "
+    f"({OWNER_ENV}) in its environment, or is attached by its parent chain to a verified member; "
+    "a descendant that leaves the group, clears that variable and is orphaned before it is observed cannot be identified",
+]
+
+
+def _raw_pids() -> tuple[list[int], str]:
+    """与 psutil.pids() 独立的完整进程列表：Linux 读 /proc 目录；其它 POSIX 调用 ps -A。失败即抛错。"""
+    if sys.platform.startswith("linux"):
+        return sorted(int(name) for name in os.listdir("/proc") if name.isdigit()), "procfs"
+    if os.name == "posix":
+        import subprocess
+        out = subprocess.run(["ps", "-A", "-o", "pid="], capture_output=True, text=True, timeout=2, check=True).stdout
+        return sorted(int(tok) for tok in out.split() if tok.isdigit()), "ps"
+    raise OSError("no independent process enumerator on this platform")
+
+
+def _enumerate_all_pids() -> tuple[list[int], str, list[dict[str, Any]]]:
+    """完整进程枚举（回收时的恢复扫描用）：先 psutil.pids()，失败再用独立方法；全部失败则抛 OSError（附尝试记录）。"""
+    attempts: list[dict[str, Any]] = []
+    try:
+        pids = psutil.pids()
+        attempts.append({"method": "psutil.pids", "ok": True})
+        return list(pids), "psutil.pids", attempts
+    except PROCESS_QUERY_ERRORS as exc:
+        attempts.append({"method": "psutil.pids", "ok": False, "error": f"{type(exc).__name__}: {exc}"[:200]})
+    try:
+        pids, method = _raw_pids()
+        attempts.append({"method": method, "ok": True})
+        return pids, method, attempts
+    except Exception as exc:  # noqa: BLE001 - 任何失败都只说明这次枚举不完整
+        attempts.append({"method": "independent", "ok": False, "error": f"{type(exc).__name__}: {exc}"[:200]})
+    error = OSError("full process enumeration unavailable")
+    error.attempts = attempts  # type: ignore[attr-defined]
+    raise error
+
+
+def _owner_markers(proc: psutil.Process) -> list[str]:
+    """进程环境里继承的启动 nonce 列表（读不到时抛 psutil/OS 错误，由调用方记为归属未知）。"""
+    return [tok for tok in proc.environ().get(OWNER_ENV, "").split(",") if tok]
+
+
+def _recovery_scan(identity: dict[str, Any], targets: dict[int, float], nonce: str | None,
+                   group_trusted: bool, phase: str) -> dict[str, Any]:
+    """所属进程树枚举失败后的恢复扫描：完整枚举一次，只把“正面核验为本次任务”的进程判为所属：
+    create_time 不早于根进程，且满足其一——环境里有本次启动 nonce；进程组仍是本次启动组（组长未被复用）；
+    父进程链连到已核验成员（每一环 create_time 不早于其父）。读不到归属的同用户新进程记为 ownership_unknown（不发信号）。"""
+    scan: dict[str, Any] = {"phase": phase, "complete": False, "method": None, "attempts": [],
+                            "candidates": 0, "owned_found": [], "ownership_unknown": []}
+    try:
+        pids, method, attempts = _enumerate_all_pids()
+    except Exception as exc:  # noqa: BLE001
+        scan["attempts"] = list(getattr(exc, "attempts", [])) or [{"error": f"{type(exc).__name__}: {exc}"[:200]}]
+        return scan
+    scan["method"], scan["attempts"] = method, attempts
+    root_ct = float(identity.get("created_at") or 0)
+    pgid = identity.get("process_group")
+    me = os.getpid()
+    uid = os.getuid() if hasattr(os, "getuid") else None
+    info: dict[int, dict[str, Any]] = {}
+    for pid in pids:
+        if pid in (me, 0) or pid in targets:
+            continue
+        try:
+            proc = psutil.Process(pid)
+            born = proc.create_time()
+            if born < root_ct - IDENTITY_TOLERANCE:
+                continue
+            if proc.status() == psutil.STATUS_ZOMBIE:
+                continue
+            row: dict[str, Any] = {"proc": proc, "created_at": born, "ppid": None, "match": None, "unknown": None}
+            try:
+                row["ppid"] = proc.ppid()
+            except psutil.NoSuchProcess:
+                continue
+            except PROCESS_QUERY_ERRORS:
+                pass
+            if group_trusted and pgid and os.name == "posix":
+                try:
+                    if os.getpgid(pid) == pgid:
+                        row["match"] = "launch_process_group"
+                except ProcessLookupError:
+                    continue
+                except OSError:
+                    pass
+            if row["match"] is None and nonce:
+                try:
+                    if nonce in _owner_markers(proc):
+                        row["match"] = "launch_nonce"
+                except psutil.NoSuchProcess:
+                    continue
+                except PROCESS_QUERY_ERRORS as exc:
+                    row["unknown"] = f"{type(exc).__name__}: {exc}"[:160]
+            info[pid] = row
+        except psutil.NoSuchProcess:
+            continue
+        except PROCESS_QUERY_ERRORS as exc:
+            info[pid] = {"proc": None, "created_at": None, "ppid": None, "match": None,
+                         "unknown": f"{type(exc).__name__}: {exc}"[:160]}
+    scan["candidates"] = len(info)
+    owned = {pid: born for pid, born in targets.items()}
+    owned.update({pid: row["created_at"] for pid, row in info.items() if row["match"]})
+    changed = True
+    while changed:   # 祖先链：父进程已判为所属、且子进程不早于父进程创建
+        changed = False
+        for pid, row in info.items():
+            if row["match"] or row["ppid"] is None or row["created_at"] is None:
+                continue
+            parent = row["ppid"]
+            if parent in owned and row["created_at"] >= owned[parent] - IDENTITY_TOLERANCE:
+                row["match"] = "ancestry"; owned[pid] = row["created_at"]; changed = True
+    for pid, row in sorted(info.items()):
+        if row["match"]:
+            scan["owned_found"].append({"pid": pid, "created_at": row["created_at"], "match": row["match"]})
+        elif row["unknown"]:
+            same_user = True
+            if row["proc"] is not None and uid is not None:
+                try:
+                    same_user = row["proc"].uids().real == uid
+                except psutil.NoSuchProcess:
+                    continue
+                except PROCESS_QUERY_ERRORS:
+                    same_user = True
+            if same_user:
+                scan["ownership_unknown"].append({"pid": pid, "created_at": row["created_at"], "error": row["unknown"]})
+    scan["complete"] = True
+    return scan
+
+
 def reclaim_owned_tree(identity: dict[str, Any], known: dict[int, float], deadline: float | None = None,
-                       *, discovery_failed: bool = False) -> dict[str, Any]:
+                       *, discovery_failed: bool = False, nonce: str | None = None) -> dict[str, Any]:
     """回收本次启动的进程树，并独立核实结果（不依赖全机进程枚举）。
     1) 逐个已确认成员（PID + create_time）：核验身份后 SIGTERM，超时再 SIGKILL；
     2) 进程组（bounded_launch 以 setsid 新建会话/进程组，pgid == 根 PID）：
@@ -261,15 +392,19 @@ def reclaim_owned_tree(identity: dict[str, Any], known: dict[int, float], deadli
        - 组长已退出：先 killpg(pgid, 0) 探测，有成员时再核对一次组长 PID 仍未被复用，才整组发信号；
        - 组长状态无法查询：不发信号，记为未核实；
     3) 最后逐个核实：死亡（或僵尸、或 PID 已复用）记入 verified_dead，其余记入 unverified；
-       进程组以 killpg(pgid, 0) == ESRCH 核实为空。unverified 非空即 confirmed=False。"""
+       进程组以 killpg(pgid, 0) == ESRCH 核实为空。unverified 非空即 confirmed=False。
+    4) 运行期间任一次所属枚举失败（discovery_failed）时，已确认成员/原进程组的回收不等于整树已回收：
+       信号前、信号后各做一次恢复扫描（_recovery_scan，只回收正面核验为本次任务的进程），最后再扫一次核实；
+       恢复扫描不完整、存在归属未知的进程、或仍有所属进程存活，整树即未核实（tree_scope.whole_tree_verified=False，
+       unverified 写入 whole_tree 条目），confirmed=False。"""
     budget = 2.0 if deadline is None else max(0.5, min(2.0, deadline - time.monotonic()))
     targets = dict(known)
     if identity.get("pid") and identity.get("created_at") is not None:
         targets[int(identity["pid"])] = float(identity["created_at"])
     report: dict[str, Any] = {"status": "confirmed", "confirmed": True, "verified_dead": [], "unverified": [],
                               "alive_before": [], "signalled": [], "signal_errors": [],
-                              "process_group": {"pgid": None, "leader": None, "signalled": [], "empty_verified": None},
-                              "not_covered": []}
+                              "process_group": {"pgid": None, "leader": None, "signalled": [], "empty_verified": None}}
+    scans: list[dict[str, Any]] = []
 
     def note_error(target: Any, sig: int, exc: BaseException) -> None:
         report["signal_errors"].append({"target": target, "signal": int(sig), "error": f"{type(exc).__name__}: {exc}"[:200]})
@@ -341,13 +476,36 @@ def reclaim_owned_tree(identity: dict[str, Any], known: dict[int, float], deadli
     def all_down() -> bool:
         return members_down() and (not group_ok or leader_reused() or _group_empty(pgid) is not False)
 
-    signal_members(signal.SIGTERM if os.name == "posix" else signal.SIGTERM)
+    group_trusted = bool(group.get("pgid")) and group.get("leader") in ("alive", "zombie", "dead")
+
+    def adopt(scan: dict[str, Any]) -> list[int]:
+        added = []
+        for row in scan["owned_found"]:
+            if row["pid"] not in targets:
+                targets[row["pid"]] = float(row["created_at"])
+                added.append(row["pid"])
+                if _identity_state(row["pid"], targets[row["pid"]])[0] == "alive":
+                    report["alive_before"].append({"pid": row["pid"], "created_at": targets[row["pid"]]})
+        return added
+
+    if discovery_failed:
+        scans.append(_recovery_scan(identity, targets, nonce, group_trusted, "before_signal"))
+        adopt(scans[-1])
+
+    kill = signal.SIGKILL if os.name == "posix" else signal.SIGTERM
+    signal_members(signal.SIGTERM)
     signal_group(signal.SIGTERM)
-    if not _wait(all_down, budget * 0.5):
-        kill = signal.SIGKILL if os.name == "posix" else signal.SIGTERM
+    if not _wait(all_down, budget * 0.4):
         signal_members(kill)
         signal_group(kill)
-        _wait(all_down, budget * 0.5)
+        _wait(all_down, budget * 0.3)
+    if discovery_failed:
+        # 信号期间可能新生的后代：再扫一次，正面核验为所属的直接 SIGKILL（已过宽限期）
+        scans.append(_recovery_scan(identity, targets, nonce, group_trusted, "after_signal"))
+        if adopt(scans[-1]):
+            signal_members(kill)
+            signal_group(kill)
+            _wait(all_down, budget * 0.3)
 
     for pid, born in targets.items():
         state, _ = _identity_state(pid, born)
@@ -363,12 +521,45 @@ def reclaim_owned_tree(identity: dict[str, Any], known: dict[int, float], deadli
     elif group.get("pgid") and group.get("leader") == "unknown":
         report["unverified"].append({"pgid": pgid, "reason": "group_leader_identity_unverifiable"})
     elif identity and not group.get("pgid"):
-        if discovery_failed:
-            report["unverified"].append({"reason": "no_process_group_and_descendants_unenumerable"})
         report["process_group"]["reason"] = "launcher did not create a process group"
+    known_ok = not any("pid" in row for row in report["unverified"])
+    scope: dict[str, Any] = {"known_members_reclaimed": known_ok,
+                             "original_group_empty_verified": group.get("empty_verified"),
+                             "enumeration_failed_during_run": bool(discovery_failed),
+                             "whole_tree_verified": True, "basis": "complete_enumeration_every_sample", "reason": None,
+                             "recovery_enumeration": {"attempted": bool(discovery_failed), "scans": scans},
+                             "assumptions": list(WHOLE_TREE_ASSUMPTIONS)}
     if discovery_failed:
-        report["not_covered"].append("processes that left the launch process group (setsid/setpgid) can only be found by "
-                                     "full PID enumeration, which failed")
+        final_scan = _recovery_scan(identity, {}, nonce, group_trusted, "final_verification")
+        scans.append(final_scan)
+        scope["basis"] = "recovery_enumeration_after_discovery_failure"
+        still = [row for row in final_scan["owned_found"]
+                 if _identity_state(row["pid"], float(row["created_at"]))[0] == "alive"]
+        if not final_scan["complete"]:
+            scope["whole_tree_verified"], scope["reason"] = False, "descendant_enumeration_incomplete"
+            report["unverified"].append({"scope": "whole_tree", "reason": "descendant_enumeration_incomplete",
+                                         "detail": "an owned-process enumeration failed during the run and no later "
+                                                   "complete enumeration succeeded; undiscovered descendants outside the "
+                                                   "launch process group cannot be ruled out"})
+        elif still:
+            scope["whole_tree_verified"], scope["reason"] = False, "owned_process_still_alive"
+            for row in still:
+                if not any(u.get("pid") == row["pid"] for u in report["unverified"]):
+                    report["unverified"].append({"pid": row["pid"], "created_at": row["created_at"], "reason": "still_alive",
+                                                 "match": row["match"]})
+        elif final_scan["ownership_unknown"]:
+            scope["whole_tree_verified"], scope["reason"] = False, "ownership_unverifiable"
+        unknown = {row["pid"]: row for scan in scans for row in scan["ownership_unknown"]}
+        for pid, row in sorted(unknown.items()):
+            if any(r2["pid"] == pid for r2 in final_scan["ownership_unknown"]) or not final_scan["complete"]:
+                report["unverified"].append({"pid": pid, "created_at": row["created_at"], "reason": "ownership_unknown",
+                                             "error": row["error"]})
+        if scope["whole_tree_verified"] is False and scope["reason"] is None:
+            scope["reason"] = "ownership_unverifiable"
+    report["tree_scope"] = scope
+    report["recovered_members"] = [row for scan in scans for row in scan["owned_found"]]
+    if not scope["whole_tree_verified"] and not any(row.get("scope") == "whole_tree" for row in report["unverified"]):
+        report["unverified"].append({"scope": "whole_tree", "reason": scope["reason"]})
     if report["unverified"]:
         report["status"], report["confirmed"] = "unconfirmed", False
     return report
@@ -477,8 +668,12 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
         return identity, members
 
     def reclaim() -> dict[str, Any]:
-        return reclaim_owned_tree(launch_identity, identities, deadline,
-                                  discovery_failed=bool(monitor_error.get("owned_discovery_failed")))
+        report = reclaim_owned_tree(launch_identity, identities, deadline,
+                                    discovery_failed=bool(monitor_error.get("owned_discovery_failed")), nonce=nonce)
+        # 恢复扫描正面核验为所属的进程并入已确认成员，后续每一轮回收与最终核实都逐个核对它们。
+        for row in report.get("recovered_members", []):
+            identities.setdefault(int(row["pid"]), float(row["created_at"]))
+        return report
     cleanup_passes: list[dict[str, Any]] = []
     worker = None
     try:
@@ -549,7 +744,12 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
     # 最终核实（独立于前面的回收过程）：任务未启动时没有身份也没有成员，核实结果为空且已确认。
     cleanup = reclaim() if (launch_identity or identities) else {
         "status": "confirmed", "confirmed": True, "verified_dead": [], "unverified": [], "alive_before": [],
-        "signalled": [], "signal_errors": [], "not_covered": [],
+        "signalled": [], "signal_errors": [],
+        "tree_scope": {"known_members_reclaimed": True, "original_group_empty_verified": None,
+                       "enumeration_failed_during_run": False, "whole_tree_verified": True,
+                       "basis": "task_never_published_launch_identity", "reason": None,
+                       "recovery_enumeration": {"attempted": False, "scans": []}, "assumptions": []},
+        "recovered_members": [],
         "process_group": {"pgid": None, "leader": None, "signalled": [], "empty_verified": None,
                           "reason": "task never published a launch identity"}}
     cleanup["passes"] = len(cleanup_passes) + 1
@@ -559,6 +759,17 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
         cleanup[key] = [row for p in cleanup_passes for row in p[key]] + cleanup[key]
     cleanup["process_group"]["signalled"] = ([sig for p in cleanup_passes for sig in p["process_group"]["signalled"]]
                                              + cleanup["process_group"]["signalled"])
+    # 恢复扫描记录同样按整次运行汇总（每条标明第几轮回收）。
+    all_passes = cleanup_passes + [cleanup]
+    seen_recovered: dict[int, dict[str, Any]] = {}
+    for p in all_passes:
+        for row in p.get("recovered_members", []):
+            seen_recovered.setdefault(int(row["pid"]), row)
+    cleanup["recovered_members"] = list(seen_recovered.values())
+    cleanup["tree_scope"]["recovery_enumeration"]["scans"] = [
+        dict(scan, cleanup_pass=i + 1) for i, p in enumerate(all_passes)
+        for scan in p.get("tree_scope", {}).get("recovery_enumeration", {}).get("scans", [])]
+    cleanup["tree_scope"]["recovery_enumeration"]["attempted"] = bool(cleanup["tree_scope"]["recovery_enumeration"]["scans"])
     alive = [{"pid": row["pid"], "created_at": row["created_at"]} for row in cleanup["unverified"] if row.get("reason") == "still_alive"]
     elapsed=time.monotonic()-start
     if not cleanup["confirmed"]:trigger=trigger or 'owned_tree_cleanup_incomplete'
@@ -603,7 +814,12 @@ def _monitor_unavailable_outcome(receipt_dir: Path, operation: str, monitor_path
                "peak_task_memory_bytes": 0, "peak_task_rss_sum_bytes": 0, "exception": None,
                "exception_message": None, "monitor_error": detail, "launch_identity": None,
                "cleanup": {"status": "confirmed", "confirmed": True, "verified_dead": [], "unverified": [],
-                           "alive_before": [], "signalled": [], "signal_errors": [], "not_covered": [],
+                           "alive_before": [], "signalled": [], "signal_errors": [],
+                           "tree_scope": {"known_members_reclaimed": True, "original_group_empty_verified": None,
+                       "enumeration_failed_during_run": False, "whole_tree_verified": True,
+                       "basis": "task_not_launched", "reason": None,
+                       "recovery_enumeration": {"attempted": False, "scans": []}, "assumptions": []},
+                           "recovered_members": [],
                            "process_group": {"pgid": None, "leader": None, "signalled": [], "empty_verified": None,
                                              "reason": "task not launched (baseline monitor failure)"}}}
     outcome["failure_receipt"] = write_failure_receipt(
