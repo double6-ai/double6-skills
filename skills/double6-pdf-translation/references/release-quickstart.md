@@ -85,6 +85,8 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 | `non_digital_pages` | error | 电子 PDF 路线遇到扫描图像页、文字转曲页或路由判为需复核的页 |
 | `source_language_matches_target` | error | 源文主要语言已经是目标语言（英译中时源文为中文，中译英时源文为英文） |
 | `target_language_unsupported` | error | `--target-language` 不是 `zh`（英译中）或 `en`（中译英） |
+| `target_language_route_unsupported` | error | `--target-language en` 只支持 `candidate --route digital_pdf`；`latex_verified` 与 `collect` 的译者固定译成简体中文 |
+| `zh2en_inline_object_math_unsupported` | error | 中译英：中文正文行内的变量/公式由 Form XObject 文字或矢量路径字形绘制，无法随英文重排（`details.pages` 列出每页计数） |
 | `source_language_mixed` / `source_language_unknown` | warning / info | 中英混合或可抽取文字过少 |
 | `page_load_failed` | error | 部分页面无法解析 |
 | `resource_limit_invalid` | error | 资源参数越界 |
@@ -124,16 +126,18 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 
 ## 中译英（`--target-language en`）
 
-`candidate`/`collect` 加 `--target-language en` 把中文电子版 PDF 译成英文（只支持 `--route digital_pdf`；默认 `zh` 为英译中，命令行与回执不变）。后端以 `--lang-in zh --lang-out en` 调用，默认提示词换成中译英版本（自定义提示词不替换），英译中方向的默认术语表（译法含汉字的条目）不注入提示词。
+`candidate --route digital_pdf` 加 `--target-language en` 把中文电子版 PDF 译成英文（默认 `zh` 为英译中，命令行与回执不变；`latex_verified`、`collect` 报 `target_language_route_unsupported`）。后端以 `--lang-in zh --lang-out en` 调用，默认提示词换成中译英版本（自定义提示词不替换），英译中方向的默认术语表（译法含汉字的条目）不注入提示词；本地 Qwen CLI 适配器同样收到目标语言，不做英译中译名修补。HY-MT 兼容代理与 LM Studio 原生传输只会译成中文，中译英时报 `target_language_backend_unsupported`。
+
+预检（只在中译英时）：中文正文行内若有 ≥3 个由 Form XObject 绘制的非中文字形或字形大小的填充矢量路径（Word/WPS 公式、MathJax/网页打印公式），以 `zh2en_inline_object_math_unsupported` 拒绝。这是失败关闭而不是修复：这类对象无法随英文重排，会与译文压叠或被丢弃。
 
 排版差异（只在中文源 → 非 CJK 目标时生效，英译中逐像素不变）：
 - 抽取中文源文时，字距调整/两端对齐造成的汉字间隙不补空格（间隙 < 0.5 字高）；表格单元格之间的大间隙照常补空格；
 - 不含汉字的段落（公式碎片、英文专名、数字）保留原字形，不送翻译；含汉字的短标签（表头“样本量”、组名）照常翻译；
 - 英文译文按整词宽度断行；单行段落（标题、图注）放不下时先借用右侧空白，到可读下限仍放不下时再借用右侧、下方空白。
 
-成品检查改为渲染中文残留检查（`render_chinese_residue`）：逐页比较源/译文可抽取汉字数，页残留率 ≥0.30 为高风险、≥0.10 为中风险，整体 ≥0.25 或存在高风险页判 `fail`（退出码 3）；源页汉字少于 100 不评估。另记录整句原样残留行数和全角中文标点数，并检测源文保留字形（未翻译的公式碎片，非 Noto 字体）与英文译文字形压叠，≥10 个字符的页写入 `retained_glyph_overlap_pages` 并把等级提到中风险（提示人工复核，不单独判失败）。
+成品检查改为渲染中文残留检查（`render_chinese_residue`）：逐页比较源/译文可抽取汉字数，页残留率 ≥0.30 为高风险、≥0.10 为中风险，整体 ≥0.25 或存在高风险页判 `fail`（退出码 3）。源页汉字少于 100 时不按比例评估，但整行中文源句（≥12 字）逐字留在译文里判高风险；所有页都短时按整份文件合计评估。以下结构性问题同样判 `fail`：源文保留字形（非 Noto 字体）与英文译文字形压叠 ≥10 个字符的页（`retained_glyph_overlap_pages`，规则 `retained_glyph_overlap_high`）；字形大小的填充矢量路径比源页少 ≥3 个且 ≥25% 的页（`vector_glyph_loss_pages`，规则 `vector_glyph_loss_high`）。
 
 已知局限：
-- Word/WPS 公式等以 Form XObject 绘制的行内变量在原坐标保留，英文正文变长后可能与之压叠（上述检测会提示）；
-- Type3 字体的源文（如网页打印 PDF）英文无法沿用粗体；无 Unicode 映射的公式字形会在译文中缺失；
+- 行内公式由 Form XObject 或矢量路径绘制的中文 PDF 不支持（预检拒绝，见上）；每页少于 3 个此类对象时不拦截，由成品压叠/字形丢失检查兜底；
+- Type3 字体的源文（如网页打印 PDF）英文无法沿用粗体；
 - 中文参考文献不剔除，按残留计数；图片里的中文不翻译（需要 OCR）。
