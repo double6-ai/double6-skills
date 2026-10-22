@@ -449,7 +449,8 @@ def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> d
                 form_owned += owned.get(xref, Counter())
         layer = [rec for key in (original - form_owned).elements() for rec in by_key.get(key, [])[:1]]
         layer_lines = _host_lines(layer, body_size, 2)
-        text_layer_math = [{'kind': 'text_layer_glyph', 'char': rec['c'], 'bbox': [round(v, 1) for v in rec['bbox']]}
+        text_layer_math = [{'kind': 'text_layer_glyph', 'char': rec['c'], 'bbox': [round(v, 1) for v in rec['bbox']],
+                            'font': rec['font'], 'size': round(rec['size'], 2), 'flags': rec['flags']}
                            for rec in _math_like_glyphs(layer, records) if _in_flow(rec['bbox'], layer_lines)]
         bare = scratch[0]
         rows = _cjk_rows(bare)
