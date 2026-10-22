@@ -299,7 +299,11 @@ def _recovery_scan(identity: dict[str, Any], targets: dict[int, float], nonce: s
                    group_trusted: bool, phase: str) -> dict[str, Any]:
     """所属进程树枚举失败后的恢复扫描：完整枚举一次，只把“正面核验为本次任务”的进程判为所属：
     create_time 不早于根进程，且满足其一——环境里有本次启动 nonce；进程组仍是本次启动组（组长未被复用）；
-    父进程链连到已核验成员（每一环 create_time 不早于其父）。读不到归属的同用户新进程记为 ownership_unknown（不发信号）。"""
+    父进程链连到已核验成员（每一环 create_time 不早于其父）。读不到归属的同用户新进程记为 ownership_unknown（不发信号）。
+    祖先链逐环核实身份（第 10 轮）：已知成员只有当前 PID 的 create_time 与记录一致（存活/僵尸）才能作祖先起点；
+    已复用、已退出或无法查询的旧号码（poisoned）不授予归属——ppid 指向这类号码、又没有独立 nonce/进程组证据的进程，
+    连同其后代，记为 ownership_unknown（整树未核实，绝不发信号）。每一跳在判定时重新核实父进程的 PID + create_time；
+    复用号码上的新进程作为普通候选按自身证据判定。"""
     scan: dict[str, Any] = {"phase": phase, "complete": False, "method": None, "attempts": [],
                             "candidates": 0, "owned_found": [], "ownership_unknown": []}
     try:
@@ -312,9 +316,19 @@ def _recovery_scan(identity: dict[str, Any], targets: dict[int, float], nonce: s
     pgid = identity.get("process_group")
     me = os.getpid()
     uid = os.getuid() if hasattr(os, "getuid") else None
+    roots: dict[int, float] = {}
+    poisoned: dict[int, str] = {}
+    for pid, born in targets.items():
+        state, _ = _identity_state(pid, born)
+        if state in ("alive", "zombie"):
+            roots[pid] = born
+        else:
+            poisoned[pid] = state
+    scan["ancestor_roots"] = [{"pid": pid, "created_at": born} for pid, born in sorted(roots.items())]
+    scan["rejected_ancestors"] = [{"pid": pid, "created_at": targets[pid], "state": state} for pid, state in sorted(poisoned.items())]
     info: dict[int, dict[str, Any]] = {}
     for pid in pids:
-        if pid in (me, 0) or pid in targets:
+        if pid in (me, 0) or pid in roots:
             continue
         try:
             proc = psutil.Process(pid)
@@ -353,17 +367,47 @@ def _recovery_scan(identity: dict[str, Any], targets: dict[int, float], nonce: s
             info[pid] = {"proc": None, "created_at": None, "ppid": None, "match": None,
                          "unknown": f"{type(exc).__name__}: {exc}"[:160]}
     scan["candidates"] = len(info)
-    owned = {pid: born for pid, born in targets.items()}
+    owned = dict(roots)
     owned.update({pid: row["created_at"] for pid, row in info.items() if row["match"]})
+    hop_cache: dict[tuple[int, float], bool] = {}
+
+    def parent_verified(parent: int) -> bool:
+        key = (parent, owned[parent])
+        if key not in hop_cache:
+            hop_cache[key] = _identity_state(parent, owned[parent])[0] in ("alive", "zombie")
+        return hop_cache[key]
+
     changed = True
-    while changed:   # 祖先链：父进程已判为所属、且子进程不早于父进程创建
+    while changed:   # 祖先链：父进程是已判为所属且身份当前仍一致的进程，子进程不早于该父进程创建
         changed = False
         for pid, row in info.items():
             if row["match"] or row["ppid"] is None or row["created_at"] is None:
                 continue
             parent = row["ppid"]
-            if parent in owned and row["created_at"] >= owned[parent] - IDENTITY_TOLERANCE:
+            if (parent in owned and row["created_at"] >= owned[parent] - IDENTITY_TOLERANCE
+                    and parent_verified(parent)):
                 row["match"] = "ancestry"; owned[pid] = row["created_at"]; changed = True
+    # 没有独立证据、父链却指向已复用/已退出/无法核实的旧号码（或身份变化的父进程）的进程及其后代：归属未知。
+    suspect: dict[int, str] = {}
+    changed = True
+    while changed:
+        changed = False
+        for pid, row in info.items():
+            if row["match"] or pid in suspect or row["ppid"] is None:
+                continue
+            parent = row["ppid"]
+            reason = None
+            if parent in poisoned and parent not in owned:
+                reason = f"parent pid {parent} no longer has the recorded identity ({poisoned[parent]})"
+            elif parent in owned and not parent_verified(parent):
+                reason = f"parent pid {parent} identity changed during the scan"
+            elif parent in suspect and (row["created_at"] is None or info[parent]["created_at"] is None
+                                         or row["created_at"] >= info[parent]["created_at"] - IDENTITY_TOLERANCE):
+                reason = f"ancestor pid {parent} ownership unknown"
+            if reason:
+                suspect[pid] = reason; changed = True
+    for pid, reason in suspect.items():
+        info[pid]["unknown"] = info[pid]["unknown"] or f"ancestor identity unverified: {reason}"
     for pid, row in sorted(info.items()):
         if row["match"]:
             scan["owned_found"].append({"pid": pid, "created_at": row["created_at"], "match": row["match"]})
@@ -530,7 +574,8 @@ def reclaim_owned_tree(identity: dict[str, Any], known: dict[int, float], deadli
                              "recovery_enumeration": {"attempted": bool(discovery_failed), "scans": scans},
                              "assumptions": list(WHOLE_TREE_ASSUMPTIONS)}
     if discovery_failed:
-        final_scan = _recovery_scan(identity, {}, nonce, group_trusted, "final_verification")
+        # 已知身份一并传入：存活且身份一致的成员作祖先起点，已复用/已退出的旧号码继续不授予归属。
+        final_scan = _recovery_scan(identity, dict(targets), nonce, group_trusted, "final_verification")
         scans.append(final_scan)
         scope["basis"] = "recovery_enumeration_after_discovery_failure"
         still = [row for row in final_scan["owned_found"]
