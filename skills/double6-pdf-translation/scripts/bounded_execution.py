@@ -442,6 +442,7 @@ def reclaim_owned_tree(identity: dict[str, Any], known: dict[int, float], deadli
        恢复扫描不完整、存在归属未知的进程、或仍有所属进程存活，整树即未核实（tree_scope.whole_tree_verified=False，
        unverified 写入 whole_tree 条目），confirmed=False。"""
     budget = 2.0 if deadline is None else max(0.5, min(2.0, deadline - time.monotonic()))
+    identity = dict(identity)   # 本地副本：nonce 核验后可能刷新根进程 create_time（见 adopt）
     targets = dict(known)
     if identity.get("pid") and identity.get("created_at") is not None:
         targets[int(identity["pid"])] = float(identity["created_at"])
@@ -523,8 +524,30 @@ def reclaim_owned_tree(identity: dict[str, Any], known: dict[int, float], deadli
     group_trusted = bool(group.get("pgid")) and group.get("leader") in ("alive", "zombie", "dead")
 
     def adopt(scan: dict[str, Any]) -> list[int]:
+        nonlocal group_ok, group_trusted
         added = []
         for row in scan["owned_found"]:
+            pid, born = row["pid"], float(row["created_at"])
+            if pid in targets and abs(targets[pid] - born) > IDENTITY_TOLERANCE:
+                # 墙钟跳变（Linux：create_time = btime + 启动 jiffies，btime 随墙钟校正而变）：同一进程报告的
+                # create_time 与回执不同，按 PID + create_time 会被误判为 pid_reused 而不回收（chunk-r2 实测孤儿）。
+                # 仅当该进程环境里带本次启动 nonce（正面所属证据）且记录身份已判为 pid_reused 时，才以观测值刷新身份；
+                # 无 nonce 的复用号码仍按复用处理，绝不发信号。
+                if row.get("match") != "launch_nonce" or _identity_state(pid, targets[pid])[0] != "pid_reused":
+                    continue
+                report.setdefault("identity_refreshed", []).append(
+                    {"pid": pid, "recorded_created_at": targets[pid], "observed_created_at": born, "evidence": "launch_nonce"})
+                targets[pid] = born
+                if identity.get("pid") == pid:
+                    identity["created_at"] = born
+                    if group.get("pgid") == pid and group.get("leader") == "pid_reused":
+                        group["leader"], group["empty_verified"] = "alive", None
+                        group["identity_refreshed_by_nonce"] = True
+                        group_ok = group_trusted = True
+                if _identity_state(pid, born)[0] == "alive":
+                    report["alive_before"].append({"pid": pid, "created_at": born})
+                added.append(pid)
+                continue
             if row["pid"] not in targets:
                 targets[row["pid"]] = float(row["created_at"])
                 added.append(row["pid"])
