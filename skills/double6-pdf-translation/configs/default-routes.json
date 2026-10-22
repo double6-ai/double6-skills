@@ -79,7 +79,7 @@
   },
   "runtime": {
     "concurrency": 1,
-    "task_rss_bytes": 3221225472,
+    "task_rss_bytes": 5368709120,
     "per_job_seconds": 120,
     "same_workspace_required": false,
     "supported_platforms": [
@@ -88,7 +88,7 @@
     ],
     "platform_defaults": {
       "macOS": {
-        "task_rss_bytes": 3221225472,
+        "task_rss_bytes": 5368709120,
         "per_job_seconds": 120,
         "memory_metric": "rss"
       },

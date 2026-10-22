@@ -869,7 +869,7 @@ def main(argv=None):
         group = subparser.add_argument_group('resource limits (CLI > env > platform default; candidate/collect/resume-latex: '
                                               'the frozen FREEZE resource_contract is authoritative, overrides must match it)')
         group.add_argument('--task-memory-mib', type=int, default=None,
-                           help='进程树内存上限（MiB）；也可用环境变量 PAPER_TRANSLATION_TASK_MEMORY_MIB。默认 macOS 3072（RSS）、Linux 4096（PSS），且不超过物理内存 25%%')
+                           help='进程树内存上限（MiB）；也可用环境变量 PAPER_TRANSLATION_TASK_MEMORY_MIB。默认 macOS 5120（RSS）、Linux 4096（PSS），且不超过物理内存 25%%')
         group.add_argument('--job-timeout-seconds', type=int, default=None,
                            help='单作业总时限（秒）；也可用 PAPER_TRANSLATION_JOB_TIMEOUT_SECONDS。默认 macOS 120、Linux 300')
         group.add_argument('--memory-metric', choices=('rss', 'pss'), default=None,

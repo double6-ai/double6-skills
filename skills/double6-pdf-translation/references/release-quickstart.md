@@ -47,7 +47,7 @@ python scripts/paper_translation_workflow.py collect \
 
 | 参数 | 环境变量 | 默认（macOS / Linux） |
 |---|---|---|
-| `--task-memory-mib` | `PAPER_TRANSLATION_TASK_MEMORY_MIB` | 3072 / 4096，且默认不超过物理内存 25% |
+| `--task-memory-mib` | `PAPER_TRANSLATION_TASK_MEMORY_MIB` | 5120（macOS，RSS）/ 4096（Linux，PSS），且默认不超过物理内存 25% |
 | `--job-timeout-seconds` | `PAPER_TRANSLATION_JOB_TIMEOUT_SECONDS` | 120 / 300 |
 | `--memory-metric` | `PAPER_TRANSLATION_MEMORY_METRIC` | `rss` / `pss` |
 
@@ -146,7 +146,7 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 
 需要本地 Tesseract 5.x 与 `chi_sim`、`eng`、`osd` 语言数据（例如 Debian/Ubuntu：`apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim tesseract-ocr-osd`）。缺失时只有这条路线报 `ocr_engine_unavailable`（退出码 2），`doctor` 的 `ocr_engine` 字段只作提示，不阻断电子路线。
 
-FREEZE 的 `route` 为 `scanned_ocr`，`routing_contract` 须逐字等于 `paper_translation_workflow.OCR_ROUTING`，不得带 `source_cache_contract`，`implementation_refs` 应包含 `scripts/ocr_route.py`。推荐资源合同：`{"task_rss_bytes": 3221225472, "per_job_seconds": 120, "concurrency": 1, "memory_metric": "rss"}`；OCR 与后端共享同一单任务时限。
+FREEZE 的 `route` 为 `scanned_ocr`，`routing_contract` 须逐字等于 `paper_translation_workflow.OCR_ROUTING`，不得带 `source_cache_contract`，`implementation_refs` 应包含 `scripts/ocr_route.py`。推荐资源合同：`{"task_rss_bytes": 5368709120, "per_job_seconds": 120, "concurrency": 1, "memory_metric": "rss"}`（`resource_limits.RSS_CONTRACT`；rc.8 由 3 GiB 调为 5 GiB）；OCR 与后端共享同一单任务时限。
 
 回执：`receipts/ocr/OCR_MANIFEST.json`（逐页渲染图、识别文字、背景图、行明细、每个 tesseract 进程身份）、`receipts/ocr-reconstruct/`（有界执行资源采样与回收结论）、`receipts/reconstructed-input/`（重建源电子预检）、`receipts/candidate/`（后端）。`WORKFLOW_CANDIDATE.json` 的 `ocr` 字段汇总引擎身份、逐页结论、重建源 sha256；`ocr_stage` 指出停在哪一步。支持/拒绝矩阵与错误码见 [ocr-route.md](ocr-route.md)。
 
