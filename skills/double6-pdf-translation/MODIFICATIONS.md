@@ -27,6 +27,7 @@
 - CI：`.github/workflows/tests.yml` 的 Linux PDF 作业安装 `tesseract-ocr`、`tesseract-ocr-eng`、`tesseract-ocr-chi-sim`、`tesseract-ocr-osd` 并列出版本。
 - 新增 `tests/test_ocr_route.py`（单元与真实引擎测试）、`tests/test_ocr_route_processes.py`（真实进程计量/回收正反例）。
 - 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py`、仓库 `README.md` 更新为 2.0.0-rc.8。
+- RSS 任务上限 5 GiB（PR #20 第 2 轮）：`scripts/resource_limits.py` 新增 `RSS_TASK_LIMIT_BYTES`、`RSS_CONTRACT`，macOS 平台默认改用它（`LEGACY_CONTRACT` 不变）；`configs/default-routes.json` 的 `runtime.task_rss_bytes` 与 `platform_defaults.macOS`；`scripts/paper_translation_workflow.py` 帮助文字；SKILL.md、`references/release-quickstart.md`、`references/ocr-route.md`；测试 `tests/test_rc3_preflight_limits.py`（macOS 默认断言改为 5 GiB，新增 5 GiB 合同、越限、旧合同、主机授权测试）、`tests/test_ocr_route_processes.py`（正例与超时例用 `RSS_TASK_LIMIT_BYTES` 并按冻结合同的 50% 主机授权运行；内存越限例不变）。
 
 ## 2.0.0-rc.7 维护改动（2026-10-22）
 
