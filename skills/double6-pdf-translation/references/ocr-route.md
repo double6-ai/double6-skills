@@ -1,0 +1,73 @@
+# 常规 OCR 路线（`candidate --route scanned_ocr`，2.0.0-rc.8）
+
+本路线把**受支持**的扫描页/混合 PDF 交给本地 Tesseract 识别，重建成“干净背景图 + 可见 OCR 文字层”的源 PDF，然后交给既有电子 PDF 后端。电子路线的所有守门照常执行：重建源电子预检（`require_digital`）、`route_pdf`、渲染残留、综合质量门、严格交付。任何不受支持的版式在**模型调用之前**以退出码 2 和下列稳定错误码拒绝。
+
+OCR 文字是机器输出，没有经过人工逐字核对，所以**永不作为质量验收**：
+- `OCR_MANIFEST.quality_claim = none`；
+- 工作流回执 `ocr_text_layer_is_acceptance=false`；
+- 综合质量最高记为 `unverified`（原结论另存于 `quality_status_before_ocr_cap`），`fail` 保持 `fail`；
+- `quality_pending` 加入 `ocr_text_unverified`。
+
+## 流程
+
+1. **引擎检查**：需要 `tesseract` 与 `chi_sim`、`eng`、`osd` 语言数据。缺失时只阻断本路线（`ocr_engine_unavailable`，退出码 2）。`doctor` 只报告引擎状态（`blocks_routes: ["scanned_ocr"]`，`blocks_digital_route: false`），不进入电子路线的阻断项。
+2. **有界 OCR 重建**：`ocr_route.py` 作为 `run_bounded` 的任务运行（操作名 `ocr-reconstruct`，0.5 s 采样）。
+   - 每个 `tesseract` 都是它的直接子进程，进程树与后端一样：计入同一任务内存，记录 PID 与 create_time，带启动 nonce、父链核验，超限或超时整树回收。
+   - 未核实的进程不报告为已确认。
+   - OCR 与随后的后端共享 FREEZE 资源合同里的同一个单任务时限（`per_job_seconds`）。
+   - 每次调用另设 45 s 的单进程上限，超时即杀并以 `ocr_engine_failed` 拒绝。
+3. **逐页处理**：
+   - 原生文字页原样复制。若页内有大图且图中 OCR 出 ≥20 个可信词，按页内混排拒绝。
+   - 扫描页依次经过：300 dpi 渲染 → 分辨率门 → 框线门 → OSD 方向 → 版面分析与识别（`--psm 3`）→ 碎行重识别 → 弱词多遍核验 → 分类与版式门 → 覆盖原文字 → 背景残留复查 → 写回文字层。
+4. **重建源绑定**：`OCR_MANIFEST.json` 记录输入 sha256、引擎与语言数据 sha256、阈值、每个 tesseract 进程的身份与峰值 RSS、逐页结论，以及重建源的路径和 sha256。
+   - `_execute-digital --ocr-manifest/--ocr-manifest-sha256` 在后端子任务里逐 sha 核对三件事：清单本身、清单里的输入 = FREEZE 输入、后端输入 = 清单里的重建源。
+
+## 支持 / 拒绝矩阵
+
+| 维度 | 支持 | 拒绝（错误码） |
+| --- | --- | --- |
+| 语言 | 简体中文源（`chi_sim+eng`，中译英）；英文源（`eng`，英译中） | OCR 文本语言与声明的源语言不符：`ocr_source_language_mismatch`；竖排文字：`ocr_vertical_text_unsupported` |
+| 整页扫描 | 每页一张整页图像、横排单栏或规整双栏正文 | 图像拼贴（多块图像拼成一页）：`ocr_tiled_scan_unsupported`；矢量轮廓字（无文字层，≥5000 个绘图项）：`ocr_outlined_vector_text_unsupported` |
+| 混合文档 | 原生文字页 + 扫描页按页混合（原生页原样保留） | 同一页内原生文字与扫描文字混排：`ocr_mixed_within_page_unsupported`；全是原生页：`ocr_route_no_scanned_pages`（请用 `digital_pdf`） |
+| 旋转 | 0/90/180/270°：页面 `/Rotate` 或 OSD 判定，且 OSD 置信度 ≥ 3.0 | OSD 判定需要旋转但置信度不足：`ocr_orientation_uncertain`；倾斜 > 1.0°：`ocr_skew_unsupported` |
+| 分辨率 | 源图有效分辨率 ≥ 200 dpi（容差 0.97），且正文中位行高 ≥ 18 源像素 | `ocr_resolution_too_low` |
+| 表格 | — | 框线表格或带网格的图表：≥3 条长水平线且 ≥2 条长竖线，方向对称判定，在 OSD 之前检查；无框线表格：≥3 行各有 ≥2 个大于 2 倍行高的列间隙。两者都报 `ocr_table_unsupported` |
+| 公式 | — | 识别出的数学行（运算符/希腊字母密度、`x = …`、行末公式编号）：`ocr_formula_unsupported`。不删公式、不遮挡正文 |
+| 置信度 | 页面平均词置信度 ≥ 80（英）/ 75（中），不确定行 ≤ 2 且不确定字符 ≤ 3% | `ocr_low_confidence`；没有任何可信文字：`ocr_no_reliable_text` |
+| 背景 | 文字所在处背景均匀（灰度 p90−p10 ≤ 60，彩色 ≤ 5%，暗像素 ≤ 8%） | 文字压在图形、印章、彩色底纹上：`ocr_text_over_graphics_unsupported`；覆盖后背景仍可 OCR 出可读文字：`ocr_background_text_residue` |
+| 引擎 | Tesseract 5.x CLI | 缺失：`ocr_engine_unavailable`；超时或非零退出：`ocr_engine_failed` |
+
+页数仍受首发上限约束（1–5 页），不做长文档分块。
+
+## 不确定行与多遍核验
+
+行内任一可读词置信度 < 50 时，这一行要做多遍核验：
+- 第 2 遍：裁出该行，用 `--psm 7` 识别。
+- 第 3 遍：只在前两遍不一致时进行，同一裁行放大 1.5 倍后再用 `--psm 7` 识别。
+
+比较时去掉空白和标点、忽略大小写。表决规则：
+- 任意两遍一致：采用一致文字；
+- 三遍互不一致，但某一遍的所有可读词置信度 ≥ 50、行均值 ≥ 文字阈值：采用该遍；
+- 否则计为不确定行。
+
+每一遍的文字都记在 `weak_line_verification` 里。注意：多遍一致只说明结果稳定，不等于正确（实测中“接入”被两遍一致地识别成“撑人”）。这正是 OCR 文本不作验收的原因。
+
+## 覆盖与重建
+
+- 可信行和不确定行（不确定行受上述上限约束）用其外圈背景的中位色覆盖；
+- 背景图存为灰度，原图明显彩色时存为 RGB；
+- 文字层按 OCR 行框写入，字体与颜色：
+  - 中文用 PyMuPDF 内置 Droid Sans Fallback 嵌入子集；
+  - 英文用 Base-14 Times；
+  - 颜色取原墨色。
+- 字号按段落宽度拟合。正文行（行高 ≤ 1.15 倍页面中位行高）字号不超过页面正文中位拟合字号的 1.03 倍，避免漏字导致字号虚高、被后端识别为标题。
+
+## 资源
+
+推荐合同：3 GiB RSS（任务进程树 RSS 之和）、120 s/任务、重任务并发 1。
+
+- OCR 阶段实测峰值约 0.15–0.35 GiB；
+- 随后的电子后端单进程约 2.3–2.6 GiB，加上工作流进程，合计 2.7–3.2 GiB，已贴近上限；
+- 超限时按 `task_memory_limit` 停止并回收，不放宽。
+
+本版把 BabelDOC 的字体子集化与清理保存辅助进程改为 spawn 启动。fork 出的子进程会按父进程的全部 RSS 计数（写时复制页），曾使一次任务的 RSS 之和达到 5.9 GB。

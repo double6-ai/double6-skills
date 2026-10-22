@@ -2,7 +2,7 @@
 name: double6-pdf-translation
 description: 论文和PDF英译中执行。先读 configs/default-routes.json，按源证据直接调用已有命令。清晰单栏扫描先预检和源图确认；审过再准备用单配置；冻住了只重出PDF。电子PDF和已核过的LaTeX走原路线。全文、实际PDF、复制和冷重建必须保留。旧的整篇强翻译流水线不是当前入口。
 metadata:
-  version: "2.0.0-rc.7"
+  version: "2.0.0-rc.8"
   development_revision: "110-unpublished"
   source_contract_revision: "111-20261017"
   release_status: "local-prepublication-candidate"
@@ -26,6 +26,7 @@ metadata:
 | 电子版 PDF | `collect`，固定参数 `--route digital_pdf`，再走既有源组审校和 candidate |
 | 已经核过的 LaTeX | `candidate`，固定参数 `--route latex_verified` |
 | 中文电子版 PDF 译成英文 | `candidate --route digital_pdf` 加 `--target-language en`（默认 `zh` 为英译中）；行内公式由 Form XObject/矢量路径绘制的 PDF 预检拒绝 |
+| 扫描件或扫描/电子混合 PDF（1–5 页，横排正文） | `candidate --route scanned_ocr`（可加 `--target-language en`）：本地 Tesseract 识别受支持页，重建源再走电子后端与全部质量门；表格、公式、低分辨率、低置信度、不确定方向等以稳定错误码退出码 2 拒绝，OCR 文字不作验收，综合质量最高 `unverified`。见 [references/ocr-route.md](references/ocr-route.md) |
 
 扫描这条不能套到所有 PDF。隐藏文字层要单独决定走不走，不能悄悄换模型，也不能悄悄改页面尺寸。
 

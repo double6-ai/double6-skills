@@ -85,7 +85,7 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 | `non_digital_pages` | error | 电子 PDF 路线遇到扫描图像页、文字转曲页或路由判为需复核的页 |
 | `source_language_matches_target` | error | 源文主要语言已经是目标语言（英译中时源文为中文，中译英时源文为英文） |
 | `target_language_unsupported` | error | `--target-language` 不是 `zh`（英译中）或 `en`（中译英） |
-| `target_language_route_unsupported` | error | `--target-language en` 只支持 `candidate --route digital_pdf`；`latex_verified` 与 `collect` 的译者固定译成简体中文 |
+| `target_language_route_unsupported` | error | `--target-language en` 只支持 `candidate --route digital_pdf` / `scanned_ocr`；`latex_verified` 与 `collect` 的译者固定译成简体中文 |
 | `zh2en_inline_object_math_unsupported` | error | 中译英：中文正文行内的变量/公式由 Form XObject 文字或矢量路径字形绘制，无法随英文重排（`details.pages` 列出每页计数） |
 | `source_language_mixed` / `source_language_unknown` | warning / info | 中英混合或可抽取文字过少 |
 | `page_load_failed` | error | 部分页面无法解析 |
@@ -141,3 +141,12 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 - 行内公式由 Form XObject 或矢量路径绘制的中文 PDF 不支持（预检拒绝，见上；只要定位到 1 个即拒绝）。定位依赖“对象中心落在中文行文字范围内、字形大小”的结构规则：中文行内的小图标也会被拒绝（误拦），不在行内的对象不检测；
 - Type3 字体的源文（如网页打印 PDF）英文无法沿用粗体；
 - 中文参考文献不剔除，按残留计数；图片里的中文不翻译（需要 OCR）。
+
+## 扫描件 / 混合 PDF：`candidate --route scanned_ocr`（rc.8）
+
+需要本地 Tesseract 5.x 与 `chi_sim`、`eng`、`osd` 语言数据（例如 Debian/Ubuntu：`apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim tesseract-ocr-osd`）。缺失时只有这条路线报 `ocr_engine_unavailable`（退出码 2），`doctor` 的 `ocr_engine` 字段只作提示，不阻断电子路线。
+
+FREEZE 的 `route` 为 `scanned_ocr`，`routing_contract` 须逐字等于 `paper_translation_workflow.OCR_ROUTING`，不得带 `source_cache_contract`，`implementation_refs` 应包含 `scripts/ocr_route.py`。推荐资源合同：`{"task_rss_bytes": 3221225472, "per_job_seconds": 120, "concurrency": 1, "memory_metric": "rss"}`；OCR 与后端共享同一单任务时限。
+
+回执：`receipts/ocr/OCR_MANIFEST.json`（逐页渲染图、识别文字、背景图、行明细、每个 tesseract 进程身份）、`receipts/ocr-reconstruct/`（有界执行资源采样与回收结论）、`receipts/reconstructed-input/`（重建源电子预检）、`receipts/candidate/`（后端）。`WORKFLOW_CANDIDATE.json` 的 `ocr` 字段汇总引擎身份、逐页结论、重建源 sha256；`ocr_stage` 指出停在哪一步。支持/拒绝矩阵与错误码见 [ocr-route.md](ocr-route.md)。
+

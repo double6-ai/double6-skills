@@ -1,5 +1,21 @@
 # 变更记录
 
+## 2.0.0-rc.8 本地发布候选 · 2026-10-22
+
+- 新增扫描件 / 混合 PDF 的常规 OCR 路线 `candidate --route scanned_ocr`（基线 item 4）。原 `digital_pdf` 路线遇到扫描页一律在预检以 `scanned_pdf_route_required` 拒绝，`scanned_raster` 只能整页重绘、不产生可翻译文字层；现在可把扫描页 OCR 重建为带文字层的数字 PDF，再走**原有**数字后端、全部质量门和严格验收。
+  - 引擎：Tesseract 5.5.0（Apache-2.0）+ tessdata_fast `chi_sim`/`eng`/`osd` 4.1.0（Apache-2.0），本机运行、免费、无 API、无密钥。缺少引擎时 `doctor` 报 `ocr_engine_status=missing`，只影响本路线，不影响 `digital_pdf` 主路线；本路线以 `ocr_engine_unavailable`（退出码 2）拒绝。
+  - 流程：`ocr_route.py` 在既有有界执行（`run_bounded`，操作名 `ocr-reconstruct`）下运行，tesseract 子进程计入本任务 RSS、按 PID + create_time / nonce / 父链核验并回收；重建 PDF（扫描页 = 清理后的背景 + 可见文字层，数字页原样复制）→ 对重建 PDF 做数字预检（要求 digital）→ `_execute-digital --ocr-manifest --ocr-manifest-sha256` 绑定 OCR 清单 → 原数字后端与全部门。OCR 与翻译共用 120 s 时限、3 GiB RSS、重任务并发 1，均未放宽。
+  - 质量：`comprehensive_quality` 在 OCR 路线上封顶为 `unverified`（`cap_ocr_quality`，原值记在 `quality_status_before_ocr_cap`）；OCR 生成的文字层不是质量验收，仍需独立质量包。
+  - 失败关闭（退出码 2，稳定错误码，见 `references/ocr-route.md`）：页面 < 0.97×最低 DPI（`ocr_resolution_too_low`）、有格线或列间隙表格（`ocr_table_unsupported`；格线检测在 OSD 之前）、公式/数学符号（`ocr_formula_unsupported`）、识别不确定（`ocr_low_confidence`：单页 > 2 行或 > 3% 字符不确定；某行有可读词置信度 < 50 时须多遍识别一致才采用）、语言不符、无扫描页、方向无法确定、倾斜 > 1°、竖排、文字压在图形/印章上、页内原生与扫描混排、分块扫描、矢量化文字等（共 17 个错误码）。不靠删公式、遮挡正文、降阈值或只记风险来过门。
+  - 多遍核对：弱行第 2 遍按行裁切 psm 7，前两遍不一致时第 3 遍 1.5 倍放大；任意两遍一致即采用（一致不等于正确，见限制）。正文行字号上限防止乱码行被画成大号标题（本轮实测 “L,拒收方式: USER R” 被当成标题导致回写失败）。
+- vendored BabelDOC `pdf_creater.py`：字体子集化 / 清理保存辅助进程改用 spawn 上下文。fork 出的辅助进程按 RSS 计入父进程约 2.5 GB 的共享页，任务 RSS 合计曾测到 5.9 GB；spawn 子进程只计自身。数字路线输出不变（回归像素比对见 PR）。
+- 已知限制（如实列出）：
+  - 内存余量小：后端进程树（工作流 + `_execute-digital` + pdf2zh 父进程约 319 MB + pdf2zh 子进程 2.0–2.6 GB）RSS 合计 2.5–3.26 GB，贴近 3 GiB。本轮真实扫描样本中 en-01 三次都被 `task_memory_limit` 停止，en-03 三次过一次；RSS 合计重复计入写时复制共享页，PSS 峰值 2.25–2.85 GiB。未放宽限额；可选方案（按 PSS 计 3 GiB、RSS 3.5 GiB、或缩小 pdf2zh 闲置父进程）列在 PR 中待决定。
+  - 严格页门会拒绝很多真实中文公文页（miit 794 号文 9 页中只有 p2、p6 可用，其余因低置信或表格拒绝）。
+  - 多遍一致不等于正确：例如“接入”被两遍都识别为“撑人”并采用；“（三）”误识为“(=)”保留；孤立的不确定短行（“用。”→“Fil.”）仍可能写出。这些都在 `comprehensive_quality=unverified` 之下交付，需人工复核。
+  - 不支持：上列失败关闭的版面；长文分块。繁体、手写未测试，不作支持声明。
+- 版本号：2.0.0-rc.8。
+
 ## 2.0.0-rc.7 本地发布候选 · 2026-10-22
 
 - 新增中译英（基线问题 F4）：`candidate --route digital_pdf` 加 `--target-language en`（默认 `zh` 英译中，命令行与回执逐字不变）。
