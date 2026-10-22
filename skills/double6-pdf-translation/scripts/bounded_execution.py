@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import sys
 import threading
 import time
@@ -132,34 +133,51 @@ def stop_children(children: list[psutil.Process], deadline: float | None = None)
 
 
 class OwnedDiscoveryError(RuntimeError):
-    """本任务进程树无法可靠枚举（监控本身失败）。"""
+    """本任务进程树无法可靠枚举（监控本身失败）。携带已核验的启动身份与已确认成员，供后备回收使用。"""
+
+    def __init__(self, message: str, identity: dict[str, Any] | None = None,
+                 members: list[psutil.Process] | None = None):
+        super().__init__(message)
+        self.identity = dict(identity or {})
+        self.members = list(members or [])
 
 
-def launched_members(identity_path: Path, nonce: str) -> tuple[dict[str, Any], list[psutil.Process]]:
+def read_launch_identity(identity_path: Path, nonce: str) -> dict[str, Any]:
+    """读取并核验 bounded_launch 写出的身份（nonce 与父进程 PID 必须是本次）；未发布时返回 {}。"""
     if not identity_path.exists():
-        return {}, []
+        return {}
     identity = json.loads(identity_path.read_text(encoding="utf-8"))
     if identity.get("nonce") != nonce or identity.get("parent_pid") != os.getpid():
         raise ValueError("bounded launch identity mismatch")
+    return identity
+
+
+def launched_members(identity_path: Path, nonce: str) -> tuple[dict[str, Any], list[psutil.Process]]:
+    identity = read_launch_identity(identity_path, nonce)
+    if not identity:
+        return {}, []
     pid = identity["pid"]
+    members: list[psutil.Process] = []
     try:
         root = psutil.Process(pid)
         if abs(root.create_time() - identity["created_at"]) > .001:
             raise ValueError("bounded launch PID was reused")
-        members = [root, *root.children(recursive=True)]
+        members = [root]
+        members += root.children(recursive=True)
     except psutil.NoSuchProcess:
         members = []
     except PROCESS_QUERY_ERRORS as exc:
-        raise OwnedDiscoveryError(f"children of {pid}: {type(exc).__name__}: {exc}"[:300]) from exc
+        # 身份已核验：保留根进程（若已确认）交给后备回收，不把未知当空。
+        raise OwnedDiscoveryError(f"children of {pid}: {type(exc).__name__}: {exc}"[:300], identity, members) from exc
     # 父命令退出后仍可能有继承 stdout 的孙进程；仅补收本次独立进程组。
     if os.name == "posix" and identity.get("process_group") == pid:
         by_pid = {p.pid: p for p in members}
         # 按 PID 列表逐个检查（不用 process_iter 迭代器）：单个非本任务进程的查询错误只跳过该进程；
-        # 取不到 PID 列表本身则无法确认本任务进程树，抛出 OwnedDiscoveryError 由 run_bounded 结构化停止。
+        # 取不到 PID 列表本身则无法确认本任务进程树，抛出 OwnedDiscoveryError（带身份与已确认成员）。
         try:
             pids = psutil.pids()
         except PROCESS_QUERY_ERRORS as exc:
-            raise OwnedDiscoveryError(f"pids: {type(exc).__name__}: {exc}"[:300]) from exc
+            raise OwnedDiscoveryError(f"pids: {type(exc).__name__}: {exc}"[:300], identity, members) from exc
         for other in pids:
             if other in by_pid:
                 continue
@@ -174,6 +192,186 @@ def launched_members(identity_path: Path, nonce: str) -> tuple[dict[str, Any], l
                 continue
         members = list(by_pid.values())
     return identity, members
+
+
+# ---- 经过身份核验的回收（PR #19 第 8 轮） ----
+IDENTITY_TOLERANCE = 0.01
+
+
+def _identity_state(pid: int, created_at: float) -> tuple[str, psutil.Process | None]:
+    """按 PID + create_time 判断原进程的状态：alive / zombie / dead / pid_reused / unknown。"""
+    try:
+        proc = psutil.Process(pid)
+        born = proc.create_time()
+    except psutil.NoSuchProcess:
+        return "dead", None
+    except PROCESS_QUERY_ERRORS:
+        return "unknown", None
+    if abs(born - created_at) > IDENTITY_TOLERANCE:
+        return "pid_reused", None
+    try:
+        if proc.status() == psutil.STATUS_ZOMBIE:
+            return "zombie", proc
+    except psutil.NoSuchProcess:
+        return "dead", None
+    except PROCESS_QUERY_ERRORS:
+        pass
+    return "alive", proc
+
+
+def _signal_pid(proc: psutil.Process, created_at: float, sig: int) -> None:
+    """发信号前再核对一次 create_time，PID 已被复用则不发。"""
+    if abs(proc.create_time() - created_at) > IDENTITY_TOLERANCE:
+        raise psutil.NoSuchProcess(proc.pid, msg="pid reused before signal")
+    proc.send_signal(sig)
+
+
+def _signal_group(pgid: int, sig: int) -> None:
+    os.killpg(pgid, sig)
+
+
+def _group_empty(pgid: int) -> bool | None:
+    """killpg(pgid, 0)：ESRCH 表示该进程组已没有任何进程；成功表示仍有成员；其它错误为未知。"""
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return None
+    return False
+
+
+def _wait(predicate: Callable[[], bool], timeout: float) -> bool:
+    end = time.monotonic() + max(0.0, timeout)
+    while True:
+        if predicate():
+            return True
+        if time.monotonic() >= end:
+            return False
+        time.sleep(0.02)
+
+
+def reclaim_owned_tree(identity: dict[str, Any], known: dict[int, float], deadline: float | None = None,
+                       *, discovery_failed: bool = False) -> dict[str, Any]:
+    """回收本次启动的进程树，并独立核实结果（不依赖全机进程枚举）。
+    1) 逐个已确认成员（PID + create_time）：核验身份后 SIGTERM，超时再 SIGKILL；
+    2) 进程组（bounded_launch 以 setsid 新建会话/进程组，pgid == 根 PID）：
+       - 组长 PID 存在且 create_time 相符：组是本次的，可整组发信号；
+       - 组长 PID 已被另一进程复用：内核在进程组仍有成员时不会复用该 ID，原组必然已空，不发信号；
+       - 组长已退出：先 killpg(pgid, 0) 探测，有成员时再核对一次组长 PID 仍未被复用，才整组发信号；
+       - 组长状态无法查询：不发信号，记为未核实；
+    3) 最后逐个核实：死亡（或僵尸、或 PID 已复用）记入 verified_dead，其余记入 unverified；
+       进程组以 killpg(pgid, 0) == ESRCH 核实为空。unverified 非空即 confirmed=False。"""
+    budget = 2.0 if deadline is None else max(0.5, min(2.0, deadline - time.monotonic()))
+    targets = dict(known)
+    if identity.get("pid") and identity.get("created_at") is not None:
+        targets[int(identity["pid"])] = float(identity["created_at"])
+    report: dict[str, Any] = {"status": "confirmed", "confirmed": True, "verified_dead": [], "unverified": [],
+                              "alive_before": [], "signalled": [], "signal_errors": [],
+                              "process_group": {"pgid": None, "leader": None, "signalled": [], "empty_verified": None},
+                              "not_covered": []}
+
+    def note_error(target: Any, sig: int, exc: BaseException) -> None:
+        report["signal_errors"].append({"target": target, "signal": int(sig), "error": f"{type(exc).__name__}: {exc}"[:200]})
+
+    def signal_members(sig: int) -> None:
+        for pid, born in targets.items():
+            state, proc = _identity_state(pid, born)
+            if state != "alive" or proc is None:
+                continue
+            try:
+                _signal_pid(proc, born, sig)
+                report["signalled"].append({"pid": pid, "signal": int(sig)})
+            except psutil.NoSuchProcess:
+                continue
+            except PROCESS_QUERY_ERRORS as exc:
+                note_error(pid, sig, exc)
+
+    def members_down() -> bool:
+        return all(_identity_state(pid, born)[0] != "alive" for pid, born in targets.items())
+
+    for pid, born in targets.items():
+        if _identity_state(pid, born)[0] == "alive":
+            report["alive_before"].append({"pid": pid, "created_at": born})
+
+    group = report["process_group"]
+    pgid = identity.get("process_group") if os.name == "posix" else None
+    group_ok = bool(pgid) and pgid == identity.get("pid")
+    if group_ok:
+        group["pgid"] = pgid
+        leader, _ = _identity_state(pgid, float(identity["created_at"]))
+        group["leader"] = leader
+        if leader == "pid_reused":
+            group["empty_verified"] = True   # 内核规则：组仍有成员时其 ID 不会被分配给新进程
+            group_ok = False
+        elif leader == "unknown":
+            group_ok = False
+        else:
+            occupied = _group_empty(pgid) is False
+            if occupied and leader in ("dead",):
+                # 组长已退出但组内仍有成员：再核对一次 PID 仍未被复用（复用即说明原组已空，探测到的是别人）
+                again, _ = _identity_state(pgid, float(identity["created_at"]))
+                if again == "pid_reused":
+                    group["leader"] = "pid_reused"; group["empty_verified"] = True; group_ok = False; occupied = False
+            if occupied:
+                report["alive_before"].append({"pgid": pgid})
+
+    def leader_reused() -> bool:
+        # 每次整组发信号/核实前都重新核对组长 PID：被复用即说明原组已空，后续探测到的是别人的组。
+        nonlocal group_ok
+        if _identity_state(pgid, float(identity["created_at"]))[0] == "pid_reused":
+            group["leader"], group["empty_verified"], group_ok = "pid_reused", True, False
+            return True
+        return False
+
+    def signal_group(sig: int) -> None:
+        if not group_ok or leader_reused():
+            return
+        empty = _group_empty(pgid)
+        if empty:
+            return
+        try:
+            _signal_group(pgid, sig)
+            group["signalled"].append(int(sig))
+        except ProcessLookupError:
+            return
+        except PROCESS_QUERY_ERRORS as exc:
+            note_error({"pgid": pgid}, sig, exc)
+
+    def all_down() -> bool:
+        return members_down() and (not group_ok or leader_reused() or _group_empty(pgid) is not False)
+
+    signal_members(signal.SIGTERM if os.name == "posix" else signal.SIGTERM)
+    signal_group(signal.SIGTERM)
+    if not _wait(all_down, budget * 0.5):
+        kill = signal.SIGKILL if os.name == "posix" else signal.SIGTERM
+        signal_members(kill)
+        signal_group(kill)
+        _wait(all_down, budget * 0.5)
+
+    for pid, born in targets.items():
+        state, _ = _identity_state(pid, born)
+        if state in ("dead", "zombie", "pid_reused"):
+            report["verified_dead"].append({"pid": pid, "created_at": born, "evidence": state})
+        else:
+            report["unverified"].append({"pid": pid, "created_at": born, "reason": "still_alive" if state == "alive" else "state_unknown"})
+    if group_ok and not leader_reused():
+        empty = _group_empty(pgid)
+        group["empty_verified"] = empty is True
+        if empty is not True:
+            report["unverified"].append({"pgid": pgid, "reason": "group_not_empty" if empty is False else "group_state_unknown"})
+    elif group.get("pgid") and group.get("leader") == "unknown":
+        report["unverified"].append({"pgid": pgid, "reason": "group_leader_identity_unverifiable"})
+    elif identity and not group.get("pgid"):
+        if discovery_failed:
+            report["unverified"].append({"reason": "no_process_group_and_descendants_unenumerable"})
+        report["process_group"]["reason"] = "launcher did not create a process group"
+    if discovery_failed:
+        report["not_covered"].append("processes that left the launch process group (setsid/setpgid) can only be found by "
+                                     "full PID enumeration, which failed")
+    if report["unverified"]:
+        report["status"], report["confirmed"] = "unconfirmed", False
+    return report
 
 
 def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str,
@@ -248,15 +446,40 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
     monitor_error: dict[str, Any] = {}
     children: dict[int, psutil.Process] = {}
 
+    identities: dict[int,float] = {}
+    launch_identity: dict[str, Any] = {}
+
+    def remember(members: list[psutil.Process]) -> None:
+        for proc in members:
+            children[proc.pid] = proc
+            try:
+                identities.setdefault(proc.pid, proc.create_time())
+            except PROCESS_QUERY_ERRORS:
+                pass
+
     def discover() -> tuple[dict[str, Any], list[psutil.Process]]:
-        # 本任务进程树枚举失败：用已知成员继续清理，并记为监控失败（结构化停止，不静默继续）。
+        # 本任务进程树枚举失败：保留已核验的启动身份与已确认成员（后备回收用），并记为监控失败（结构化停止）。
         try:
-            return launched_members(identity_path, nonce)
+            identity, members = launched_members(identity_path, nonce)
         except OwnedDiscoveryError as exc:
             monitor_error.setdefault("detail", str(exc))
             monitor_error["owned_discovery_failed"] = True
-            return {}, list(children.values())
-    identities: dict[int,float] = {}
+            identity, members = exc.identity, exc.members
+            if identity:
+                launch_identity.update(identity)
+                identities.setdefault(int(identity["pid"]), float(identity["created_at"]))
+            remember(members)
+            return identity, list(children.values())
+        if identity:
+            launch_identity.update(identity)
+            identities.setdefault(int(identity["pid"]), float(identity["created_at"]))
+        remember(members)
+        return identity, members
+
+    def reclaim() -> dict[str, Any]:
+        return reclaim_owned_tree(launch_identity, identities, deadline,
+                                  discovery_failed=bool(monitor_error.get("owned_discovery_failed")))
+    cleanup_passes: list[dict[str, Any]] = []
     worker = None
     try:
         stream.write(json.dumps(baseline) + "\n"); stream.flush()
@@ -268,10 +491,6 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
             while not done.wait(max(.001,min(wait,max(0,work_deadline-time.monotonic())))):
                 wait = interval_seconds
                 identity, members = discover()
-                for proc in members:
-                    children[proc.pid] = proc
-                    try:identities[proc.pid]=proc.create_time()
-                    except (psutil.NoSuchProcess,psutil.AccessDenied):pass
                 try:
                     current = observe(members)
                 except Exception as exc:
@@ -299,22 +518,16 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
                                 break
                             identity, members = discover()
                             if identity:
-                                children.update({p.pid: p for p in members})
                                 break
-                    stop_children(list(children.values()),deadline)
+                    cleanup_passes.append(reclaim())
                     done.wait(max(0,min(1,deadline-time.monotonic())))
                     break
-            _, members = discover()
-            # 成功或异常退出均回收本次身份链中的残留，不能留下孤儿继续写。
-            children.update({p.pid:p for p in members})
-            live=[]
-            for proc in children.values():
-                try:
-                    if proc.is_running() and proc.status()!=psutil.STATUS_ZOMBIE:live.append(proc)
-                except (psutil.NoSuchProcess,psutil.AccessDenied):pass
-            if live:
+            discover()
+            # 成功或异常退出均回收本次身份链中的残留（已确认成员 + 经核验的进程组），不能留下孤儿继续写。
+            final_cleanup = reclaim()
+            cleanup_passes.append(final_cleanup)
+            if final_cleanup["alive_before"]:
                 trigger = trigger or 'owned_descendants_after_command'
-                stop_children(live,deadline)
                 done.wait(max(0,min(1,deadline-time.monotonic())))
             _, members = discover()
             try:
@@ -333,15 +546,26 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
     finally:
         stream.close()
     command = result.get("command")
-    alive=[]
-    for proc in children.values():
-        try:
-            if proc.is_running() and proc.status()!=psutil.STATUS_ZOMBIE:alive.append({'pid':proc.pid,'created_at':proc.create_time()})
-        except (psutil.NoSuchProcess,psutil.AccessDenied):pass
+    # 最终核实（独立于前面的回收过程）：任务未启动时没有身份也没有成员，核实结果为空且已确认。
+    cleanup = reclaim() if (launch_identity or identities) else {
+        "status": "confirmed", "confirmed": True, "verified_dead": [], "unverified": [], "alive_before": [],
+        "signalled": [], "signal_errors": [], "not_covered": [],
+        "process_group": {"pgid": None, "leader": None, "signalled": [], "empty_verified": None,
+                          "reason": "task never published a launch identity"}}
+    cleanup["passes"] = len(cleanup_passes) + 1
+    # 汇总所有回收轮次：signalled/process_group.signalled/alive_before/signal_errors 是整次运行的记录，
+    # verified_dead/unverified/empty_verified 是最后一次独立核实的结果。
+    for key in ("signalled", "alive_before", "signal_errors"):
+        cleanup[key] = [row for p in cleanup_passes for row in p[key]] + cleanup[key]
+    cleanup["process_group"]["signalled"] = ([sig for p in cleanup_passes for sig in p["process_group"]["signalled"]]
+                                             + cleanup["process_group"]["signalled"])
+    alive = [{"pid": row["pid"], "created_at": row["created_at"]} for row in cleanup["unverified"] if row.get("reason") == "still_alive"]
     elapsed=time.monotonic()-start
-    if alive:trigger=trigger or 'owned_tree_cleanup_incomplete'
+    if not cleanup["confirmed"]:trigger=trigger or 'owned_tree_cleanup_incomplete'
     if time.monotonic()>deadline:trigger=trigger or 'whole_job_deadline_exceeded'
-    outcome = {"status": "stopped" if trigger else "succeeded" if command and command.success else "failed",
+    status = ("cleanup_unconfirmed" if not cleanup["confirmed"] else
+              "stopped" if trigger else "succeeded" if command and command.success else "failed")
+    outcome = {"status": status,
                "stop_reason": trigger, "operation": operation, "elapsed_seconds": elapsed,
                "whole_job_budget_seconds":deadline-start,"cleanup_reserve_seconds":reserve,
                "deadline_met":time.monotonic()<=deadline,"owned_tree_alive":alive,
@@ -354,14 +578,18 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
                "peak_task_rss_sum_bytes": peak["rss_sum"],
                "exception": result.get("exception"),
                "exception_message": result.get("exception_message"),
-               "monitor_error": monitor_error.get("detail")}
-    if trigger or result.get("exception"):
+               "monitor_error": monitor_error.get("detail"),
+               "launch_identity": {k: launch_identity.get(k) for k in ("pid", "created_at", "process_group")} if launch_identity else None,
+               "cleanup": cleanup}
+    if trigger or result.get("exception") or not cleanup["confirmed"]:
         outcome["failure_receipt"] = write_failure_receipt(
             receipt_dir=receipt_dir, operation=operation, domain="resource",
-            failure_code=trigger or "execution_exception", retryable=False,
+            failure_code=("owned_tree_cleanup_unconfirmed" if not cleanup["confirmed"] else trigger or "execution_exception"),
+            retryable=False,
             detail=(f"{trigger}: {monitor_error['detail']}" if trigger and monitor_error.get("detail") else trigger) or ": ".join(filter(None, [result.get("exception"), result.get("exception_message")])),
             metadata={"resource_receipt": str(monitor_path), "memory_metric": memory_metric,
-                      "rss_limit_bytes": rss_limit, "peak_task_memory_bytes": peak["task"]})
+                      "rss_limit_bytes": rss_limit, "peak_task_memory_bytes": peak["task"],
+                      "stop_reason": trigger, "cleanup": cleanup, "launch_identity": outcome["launch_identity"]})
     return outcome
 
 
@@ -373,7 +601,11 @@ def _monitor_unavailable_outcome(receipt_dir: Path, operation: str, monitor_path
                "observed_owned_identities": [], "resource_receipt": str(monitor_path), "command": None,
                "launch_receipt": None, "rss_limit_bytes": rss_limit, "memory_metric": memory_metric,
                "peak_task_memory_bytes": 0, "peak_task_rss_sum_bytes": 0, "exception": None,
-               "exception_message": None, "monitor_error": detail}
+               "exception_message": None, "monitor_error": detail, "launch_identity": None,
+               "cleanup": {"status": "confirmed", "confirmed": True, "verified_dead": [], "unverified": [],
+                           "alive_before": [], "signalled": [], "signal_errors": [], "not_covered": [],
+                           "process_group": {"pgid": None, "leader": None, "signalled": [], "empty_verified": None,
+                                             "reason": "task not launched (baseline monitor failure)"}}}
     outcome["failure_receipt"] = write_failure_receipt(
         receipt_dir=receipt_dir, operation=operation, domain="resource", failure_code=MONITOR_FAILURE,
         retryable=False, detail=f"{MONITOR_FAILURE}: {detail}",

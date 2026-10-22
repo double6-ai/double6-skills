@@ -213,7 +213,10 @@ def run_job(args, command, operation):
             memory_metric=limits['memory_metric'], max_total_fraction=limits['max_total_fraction'],
             env={**os.environ, **getattr(args, 'frozen_environment', {}), 'OMP_NUM_THREADS': '1', 'OPENBLAS_NUM_THREADS': '1', 'MKL_NUM_THREADS': '1'})
     result['resource_limits'] = limits
-    if result.get('status') == 'stopped' and result.get('stop_reason'):
+    if result.get('status') == 'cleanup_unconfirmed':
+        # 停止后无法核实本任务进程树已全部退出：独立错误码，回执 cleanup.unverified 列出未核实对象。
+        result.setdefault('error_code', 'owned_tree_cleanup_unconfirmed')
+    elif result.get('status') == 'stopped' and result.get('stop_reason'):
         # 资源门/监控失败的结构化停止：稳定错误码即 stop_reason（如 owned_process_monitor_unavailable）。
         result.setdefault('error_code', result['stop_reason'])
     child = child_structured_result(result)
