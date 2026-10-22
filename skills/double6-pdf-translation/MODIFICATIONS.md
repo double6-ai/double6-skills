@@ -18,6 +18,19 @@
 
 源论文、译稿、字体、TeX、模型权重与验证证据不包含在公开运行包中。每份文档的完整语义、实际单语/双语页面、样式链接、阅读复制和冷重建仍须执行；本次维护没有授予任意输入的自动严格交付能力。
 
+## 2.0.0-rc.7 维护改动（2026-10-22）
+
+- 修改 `scripts/pdf_input_preflight.py`、`scripts/paper_translation_workflow.py`、`scripts/pdf_translation_cli.py`、`scripts/pdf_translation_commands.py`、`scripts/pdf_translation_render.py`、`scripts/pdf_translation_runtime.py`、`scripts/run_pdf_translation_context.py`、`scripts/qa_pipeline.py`、`scripts/render_residue_check.py`：`--target-language {zh,en}`、目标语言感知预检、中译英后端参数/提示词/术语过滤、渲染中文残留与保留字形压叠检查。
+- 修改 vendored BabelDOC：
+  - `utils/layout_helper.py`：`_is_cjk_no_space_pair`，汉字（含部首、全角标点）间小间隙与跨行不补空格（两处：`get_char_unicode_string`、`_add_space_dummy_chars_to_list`）；
+  - `midend/il_translator.py`：`passes_min_text_length`；中文源 → 非 CJK 目标时跳过不含汉字的段落；
+  - `midend/il_translator_llm_only.py`：最短长度判定改用 `passes_min_text_length`；
+  - `midend/table_figure_text.py`：中文源 → 非 CJK 目标时放行含汉字的紧凑标签；
+  - `midend/typesetting.py`：`english_word_break_extent`；拉丁目标语言单行段落右扩、可读下限处右/下扩（`_is_single_source_line`、`_latin_target_expanded_box`）。
+  - 上述文件头维护日期更新为 2026-10-22。
+- 新增 `tests/test_zh2en_translation.py`、`tests/fixtures/zh2en/`。
+- 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py` 更新为 2.0.0-rc.7。
+
 ## 2.0.0-rc.6 维护改动（2026-10-22）
 
 - 修改 vendored BabelDOC `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/styles_and_formulas.py`：公式分组在栏内视觉折行处断开；`merge_overlapping_formulas` 不跨折行合并、不合并中间夹正文的不相邻公式；按逗号拆分公式时保留下标/上标逗号；零高度/零宽度线段（分式线）按 0.5pt 线宽参与公式包含判定。文件头维护日期更新为 2026-10-18。
