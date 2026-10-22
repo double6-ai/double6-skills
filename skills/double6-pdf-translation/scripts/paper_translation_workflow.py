@@ -213,6 +213,9 @@ def run_job(args, command, operation):
             memory_metric=limits['memory_metric'], max_total_fraction=limits['max_total_fraction'],
             env={**os.environ, **getattr(args, 'frozen_environment', {}), 'OMP_NUM_THREADS': '1', 'OPENBLAS_NUM_THREADS': '1', 'MKL_NUM_THREADS': '1'})
     result['resource_limits'] = limits
+    if result.get('status') == 'stopped' and result.get('stop_reason'):
+        # 资源门/监控失败的结构化停止：稳定错误码即 stop_reason（如 owned_process_monitor_unavailable）。
+        result.setdefault('error_code', result['stop_reason'])
     child = child_structured_result(result)
     if child:
         # 子任务以结构化 JSON 报告的预检/路由拒绝：上浮为 blocked，并保留错误码与发现。
@@ -788,6 +791,11 @@ def main(argv=None):
         if args.action == '_execute-digital' and isinstance(exc, PreflightError):
             print(CHILD_RESULT_MARKER + json.dumps({k: result[k] for k in ('status', 'error_code', 'findings')}, ensure_ascii=False))
         return EXIT_BLOCKED
+    except Exception as exc:
+        # 未预期的内部错误：仍输出结构化 JSON 与回执（不再只剩 traceback），退出码 1；不吞掉错误。
+        result = unexpected_failure(args, exc)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return EXIT_ERROR
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if result['status'] == 'blocked':
         return EXIT_BLOCKED
@@ -797,6 +805,25 @@ def main(argv=None):
         result.setdefault('exit_code', EXIT_QUALITY_FAIL)
         return EXIT_QUALITY_FAIL
     return EXIT_OK if ok else EXIT_ERROR
+
+
+def unexpected_failure(args, exc):
+    import traceback
+    result = {'status': 'failed', 'error_code': 'internal_error', 'action': args.action, 'schema_version': 1,
+              'exception_type': type(exc).__name__, 'exception_message': str(exc)[:500],
+              'traceback_tail': traceback.format_exc()[-2000:]}
+    receipts = getattr(args, 'receipts', None)
+    if receipts:
+        try:
+            Path(receipts).mkdir(parents=True, exist_ok=True)
+            path = Path(receipts) / 'WORKFLOW_INTERNAL_ERROR.json'
+            if not path.exists():
+                write_new(path, result)
+            result['receipt'] = str(path)
+        except OSError as receipt_exc:
+            result['receipt_error'] = f'{type(receipt_exc).__name__}: {receipt_exc}'[:300]
+    print(result['traceback_tail'], file=sys.stderr)
+    return result
 
 
 def structured_failure(args, exc):

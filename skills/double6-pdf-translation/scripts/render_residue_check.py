@@ -689,27 +689,157 @@ def page_inline_object_damage(source_doc, page_index: int, target_page) -> dict[
             'samples': (lost + collided)[:5], 'flagged': bool(lost or collided)}
 
 
+# 严格的数学字体（不含普通斜体）：整段 token 都用这类字体时，token 里的每个字母都是数学实例（如 CMMI 的 xy）。
+_STRICT_MATH_FONT = re.compile(r'cmmi|cmsy|cmex|cmbsy|math|symbol|stix|euclid|mt-?extra|msam|msbm|rsfs|eufm|eusm',
+                               re.IGNORECASE)
+# 本身就是英文单词的单个字母：以正文字体孤立出现时无法与冠词/代词区分，不能作为变量保留的证据（失败关闭）。
+_WORD_LETTERS = frozenset('aAI')
+TOKEN_GAP_EM = 0.2        # 同一行相邻字形水平间隙 > 0.2 个字号即断开 token（后端常不写空格字符）
+TOKEN_SIZE_RATIO = (0.75, 1.33)  # 相邻字形字号比超出此范围（上下标）即断开 token
+
+
+def _target_tokens(target_page) -> list[list[dict[str, Any]]]:
+    """译文页按 rawdict 行切成 token：空白/控制字符（有的后端把空格写成 \x03 字形）、明显水平间隙、
+    字号突变（上下标）、严格数学字体与非数学字体的切换都是 token 边界。
+    每个字形保留字体/字号/标志，并记下所在行号（line）以便比较同行相邻 token 的字体。"""
+    import unicodedata
+    tokens: list[list[dict[str, Any]]] = []
+    line_no = 0
+    for block in target_page.get_text('rawdict').get('blocks', []):
+        for line in block.get('lines', []):
+            line_no += 1
+            current: list[dict[str, Any]] = []
+            prev = None
+            for span in line['spans']:
+                math_font = bool(_STRICT_MATH_FONT.search(span.get('font', '') or ''))
+                for char in span['chars']:
+                    c = char['c']
+                    if not c.strip() or unicodedata.category(c)[0] in 'ZC':
+                        if current:
+                            tokens.append(current)
+                        current, prev = [], None
+                        continue
+                    rec = {'c': c, 'bbox': tuple(char['bbox']), 'font': span.get('font', ''),
+                           'size': span.get('size', 0.0), 'flags': span.get('flags', 0), 'math_font': math_font,
+                           'line': line_no}
+                    if prev is not None:
+                        gap = rec['bbox'][0] - prev['bbox'][2]
+                        ratio = rec['size'] / prev['size'] if prev['size'] else 1.0
+                        if (gap > TOKEN_GAP_EM * max(rec['size'], prev['size'])
+                                or not TOKEN_SIZE_RATIO[0] <= ratio <= TOKEN_SIZE_RATIO[1]
+                                or rec['math_font'] != prev['math_font']):
+                            tokens.append(current)
+                            current = []
+                    current.append(rec)
+                    prev = rec
+            if current:
+                tokens.append(current)
+    return tokens
+
+
+# 单字母两侧允许的非字母邻字：括号、运算符、逗号分号、数字等（如 "(p<0.001)"、"x,"、"2x"）。
+# 句点、连字符、撇号表示它是单词的一部分（"e.g."、"x-ray"、"paper's"），不算独立字母。
+_WORD_JOINERS = frozenset(".-'’‐‑")
+
+
+def _standalone_letter(core: list[dict[str, Any]], k: int) -> bool:
+    """core[k] 是字母：它所在的连续字母串长度为 1，且两侧紧邻的字符不是单词连接符。"""
+    left = core[k - 1]['c'] if k > 0 else None
+    right = core[k + 1]['c'] if k + 1 < len(core) else None
+    for n in (left, right):
+        if n is not None and (n.isalpha() or n in _WORD_JOINERS):
+            return False
+    return True
+
+
+def _target_math_instances(target_page) -> tuple[dict[str, list[dict[str, Any]]], dict[str, str]]:
+    """译文页里可作为“数学实例”的字形（逐实例证据，不再用整页字符计数）：
+    - 数学符号/希腊字母：任何位置都算（英文单词里不会出现）；其它非字母数字符号同样按出现计；
+    - 字母/数字：整段 token 都是严格数学字体（如 CMMI 的 "xy"）；或字母是独立字母
+      （token 去掉首尾标点后，所在连续字母串只有它一个，且两侧不是 . - ' 等单词连接符，
+      如 "x"、"x,"、"(p<0.001)"、"Appendix B."）；数字只在严格数学字体里算；
+    - 英文单词内部的字母（如 expressions 里的 x）一律不算。
+    a/A/I 本身是英文单词：作为候选保留，但带 ambiguous 标记，由匹配时的字体证据决定（见 page_text_layer_math_loss）。
+    返回 (char -> 候选字形列表, char -> 不算的原因)。"""
+    import unicodedata
+    from pdf_input_preflight import _is_math_char
+
+    candidates: dict[str, list[dict[str, Any]]] = {}
+    reasons: dict[str, str] = {}
+    tokens = _target_tokens(target_page)
+    for ti, token in enumerate(tokens):
+        lo, hi = 0, len(token)
+        while lo < hi and unicodedata.category(token[lo]['c'])[0] == 'P':
+            lo += 1
+        while hi > lo and unicodedata.category(token[hi - 1]['c'])[0] == 'P':
+            hi -= 1
+        core = token[lo:hi]
+        all_math_font = bool(core) and all(r['math_font'] for r in core)
+        token_font = {r['font'] for r in token}
+        neighbour_fonts = {r['font'] for tj in (ti - 1, ti + 1) if 0 <= tj < len(tokens)
+                           and tokens[tj] and tokens[tj][0]['line'] == token[0]['line'] for r in tokens[tj]}
+        for r in token:
+            c = r['c']
+            if _is_math_char(c) or not c.isalnum():
+                candidates.setdefault(c, []).append(r)
+            elif all_math_font:
+                candidates.setdefault(c, []).append(r)
+            elif c.isalpha() and any(r is q for q in core) and _standalone_letter(core, next(
+                    k for k, q in enumerate(core) if q is r)):
+                rec = dict(r)
+                if c in _WORD_LETTERS:
+                    rec['ambiguous'] = True
+                    # 同行相邻 token 的字体与它不同：它是嵌在重排英文里的原字形（后端保留原字体）。
+                    rec['embedded'] = bool(neighbour_fonts) and not (neighbour_fonts & token_font)
+                candidates.setdefault(c, []).append(rec)
+            else:
+                reasons.setdefault(c, 'only_inside_words')
+    return candidates, reasons
+
+
+def _distinct_style(obj: dict[str, Any]) -> bool:
+    from pdf_input_preflight import _MATH_FONT
+    return bool(_MATH_FONT.search(obj.get('font') or '')) or bool(obj.get('flags', 0) & (2 | 16))
+
+
+def _eligible(obj: dict[str, Any], cand: dict[str, Any]) -> bool:
+    """候选字形能否作为源页这个数学字形的保留证据。a/A/I（同时是英文单词）须有逐实例的字体证据：
+    与源字形同一字体名，且源字形有区别性样式（粗体/斜体/数学字体）或它嵌在不同字体的重排英文里；
+    否则与冠词/代词无法区分，不算保留（失败关闭）。"""
+    if not cand.get('ambiguous'):
+        return True
+    if not obj.get('font') or cand['font'] != obj['font']:
+        return False
+    return _distinct_style(obj) or cand.get('embedded', False)
+
+
 def page_text_layer_math_loss(source_doc, page_index: int, target_page) -> dict[str, Any]:
     """文字层（页面级或页面等价 Form 自身）中文正文行里的数学字形（数学符号/希腊字母、数学或斜体字体、
-    孤立单字母，判据与预检相同）在译文页里是否仍然存在：按字符计数，源页的每个这类字形都须在译文页里
-    有一个同字符的字形；少一个即判丢失（high，失败关闭）。
-    译文段落会重排、变量两侧换成英文单词，所以不按位置、也不按“是否孤立”核对，只按字符多重集核对：
-    可能漏判（英文单词里的同一字母会掩盖变量丢失，例如 a、x），不会因为重排或换邻字误判。
-    数学符号与希腊字母（×、λ 等）在英文正文里很少出现，丢失几乎总能查出。"""
-    from collections import Counter
-    from pdf_input_preflight import _char_records, inline_object_math
+    孤立单字母，判据与预检相同）在译文页里是否仍然存在（PR #19 第 7 轮：逐实例核对，失败关闭）。
+    源页每个这类字形都须在译文页里匹配到一个同字符、且本身是“数学实例”的字形（见 _target_math_instances），
+    每个译文字形只能用一次；英文单词内部的同一字母（如 expressions 里的 x）不能顶替丢失的变量。
+    匹配不到、或只剩有歧义而无字体证据的候选（a/A/I）即判丢失（high）。
+    译文段落会重排，所以不按原坐标核对位置。"""
+    from pdf_input_preflight import inline_object_math
 
     located = inline_object_math(source_doc, page_index, with_objects=True)['text_layer_math']
     if not located:
-        return {'located': 0, 'lost': 0, 'samples': [], 'flagged': False}
-    kept = Counter(r['c'] for r in _char_records(target_page))
+        return {'located': 0, 'lost': 0, 'samples': [], 'flagged': False, 'rule': 'per_instance_v1'}
+    candidates, reasons = _target_math_instances(target_page)
     lost = []
-    for obj in located:
-        if kept[obj['char']] > 0:
-            kept[obj['char']] -= 1
-        else:
-            lost.append(obj)
-    return {'located': len(located), 'lost': len(lost), 'samples': lost[:5], 'flagged': bool(lost)}
+    # 有区别性样式的源字形先挑，避免它的唯一合格候选被普通字形先占用。
+    for order, obj in sorted(enumerate(located), key=lambda item: not _distinct_style(item[1])):
+        pool = candidates.get(obj['char'], [])
+        pick = next((i for i, cand in enumerate(pool) if _eligible(obj, cand)), None)
+        if pick is not None:
+            pool.pop(pick)
+            continue
+        reason = ('ambiguous_english_word_letter' if any(c.get('ambiguous') for c in pool)
+                  else reasons.get(obj['char'], 'absent'))
+        lost.append((order, dict(obj, unresolved=reason)))
+    lost = [obj for _, obj in sorted(lost, key=lambda item: item[0])]
+    return {'located': len(located), 'lost': len(lost), 'samples': lost[:5], 'flagged': bool(lost),
+            'rule': 'per_instance_v1'}
 
 
 def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
