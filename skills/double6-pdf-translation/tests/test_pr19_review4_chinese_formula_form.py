@@ -60,3 +60,131 @@ def test_inline_formula_with_chinese_subscript_cannot_hide_lost_variable(tmp_pat
         json.dumps({'preflight': pre, 'quality': quality}, ensure_ascii=False, indent=2, default=str))
     assert pre['status'] == 'blocked' or quality['quality_fail'], \
         'Two Chinese subscript characters classify an actual formula Form as body and erase variable evidence'
+
+
+# ---------- 评审要求的变体与正例（每个都做原页、单层包装、双层包装） ----------
+
+def _variants(d, tmp_path, name):
+    """保存原页、单层整页包装、双层整页包装三个版本，返回路径列表。"""
+    paths = [tmp_path / f'{name}-plain.pdf', tmp_path / f'{name}-once.pdf', tmp_path / f'{name}-twice.pdf']
+    d.save(paths[0])
+    once = wrap_page(d)
+    once.save(paths[1])
+    twice = wrap_page(once)
+    twice.save(paths[2])
+    once.close()
+    twice.close()
+    return paths
+
+
+def _inspect(path):
+    from pdf_input_preflight import inspect_pdf
+    report = inspect_pdf(path, target_language='en', require_digital=True)
+    return report, report['inline_object_math'][0]
+
+
+def _gate(source, tmp_path):
+    from render_residue_check import check_render_residue
+    target = tmp_path / 'target-no-variable.pdf'
+    english_target_without_variable(target)
+    return check_render_residue(source, target, target_language='en')
+
+
+def _formula_form(parts):
+    """parts: [(x, text, fontname, size)]，生成 60x16pt 的公式 Form 源文档。
+
+    PyMuPDF 的 show_pdf_page 生成“外层容器 Form + 页面 Form”两层，所以每放一次公式，hosted_cjk_forms 记 2。
+    """
+    f = fitz.open()
+    fp = f.new_page(width=60, height=16)
+    for x, text, font, size in parts:
+        fp.insert_text((x, 12), text, fontname=font, fontsize=size)
+    return f
+
+
+def _text_block(width, height, lines, size=10.5, latin=None):
+    """中文正文/图注块 Form 源文档：lines 为中文行；latin 为 [(行号, x, 文本)]，插入同行英文术语。"""
+    f = fitz.open()
+    fp = f.new_page(width=width, height=height)
+    for i, line in enumerate(lines):
+        fp.insert_text((2, 2 + size * 1.4 * (i + 1)), line, fontname='china-s', fontsize=size)
+    for i, x, text in latin or []:
+        fp.insert_text((x, 2 + size * 1.4 * (i + 1)), text, fontname='tiro', fontsize=size)
+    return f
+
+
+def test_multiple_variables_with_chinese_subscript_are_blocked_plain_and_wrapped(tmp_path):
+    """多个变量 + 中文下标（'M×N' + '最大'，以及 'x' + '最优' + 'y'）：原页与包装后都拦截，成品门判丢失。"""
+    cases = {
+        'mxn': ([(2, 'M×N', 'tiro', 11), (26, '最大', 'china-s', 7)], 3),
+        'xy': ([(2, 'x', 'tiro', 11), (8, '最优', 'china-s', 7), (24, 'y', 'tiro', 11)], 2),
+    }
+    for name, (parts, n_latin) in cases.items():
+        d = fitz.open()
+        p = b._inline_page(d)
+        f = _formula_form(parts)
+        p.show_pdf_page(fitz.Rect(GAP, 108, GAP + 30, 123), f, 0)
+        for path in _variants(d, tmp_path, name):
+            report, page = _inspect(path)
+            assert report['error_code'] == 'zh2en_inline_object_math_unsupported', (name, path.name)
+            assert page['xobject_text_glyphs'] == n_latin and page['hosted_cjk_forms'] >= 1, (name, path.name, page)
+            gate = _gate(path, tmp_path)
+            damage = gate['pages'][0]['inline_object_damage']
+            assert damage['located'] == n_latin and damage['lost'] == n_latin and gate['quality_fail'], (name, path.name)
+        d.close()
+        f.close()
+
+
+def test_chinese_paragraph_caption_and_label_forms_are_body_plain_and_wrapped(tmp_path):
+    """正例：整段中文正文 Form（含英文术语）、小字号图注块 Form、行外中文标签 Form、
+    与页面级左栏同高的右栏中文行 Form（含英文术语）、紧邻正文行的两行旁注 Form、与正文行同高但不紧邻的行外标签 Form 都是正文载体，不拦截，成品门不定位对象。"""
+    d = fitz.open()
+    page = d.new_page()
+    page.insert_textbox(fitz.Rect(72, 60, 520, 130), b.ZH_FILL, fontname='china-s', fontsize=10.5)  # 页面级正文
+    para = _text_block(450, 60, ['本节介绍基于 的阵列模型，并给出远场指向性', '的解析表达式与数值结果，讨论天线间距的影响。',
+                                 '实验表明该方法在多种配置下都稳定。'], latin=[(0, 54, 'MIMO')])
+    page.show_pdf_page(fitz.Rect(72, 150, 522, 210), para, 0)                                  # 整段正文 Form
+    page.draw_rect(fitz.Rect(150, 230, 400, 330), color=(0, 0, 0))                            # 图
+    caption = _text_block(300, 20, ['图 1 均匀线阵的方向图（ 为阵元数）'], size=9, latin=[(0, 85, 'N')])
+    page.show_pdf_page(fitz.Rect(150, 335, 450, 355), caption, 0)                              # 图注块 Form
+    label = _text_block(60, 20, ['主瓣'], size=9, latin=[(0, 22, 'θ0')])
+    page.show_pdf_page(fitz.Rect(330, 240, 390, 260), label, 0)                                # 图内/行外标签 Form
+    page.insert_text((72, 400), '左栏正文：阵列增益随阵元数增加。', fontname='china-s', fontsize=10.5)
+    right = _text_block(230, 16, ['右栏正文： 信道容量随天线数增长。'], latin=[(0, 58, 'MIMO')])
+    page.show_pdf_page(fitz.Rect(238, 388, 468, 404), right, 0)  # 与左栏同高、间隙小于 1.5 字高的右栏行 Form（按宽度判为正文）
+    page.insert_text((72, 470), '旁注所在行的正文内容。', fontname='china-s', fontsize=10.5)
+    note = _text_block(30, 34, ['注一', '见上'], size=9, latin=[(1, 20, 'a')])
+    page.show_pdf_page(fitz.Rect(180, 450, 210, 484), note, 0)                                 # 紧邻正文行的两行旁注 Form（按行数判为正文）
+    page.insert_text((72, 530), '表格续页说明。', fontname='china-s', fontsize=10.5)
+    tag = _text_block(50, 16, ['续表'], size=10.5, latin=[(0, 26, 'A')])
+    page.show_pdf_page(fitz.Rect(450, 518, 500, 534), tag, 0)                                  # 同一纵向带但远离正文的行外标签 Form（按紧邻判为正文）
+    for path in _variants(d, tmp_path, 'body-forms'):
+        report, page_info = _inspect(path)
+        assert report['status'] != 'blocked', (path.name, report['findings'])
+        assert page_info['xobject_text_glyphs'] == 0 and page_info['hosted_cjk_forms'] == 0, (path.name, page_info)
+        assert page_info['body_forms'] >= 6, (path.name, page_info)
+        gate = _gate(path, tmp_path)
+        assert gate['pages'][0]['inline_object_damage']['located'] == 0, path.name
+    d.close()
+
+
+def test_formula_with_chinese_label_nested_inside_body_block_form(tmp_path):
+    """正文块 Form 内嵌 'M最大' 公式 Form（再包一层整页）：外层是正文载体，内层仍是行内对象并被拦截。"""
+    block = fitz.open()
+    bp = block.new_page(width=470, height=40)
+    bp.insert_text((4, 24), b.ZH_LINE_A, fontname='china-s', fontsize=10.5)
+    gap = 4 + 10.5 * len(b.ZH_LINE_A) + 4
+    bp.insert_text((gap + 34, 24), '个单极化全向天线组成的阵列。', fontname='china-s', fontsize=10.5)
+    f = _formula_form([(2, 'M', 'tiro', 11), (12, '最大', 'china-s', 7)])
+    bp.show_pdf_page(fitz.Rect(gap, 12, gap + 45, 27), f, 0)
+    d = fitz.open()
+    page = d.new_page()
+    page.insert_textbox(fitz.Rect(72, 80, 520, 300), b.ZH_FILL, fontname='china-s', fontsize=10.5)
+    page.show_pdf_page(fitz.Rect(72, 400, 542, 440), block, 0)
+    for path in _variants(d, tmp_path, 'nested-label-formula'):
+        report, page_info = _inspect(path)
+        assert report['error_code'] == 'zh2en_inline_object_math_unsupported', path.name
+        assert page_info['xobject_text_glyphs'] == 1 and page_info['hosted_cjk_forms'] >= 1 and page_info['body_forms'] >= 1
+        gate = _gate(path, tmp_path)
+        assert gate['pages'][0]['inline_object_damage']['lost'] == 1 and gate['quality_fail'], path.name
+    d.close()
