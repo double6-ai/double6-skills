@@ -172,6 +172,16 @@ def _char_keys(page) -> list[tuple[str, tuple[int, int, int, int]]]:
     return keys
 
 
+def _has_cjk_row(chars) -> bool:
+    """字符多重集里是否有中文正文：同一行（纵向中心相差不到半个字高）至少 2 个汉字。"""
+    cjk = [bbox for char, bbox in chars.elements() if _CJK.match(char)]
+    for i, a in enumerate(cjk):
+        for b in cjk[i + 1:]:
+            if abs((a[1] + a[3]) - (b[1] + b[3])) / 2 <= 0.5 * max(a[3] - a[1], b[3] - b[1], 1):
+                return True
+    return False
+
+
 def _inside_row(cx: float, cy: float, rows) -> tuple[float, float, float, float] | None:
     for row in rows:
         x0, y0, x1, y1 = row
@@ -188,25 +198,46 @@ def _is_vector_glyph(rect, row_height: float) -> bool:
             and min(rect.width, rect.height) >= 0.12 * row_height and max(rect.width, rect.height) >= 0.25 * row_height)
 
 
+def _form_tree(page) -> dict[int, int]:
+    """页面引用的全部 Form XObject（含嵌套）：xref -> 调用者 xref（0 为页面内容流）。"""
+    return {item[0]: item[2] for item in page.get_xobjects()}
+
+
 def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> dict[str, Any]:
     """定位一页中文正文行内的 Form XObject 字形与矢量路径字形（结构证据，只读，不改源文件）。
 
+    按嵌套层级区分两类 Form：
+    - 正文载体 Form：它（连同其内层）绘制的文字里有中文（同一行 >= 2 个汉字），例如整页外壳、正文块；
+    - 行内对象 Form：不绘制中文正文，例如 Word/WPS 公式里的变量。
+    只清空行内对象 Form（正文载体保留，即使它包着行内对象 Form），清空前后的文字差集即为行内 Form 字形；
+    中文正文行取自清空后的页面（页面级正文 + 正文载体中的正文）。外层外壳因此不会让内层变量被丢掉。
     ``objects`` 列出每个对象的类型、字符与 bbox，供成品门逐个核对是否丢失或与译文压叠。
-    整页被包进 Form XObject 时（清空 Form 后没有页面级中文行），改用原页的中文行定位矢量字形，
-    并不把 Form 内文字当作行内对象（此时 Form 内文字就是正文本身）。
     """
     import fitz
     from collections import Counter
 
     page = doc[page_index]
+    original = Counter(_char_keys(page))
     scratch = fitz.open()
+    body_forms: list[int] = []
+    inline_forms: list[int] = []
     try:
         scratch.insert_pdf(doc, from_page=page_index, to_page=page_index)
-        bare = scratch[0]
-        forms = {item[0] for item in bare.get_xobjects()}
-        for xref in forms:
-            # 只改内存中的临时副本：清空 Form XObject 内容流，差集即为 Form 绘制的文字。
+        tree = _form_tree(scratch[0])
+        # 逐个 Form 判定：只清空它（及其内层，随之不再绘制），差集即它负责绘制的文字。
+        for xref in tree:
+            saved = scratch.xref_stream(xref)
             scratch.update_stream(xref, b'')
+            attributable = original - Counter(_char_keys(scratch[0]))
+            scratch.update_stream(xref, saved)
+            if _has_cjk_row(attributable):
+                body_forms.append(xref)
+            else:
+                inline_forms.append(xref)
+        for xref in inline_forms:
+            # 只改内存中的临时副本：清空行内对象 Form 的内容流，正文载体 Form 保留。
+            scratch.update_stream(xref, b'')
+        bare = scratch[0]
         rows = _cjk_rows(bare)
         remaining = Counter(_char_keys(bare))
         xobject_chars = []
@@ -217,11 +248,8 @@ def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> d
                 xobject_chars.append(key)
     finally:
         scratch.close()
-    page_in_form = False
-    if not rows and forms:
-        page_rows = _cjk_rows(page)
-        if page_rows:
-            page_in_form, rows, xobject_chars = True, page_rows, []
+    forms = set(body_forms) | set(inline_forms)
+    page_in_form = bool(body_forms)
     objects: list[dict[str, Any]] = []
     for char, (x0, y0, x1, y1) in xobject_chars:
         if not _CJK.match(char) and _inside_row((x0 + x1) / 2, (y0 + y1) / 2, rows):
@@ -236,6 +264,7 @@ def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> d
     xobject_inline = sum(1 for o in objects if o['kind'] == 'xobject_text')
     vector_inline = sum(1 for o in objects if o['kind'] == 'vector_glyph')
     result = {'page': page_index + 1, 'cjk_rows': len(rows), 'form_xobjects': len(forms), 'page_in_form': page_in_form,
+              'body_forms': len(body_forms), 'inline_forms': len(inline_forms),
               'xobject_text_glyphs': xobject_inline, 'vector_glyphs': vector_inline,
               'samples': objects[:5],
               'flagged': xobject_inline + vector_inline >= INLINE_OBJECT_PAGE_MIN}
