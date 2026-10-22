@@ -20,6 +20,7 @@ sys.path.insert(0, str(SKILL / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bounded_execution as be  # noqa: E402
 import ocr_route  # noqa: E402
+import resource_limits as rl  # noqa: E402
 from test_ocr_route import scanned_pdf  # noqa: E402
 
 pytestmark = [pytest.mark.skipif(os.name != 'posix', reason='process-tree reclaim is POSIX only'),
@@ -69,7 +70,8 @@ def test_ocr_children_are_metered_and_reclaimed(tmp_path):
     try:
         result = be.run_bounded(_ocr_argv(pdf, tmp_path / 'w'), cwd=tmp_path, receipt_dir=tmp_path / 'r',
                                 operation='ocr-reconstruct', timeout_seconds=120, interval_seconds=0.05,
-                                rss_limit=3 * 1024 ** 3, max_processes=8)
+                                rss_limit=rl.RSS_TASK_LIMIT_BYTES, max_processes=8,
+                                max_total_fraction=rl.EXPLICIT_TOTAL_FRACTION)  # 冻结合同按 50% 主机授权执行（同工作流）
         assert result['status'] == 'succeeded', result
         manifest = json.loads((tmp_path / 'w' / 'OCR_MANIFEST.json').read_text())
         assert manifest['status'] == 'ok'
@@ -94,7 +96,7 @@ def test_ocr_children_are_reclaimed_when_the_task_limit_trips(tmp_path, limit):
     unrelated, unrelated_ct = _unrelated(tmp_path)
     workdir = tmp_path / 'w'
     try:
-        kwargs = dict(timeout_seconds=120, rss_limit=3 * 1024 ** 3)
+        kwargs = dict(timeout_seconds=120, rss_limit=rl.RSS_TASK_LIMIT_BYTES, max_total_fraction=rl.EXPLICIT_TOTAL_FRACTION)
         if limit == 'timeout':
             kwargs['timeout_seconds'] = 6           # 5 页 OCR 需要远超 6 s
         else:
