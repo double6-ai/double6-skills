@@ -173,17 +173,12 @@ def _char_keys(page) -> list[tuple[str, tuple[int, int, int, int]]]:
 
 
 def _has_cjk_row(chars) -> bool:
-    """字符多重集里是否有中文正文：同一行（纵向中心相差不到半个字高）至少 2 个汉字。"""
-    cjk = [bbox for char, bbox in chars.elements() if _CJK.match(char)]
-    for i, a in enumerate(cjk):
-        for b in cjk[i + 1:]:
-            if abs((a[1] + a[3]) - (b[1] + b[3])) / 2 <= 0.5 * max(a[3] - a[1], b[3] - b[1], 1):
-                return True
-    return False
+    """字符多重集里是否有中文行：同一行（纵向中心相差不到半个字高）至少 2 个汉字。"""
+    return any(len(line) >= 2 for line in _char_lines(chars))
 
 
 def _char_lines(chars) -> list[list[tuple[int, int, int, int]]]:
-    """把字符 bbox 按行聚类（纵向中心相差不到半个字高为同一行），每行返回其中汉字的 bbox 列表。"""
+    """把字符多重集里的汉字 bbox 按行聚类（纵向中心相差不到半个字高为同一行）。"""
     cjk = sorted((bbox for char, bbox in chars.elements() if _CJK.match(char)), key=lambda b: (b[1] + b[3]) / 2)
     lines: list[list[tuple[int, int, int, int]]] = []
     for bbox in cjk:
@@ -195,39 +190,6 @@ def _char_lines(chars) -> list[list[tuple[int, int, int, int]]]:
                 continue
         lines.append([bbox])
     return lines
-
-
-# 带中文的 Form 是“行内公式（含中文下标/短标签）”还是“正文载体”的结构判据：
-# Form 绘制的文字是单行、落在一条由 Form 之外的文字构成的中文宿主行的纵向带内、与宿主行的汉字左右紧邻，
-# 且宽度只占宿主行的一小段，则它是嵌在中文行里的局部对象（行内 Form）；否则（多行、独占一行、无宿主行、
-# 与宿主行等宽，如整页外壳、正文块、图注块、行外标签）是正文载体。
-HOST_ADJACENT_GAP = 1.5      # 与宿主行汉字的水平间隙 <= 1.5 个宿主字高
-HOST_SINGLE_LINE = 1.6       # Form 文字总高 <= 1.6 个宿主字高（单行）
-HOST_MAX_WIDTH_CHARS = 4.0   # Form 文字宽 <= max(4 个宿主字高, 宿主行汉字跨度的一半)
-
-
-def _hosted_in_cjk_line(attributable, outside) -> bool:
-    """attributable（Form 绘制的字符）是否作为局部对象嵌在 outside（Form 之外的字符）构成的中文行里。"""
-    boxes = list(attributable.elements())
-    if not boxes:
-        return False
-    fx0 = min(b[0] for _, b in boxes); fy0 = min(b[1] for _, b in boxes)
-    fx1 = max(b[2] for _, b in boxes); fy1 = max(b[3] for _, b in boxes)
-    cy = (fy0 + fy1) / 2
-    for line in _char_lines(outside):
-        if len(line) < 2:
-            continue
-        y0 = min(b[1] for b in line); y1 = max(b[3] for b in line)
-        h = max(max(b[3] - b[1] for b in line), 1)
-        if not (y0 <= cy <= y1) or fy1 - fy0 > HOST_SINGLE_LINE * h:
-            continue
-        span = max(b[2] for b in line) - min(b[0] for b in line)
-        if fx1 - fx0 > max(HOST_MAX_WIDTH_CHARS * h, 0.5 * span):
-            continue
-        gap = min(min(abs(b[0] - fx1), abs(fx0 - b[2])) if (b[2] <= fx0 or b[0] >= fx1) else 0 for b in line)
-        if gap <= HOST_ADJACENT_GAP * h:
-            return True
-    return False
 
 
 def _inside_row(cx: float, cy: float, rows) -> tuple[float, float, float, float] | None:
@@ -251,46 +213,191 @@ def _form_tree(page) -> dict[int, int]:
     return {item[0]: item[2] for item in page.get_xobjects()}
 
 
-def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> dict[str, Any]:
-    """定位一页中文正文行内的 Form XObject 字形与矢量路径字形（结构证据，只读，不改源文件）。
+# ---- 带中文的 Form：正文准入（默认不是正文） ----
+# 字体名或斜体标志表明是数学/斜体字形（数学变量的常见排版）。
+_MATH_FONT = re.compile(r'italic|oblique|math|cmmi|cmsy|cmex|cmbsy|symbol|stix|cambria|mt-?extra|euclid|msam|msbm|rsfs|eufm|eusm',
+                        re.IGNORECASE)
+PROSE_HOST_SIZE = 0.75     # 宿主正文行：汉字字号 >= 页面主体字号的 0.75 倍
+PROSE_HOST_MIN_CJK = 4     # Form 自身的中文行要作为宿主（同一内容流里混排公式）时，至少 4 个汉字
+IN_FLOW_ONE_SIDE = 3.0     # 只在一侧有宿主汉字时（行首/行尾公式），水平间隙 <= 3 个宿主字高
+LATIN_SIZE_RATIO = (0.75, 1.33)  # 拉丁字母字号与 Form 自身汉字字号之比超出此范围（上下标、公式字号）即为数学证据
 
-    按嵌套层级区分两类 Form：
-    - 行内对象 Form：它（连同其内层）绘制的文字里没有中文行（同一行 >= 2 个汉字），例如 Word/WPS 公式里的变量；
-      或者虽有中文，但按 ``_hosted_in_cjk_line`` 是嵌在 Form 之外中文宿主行里的单行局部对象（带中文下标/短标签的公式）；
-    - 正文载体 Form：其余带中文行的 Form，例如整页外壳、正文块、图注块、行外标签。
-    只清空行内对象 Form（正文载体保留，即使它包着行内对象 Form），清空前后的文字差集即为行内 Form 字形；
-    中文正文行取自清空后的页面（页面级正文 + 正文载体中的正文）。外层外壳因此不会让内层变量被丢掉。
-    ``objects`` 列出每个对象的类型、字符与 bbox，供成品门逐个核对是否丢失或与译文压叠。
+
+def _char_records(page) -> list[dict[str, Any]]:
+    records = []
+    for block in page.get_text('rawdict').get('blocks', []):
+        for line in block.get('lines', []):
+            for span in line['spans']:
+                for char in span['chars']:
+                    if char['c'].strip():
+                        records.append({'key': (char['c'], tuple(round(v) for v in char['bbox'])), 'c': char['c'],
+                                        'bbox': tuple(char['bbox']), 'font': span.get('font', ''),
+                                        'size': span.get('size', 0.0), 'flags': span.get('flags', 0)})
+    return records
+
+
+def _drawing_keys(page) -> list[tuple[str, tuple[int, int, int, int]]]:
+    keys = []
+    for drawing in page.get_drawings():
+        r = drawing['rect']
+        keys.append((drawing.get('type', ''), (round(r.x0, 1), round(r.y0, 1), round(r.x1, 1), round(r.y1, 1))))
+    return keys
+
+
+def _is_math_char(c: str) -> bool:
+    import unicodedata
+    code = ord(c)
+    return (unicodedata.category(c) == 'Sm' or 0x0370 <= code <= 0x03FF or 0x1D400 <= code <= 0x1D7FF
+            or 0x2100 <= code <= 0x214F or 0x2200 <= code <= 0x22FF)
+
+
+def _math_like_glyphs(own: list[dict[str, Any]], page_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Form 自身绘制的非中文字形里，像数学变量/符号的那些（结构与字体证据，不用词表）：
+    数学符号或希腊字母；数学/斜体字体；孤立的单个拉丁字母（前后紧邻处没有其它字母数字）；
+    字号与 Form 自身汉字字号明显不同的拉丁字母（上下标、公式字号）。普通英文单词与数字不算。"""
+    import unicodedata
+    cjk_sizes = sorted(r['size'] for r in own if _CJK.match(r['c']))
+    cjk_size = cjk_sizes[len(cjk_sizes) // 2] if cjk_sizes else 0.0
+    result = []
+    for r in own:
+        c = r['c']
+        if _CJK.match(c) or unicodedata.category(c)[0] in 'PZC':
+            continue
+        if _is_math_char(c) or _MATH_FONT.search(r['font'] or '') or (r['flags'] & 2):
+            result.append(r)
+            continue
+        if not c.isalpha():
+            continue  # 数字不单独作为数学证据（正文年份、编号、引用上标）
+        x0, y0, x1, y1 = r['bbox']
+        h = max(y1 - y0, 1.0)
+        # 紧邻的前后字符（同一行、间隙 <= 0.3 个字号的任何字符）；只要有一侧是拉丁字母或数字，就是单词的一部分。
+        same_line = [o for o in page_records if o is not r and abs((o['bbox'][1] + o['bbox'][3]) - (y0 + y1)) / 2 <= 0.5 * h]
+        left = max((o for o in same_line if o['bbox'][2] <= x0 + 0.5), key=lambda o: o['bbox'][2], default=None)
+        right = min((o for o in same_line if o['bbox'][0] >= x1 - 0.5), key=lambda o: o['bbox'][0], default=None)
+        neighbours = [o for o in (left, right) if o is not None and
+                      (x0 - o['bbox'][2] if o is left else o['bbox'][0] - x1) <= 0.3 * r['size']]
+        if not any(o['c'].isalnum() and not _CJK.match(o['c']) for o in neighbours):
+            result.append(r)  # 孤立单字母（两侧紧邻处没有拉丁字母或数字）
+            continue
+        if cjk_size and not (LATIN_SIZE_RATIO[0] <= r['size'] / cjk_size <= LATIN_SIZE_RATIO[1]):
+            result.append(r)
+    return result
+
+
+def _fraction_rules(own_paths, own: list[dict[str, Any]]):
+    """Form 自身的细横线，且其正上方与正下方紧邻处都有 Form 自身的字形：分数线。"""
+    rules = []
+    for _, (x0, y0, x1, y1) in own_paths:
+        if y1 - y0 > 1.5 or x1 - x0 < 3:
+            continue
+        overlap = [r for r in own if min(r['bbox'][2], x1) - max(r['bbox'][0], x0) > 0]
+        above = any(0 <= y0 - r['bbox'][3] + 1 <= (r['bbox'][3] - r['bbox'][1]) + 1 for r in overlap)
+        below = any(0 <= r['bbox'][1] - y1 + 1 <= (r['bbox'][3] - r['bbox'][1]) + 1 for r in overlap)
+        if above and below:
+            rules.append((x0, y0, x1, y1))
+    return rules
+
+
+def _host_lines(records: list[dict[str, Any]], body_size: float, min_cjk: int):
+    """正文字号的中文行（宿主行）：(y0, y1, h, [x 区间])。"""
+    from collections import Counter
+    keyed = Counter(r['key'] for r in records if _CJK.match(r['c']) and r['size'] >= PROSE_HOST_SIZE * body_size)
+    lines = []
+    for line in _char_lines(keyed):
+        if len(line) >= min_cjk:
+            lines.append((min(b[1] for b in line), max(b[3] for b in line), max(max(b[3] - b[1] for b in line), 1),
+                          [(b[0], b[2]) for b in line]))
+    return lines
+
+
+def _in_flow(bbox, lines) -> bool:
+    """bbox 是否落在某条宿主中文行里：与行的纵向带相交，且两侧都有该行汉字，或一侧汉字的水平间隙 <= 3 个字高。"""
+    x0, y0, x1, y1 = bbox
+    for ly0, ly1, h, spans in lines:
+        if min(y1, ly1) - max(y0, ly0) <= 0:
+            continue
+        left = [a1 for a0, a1 in spans if a1 <= x0 + 1]
+        right = [a0 for a0, a1 in spans if a0 >= x1 - 1]
+        if left and right:
+            return True
+        gaps = [x0 - a for a in left] + [a - x1 for a in right]
+        if gaps and min(gaps) <= IN_FLOW_ONE_SIDE * h:
+            return True
+    return False
+
+
+def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> dict[str, Any]:
+    """定位一页中文正文行内的结构对象（结构证据，只读，不改源文件）。
+
+    每个 Form XObject（含嵌套）按**自身**内容（扣除内层 Form 的内容）分类：
+    - container：自身不画任何文字或路径（整页外壳等），只递归看内层；
+    - object：自身不画汉字（Word/WPS 公式变量等）。在临时副本里清空后，其字形中心落在中文行内即为行内对象；
+    - body：自身画汉字，且没有任何数学证据（数学符号/希腊字母、数学或斜体字体、孤立单字母、
+      与自身汉字字号明显不同的拉丁字母、分数线）。只有正面确认为正文的 Form 才算正文；
+    - mixed：自身画汉字且有数学证据。若数学证据落在宿主中文行里（Form 之外的正文行，或 Form 自身
+      >= 4 个汉字的正文行），判 needs_review：整页拒绝，其数学字形与分数线逐个计入 ``objects``，
+      供成品门核对；不在任何正文行里的（图内标签等）记为 standalone，不计入。
+    尺寸（高、宽、间隙）不是忽略已定位证据的理由。
     """
     import fitz
     from collections import Counter
 
     page = doc[page_index]
-    original = Counter(_char_keys(page))
+    records = _char_records(page)
+    original = Counter(r['key'] for r in records)
+    by_key: dict[tuple, list[dict[str, Any]]] = {}
+    for r in records:
+        by_key.setdefault(r['key'], []).append(r)
+    original_paths = Counter(_drawing_keys(page))
+    cjk_sizes = Counter(round(r['size'], 1) for r in records if _CJK.match(r['c']))
+    body_size = cjk_sizes.most_common(1)[0][0] if cjk_sizes else 0.0
     scratch = fitz.open()
-    body_forms: list[int] = []
-    inline_forms: list[int] = []
-    hosted_cjk_forms: list[int] = []
+    classes: dict[int, str] = {}
+    objects: list[dict[str, Any]] = []
     try:
         scratch.insert_pdf(doc, from_page=page_index, to_page=page_index)
         tree = _form_tree(scratch[0])
-        # 逐个 Form 判定：只清空它（及其内层，随之不再绘制），差集即它负责绘制的文字。
+        drawn: dict[int, Counter] = {}
+        drawn_paths: dict[int, Counter] = {}
         for xref in tree:
             saved = scratch.xref_stream(xref)
             scratch.update_stream(xref, b'')
-            attributable = original - Counter(_char_keys(scratch[0]))
+            drawn[xref] = original - Counter(_char_keys(scratch[0]))
+            drawn_paths[xref] = original_paths - Counter(_drawing_keys(scratch[0]))
             scratch.update_stream(xref, saved)
-            if not _has_cjk_row(attributable):
-                inline_forms.append(xref)
-            elif _hosted_in_cjk_line(attributable, original - attributable):
-                # 带中文下标/短标签的行内公式（如 “M最大”）：仍是行内对象，变量照常计入。
-                inline_forms.append(xref)
-                hosted_cjk_forms.append(xref)
+        for xref in tree:
+            own_chars, own_paths = Counter(drawn[xref]), Counter(drawn_paths[xref])
+            for child, parent in tree.items():
+                if parent == xref and child != xref:
+                    own_chars -= drawn[child]
+                    own_paths -= drawn_paths[child]
+            if not own_chars and not own_paths:
+                classes[xref] = 'container'
+                continue
+            own = [rec for key in own_chars.elements() for rec in by_key.get(key, [])[:1]]
+            if not any(_CJK.match(rec['c']) for rec in own):
+                classes[xref] = 'object'
+                continue
+            math = _math_like_glyphs(own, records)
+            rules = _fraction_rules(list(own_paths.elements()), own)
+            if not math and not rules:
+                classes[xref] = 'body'
+                continue
+            outside = [rec for key in (original - drawn[xref]).elements() for rec in by_key.get(key, [])[:1]]
+            lines = _host_lines(outside, body_size, 2) + _host_lines(own, body_size, PROSE_HOST_MIN_CJK)
+            if any(_in_flow(rec['bbox'], lines) for rec in math) or any(_in_flow(rule, lines) for rule in rules):
+                classes[xref] = 'needs_review'
+                for rec in math:
+                    objects.append({'kind': 'xobject_text', 'char': rec['c'], 'bbox': [round(v) for v in rec['bbox']],
+                                    'source': 'mixed_form_needs_review'})
+                for rule in rules:
+                    objects.append({'kind': 'form_rule', 'bbox': [round(v, 2) for v in rule], 'source': 'mixed_form_needs_review'})
             else:
-                body_forms.append(xref)
-        for xref in inline_forms:
-            # 只改内存中的临时副本：清空行内对象 Form 的内容流，正文载体 Form 保留。
-            scratch.update_stream(xref, b'')
+                classes[xref] = 'standalone_mixed'
+        for xref, kind in classes.items():
+            if kind == 'object':
+                # 只改内存中的临时副本：清空不画汉字的 Form，正文/混排/外壳 Form 保留。
+                scratch.update_stream(xref, b'')
         bare = scratch[0]
         rows = _cjk_rows(bare)
         remaining = Counter(_char_keys(bare))
@@ -302,9 +409,7 @@ def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> d
                 xobject_chars.append(key)
     finally:
         scratch.close()
-    forms = set(body_forms) | set(inline_forms)
-    page_in_form = bool(body_forms)
-    objects: list[dict[str, Any]] = []
+    count = Counter(classes.values())
     for char, (x0, y0, x1, y1) in xobject_chars:
         if not _CJK.match(char) and _inside_row((x0 + x1) / 2, (y0 + y1) / 2, rows):
             objects.append({'kind': 'xobject_text', 'char': char, 'bbox': [x0, y0, x1, y1]})
@@ -317,11 +422,15 @@ def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> d
             objects.append({'kind': 'vector_glyph', 'bbox': [round(v, 2) for v in (rect.x0, rect.y0, rect.x1, rect.y1)]})
     xobject_inline = sum(1 for o in objects if o['kind'] == 'xobject_text')
     vector_inline = sum(1 for o in objects if o['kind'] == 'vector_glyph')
-    result = {'page': page_index + 1, 'cjk_rows': len(rows), 'form_xobjects': len(forms), 'page_in_form': page_in_form,
-              'body_forms': len(body_forms), 'inline_forms': len(inline_forms), 'hosted_cjk_forms': len(hosted_cjk_forms),
-              'xobject_text_glyphs': xobject_inline, 'vector_glyphs': vector_inline,
-              'samples': objects[:5],
-              'flagged': xobject_inline + vector_inline >= INLINE_OBJECT_PAGE_MIN}
+    rule_inline = sum(1 for o in objects if o['kind'] == 'form_rule')
+    reasons = sorted({'mixed_form_needs_review' if o.get('source') else 'inline_object' for o in objects})
+    result = {'page': page_index + 1, 'cjk_rows': len(rows), 'form_xobjects': len(classes),
+              'page_in_form': bool(count['body'] or count['needs_review'] or count['standalone_mixed']),
+              'container_forms': count['container'], 'body_forms': count['body'], 'inline_forms': count['object'],
+              'needs_review_forms': count['needs_review'], 'standalone_mixed_forms': count['standalone_mixed'],
+              'xobject_text_glyphs': xobject_inline, 'vector_glyphs': vector_inline, 'form_rules': rule_inline,
+              'reasons': reasons, 'samples': objects[:5],
+              'flagged': xobject_inline + vector_inline + rule_inline >= INLINE_OBJECT_PAGE_MIN}
     if with_objects:
         result['objects'] = objects
     return result

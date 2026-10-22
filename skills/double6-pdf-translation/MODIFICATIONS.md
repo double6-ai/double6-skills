@@ -33,7 +33,8 @@
 - 评审第 2 轮修正：`scripts/pdf_input_preflight.py`（行内结构对象阈值 1、`with_objects` 定位明细、整页 Form 处理）、`scripts/render_residue_check.py`（`page_inline_object_damage` 逐对象核对丢失/压叠，压叠阈值 1 个字符）、`scripts/qa_pipeline.py`（`inline_object_damage_high`）。
 - 评审第 3 轮修正：`scripts/pdf_input_preflight.py`（`inline_object_math` 逐个 Form 归类为正文 Form/行内 Form，只清空行内 Form 求差集；新增 `_form_tree`、`_has_cjk_row` 与 `body_forms`/`inline_forms` 计数）。
 - 评审第 4 轮修正：`scripts/pdf_input_preflight.py`（带中文行的 Form 按宿主行结构判据再分类：新增 `_char_lines`、`_hosted_in_cjk_line`、`HOST_*` 阈值与 `hosted_cjk_forms` 计数）。
-- 新增 `tests/test_zh2en_translation.py`、`tests/fixtures/zh2en/`、`tests/test_pr19_review_boundaries.py`、`tests/test_pr19_review2_sparse_math.py`、`tests/test_pr19_review3_wrapped_form.py`、`tests/test_pr19_review4_chinese_formula_form.py`。
+- 评审第 5 轮修正：`scripts/pdf_input_preflight.py`（按 Form 自身内容分类 container/object/body/mixed，正文准入与数学证据 `_math_like_glyphs`/`_fraction_rules`，宿主正文行 `_host_lines`/`_in_flow`，needs_review 拒绝与 `reasons`、`needs_review_forms`/`standalone_mixed_forms`/`container_forms`/`form_rules` 计数；去掉第 4 轮的 `_hosted_in_cjk_line` 与 `HOST_*` 尺寸上限）、`scripts/render_residue_check.py`（`form_rule` 分数线逐个核对）；第 3、4 轮测试按新语义调整（见 CHANGELOG）。
+- 新增 `tests/test_zh2en_translation.py`、`tests/fixtures/zh2en/`、`tests/test_pr19_review_boundaries.py`、`tests/test_pr19_review2_sparse_math.py`、`tests/test_pr19_review3_wrapped_form.py`、`tests/test_pr19_review4_chinese_formula_form.py`、`tests/test_pr19_review5_mixed_form.py`。
 - 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py` 更新为 2.0.0-rc.7。
 
 ## 2.0.0-rc.6 维护改动（2026-10-22）

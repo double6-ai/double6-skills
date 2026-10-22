@@ -93,7 +93,7 @@ def _gate(source, tmp_path):
 def _formula_form(parts):
     """parts: [(x, text, fontname, size)]，生成 60x16pt 的公式 Form 源文档。
 
-    PyMuPDF 的 show_pdf_page 生成“外层容器 Form + 页面 Form”两层，所以每放一次公式，hosted_cjk_forms 记 2。
+    第 5 轮起按 Form 自身内容分类：show_pdf_page 的外层容器 Form 自身不画内容，记为 container；公式本身的 Form 记为 needs_review。
     """
     f = fitz.open()
     fp = f.new_page(width=60, height=16)
@@ -127,7 +127,7 @@ def test_multiple_variables_with_chinese_subscript_are_blocked_plain_and_wrapped
         for path in _variants(d, tmp_path, name):
             report, page = _inspect(path)
             assert report['error_code'] == 'zh2en_inline_object_math_unsupported', (name, path.name)
-            assert page['xobject_text_glyphs'] == n_latin and page['hosted_cjk_forms'] >= 1, (name, path.name, page)
+            assert page['xobject_text_glyphs'] == n_latin and page['needs_review_forms'] >= 1, (name, path.name, page)
             gate = _gate(path, tmp_path)
             damage = gate['pages'][0]['inline_object_damage']
             assert damage['located'] == n_latin and damage['lost'] == n_latin and gate['quality_fail'], (name, path.name)
@@ -136,7 +136,7 @@ def test_multiple_variables_with_chinese_subscript_are_blocked_plain_and_wrapped
 
 
 def test_chinese_paragraph_caption_and_label_forms_are_body_plain_and_wrapped(tmp_path):
-    """正例：整段中文正文 Form（含英文术语）、小字号图注块 Form、行外中文标签 Form、
+    """正例：整段中文正文 Form（含英文术语）、小字号图注块 Form（含年份）、行外中文标签 Form、
     与页面级左栏同高的右栏中文行 Form（含英文术语）、紧邻正文行的两行旁注 Form、与正文行同高但不紧邻的行外标签 Form 都是正文载体，不拦截，成品门不定位对象。"""
     d = fitz.open()
     page = d.new_page()
@@ -145,7 +145,7 @@ def test_chinese_paragraph_caption_and_label_forms_are_body_plain_and_wrapped(tm
                                  '实验表明该方法在多种配置下都稳定。'], latin=[(0, 54, 'MIMO')])
     page.show_pdf_page(fitz.Rect(72, 150, 522, 210), para, 0)                                  # 整段正文 Form
     page.draw_rect(fitz.Rect(150, 230, 400, 330), color=(0, 0, 0))                            # 图
-    caption = _text_block(300, 20, ['图 1 均匀线阵的方向图（ 为阵元数）'], size=9, latin=[(0, 85, 'N')])
+    caption = _text_block(300, 20, ['图 1 均匀线阵的方向图（ 年数据）'], size=9, latin=[(0, 85, '2024')])
     page.show_pdf_page(fitz.Rect(150, 335, 450, 355), caption, 0)                              # 图注块 Form
     label = _text_block(60, 20, ['主瓣'], size=9, latin=[(0, 22, 'θ0')])
     page.show_pdf_page(fitz.Rect(330, 240, 390, 260), label, 0)                                # 图内/行外标签 Form
@@ -153,7 +153,7 @@ def test_chinese_paragraph_caption_and_label_forms_are_body_plain_and_wrapped(tm
     right = _text_block(230, 16, ['右栏正文： 信道容量随天线数增长。'], latin=[(0, 58, 'MIMO')])
     page.show_pdf_page(fitz.Rect(238, 388, 468, 404), right, 0)  # 与左栏同高、间隙小于 1.5 字高的右栏行 Form（按宽度判为正文）
     page.insert_text((72, 470), '旁注所在行的正文内容。', fontname='china-s', fontsize=10.5)
-    note = _text_block(30, 34, ['注一', '见上'], size=9, latin=[(1, 20, 'a')])
+    note = _text_block(30, 34, ['注一', '见上'], size=9, latin=[(1, 20, '12')])
     page.show_pdf_page(fitz.Rect(180, 450, 210, 484), note, 0)                                 # 紧邻正文行的两行旁注 Form（按行数判为正文）
     page.insert_text((72, 530), '表格续页说明。', fontname='china-s', fontsize=10.5)
     tag = _text_block(50, 16, ['续表'], size=10.5, latin=[(0, 26, 'A')])
@@ -161,8 +161,9 @@ def test_chinese_paragraph_caption_and_label_forms_are_body_plain_and_wrapped(tm
     for path in _variants(d, tmp_path, 'body-forms'):
         report, page_info = _inspect(path)
         assert report['status'] != 'blocked', (path.name, report['findings'])
-        assert page_info['xobject_text_glyphs'] == 0 and page_info['hosted_cjk_forms'] == 0, (path.name, page_info)
-        assert page_info['body_forms'] >= 6, (path.name, page_info)
+        assert page_info['xobject_text_glyphs'] == 0 and page_info['needs_review_forms'] == 0, (path.name, page_info)
+        # 第 5 轮起正文须正面确认：行外标签 Form 里有孤立字母/希腊字母时记为 standalone_mixed（不在正文行内，不计入、不拦截）。
+        assert page_info['needs_review_forms'] == 0 and page_info['body_forms'] + page_info['standalone_mixed_forms'] >= 6, (path.name, page_info)
         gate = _gate(path, tmp_path)
         assert gate['pages'][0]['inline_object_damage']['located'] == 0, path.name
     d.close()
@@ -184,7 +185,7 @@ def test_formula_with_chinese_label_nested_inside_body_block_form(tmp_path):
     for path in _variants(d, tmp_path, 'nested-label-formula'):
         report, page_info = _inspect(path)
         assert report['error_code'] == 'zh2en_inline_object_math_unsupported', path.name
-        assert page_info['xobject_text_glyphs'] == 1 and page_info['hosted_cjk_forms'] >= 1 and page_info['body_forms'] >= 1
+        assert page_info['xobject_text_glyphs'] == 1 and page_info['needs_review_forms'] >= 1 and page_info['body_forms'] >= 1
         gate = _gate(path, tmp_path)
         assert gate['pages'][0]['inline_object_damage']['lost'] == 1 and gate['quality_fail'], path.name
     d.close()

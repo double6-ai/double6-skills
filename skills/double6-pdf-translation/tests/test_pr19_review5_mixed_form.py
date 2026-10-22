@@ -157,3 +157,111 @@ def test_formula_glyphs_in_same_form_stream_as_chinese_body(tmp_path):
         page.show_pdf_page(fitz.Rect(72, 150, 522, 210), block, 0)
         for src in save_variants(d, tmp_path, f'same-stream-{name}'):
             _assert_blocked_and_gate_fails(src, tmp_path, src.name)
+
+
+# ---------- 正文准入：正例与“不确定即拒绝”的边界 ----------
+
+def _inspect(path):
+    from pdf_input_preflight import inspect_pdf
+    report = inspect_pdf(path, target_language='en', require_digital=True)
+    return report, report['inline_object_math'][0]
+
+
+def _variants3(d, tmp_path, name):
+    """原页、单层整页包装、双层整页包装。"""
+    plain, once = save_variants(d, tmp_path, name)
+    with fitz.open(once) as o:
+        twice = wrap_page(o)
+    path = tmp_path / f'{name}-twice.pdf'
+    twice.save(path)
+    twice.close()
+    return [plain, once, path]
+
+
+def _block(width, height, lines, size=10.5, latin=()):
+    f = fitz.open()
+    fp = f.new_page(width=width, height=height)
+    for i, line in enumerate(lines):
+        fp.insert_text((2, 2 + size * 1.4 * (i + 1)), line, fontname='china-s', fontsize=size)
+    for i, x, text in latin:
+        fp.insert_text((x, 2 + size * 1.4 * (i + 1)), text, fontname='tiro', fontsize=size)
+    return f
+
+
+def _assert_not_blocked(path, tmp_path):
+    report, page = _inspect(path)
+    assert report['status'] != 'blocked', (path.name, report['findings'])
+    assert page['needs_review_forms'] == 0 and page['xobject_text_glyphs'] == 0, (path.name, page)
+    _, quality = both_gates(path, tmp_path)
+    assert quality['pages'][0]['inline_object_damage']['located'] == 0, path.name
+    return page
+
+
+def test_chinese_body_form_with_english_words_and_numbers_is_body(tmp_path):
+    """正例：中文正文段落 Form 里有普通英文单词与数字（Transformer、MIMO、2024、5G），
+    与正文同字体同字号、不是孤立单字母——正面确认为正文；原页、单层、双层包装与页面级正文混排都不拦。"""
+    para = _block(450, 60, ['本文提出的 模型在 年的基准上取得最好结果，', '并在 与 场景下验证了泛化能力。'],
+                  latin=[(0, 54, 'Transformer'), (0, 136, '2024'), (1, 44, 'MIMO'), (1, 80, '5G')])
+    d = fitz.open()
+    page = d.new_page()
+    page.insert_textbox(fitz.Rect(72, 60, 520, 130), b.ZH_FILL, fontname='china-s', fontsize=10.5)  # 页面级正文
+    page.show_pdf_page(fitz.Rect(72, 150, 522, 210), para, 0)
+    caption = _block(300, 20, ['图 1 整体结构示意图'], size=9, latin=[(0, 30, 'Transformer')])
+    page.show_pdf_page(fitz.Rect(150, 330, 450, 350), caption, 0)
+    for path in _variants3(d, tmp_path, 'words'):
+        info = _assert_not_blocked(path, tmp_path)
+        assert info['body_forms'] >= 2, (path.name, info)
+
+
+def test_two_column_figure_form_with_chinese_labels_is_not_in_body_lines(tmp_path):
+    """正例：双栏页。右栏是中文正文段落 Form（含英文单词）；左栏是图 Form（坐标轴、曲线、刻度数字、
+    中文轴标题、单字母轴标签 x/y、希腊字母 θ），与右栏正文同高但不在正文行里：记 standalone_mixed，不拦。"""
+    fig = fitz.open()
+    fp = fig.new_page(width=220, height=160)
+    fp.draw_line((30, 130), (210, 130), color=(0, 0, 0), width=0.8)
+    fp.draw_line((30, 130), (30, 10), color=(0, 0, 0), width=0.8)
+    fp.draw_polyline([(30, 120), (80, 80), (130, 60), (200, 30)], color=(0, 0, 0), width=1)
+    for i, x in enumerate((30, 90, 150, 210)):
+        fp.insert_text((x - 3, 142), str(i * 10), fontname='tiro', fontsize=7)
+    fp.insert_text((95, 156), '时间', fontname='china-s', fontsize=8)
+    fp.insert_text((120, 156), 'x', fontname='tiro', fontsize=8)
+    fp.insert_text((4, 70), '幅度', fontname='china-s', fontsize=8)
+    fp.insert_text((4, 82), 'y', fontname='tiro', fontsize=8)
+    fp.insert_text((140, 50), 'θ', fontname='china-s', fontsize=8)
+    right = _block(240, 200, ['右栏正文介绍实验设置与评价指标，', '模型在多个数据集上训练并测试，', '结果表明方法稳定有效。'] * 3,
+                   latin=[(1, 170, 'MIMO')])
+    d = fitz.open()
+    page = d.new_page()
+    page.insert_textbox(fitz.Rect(40, 60, 280, 120), b.ZH_FILL[:60], fontname='china-s', fontsize=10.5)  # 左栏页面级正文
+    page.show_pdf_page(fitz.Rect(40, 130, 260, 290), fig, 0)
+    page.show_pdf_page(fitz.Rect(300, 60, 540, 260), right, 0)
+    for path in _variants3(d, tmp_path, 'two-column'):
+        info = _assert_not_blocked(path, tmp_path)
+        assert info['standalone_mixed_forms'] >= 1 and info['body_forms'] >= 1, (path.name, info)
+
+
+@pytest.mark.parametrize('case', ['caption_variable', 'note_variable'])
+def test_uncertain_mixed_form_in_body_line_is_needs_review(tmp_path, case):
+    """不确定即拒绝：图注 Form 里出现孤立变量 N（“N 为阵元数”），或紧邻正文行的旁注 Form 里出现孤立字母 a，
+    都不能确认为正文，判 needs_review（exit 2），其字形计入成品门。第 4 轮的正例里这两处曾是 N 与 a，第 5 轮改为
+    年份/编号，并在这里作为 needs_review 反例单独测试。"""
+    d = fitz.open()
+    page = d.new_page()
+    page.insert_textbox(fitz.Rect(72, 60, 520, 130), b.ZH_FILL, fontname='china-s', fontsize=10.5)
+    if case == 'caption_variable':
+        page.draw_rect(fitz.Rect(150, 230, 400, 330), color=(0, 0, 0))
+        f = _block(300, 20, ['图 1 均匀线阵的方向图（ 为阵元数）'], size=9, latin=[(0, 85, 'N')])
+        page.show_pdf_page(fitz.Rect(150, 335, 450, 355), f, 0)
+        expected = 'N'
+    else:
+        page.insert_text((72, 470), '旁注所在行的正文内容。', fontname='china-s', fontsize=10.5)
+        f = _block(30, 34, ['注一', '见上'], size=9, latin=[(1, 20, 'a')])
+        page.show_pdf_page(fitz.Rect(180, 450, 210, 484), f, 0)
+        expected = 'a'
+    for src in save_variants(d, tmp_path, case):
+        report, info = _inspect(src)
+        assert report['error_code'] == 'zh2en_inline_object_math_unsupported', src.name
+        assert info['needs_review_forms'] == 1 and info['reasons'] == ['mixed_form_needs_review'], (src.name, info)
+        assert [o['char'] for o in info['samples']] == [expected]
+        _, quality = both_gates(src, tmp_path)
+        assert quality['pages'][0]['inline_object_damage']['lost'] == 1 and quality['quality_fail'], src.name
