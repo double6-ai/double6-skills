@@ -1,5 +1,10 @@
 # 变更记录
 
+## 2.0.0-rc.9 本地发布候选 · 2026-10-23
+
+- 新增长文档分块翻译 `chunked-candidate`（基线 item 5）。此前 `candidate` 只接受完整 1–5 页（FREEZE 页门 `page_limit_exceeded`），一份不能在一个有界任务（120 s、5 GiB RSS、重任务并发 1）内完成的长文档无法翻译。现在把文档按页范围切成一串有界块，每块是一次**普通** `candidate`（`digital_pdf` 或 `scanned_ocr` 原路线、原门），再按原页序合并。详见 `references/chunked-translation.md`。
+- 版本号：2.0.0-rc.9。
+
 ## 2.0.0-rc.8 本地发布候选 · 2026-10-22
 
 - 新增扫描件 / 混合 PDF 的常规 OCR 路线 `candidate --route scanned_ocr`（基线 item 4）。原 `digital_pdf` 路线遇到扫描页一律在预检以 `scanned_pdf_route_required` 拒绝，`scanned_raster` 只能整页重绘、不产生可翻译文字层；现在可把扫描页 OCR 重建为带文字层的数字 PDF，再走**原有**数字后端、全部质量门和严格验收。

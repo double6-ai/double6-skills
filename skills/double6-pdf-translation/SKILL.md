@@ -2,7 +2,7 @@
 name: double6-pdf-translation
 description: 论文和PDF英译中执行。先读 configs/default-routes.json，按源证据直接调用已有命令。清晰单栏扫描先预检和源图确认；审过再准备用单配置；冻住了只重出PDF。电子PDF和已核过的LaTeX走原路线。全文、实际PDF、复制和冷重建必须保留。旧的整篇强翻译流水线不是当前入口。
 metadata:
-  version: "2.0.0-rc.8"
+  version: "2.0.0-rc.9"
   development_revision: "110-unpublished"
   source_contract_revision: "111-20261017"
   release_status: "local-prepublication-candidate"
