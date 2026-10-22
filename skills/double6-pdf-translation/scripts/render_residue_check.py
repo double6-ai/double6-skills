@@ -1,6 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Double6 Skills，2026-10-17：2.0.0-rc.3 新增；变更见Skill根目录MODIFICATIONS.md。
-"""基于实际渲染成品的英文残留检查（最小版）。
+"""基于实际渲染成品的源语言残留检查（最小版）：英译中查英文残留，中译英查中文残留。
+
+中译英（target_language='en'）：逐页比较源/译文可抽取的 CJK 汉字数，残留率 r = 译文汉字 / 源文汉字。
+英文译文里合理保留的汉字几乎为零（不像英译中要保留人名、公式变量），阈值因此更严：
+页 r≥0.30 为 high、r≥0.10 为 medium，全文 r≥0.25 为 high；源页汉字少于 100 不评估。
+另记录整句原样残留（≥12 个汉字的源文行原样出现在译文中）和全角中文标点数，供人工复核；
+并检测源文保留字形（未翻译的公式碎片）与英文译文字形的压叠（≥10 个字符的页记为 medium，提示复核）。
+以下为英译中检查说明。
 
 逐页比较源 PDF 与译文 PDF 中可抽取的拉丁词数量：残留率 r = 译文拉丁词 / 源文拉丁词。
 正常英译中保留人名、引用、公式变量等，实测 r≈0.05–0.15；整页未翻译时 r≈1。
@@ -510,8 +517,397 @@ def page_residue(source_text: str, target_text: str, target_extra_words: int = 0
             'evaluated': evaluated, 'severity': severity}
 
 
+ZH_MIN_SOURCE_CHARS = 100
+ZH_PAGE_HIGH = 0.30
+ZH_PAGE_MEDIUM = 0.10
+ZH_DOCUMENT_HIGH = 0.25
+ZH_VERBATIM_MIN_CHARS = 12
+# 所有页都短于 ZH_MIN_SOURCE_CHARS 时，按整份文件合计评估的最低中文字符数。
+ZH_DOCUMENT_MIN_SOURCE_CHARS = 24
+# 中文残留计数含康熙部首/部首补充与兼容汉字：部分中文 PDF 字体把常用字映射到这些码位。
+CJK_WIDE = re.compile(r'[\u2e80-\u2fdf\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]')
+CJK_PUNCT = re.compile(r'[\u3000-\u303f\uff01\uff08\uff09\uff0c\uff1a\uff1b\uff1f]')
+
+
+def page_chinese_residue(source_text: str, target_text: str) -> dict[str, Any]:
+    source_chars = len(CJK_WIDE.findall(source_text))
+    target_chars = len(CJK_WIDE.findall(target_text))
+    candidates = [re.sub(r'\s+', '', line) for line in source_text.splitlines()]
+    candidates = [line for line in candidates if len(CJK_WIDE.findall(line)) >= ZH_VERBATIM_MIN_CHARS]
+    joined = re.sub(r'\s+', '', target_text)
+    verbatim = sum(1 for line in candidates if line in joined)
+    ratio = target_chars / source_chars if source_chars else 0.0
+    evaluated = source_chars >= ZH_MIN_SOURCE_CHARS
+    severity = (('high' if ratio >= ZH_PAGE_HIGH else 'medium' if ratio >= ZH_PAGE_MEDIUM else 'ok')
+                if evaluated else 'not_evaluated')
+    # 短页（源文中文不足 ZH_MIN_SOURCE_CHARS）不按比例评估，但整行中文源句（>= ZH_VERBATIM_MIN_CHARS 个汉字）
+    # 逐字出现在译文里是直接的未翻译证据，判 high。
+    short_page_verbatim = not evaluated and verbatim > 0
+    if short_page_verbatim:
+        severity = 'high'
+    return {'source_cjk_chars': source_chars, 'target_cjk_chars': target_chars,
+            'target_cjk_punctuation': len(CJK_PUNCT.findall(target_text)),
+            'target_latin_words': len(LATIN_WORD.findall(target_text)), 'residue_ratio': round(ratio, 4),
+            'verbatim_source_lines': verbatim, 'source_lines_checked': len(candidates),
+            'evaluated': evaluated, 'short_page_verbatim': short_page_verbatim, 'severity': severity}
+
+
+# 中译英时英文译文用 babeldoc 自带的 Noto 字体排版；源文保留字形（未翻译的公式碎片、变量）仍是原字体。
+TRANSLATED_FONT_PATTERN = re.compile(r'Noto', re.IGNORECASE)
+OVERLAP_MIN_FRACTION = 0.5
+# 任何一个源文保留字形与译文字形压叠都判 high（评审第 2 轮：不按整页净计数放行）。
+OVERLAP_PAGE_MIN_CHARS = 1
+
+
+def _glyph_boxes(page):
+    import fitz
+
+    boxes = []
+    for block in page.get_text('rawdict')['blocks']:
+        for line in block.get('lines', []):
+            for span in line['spans']:
+                for char in span['chars']:
+                    if char['c'].isalnum():
+                        boxes.append((span['font'], char['c'], fitz.Rect(char['bbox'])))
+    return boxes
+
+
+def page_retained_glyph_overlap(page, translated_font_pattern=None) -> dict[str, Any]:
+    """源文保留字形与英文译文字形相互压叠的字符数；达到 OVERLAP_PAGE_MIN_CHARS 时该页判 high（失败关闭）。"""
+    translated_font_pattern = translated_font_pattern or TRANSLATED_FONT_PATTERN
+    boxes = _glyph_boxes(page)
+    translated = [b for b in boxes if translated_font_pattern.search(b[0])]
+    retained = [b for b in boxes if not translated_font_pattern.search(b[0])]
+    samples, count = [], 0
+    for font, char, rect in retained:
+        area = rect.get_area()
+        if area <= 0:
+            continue
+        for _, other_char, other in translated:
+            inter = rect & other
+            if not inter.is_empty and inter.get_area() > OVERLAP_MIN_FRACTION * min(area, other.get_area()):
+                count += 1
+                if len(samples) < 5:
+                    samples.append({'retained': char, 'font': font, 'translated': other_char,
+                                    'bbox': [round(v, 1) for v in rect]})
+                break
+    return {'retained_glyphs': len(retained), 'overlapping_glyphs': count, 'samples': samples,
+            'flagged': count >= OVERLAP_PAGE_MIN_CHARS}
+
+
+# 字形大小的填充矢量路径（MathJax/网页打印公式把数学字形画成路径）。排版引擎会丢弃译文段落内的这类路径，
+# 成品比源页少 >= VECTOR_GLYPH_LOSS_MIN 个且 >= VECTOR_GLYPH_LOSS_FRACTION 时判 high（失败关闭）。
+VECTOR_GLYPH_MAX_SIDE = 24.0
+VECTOR_GLYPH_LOSS_MIN = 3
+VECTOR_GLYPH_LOSS_FRACTION = 0.25
+
+
+def _vector_glyph_count(page) -> int:
+    count = 0
+    for drawing in page.get_drawings():
+        if drawing.get('fill') is None:
+            continue
+        rect = drawing['rect']
+        if (rect.width <= VECTOR_GLYPH_MAX_SIDE and rect.height <= VECTOR_GLYPH_MAX_SIDE
+                and max(rect.width, rect.height) >= 2 and min(rect.width, rect.height) >= 0.8):
+            count += 1
+    return count
+
+
+def page_vector_glyph_loss(source_page, target_page) -> dict[str, Any]:
+    source, target = _vector_glyph_count(source_page), _vector_glyph_count(target_page)
+    lost = max(0, source - target)
+    return {'source_vector_glyphs': source, 'target_vector_glyphs': target, 'lost': lost,
+            'flagged': lost >= VECTOR_GLYPH_LOSS_MIN and lost >= VECTOR_GLYPH_LOSS_FRACTION * source}
+
+
+# 源文中文正文行内已定位的结构对象（矢量公式字形、Form XObject 变量）在成品中的核对容差（pt）。
+INLINE_OBJECT_MATCH_TOLERANCE = 1.5
+INLINE_OBJECT_COLLISION_FRACTION = 0.3
+
+
+def _target_text_boxes(page):
+    import fitz
+
+    boxes = []
+    for block in page.get_text('rawdict')['blocks']:
+        for line in block.get('lines', []):
+            for span in line['spans']:
+                for char in span['chars']:
+                    if char['c'].strip():
+                        boxes.append((char['c'], fitz.Rect(char['bbox'])))
+    return boxes
+
+
+def _collides(rect, others, fraction=INLINE_OBJECT_COLLISION_FRACTION) -> str | None:
+    area = rect.get_area()
+    for char, other in others:
+        inter = rect & other
+        if area > 0 and not inter.is_empty and inter.get_area() > fraction * min(area, other.get_area() or area):
+            return char
+    return None
+
+
+def page_inline_object_damage(source_doc, page_index: int, target_page) -> dict[str, Any]:
+    """逐个核对源页中文正文行内已定位的结构对象（行内 Form 字形、矢量字形、needs_review 混排 Form 的数学字形与分数线）：
+    成品中缺失（丢失）或与译文字形压叠，任何一个都判 high。"""
+    import fitz
+    from pdf_input_preflight import inline_object_math
+
+    located = inline_object_math(source_doc, page_index, with_objects=True)['objects']
+    tol = INLINE_OBJECT_MATCH_TOLERANCE
+    text = _target_text_boxes(target_page)
+    drawings = target_page.get_drawings() if located else []
+    paths = [d['rect'] for d in drawings if d.get('fill') is not None]
+    strokes = [d['rect'] for d in drawings]
+    used: set[int] = set()
+    lost, collided = [], []
+    for obj in located:
+        rect = fitz.Rect(obj['bbox'])
+        if obj['kind'] in ('vector_glyph', 'form_rule'):
+            # 分数线（混排 Form 里的细横线）可以是描边路径，因此在全部路径里找；矢量字形只在填充路径里找。
+            candidates = paths if obj['kind'] == 'vector_glyph' else strokes
+            match = next((r for r in candidates if abs(r.x0 - rect.x0) <= tol and abs(r.y0 - rect.y0) <= tol
+                          and abs(r.x1 - rect.x1) <= tol and abs(r.y1 - rect.y1) <= tol), None)
+            if match is None:
+                lost.append(obj)
+            elif (hit := _collides(match, text)):
+                collided.append(dict(obj, with_text=hit))
+        else:
+            cx, cy = (rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2
+            index = next((i for i, (char, box) in enumerate(text) if i not in used and char == obj['char']
+                          and abs((box.x0 + box.x1) / 2 - cx) <= tol + 1 and abs((box.y0 + box.y1) / 2 - cy) <= tol + 1), None)
+            if index is None:
+                lost.append(obj)
+                continue
+            used.add(index)
+            box = text[index][1]
+            others = [item for i, item in enumerate(text) if i != index]
+            if (hit := _collides(box, others, OVERLAP_MIN_FRACTION)):
+                collided.append(dict(obj, with_text=hit))
+    return {'located': len(located), 'lost': len(lost), 'collided': len(collided),
+            'samples': (lost + collided)[:5], 'flagged': bool(lost or collided)}
+
+
+# 严格的数学字体（不含普通斜体）：整段 token 都用这类字体时，token 里的每个字母都是数学实例（如 CMMI 的 xy）。
+_STRICT_MATH_FONT = re.compile(r'cmmi|cmsy|cmex|cmbsy|math|symbol|stix|euclid|mt-?extra|msam|msbm|rsfs|eufm|eusm',
+                               re.IGNORECASE)
+# 本身就是英文单词的单个字母：以正文字体孤立出现时无法与冠词/代词区分，不能作为变量保留的证据（失败关闭）。
+_WORD_LETTERS = frozenset('aAI')
+TOKEN_GAP_EM = 0.2        # 同一行相邻字形水平间隙 > 0.2 个字号即断开 token（后端常不写空格字符）
+TOKEN_SIZE_RATIO = (0.75, 1.33)  # 相邻字形字号比超出此范围（上下标）即断开 token
+
+
+def _target_tokens(target_page) -> list[list[dict[str, Any]]]:
+    """译文页按 rawdict 行切成 token：空白/控制字符（有的后端把空格写成 \x03 字形）、明显水平间隙、
+    字号突变（上下标）、严格数学字体与非数学字体的切换都是 token 边界。
+    每个字形保留字体/字号/标志，并记下所在行号（line）以便比较同行相邻 token 的字体。"""
+    import unicodedata
+    tokens: list[list[dict[str, Any]]] = []
+    line_no = 0
+    for block in target_page.get_text('rawdict').get('blocks', []):
+        for line in block.get('lines', []):
+            line_no += 1
+            current: list[dict[str, Any]] = []
+            prev = None
+            for span in line['spans']:
+                math_font = bool(_STRICT_MATH_FONT.search(span.get('font', '') or ''))
+                for char in span['chars']:
+                    c = char['c']
+                    if not c.strip() or unicodedata.category(c)[0] in 'ZC':
+                        if current:
+                            tokens.append(current)
+                        current, prev = [], None
+                        continue
+                    rec = {'c': c, 'bbox': tuple(char['bbox']), 'font': span.get('font', ''),
+                           'size': span.get('size', 0.0), 'flags': span.get('flags', 0), 'math_font': math_font,
+                           'line': line_no}
+                    if prev is not None:
+                        gap = rec['bbox'][0] - prev['bbox'][2]
+                        ratio = rec['size'] / prev['size'] if prev['size'] else 1.0
+                        if (gap > TOKEN_GAP_EM * max(rec['size'], prev['size'])
+                                or not TOKEN_SIZE_RATIO[0] <= ratio <= TOKEN_SIZE_RATIO[1]
+                                or rec['math_font'] != prev['math_font']):
+                            tokens.append(current)
+                            current = []
+                    current.append(rec)
+                    prev = rec
+            if current:
+                tokens.append(current)
+    return tokens
+
+
+# 单字母两侧允许的非字母邻字：括号、运算符、逗号分号、数字等（如 "(p<0.001)"、"x,"、"2x"）。
+# 句点、连字符、撇号表示它是单词的一部分（"e.g."、"x-ray"、"paper's"），不算独立字母。
+_WORD_JOINERS = frozenset(".-'’‐‑")
+
+
+def _standalone_letter(core: list[dict[str, Any]], k: int) -> bool:
+    """core[k] 是字母：它所在的连续字母串长度为 1，且两侧紧邻的字符不是单词连接符。"""
+    left = core[k - 1]['c'] if k > 0 else None
+    right = core[k + 1]['c'] if k + 1 < len(core) else None
+    for n in (left, right):
+        if n is not None and (n.isalpha() or n in _WORD_JOINERS):
+            return False
+    return True
+
+
+def _target_math_instances(target_page) -> tuple[dict[str, list[dict[str, Any]]], dict[str, str]]:
+    """译文页里可作为“数学实例”的字形（逐实例证据，不再用整页字符计数）：
+    - 数学符号/希腊字母：任何位置都算（英文单词里不会出现）；其它非字母数字符号同样按出现计；
+    - 字母/数字：整段 token 都是严格数学字体（如 CMMI 的 "xy"）；或字母是独立字母
+      （token 去掉首尾标点后，所在连续字母串只有它一个，且两侧不是 . - ' 等单词连接符，
+      如 "x"、"x,"、"(p<0.001)"、"Appendix B."）；数字只在严格数学字体里算；
+    - 英文单词内部的字母（如 expressions 里的 x）一律不算。
+    a/A/I 本身是英文单词：作为候选保留，但带 ambiguous 标记，由匹配时的字体证据决定（见 page_text_layer_math_loss）。
+    返回 (char -> 候选字形列表, char -> 不算的原因)。"""
+    import unicodedata
+    from pdf_input_preflight import _is_math_char
+
+    candidates: dict[str, list[dict[str, Any]]] = {}
+    reasons: dict[str, str] = {}
+    tokens = _target_tokens(target_page)
+    for ti, token in enumerate(tokens):
+        lo, hi = 0, len(token)
+        while lo < hi and unicodedata.category(token[lo]['c'])[0] == 'P':
+            lo += 1
+        while hi > lo and unicodedata.category(token[hi - 1]['c'])[0] == 'P':
+            hi -= 1
+        core = token[lo:hi]
+        all_math_font = bool(core) and all(r['math_font'] for r in core)
+        token_font = {r['font'] for r in token}
+        neighbour_fonts = {r['font'] for tj in (ti - 1, ti + 1) if 0 <= tj < len(tokens)
+                           and tokens[tj] and tokens[tj][0]['line'] == token[0]['line'] for r in tokens[tj]}
+        for r in token:
+            c = r['c']
+            if _is_math_char(c) or not c.isalnum():
+                candidates.setdefault(c, []).append(r)
+            elif all_math_font:
+                candidates.setdefault(c, []).append(r)
+            elif c.isalpha() and any(r is q for q in core) and _standalone_letter(core, next(
+                    k for k, q in enumerate(core) if q is r)):
+                rec = dict(r)
+                if c in _WORD_LETTERS:
+                    rec['ambiguous'] = True
+                    # 同行相邻 token 的字体与它不同：它是嵌在重排英文里的原字形（后端保留原字体）。
+                    rec['embedded'] = bool(neighbour_fonts) and not (neighbour_fonts & token_font)
+                candidates.setdefault(c, []).append(rec)
+            else:
+                reasons.setdefault(c, 'only_inside_words')
+    return candidates, reasons
+
+
+def _distinct_style(obj: dict[str, Any]) -> bool:
+    from pdf_input_preflight import _MATH_FONT
+    return bool(_MATH_FONT.search(obj.get('font') or '')) or bool(obj.get('flags', 0) & (2 | 16))
+
+
+def _eligible(obj: dict[str, Any], cand: dict[str, Any]) -> bool:
+    """候选字形能否作为源页这个数学字形的保留证据。a/A/I（同时是英文单词）须有逐实例的字体证据：
+    与源字形同一字体名，且源字形有区别性样式（粗体/斜体/数学字体）或它嵌在不同字体的重排英文里；
+    否则与冠词/代词无法区分，不算保留（失败关闭）。"""
+    if not cand.get('ambiguous'):
+        return True
+    if not obj.get('font') or cand['font'] != obj['font']:
+        return False
+    return _distinct_style(obj) or cand.get('embedded', False)
+
+
+def page_text_layer_math_loss(source_doc, page_index: int, target_page) -> dict[str, Any]:
+    """文字层（页面级或页面等价 Form 自身）中文正文行里的数学字形（数学符号/希腊字母、数学或斜体字体、
+    孤立单字母，判据与预检相同）在译文页里是否仍然存在（PR #19 第 7 轮：逐实例核对，失败关闭）。
+    源页每个这类字形都须在译文页里匹配到一个同字符、且本身是“数学实例”的字形（见 _target_math_instances），
+    每个译文字形只能用一次；英文单词内部的同一字母（如 expressions 里的 x）不能顶替丢失的变量。
+    匹配不到、或只剩有歧义而无字体证据的候选（a/A/I）即判丢失（high）。
+    译文段落会重排，所以不按原坐标核对位置。"""
+    from pdf_input_preflight import inline_object_math
+
+    located = inline_object_math(source_doc, page_index, with_objects=True)['text_layer_math']
+    if not located:
+        return {'located': 0, 'lost': 0, 'samples': [], 'flagged': False, 'rule': 'per_instance_v1'}
+    candidates, reasons = _target_math_instances(target_page)
+    lost = []
+    # 有区别性样式的源字形先挑，避免它的唯一合格候选被普通字形先占用。
+    for order, obj in sorted(enumerate(located), key=lambda item: not _distinct_style(item[1])):
+        pool = candidates.get(obj['char'], [])
+        pick = next((i for i, cand in enumerate(pool) if _eligible(obj, cand)), None)
+        if pick is not None:
+            pool.pop(pick)
+            continue
+        reason = ('ambiguous_english_word_letter' if any(c.get('ambiguous') for c in pool)
+                  else reasons.get(obj['char'], 'absent'))
+        lost.append((order, dict(obj, unresolved=reason)))
+    lost = [obj for _, obj in sorted(lost, key=lambda item: item[0])]
+    return {'located': len(located), 'lost': len(lost), 'samples': lost[:5], 'flagged': bool(lost),
+            'rule': 'per_instance_v1'}
+
+
+def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
+    """中译英：基于最终 PDF 的中文残留检查（不依赖 translation blocks 自报）。"""
+    import fitz
+
+    result: dict[str, Any] = {'schema_version': 1, 'check': 'render_chinese_residue', 'target_language': 'en',
+                              'source': str(source_pdf), 'target': str(target_pdf) if target_pdf else None,
+                              'thresholds': {'page_high': ZH_PAGE_HIGH, 'page_medium': ZH_PAGE_MEDIUM,
+                                             'document_high': ZH_DOCUMENT_HIGH, 'min_source_chars': ZH_MIN_SOURCE_CHARS,
+                                             'verbatim_min_chars': ZH_VERBATIM_MIN_CHARS,
+                                             'document_min_source_chars': ZH_DOCUMENT_MIN_SOURCE_CHARS},
+                              'pages': []}
+    if not target_pdf or not Path(target_pdf).is_file():
+        result.update(status='not_evaluated', severity='ok', reason='target_pdf_missing')
+        return result
+    with fitz.open(source_pdf) as source, fitz.open(target_pdf) as target:
+        count = min(len(source), len(target))
+        result['page_count_source'], result['page_count_target'] = len(source), len(target)
+        for index in range(count):
+            row = page_chinese_residue(source[index].get_text(), target[index].get_text())
+            row['page'] = index + 1
+            row['retained_glyph_overlap'] = page_retained_glyph_overlap(target[index])
+            row['vector_glyph_loss'] = page_vector_glyph_loss(source[index], target[index])
+            row['inline_object_damage'] = page_inline_object_damage(source, index, target[index])
+            row['text_layer_math_loss'] = page_text_layer_math_loss(source, index, target[index])
+            result['pages'].append(row)
+    evaluated = [p for p in result['pages'] if p['evaluated']]
+    scope = 'pages'
+    if not evaluated:
+        # 每页都太短时改按整份文件合计评估，避免短文件整份原样返回也被判为 not_evaluated/ok。
+        whole = [p for p in result['pages'] if p['source_cjk_chars']]
+        if sum(p['source_cjk_chars'] for p in whole) >= ZH_DOCUMENT_MIN_SOURCE_CHARS:
+            evaluated, scope = whole, 'document'
+    total_source = sum(p['source_cjk_chars'] for p in evaluated)
+    total_target = sum(p['target_cjk_chars'] for p in evaluated)
+    overall = total_target / total_source if total_source else 0.0
+    high_pages = [p['page'] for p in result['pages'] if p['severity'] == 'high']
+    medium_pages = [p['page'] for p in result['pages'] if p['severity'] == 'medium']
+    short_verbatim_pages = [p['page'] for p in result['pages'] if p.get('short_page_verbatim')]
+    overlap_pages = [p['page'] for p in result['pages'] if p['retained_glyph_overlap']['flagged']]
+    vector_loss_pages = [p['page'] for p in result['pages'] if p['vector_glyph_loss']['flagged']]
+    inline_damage_pages = [p['page'] for p in result['pages'] if p['inline_object_damage']['flagged']]
+    text_layer_loss_pages = [p['page'] for p in result['pages'] if p['text_layer_math_loss']['flagged']]
+    # 源文保留字形（行内变量、公式碎片）与英文译文压叠时读者无法辨认，按失败关闭处理（high，退出码 3）。
+    # 矢量路径公式字形在成品中丢失同样失败关闭。
+    # 中文正文行内已定位的结构对象：任何一个丢失或与译文压叠都失败关闭。
+    severity = ('high' if (evaluated and overall >= ZH_DOCUMENT_HIGH) or high_pages or overlap_pages or vector_loss_pages
+                or inline_damage_pages or text_layer_loss_pages
+                else 'medium' if medium_pages else 'ok')
+    result['thresholds'].update(overlap_min_fraction=OVERLAP_MIN_FRACTION, overlap_page_min_chars=OVERLAP_PAGE_MIN_CHARS,
+                                vector_glyph_loss_min=VECTOR_GLYPH_LOSS_MIN,
+                                vector_glyph_loss_fraction=VECTOR_GLYPH_LOSS_FRACTION,
+                                inline_object_match_tolerance=INLINE_OBJECT_MATCH_TOLERANCE,
+                                inline_object_damage_min=1, text_layer_math_loss_min=1)
+    result.update(status='evaluated' if evaluated else 'not_evaluated', evaluation_scope=scope,
+                  overall_residue_ratio=round(overall, 4), high_pages=high_pages, medium_pages=medium_pages,
+                  short_page_verbatim_pages=short_verbatim_pages, retained_glyph_overlap_pages=overlap_pages,
+                  vector_glyph_loss_pages=vector_loss_pages, inline_object_damage_pages=inline_damage_pages,
+                  text_layer_math_loss_pages=text_layer_loss_pages, severity=severity, quality_fail=severity == 'high')
+    return result
+
+
 def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh') -> dict[str, Any]:
     import fitz
+
+    if target_language == 'en':
+        return check_chinese_residue(source_pdf, target_pdf)
 
     result: dict[str, Any] = {'schema_version': 1, 'check': 'render_english_residue', 'target_language': target_language,
                               'source': str(source_pdf), 'target': str(target_pdf) if target_pdf else None,
@@ -519,7 +915,7 @@ def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh')
                                              'document_high': DOCUMENT_HIGH, 'min_source_words': MIN_SOURCE_WORDS},
                               'pages': []}
     if target_language != 'zh':
-        result.update(status='not_applicable', severity='ok', reason='only_en_to_zh_supported')
+        result.update(status='not_applicable', severity='ok', reason='unsupported_target_language')
         return result
     if not target_pdf or not Path(target_pdf).is_file():
         result.update(status='not_evaluated', severity='ok', reason='target_pdf_missing')
@@ -576,8 +972,9 @@ def main(argv=None):
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--target', type=Path, required=True)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--target-language', choices=('zh', 'en'), default='zh')
     args = parser.parse_args(argv)
-    result = check_render_residue(args.source, args.target)
+    result = check_render_residue(args.source, args.target, target_language=args.target_language)
     text = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:
         args.output.write_text(text + '\n', encoding='utf-8')

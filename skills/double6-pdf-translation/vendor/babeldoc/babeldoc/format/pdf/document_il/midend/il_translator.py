@@ -74,8 +74,18 @@ def _strip_protected_passthrough_tokens(text: str) -> str:
 CONTEXT_RELEASED_IDENTITY = "context_released_source_identity"
 
 
-def classify_same_as_input_result(text: str) -> str:
+_CJK_IDEOGRAPH_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+
+def classify_same_as_input_result(text: str, lang_in: str | None = None) -> str:
+    """原样返回的段落是否属于可放行的受保护内容。
+
+    英译中（默认）只把含拉丁字母的剩余文本视为未翻译正文，行为不变；中译英源语言为中文时，
+    去掉受保护片段（占位符、URL、邮箱、引用、代码、LaTeX 命令）后仍含汉字即为未翻译中文正文。
+    """
     residue = _strip_protected_passthrough_tokens(text)
+    if residue and str(lang_in or "").lower().startswith("zh") and _CJK_IDEOGRAPH_PATTERN.search(residue):
+        return "ordinary_same_as_input"
     if not residue or not re.search(r"[A-Za-z]", residue):
         return "protected_or_passthrough"
     return "ordinary_same_as_input"
@@ -303,6 +313,25 @@ Now translate the following text:
 
 $text_to_translate"""
 )
+
+
+_CJK_IDEOGRAPH = re.compile(r"[\u2e80-\u2fdf\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+_CJK_TARGET_CODES = ("ZH", "JA", "JP", "KO", "KR", "CN", "HK", "TW")
+
+
+def _cjk_source_latin_target(config) -> bool:
+    lang_in = str(getattr(config, "lang_in", "") or "").upper()
+    lang_out = str(getattr(config, "lang_out", "") or "").upper()
+    return lang_in.startswith("ZH") and bool(lang_out) and not any(code in lang_out for code in _CJK_TARGET_CODES)
+
+
+def passes_min_text_length(paragraph, text, config) -> bool:
+    """最短长度过滤。中译英时汉字词通常只有 2–4 个字（“荣誉组”“样本量”），按字符数的
+    最短长度是为英文设计的；含汉字的短段落照常翻译，否则会作为中文残留留在英文译文里。"""
+    text = str(text or "")
+    if bypasses_min_text_length(paragraph) or len(text) >= config.min_text_length:
+        return True
+    return _cjk_source_latin_target(config) and bool(_CJK_IDEOGRAPH.search(text))
 
 
 class RichTextPlaceholder:
@@ -872,6 +901,14 @@ class ILTranslator:
         if is_placeholder_only_paragraph(paragraph):
             return None
 
+        # 中文源 → 非 CJK 目标（中译英）：不含汉字的段落（未识别为公式的公式碎片、
+        # 英文专名/参考文献、数字标签）本身已是目标语言或不可翻译，保留原字形不送翻译，
+        # 避免用拉丁字体重排公式碎片。英译中不进入此分支。
+        if _cjk_source_latin_target(self.translation_config) and not _CJK_IDEOGRAPH.search(
+            str(paragraph.unicode or "")
+        ):
+            return None
+
         # Extract original placeholder-like tokens from the raw paragraph text
         original_placeholder_tokens: dict[str, int] = {}
 
@@ -1291,7 +1328,7 @@ class ILTranslator:
             getattr(translate_input, "original_placeholder_tokens", None),
         )
         text = translate_input.unicode
-        if not bypasses_min_text_length(paragraph) and len(text) < self.translation_config.min_text_length:
+        if not passes_min_text_length(paragraph, text, self.translation_config):
             logger.debug(
                 f"Text too short to translate, skip. Text: {text}. Paragraph id: {paragraph.debug_id}."
             )
@@ -1321,7 +1358,9 @@ class ILTranslator:
             return True
         if translated_text == input_unicode:
             if llm_translate_tracker := tracker.last_llm_translate_tracker():
-                classification = classify_same_as_input_result(input_unicode)
+                classification = classify_same_as_input_result(
+                    input_unicode, getattr(getattr(self, "translation_config", None), "lang_in", None)
+                )
                 llm_translate_tracker.set_error_message(f"same_as_input:{classification}")
                 if classification != "protected_or_passthrough":
                     llm_translate_tracker.set_placeholder_full_match()

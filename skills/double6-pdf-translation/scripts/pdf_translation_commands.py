@@ -36,6 +36,10 @@ def build_qwen_cli_command(args: argparse.Namespace, context_file: Path | None =
         "--system-prompt",
         args.custom_system_prompt,
     ]
+    target_language = getattr(args, "target_language", "zh") or "zh"
+    if target_language != "zh":
+        # 中译英：显式把目标语言传给适配器；英译中命令行保持逐字不变。
+        command.extend(["--target-language", target_language])
     if context_file:
         command.extend(["--context-file", str(context_file)])
     return " ".join(shlex.quote(item) for item in command)
@@ -56,12 +60,26 @@ def _compact_policy_items(items: list[dict[str, Any]], *, limit: int = 12) -> li
         lines.append(line[:240])
     return lines
 
+_CJK_POLICY_TEXT = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+
+
+def _policy_item_matches_target(item: dict[str, Any], target_language: str = "zh") -> bool:
+    """中译英时剔除英译中方向的默认术语映射（译法/禁用译法含汉字），避免提示词要求输出中文。"""
+    if target_language != "en":
+        return True
+    values = [item.get("translation") or item.get("target") or ""]
+    forbidden = item.get("forbidden_translations")
+    if isinstance(forbidden, list):
+        values.extend(str(value) for value in forbidden)
+    return not any(_CJK_POLICY_TEXT.search(str(value)) for value in values)
+
+
 def _policy_item_is_active(item: dict[str, Any]) -> bool:
     """过滤已被评测/审计标记为缺席或停用的策略项，避免把假实体注入模型提示词。"""
     from policy_utils import policy_item_is_active
     return policy_item_is_active(item)
 
-def build_backend_system_prompt(base_prompt: str, output_dir: Path) -> str:
+def build_backend_system_prompt(base_prompt: str, output_dir: Path, target_language: str = "zh") -> str:
     sections: list[str] = []
     for name, title in [
         ("entity_map.json", "专名实体策略"),
@@ -77,7 +95,8 @@ def build_backend_system_prompt(base_prompt: str, output_dir: Path) -> str:
         raw_items = data.get("entities") if name == "entity_map.json" else data.get("terms")
         if isinstance(raw_items, list):
             lines = _compact_policy_items(
-                [item for item in raw_items if isinstance(item, dict) and _policy_item_is_active(item)]
+                [item for item in raw_items if isinstance(item, dict) and _policy_item_is_active(item)
+                 and _policy_item_matches_target(item, target_language)]
             )
             if lines:
                 sections.append(title + "：\n" + "\n".join(lines))
@@ -110,7 +129,9 @@ def build_backend_system_prompt(base_prompt: str, output_dir: Path) -> str:
         base_prompt.rstrip()
         + "\n\nDocument-level constraints from paper-translation QA artifacts:\n"
         + "\n\n".join(sections)
-        + "\nTranslate ordinary English prose completely. Preserve protected spans verbatim."
+        + ("\nTranslate all Chinese prose completely into English. Preserve protected spans verbatim."
+           if target_language == "en" else
+           "\nTranslate ordinary English prose completely. Preserve protected spans verbatim.")
     )
 
 def build_pdf2zh_command(args: argparse.Namespace, output_dir: Path, context_file: Path | None = None) -> list[str]:
@@ -123,6 +144,10 @@ def build_pdf2zh_command(args: argparse.Namespace, output_dir: Path, context_fil
         "--lang-out",
         "zh",
     ]
+    target_language = getattr(args, "target_language", "zh") or "zh"
+    if target_language != "zh":
+        # 中译英：显式声明源/目标语言；英译中保持既有命令行逐字不变（pdf2zh 默认 lang-in=en）。
+        command[-2:] = ["--lang-in", TARGET_SOURCE_LANGUAGE[target_language], "--lang-out", target_language]
     if bool(getattr(args, "backend_debug_artifacts", True)):
         command.extend(["--working-dir", str(output_dir / "_backend_working")])
     if getattr(args,'source_cache_mode',None) or bool(getattr(args, "ignore_translation_cache", False)):

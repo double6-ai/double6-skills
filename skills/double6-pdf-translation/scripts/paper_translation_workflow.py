@@ -187,6 +187,10 @@ def candidate_command(args, freeze):
                '--local-max-concurrency', '1', '--timeout', str(timeouts['timeout']), '--openai-timeout', str(timeouts['openai_timeout']),
                '--latex-render-timeout', str(timeouts['timeout']), '--latex-translate-timeout', str(timeouts['openai_timeout']),
                '--latex-compile-timeout', '45', '--hymt-compat-proxy', 'auto', '--strict-delivery-gates']
+    target_language = getattr(args, 'target_language', 'zh')
+    if target_language != 'zh':
+        # 只有非默认方向才追加参数，英译中命令行与既有回执保持逐字不变。
+        command += ['--target-language', target_language]
     if freeze.get('model_fingerprint_ref') and bound_json(freeze['model_fingerprint_ref']).get('api_contract')=='lmstudio_native_chat_v1':
         command+=['--translation-transport','lmstudio_native_chat_v1','--translator-mode','openai']
     if args.route == 'latex_verified':
@@ -209,6 +213,12 @@ def run_job(args, command, operation):
             memory_metric=limits['memory_metric'], max_total_fraction=limits['max_total_fraction'],
             env={**os.environ, **getattr(args, 'frozen_environment', {}), 'OMP_NUM_THREADS': '1', 'OPENBLAS_NUM_THREADS': '1', 'MKL_NUM_THREADS': '1'})
     result['resource_limits'] = limits
+    if result.get('status') == 'cleanup_unconfirmed':
+        # 停止后无法核实本任务进程树已全部退出：独立错误码，回执 cleanup.unverified 列出未核实对象。
+        result.setdefault('error_code', 'owned_tree_cleanup_unconfirmed')
+    elif result.get('status') == 'stopped' and result.get('stop_reason'):
+        # 资源门/监控失败的结构化停止：稳定错误码即 stop_reason（如 owned_process_monitor_unavailable）。
+        result.setdefault('error_code', result['stop_reason'])
     child = child_structured_result(result)
     if child:
         # 子任务以结构化 JSON 报告的预检/路由拒绝：上浮为 blocked，并保留错误码与发现。
@@ -752,6 +762,8 @@ def main(argv=None):
             p.add_argument('--base-url', required=True)
             p.add_argument('--smoke', action='store_true')
             p.add_argument('--cjk-font', default='Songti SC')
+            p.add_argument('--target-language', choices=('zh', 'en'), default='zh',
+                           help='目标语言：zh=英译中（默认），en=中译英')
             p.add_argument('--source-cache-context',type=Path)
             p.add_argument('--source-cache-context-sha256')
         else:
@@ -782,6 +794,11 @@ def main(argv=None):
         if args.action == '_execute-digital' and isinstance(exc, PreflightError):
             print(CHILD_RESULT_MARKER + json.dumps({k: result[k] for k in ('status', 'error_code', 'findings')}, ensure_ascii=False))
         return EXIT_BLOCKED
+    except Exception as exc:
+        # 未预期的内部错误：仍输出结构化 JSON 与回执（不再只剩 traceback），退出码 1；不吞掉错误。
+        result = unexpected_failure(args, exc)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return EXIT_ERROR
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if result['status'] == 'blocked':
         return EXIT_BLOCKED
@@ -791,6 +808,25 @@ def main(argv=None):
         result.setdefault('exit_code', EXIT_QUALITY_FAIL)
         return EXIT_QUALITY_FAIL
     return EXIT_OK if ok else EXIT_ERROR
+
+
+def unexpected_failure(args, exc):
+    import traceback
+    result = {'status': 'failed', 'error_code': 'internal_error', 'action': args.action, 'schema_version': 1,
+              'exception_type': type(exc).__name__, 'exception_message': str(exc)[:500],
+              'traceback_tail': traceback.format_exc()[-2000:]}
+    receipts = getattr(args, 'receipts', None)
+    if receipts:
+        try:
+            Path(receipts).mkdir(parents=True, exist_ok=True)
+            path = Path(receipts) / 'WORKFLOW_INTERNAL_ERROR.json'
+            if not path.exists():
+                write_new(path, result)
+            result['receipt'] = str(path)
+        except OSError as receipt_exc:
+            result['receipt_error'] = f'{type(receipt_exc).__name__}: {receipt_exc}'[:300]
+    print(result['traceback_tail'], file=sys.stderr)
+    return result
 
 
 def structured_failure(args, exc):
@@ -807,13 +843,13 @@ def structured_failure(args, exc):
     return result
 
 
-def bounded_input_preflight(input_pdf, receipts, *, require_digital):
+def bounded_input_preflight(input_pdf, receipts, *, require_digital, target_language='zh'):
     """在有界子进程中解析 PDF（内存/时限受监控）；页数超限时子进程不再逐页解析。"""
     receipt_dir = Path(receipts) / 'input-preflight'
     report_path = receipt_dir / 'input_preflight_report.json'
     receipt_dir.mkdir(parents=True, exist_ok=True)
     command = [sys.executable, str(SCRIPT_DIR / 'pdf_input_preflight.py'), '--input', str(Path(input_pdf).resolve()),
-               '--max-pages', str(DIGITAL_MAX_PAGES), '--target-language', 'zh', '--output', str(report_path)]
+               '--max-pages', str(DIGITAL_MAX_PAGES), '--target-language', target_language, '--output', str(report_path)]
     if require_digital:
         command.append('--require-digital')
     outcome = run_bounded(command, cwd=SCRIPT_DIR, receipt_dir=receipt_dir, operation='input-preflight',
@@ -833,12 +869,30 @@ def bounded_input_preflight(input_pdf, receipts, *, require_digital):
     return report
 
 
+def check_target_language_route(args):
+    """中译英只支持 candidate --route digital_pdf：LaTeX 路线的译者与 collect 的源绑定原生传输都写死译成简体中文。
+    在预检、FREEZE、doctor 与任何模型调用之前以退出码 2 拒绝，避免静默产出错误方向的译文。"""
+    target = getattr(args, 'target_language', 'zh') or 'zh'
+    if target == 'zh':
+        return
+    if args.route != 'digital_pdf' or args.action == 'collect':
+        exc = PreflightError('target_language_route_unsupported',
+                             f'--target-language {target} 只支持 candidate --route digital_pdf；'
+                             f'当前 {args.action} --route {args.route} 的译者固定译成简体中文。',
+                             target_language=target, route=args.route, action=args.action)
+        exc.result = dict(blocked_result([finding('target_language_route_unsupported', target_language=target,
+                                                  route=args.route, action=args.action)]),
+                          stage='target_language_route')
+        raise exc
+
+
 def candidate_input_preflight(args):
     """candidate/collect 在验证 FREEZE 与启动重任务前先做轻量结构化输入预检。"""
     receipts = Path(args.receipts)
     receipts.mkdir(parents=True, exist_ok=True)
     path = receipts / 'WORKFLOW_INPUT_PREFLIGHT.json'
-    report = bounded_input_preflight(args.input, receipts, require_digital=args.route == 'digital_pdf')
+    report = bounded_input_preflight(args.input, receipts, require_digital=args.route == 'digital_pdf',
+                                     target_language=getattr(args, 'target_language', 'zh'))
     if not path.exists():
         write_new(path, report)
     if report['status'] == 'blocked':
@@ -884,6 +938,7 @@ def dispatch(args):
         result.update(quality_verdict(args.output))
         write_new(args.receipts/'WORKFLOW_RESUMED_CANDIDATE.json', result)
     elif args.action in ('candidate','collect'):
+        check_target_language_route(args)
         preflight_report = candidate_input_preflight(args)
         freeze = read_json(args.freeze)
         pages = validate_freeze(freeze, args.input, args.route, args.model)

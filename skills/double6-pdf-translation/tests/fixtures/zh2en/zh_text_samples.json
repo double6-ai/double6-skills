@@ -1,0 +1,11 @@
+{
+ "source": {
+  "arxiv": "2601.14329",
+  "license": "CC0 1.0",
+  "authors": "Zhao et al.",
+  "page": 3
+ },
+ "zh": "玻色子是自旋量子数为整数倍的粒子, 其产生湮灭算符满足对易关系. 光子、磁振子、声子、极化激元和冷原子等均是现代物理研究中的常见玻色子, 光学微腔、波导腔和声子-极化激元腔等也是典型的玻色场系统. 因此玻色子在光与物质相互作用、量子计算和处理、量子通信、冷原子研究和量子超流等诸多领域都有广泛应用. 由于玻色系统不受泡利不相容原理的限制, 其还能在单格点处出现费米系统中被禁止存在的单模压缩(single-mode-squeezing, SMS) 项. QBS 的普适哈密顿量有如下表达:",
+ "en": "Bosons are particles with integer spin, whose creation and annihilation operators obey the commutation relation. Photons, magnons, phonons, polaritons and cold atoms are common bosons in modern physics, and optical microcavities, waveguide cavities and phonon-polariton cavities are typical bosonic field systems. Bosons are therefore widely used in light-matter interaction, quantum computing and processing, quantum communication, cold-atom research and quantum superfluidity. Because bosonic systems are not constrained by the Pauli exclusion principle, they can host single-mode squeezing (SMS) terms on a single site, which are forbidden in fermionic systems. The general Hamiltonian of QBS is:",
+ "en_note": "replay translation written for this repository, not model output"
+}
