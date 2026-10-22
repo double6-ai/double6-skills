@@ -61,7 +61,7 @@ CODES = {
     'ocr_skew_unsupported': '扫描页倾斜超过 1°；当前不做纠偏，拒绝以免覆盖不准。',
     'ocr_vertical_text_unsupported': '检测到竖排文字；当前只支持横排。',
     'ocr_table_unsupported': '扫描页含表格（框线或多列对齐的表格行）；表格结构无法可靠重建，拒绝。',
-    'ocr_formula_unsupported': '扫描页含公式或数学符号密集的行；OCR 无法保证公式完整，拒绝而不是删除或改写公式。',
+    'ocr_formula_unsupported': '扫描页含公式或数学符号密集的行，或图像里有上标/下标/叠排分式（details.evidence=image_geometry）；OCR 无法保证公式完整，在覆盖原图之前拒绝，而不是删除或改写公式。',
     'ocr_low_confidence': '识别置信度不足（页均值过低或存在多行不确定文字）。',
     'ocr_text_over_graphics_unsupported': '文字压在图形、印章或非均匀底色上；无法干净覆盖原文，拒绝。',
     'ocr_no_reliable_text': '扫描页没有识别出可信文字。',
@@ -268,7 +268,8 @@ def group_lines(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
                        'mean_conf': round(statistics.fmean(confs), 2) if confs else 0.0,
                        'words': len(members), 'gaps': gaps, 'min_readable_word_conf': min_readable_conf(members),
                        'readable_chars': len(_CJK.findall(text)) + len(_LATIN.findall(text)),
-                       'word_boxes': [[w['left'], w['top'], w['left'] + w['width'], w['top'] + w['height']] for w in members]})
+                       'word_boxes': [[w['left'], w['top'], w['left'] + w['width'], w['top'] + w['height']] for w in members],
+                       'word_texts': [w['text'] for w in members]})
     return result
 
 
@@ -328,6 +329,7 @@ def refine_fragmented_rows(lines: list[dict[str, Any]], image_path: Path, *, bin
                           'min_readable_word_conf': min_readable_conf(words),
                           'readable_chars': len(_CJK.findall(text)) + len(_LATIN.findall(text)),
                           'word_boxes': [[w['left'], w['top'], w['left'] + w['width'], w['top'] + w['height']] for w in words],
+                          'word_texts': [w['text'] for w in words],
                           'refined_from': [l['text'] for l in row]}
         log[-1]['accepted'] = merged is not None
         result.extend([merged] if merged else row)
@@ -362,6 +364,7 @@ def _adopt(line: dict[str, Any], result: dict[str, Any]) -> None:
                  'gaps': [b['left'] - (a['left'] + a['width']) for a, b in zip(words, words[1:])],
                  'readable_chars': len(_CJK.findall(text)) + len(_LATIN.findall(text)),
                  'word_boxes': [[w['left'], w['top'], w['left'] + w['width'], w['top'] + w['height']] for w in words],
+                 'word_texts': [w['text'] for w in words],
                  'min_readable_word_conf': result['weakest']})
 
 
@@ -444,6 +447,212 @@ def is_math_line(text: str) -> bool:
     if _EQ_NUMBER.search(text) and chars <= 40 and (symbols >= 1 or len(_LATIN_WORD.findall(text)) <= 2):
         return True
     return False
+
+
+# ---------------------------------------------------------------- 上下标 / 叠排分式（图像几何证据，不依赖 OCR 文字）
+# 复用思路：电子路线 pdf_input_preflight._math_like_glyphs 以“字号比超出 0.75–1.33 + 偏离同行基线”认定数学字形；
+# 扫描页没有字体信息，改在渲染图上做连通域：同一列（横向重叠）的连通域合并为字形簇，按本行基线与 x 高度
+# 量化每个簇的上下位置。上标簇底边明显高于基线、顶边高过 x 高度；下标簇顶边低于中线、底边低于基线。
+# 只有当 OCR 在同一个词里确实读出了天然处于该位置的标点（引号/撇号/*/° 抬高，逗号/分号压低）时才算得到解释；
+# 其它（读成 '?'、数字、被丢掉、落在词框之外）一律视为上下标证据并整页拒绝。
+SCRIPT_RAISED_BOTTOM = 0.35       # 簇底边高于基线 ≥ 0.35 x 高
+SCRIPT_RAISED_TOP = 1.15          # 且簇顶边高于基线 ≥ 1.15 x 高（越过 x 高线）
+SCRIPT_LOWERED_TOP = 0.75         # 下标：簇顶边高于基线 ≤ 0.75 x 高（低于 x 高线）
+SCRIPT_LOWERED_BOTTOM = -0.25     # 且簇底边低于基线 ≥ 0.25 x 高
+SCRIPT_MIN_HEIGHT = 0.45          # 簇高 ≥ 0.45 x 高（排除 i 点之外的小噪点、句点）
+SCRIPT_MIN_WIDTH_PX = 3           # 簇宽 ≥ 3 px 且 ≥ 0.15 x 高：排除扫描发丝线（300 dpi 下真实字形不止 2 px 宽）
+SCRIPT_MIN_WIDTH = 0.15
+# 含汉字的行：“x 高”取的是汉字高度，上下标字形相对汉字很小；按小字形处理（高度 0.2–0.6 汉字高），
+# 汉字自身的分离部件（如上下结构的上半部）通常 > 0.6，不计入。
+CJK_SCRIPT_RAISED_BOTTOM = 0.35
+CJK_SCRIPT_LOWERED_TOP = 0.5
+CJK_SCRIPT_LOWERED_BOTTOM = -0.15
+CJK_SCRIPT_HEIGHT = (0.2, 0.6)
+RAISED_MARKS = {"'": 1, '"': 2, '\u2018': 1, '\u2019': 1, '\u201c': 2, '\u201d': 2, '`': 1, '\u00b4': 1, '\u2032': 1,
+                '\u2033': 2, '*': 1, '\u00b0': 1, '^': 1, '\u00ba': 1, '\u00aa': 1}
+LOWERED_MARKS = {',': 1, ';': 1, '\uff0c': 1, '\uff1b': 1, '\u3001': 1}
+# 标点能“解释”抬高/压低字形的形状上限（x 高为单位）：引号/撇号/星号是小而窄的记号；逗号/分号的顶端贴近基线。
+# 被误读成 ' 或 ° 的上标数字（高 ≈ 0.85–0.95）、被误读成 , ; 的下标（顶端 ≈ 0.55–0.6）因此不会被解释掉。
+MARK_MAX_HEIGHT = 0.72
+MARK_MAX_WIDTH = 0.8               # 打字机字体的双引号两撇常连成一个簇
+COMMA_MAX_TOP = 0.5
+MARK_SEARCH = 2.0                 # 词框外 2 x 高内的记号归到最近的词（tesseract 词框常不含尾随引号）
+FRACTION_BAR_MAX_THICK = 0.18     # 分数线：厚度 ≤ 0.18 x 高
+FRACTION_BAR_MIN_LEN = 0.9        # 长度 ≥ 0.9 x 高、≤ 8 x 高（更长的是框线/下划线，另有门）
+FRACTION_BAR_MAX_LEN = 8.0
+FRACTION_GAP = 0.45               # 分数线与上下字形的竖向间隙 ≤ 0.45 x 高
+
+
+def _ink_threshold(gray) -> int:
+    import numpy as np
+    return int(min(RULE_INK_THRESHOLD, int(np.percentile(gray, 90)) - 60))
+
+
+def _components(ink, offset=(0, 0), min_area: int = 4) -> list[list[int]]:
+    import cv2
+    n, _labels, stats, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    out = []
+    for i in range(1, n):
+        x, y, w, h, area = (int(v) for v in stats[i])
+        if area >= min_area:
+            out.append([x + offset[0], y + offset[1], x + w + offset[0], y + h + offset[1], area])
+    return out
+
+
+def _clusters(comps: list[list[int]]) -> list[dict[str, Any]]:
+    """横向重叠（> 较窄者宽度 50%）的连通域合并成一个字形簇（i/j 的点、重音、汉字的分离笔画并入同一簇）。"""
+    clusters: list[dict[str, Any]] = []
+    for c in sorted(comps):
+        for k in clusters:
+            overlap = min(k['box'][2], c[2]) - max(k['box'][0], c[0])
+            if overlap > 0.5 * min(k['box'][2] - k['box'][0], c[2] - c[0]):
+                k['box'] = [min(k['box'][0], c[0]), min(k['box'][1], c[1]), max(k['box'][2], c[2]), max(k['box'][3], c[3])]
+                k['parts'].append(c)
+                break
+        else:
+            clusters.append({'box': c[:4], 'parts': [c]})
+    return clusters
+
+
+def _mark_count(text: str, marks: dict[str, int]) -> int:
+    return sum(marks.get(ch, 0) for ch in text)
+
+
+def _mark_zone(word: str, kind: str) -> str:
+    """能解释压低字形的逗号/分号不能夹在两个字母数字之间（“H,O”“x,y” 中间的逗号不算，“1,”“word,(1947)” 算）；
+    抬高记号（引号、撇号、*、°）整词都算（don't、’s）。"""
+    if kind == 'raised':
+        return word
+    def alnum(i: int) -> bool:
+        return 0 <= i < len(word) and word[i].isalnum()
+    return ''.join(ch for i, ch in enumerate(word) if ch in LOWERED_MARKS and not (alnum(i - 1) and alnum(i + 1)))
+
+
+def line_script_evidence(gray, line: dict[str, Any], threshold: int) -> dict[str, Any]:
+    """一行的上下标几何证据。返回 {'baseline','x_height','suspects':[...]}；suspects 非空即该行含无法解释的上下标字形。"""
+    import numpy as np
+    x0, y0, x1, y1 = line['bbox_px']
+    h = max(1, y1 - y0)
+    margin = int(0.25 * h)
+    H, W = gray.shape
+    cx0, cy0, cx1, cy1 = max(0, x0 - margin), max(0, y0 - margin), min(W, x1 + margin), min(H, y1 + margin)
+    ink = (gray[cy0:cy1, cx0:cx1] < threshold).astype(np.uint8)
+    comps = [c for c in _components(ink, (cx0, cy0))
+             if y0 - 0.05 * h <= (c[1] + c[3]) / 2 <= y1 + 0.05 * h]   # 中心在本行内：不吸收上下相邻行
+    clusters = _clusters(comps)
+    if len(clusters) < 3:
+        return {'baseline': None, 'x_height': None, 'suspects': [], 'cjk_stroke_like_skipped': 0}
+    baseline = statistics.median(k['box'][3] for k in clusters)
+    near = [k['box'][3] - k['box'][1] for k in clusters if abs(k['box'][3] - baseline) <= 0.08 * h]
+    xh = float(np.percentile(near, 30)) if near else 0.5 * h
+    xh = max(xh, 1.0)
+    boxes, texts = line.get('word_boxes') or [], line.get('word_texts') or []
+    raised_by_word: dict[int, list[dict[str, Any]]] = {}
+    lowered_by_word: dict[int, list[dict[str, Any]]] = {}
+    suspects = []
+    cjk = bool(_CJK.search(line.get('text', '')))
+    skipped_cjk = 0
+    for k in clusters:
+        bx0, by0, bx1, by1 = k['box']
+        if bx1 - bx0 < max(SCRIPT_MIN_WIDTH_PX, SCRIPT_MIN_WIDTH * xh):
+            continue
+        centre = (bx0 + bx1) / 2
+        height = (by1 - by0) / xh
+        near = sorted((max(b[0] - centre, centre - b[2], 0), i) for i, b in enumerate(boxes) if i < len(texts))
+        near = [(d, i) for d, i in near if d <= (0.5 if cjk else MARK_SEARCH) * xh]
+        local = baseline
+        if cjk:
+            if not CJK_SCRIPT_HEIGHT[0] <= height <= CJK_SCRIPT_HEIGHT[1]:
+                continue
+            if not near or _CJK.search(texts[near[0][1]]):
+                # 汉字行：分离的笔画（省、学、心的上部点画）与小号上标在几何上无法区分，且汉字 OCR 词框常有偏移。
+                # 只检查落在拉丁/数字词旁（0.5 字高内）的小字形；靠近汉字词或不在任何词旁的视为汉字笔画（已知局限，见 ocr-route.md）。
+                skipped_cjk += 1
+                continue
+            # 汉字行里的拉丁/数字词：基线取该词自身其它字形的底边中位数（汉字字面常比拉丁基线更低）
+            wb = boxes[near[0][1]]
+            own = [o['box'][3] for o in clusters if o is not k and wb[0] - 0.1 * xh <= (o['box'][0] + o['box'][2]) / 2 <= wb[2] + 0.1 * xh]
+            if own:
+                local = statistics.median(own)
+        bottom = (local - by1) / xh; top = (local - by0) / xh
+        if cjk:
+            raised = bottom >= CJK_SCRIPT_RAISED_BOTTOM
+            lowered = top <= CJK_SCRIPT_LOWERED_TOP and bottom <= CJK_SCRIPT_LOWERED_BOTTOM
+        else:
+            raised = bottom >= SCRIPT_RAISED_BOTTOM and top >= SCRIPT_RAISED_TOP and height >= SCRIPT_MIN_HEIGHT
+            lowered = top <= SCRIPT_LOWERED_TOP and bottom <= SCRIPT_LOWERED_BOTTOM and height >= SCRIPT_MIN_HEIGHT
+        if not (raised or lowered):
+            continue
+        item = {'kind': 'raised' if raised else 'lowered', 'box_px': [bx0, by0, bx1, by1],
+                'bottom_over_baseline_xh': round(bottom, 2), 'top_over_baseline_xh': round(top, 2), 'height_xh': round(height, 2)}
+        kind = 'raised' if raised else 'lowered'
+        marks = RAISED_MARKS if raised else LOWERED_MARKS
+        if not near:
+            item['reason'] = 'outside_any_ocr_word'
+            suspects.append(item)
+            continue
+        with_marks = [i for d, i in near if _mark_count(_mark_zone(texts[i], kind), marks)]
+        owner = with_marks[0] if with_marks else near[0][1]
+        item['word'] = texts[owner]
+        if raised:
+            mark_shaped = height <= MARK_MAX_HEIGHT and (bx1 - bx0) / xh <= MARK_MAX_WIDTH
+        else:
+            mark_shaped = top <= COMMA_MAX_TOP and (bx1 - bx0) / xh <= MARK_MAX_WIDTH
+        if not mark_shaped:
+            item['reason'] = 'glyph_too_large_for_punctuation'
+            suspects.append(item)
+            continue
+        (raised_by_word if raised else lowered_by_word).setdefault(owner, []).append(item)
+    for table, marks, kind in ((raised_by_word, RAISED_MARKS, 'raised'), (lowered_by_word, LOWERED_MARKS, 'lowered')):
+        for owner, items in table.items():
+            word = texts[owner]
+            available = _mark_count(_mark_zone(word, kind), marks)
+            alnum = re.sub(r'[\W_]', '', word)
+            if kind == 'raised' and available and alnum and len(alnum) <= 2 and not _CJK.search(word):
+                # “x'” “2'” “1‘”：单个变量/数字旁的小号抬高记号可能是被误读的上标，不当作解释（宁可拒绝）。
+                # 压低一侧不需要：逗号形状（顶端 ≤ COMMA_MAX_TOP）已与下标（顶端 ≈ 0.55–0.6）分开。
+                for item in items:
+                    item['reason'] = 'mark_after_short_token_ambiguous'
+                suspects.extend(items)
+                continue
+            if len(items) > available:
+                for item in items:
+                    item['reason'] = 'not_explained_by_ocr_punctuation'
+                suspects.extend(items)
+    return {'baseline': round(baseline, 1), 'x_height': round(xh, 1), 'suspects': suspects, 'cjk_stroke_like_skipped': skipped_cjk}
+
+
+def fraction_bar_evidence(gray, lines: list[dict[str, Any]], x_height: float, threshold: int) -> list[dict[str, Any]]:
+    """叠排分式：短横线（不是表格框线/下划线），正上方与正下方紧贴处都有字形。"""
+    import numpy as np
+    if not lines or x_height <= 0:
+        return []
+    x0 = max(0, min(l['bbox_px'][0] for l in lines) - int(2 * x_height)); x1 = max(l['bbox_px'][2] for l in lines) + int(2 * x_height)
+    y0 = max(0, min(l['bbox_px'][1] for l in lines) - int(2 * x_height)); y1 = max(l['bbox_px'][3] for l in lines) + int(2 * x_height)
+    ink = (gray[y0:y1, x0:x1] < threshold).astype(np.uint8)
+    comps = _components(ink, (x0, y0))
+    found = []
+    for c in comps:
+        w, h = c[2] - c[0], c[3] - c[1]
+        if not (h <= max(2.0, FRACTION_BAR_MAX_THICK * x_height) and FRACTION_BAR_MIN_LEN * x_height <= w <= FRACTION_BAR_MAX_LEN * x_height):
+            continue
+        if c[4] < 0.6 * w * h:          # 实心细横线
+            continue
+        def glyphs(side):
+            out = []
+            for d in comps:
+                if d is c or (d[3] - d[1]) < 0.4 * x_height:
+                    continue
+                if d[0] < c[0] - 0.2 * x_height or d[2] > c[2] + 0.2 * x_height:
+                    continue
+                gap = (c[1] - d[3]) if side == 'above' else (d[1] - c[3])
+                if 0 <= gap <= FRACTION_GAP * x_height:
+                    out.append(d[:4])
+            return out
+        above, below = glyphs('above'), glyphs('below')
+        if above and below:
+            found.append({'bar_px': c[:4], 'above_px': above[:3], 'below_px': below[:3]})
+    return found
 
 
 RULE_INK_THRESHOLD = 160         # 框线二值化阈值（灰度 < 160 视为墨）
@@ -667,6 +876,33 @@ def analyse_scanned_page(page, index: int, *, binary: str, lang: str, lang_key: 
                          minimum_mean_conf=PAGE_MEAN_CONF[lang_key], uncertain_lines=len(uncertain),
                          uncertain_char_ratio=round(uncertain_chars / readable_total, 4),
                          samples=[l['text'][:60] for l in uncertain[:5]]))
+    # 上下标 / 叠排分式：在覆盖原图之前按图像几何检查（OCR 把 x² 读成 x? 时文字里已没有数学证据）
+    gray_np = np.asarray(gray_img)
+    ink_threshold = _ink_threshold(gray_np)
+    script_lines = []
+    x_heights = []
+    cjk_skipped = 0
+    for l in text_lines + uncertain:
+        ev = line_script_evidence(gray_np, l, ink_threshold)
+        cjk_skipped += ev['cjk_stroke_like_skipped']
+        if _CJK.search(l['text']):
+            ev = dict(ev, x_height=None)        # 汉字行的“x 高”是字高，不参与分数线尺度
+        if ev['x_height']:
+            x_heights.append(ev['x_height'])
+        if ev['suspects']:
+            script_lines.append({'text': l['text'][:80], 'bbox_px': l['bbox_px'], 'baseline_px': ev['baseline'],
+                                 'x_height_px': ev['x_height'], 'suspects': ev['suspects'][:5]})
+    latin_lines = [l for l in text_lines + uncertain if not _CJK.search(l['text'])]
+    bars = fraction_bar_evidence(gray_np, latin_lines, statistics.median(x_heights) if x_heights else 0.0, ink_threshold) \
+        if latin_lines else []
+    record['script_check'] = {'ink_threshold': ink_threshold, 'lines_checked': len(text_lines + uncertain),
+                              'script_lines': len(script_lines), 'fraction_bars': len(bars),
+                              'cjk_stroke_like_skipped': cjk_skipped}
+    if script_lines or bars:
+        # 复用公式拒绝码（错误码集合保持稳定）；details.evidence 区分图像几何证据与文字证据
+        f.append(finding('ocr_formula_unsupported', page=page_no, evidence='image_geometry', kind='math_script_or_stacked_fraction',
+                         script_lines=len(script_lines), fraction_bars=len(bars), samples=script_lines[:5],
+                         fraction_samples=bars[:3]))
     if f:
         record['line_details'] = [{k: l[k] for k in ('key', 'bbox_px', 'text', 'mean_conf', 'class', 'math')} for l in lines]
         return record
