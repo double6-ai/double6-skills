@@ -1,10 +1,10 @@
 # 宿主集成手册（Windows / 受限宿主）
 
-本手册面向在 WorkBuddy、TRAE 等宿主中驱动 Double6 工作台制作器的调用方，沉淀 Windows 实测踩坑经验。流程语义与边界以 `SKILL.md` 为准；本文只覆盖操作层面的"怎么做、别怎么做"。
+本手册面向在 WorkBuddy、TRAE 等宿主中驱动 Double6 工作台制作器的调用方，沉淀 Windows 实测踩坑经验。流程语义与边界以 `references/runtime-contract.md` 为准；本文只覆盖操作层面的"怎么做、别怎么做"。
 
 ## 1. CLI 操作
 
-流程语义、事件字段和 SHA 读取以 `SKILL.md` 为准。这里只写命令怎么敲。
+流程语义、事件字段和 SHA 读取以 `references/runtime-contract.md` 为准。这里只写命令怎么敲。
 
 ### 最小命令序列
 
@@ -103,11 +103,11 @@ stderr 中的 `SAFE_DELETE_FAIL_CLOSED` 是 Windows 沙箱无回收站导致的�
 - **浏览器自动发现**：依次查找 `DOUBLE6_CHROMIUM_EXECUTABLE`、系统 Chrome/Chromium（macOS `/Applications`、Windows `Program Files`/`LOCALAPPDATA`、Linux PATH 中的 google-chrome/chromium），以及 Playwright 缓存（`PLAYWRIGHT_BROWSERS_PATH`、`~/.cache/ms-playwright`、`~/Library/Caches/ms-playwright`、`%LOCALAPPDATA%\ms-playwright`，兼容 chrome-linux64 / chrome-mac-arm64 / chrome-win64 等新目录）。
 - **优先用系统 Chrome**：通过 `DOUBLE6_CHROMIUM_EXECUTABLE` 或 Playwright 的 `executable_path` 指向已安装的 Chrome.exe，不要先 `playwright install` 下载二进制。Windows 下 CLI 预检会自动尝试常见 Chrome 安装路径，先跑 `evaluate --preflight` 看指引。
 - **禁用 `networkidle`**：SPA 页面长连接/轮询会让它 30 秒超时。统一用 `domcontentloaded` + 显式等待（等待具体选择器或状态出现）。
-- **验证数据链路，不模拟完整答题**：答题 UI 自动化（自绘键盘、输入框焦点）太易碎。可靠做法是在页面内用 `page.evaluate` 直接执行与 `persist` 相同的写入逻辑，然后刷新页面、断言数据已落盘并正确回渲染。存储故障验收仍须按 `SKILL.md` 要求先填全部必填字段再逐字段比对。
+- **验证数据链路，不模拟完整答题**：答题 UI 自动化（自绘键盘、输入框焦点）太易碎。可靠做法是在页面内用 `page.evaluate` 直接执行与 `persist` 相同的写入逻辑，然后刷新页面、断言数据已落盘并正确回渲染。存储故障验收仍须先填全部必填字段，再逐字段比对恢复结果。
 
 ## 3. 本机服务器扩展守则（local deploy）
 
-用户主动提出"本机部署"（磁盘持久化、局域网访问）时直接执行，不要求额外的授权前置；它与"公开发布（云托管）"是两个方向，都超出单文件交付本身。实施时记住：
+用户主动提出"本机部署"（磁盘持久化、仅本机访问）时直接执行，不要求额外授权；开放局域网让其他设备访问、上传或云托管属于把数据送出本机，必须另行授权。口径与 `references/runtime-contract.md`「发布与授权」一致：授权口径：本机安装（打包、覆盖本机 skill 安装目录、本机部署、重启本机服务）不需要另行授权；把数据或页面送出本机（SMB/网盘上传、云托管、公开发布、共享晋升、开放给其他设备访问、发送给他人）必须由用户另行授权。两者都超出单文件交付本身。实施时记住：
 
 - **双写改造范围很小**：交付的 `index.html` 存储高度集中——单一 `STORAGE_KEY`、仅 3 处 localStorage 调用点。localStorage → 本地服务器的双写只需在这 3 处动手，不要去散落处补。
 - **"换一批"必须用时间戳种子**：用日期做种子时同一天点几次结果都一样，用户会以为坏了。用 `Date.now()` 级别的时间戳或递增计数。

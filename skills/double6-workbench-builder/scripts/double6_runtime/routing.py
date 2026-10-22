@@ -28,6 +28,24 @@ BOUNDARY_DECISION_IDS = frozenset({
     "privacy-boundary", "content-source-boundary", "participant-boundary", "external-action-boundary",
 })
 CONTENT_SOURCE_DOMAINS = {"education-learning", "teaching-classroom", "exam-preparation"}
+SENSITIVE_RISKS = {"child-data", "customer-data", "financial-data", "health-data", "sensitive-data", "account-data"}
+SELF_USE_HEALTH_DOMAINS = {"fitness-nutrition"}
+# 出现这些词说明数据涉及他人，自用健康例外不适用，仍走原有授权与合成默认。
+OTHER_PERSON_MARKERS = (
+    "孩子", "儿童", "学生", "宝宝", "客户", "会员", "学员", "病人", "患者", "员工", "家人", "家里", "老婆", "老公",
+    "妻子", "丈夫", "父母", "爸爸", "妈妈", "老人", "朋友", "同事", "别人", "他人", "全家", "我们",
+)
+
+
+def is_self_use_health(text: str, route: dict[str, Any]) -> bool:
+    """自己记自己的减脂/训练：数据属于本人且只存本机，不需要另行授权，也不推荐合成数据。"""
+    domains = {route.get("primary_domain"), *route.get("auxiliary_domains", [])}
+    risks = set(route.get("risk_pack_ids", [])) & SENSITIVE_RISKS
+    if route.get("primary_domain") not in SELF_USE_HEALTH_DOMAINS or not domains <= SELF_USE_HEALTH_DOMAINS:
+        return False
+    if not risks <= {"health-data"}:
+        return False
+    return not any(marker in str(text or "") for marker in OTHER_PERSON_MARKERS)
 REAL_DATA_MARKERS = {
     "真实数据", "真实学生", "学生名单", "客户名单", "导入客户", "员工资料", "候选人简历",
     "我的账单", "银行流水", "发票数据", "工资数据", "薪酬数据", "产检报告", "检查报告",
@@ -258,8 +276,9 @@ def critical_decisions(text: str, route: dict[str, Any]) -> list[dict[str, Any]]
             allowed_adjustments=["当前最卡的内容", "优先目标", "明确不需要的学习方向"],
         ))
     if (
-        risks & {"child-data", "customer-data", "financial-data", "health-data", "sensitive-data", "account-data"}
+        risks & SENSITIVE_RISKS
         and any(marker.lower() in text.lower() for marker in REAL_DATA_MARKERS)
+        and not is_self_use_health(text, route)
     ):
         life_copy = any(trigger in text for trigger in LIFE_DASHBOARD_TRIGGERS)
         decisions.append(_decision(
@@ -348,7 +367,12 @@ def safe_defaults(text: str, route: dict[str, Any]) -> list[dict[str, Any]]:
     domains = set([route.get("primary_domain"), *route.get("auxiliary_domains", [])])
     risks = set(route.get("risk_pack_ids", []))
     defaults: list[dict[str, Any]] = []
-    if risks & {"child-data", "customer-data", "financial-data", "health-data", "sensitive-data", "account-data"}:
+    if is_self_use_health(text, route):
+        defaults.append({
+            "decision_id": "privacy-boundary", "value": "self_owned_local_only",
+            "reason": "本人自用的健康记录：数据属于用户自己且只存当前设备，无需另行授权，也不改用合成数据",
+        })
+    elif risks & SENSITIVE_RISKS:
         defaults.append({
             "decision_id": "privacy-boundary", "value": "synthetic_or_redacted",
             "reason": "用户未明确要求录入真实敏感数据，默认使用合成或脱敏数据",

@@ -58,7 +58,7 @@
       "required": ["storage", "sensitive_data", "export_import"],
       "properties": {
         "storage": {"const": "local_only"},
-        "sensitive_data": {"type": "string", "description": "须等于 privacy-boundary 决策或安全默认值，通常为 synthetic_or_redacted"},
+        "sensitive_data": {"type": "string", "description": "须等于 privacy-boundary 决策或安全默认值，通常为 synthetic_or_redacted；本人自用减脂/训练记录为 self_owned_local_only"},
         "export_import": {"const": true},
         "content_source": {"type": "object", "required": ["mode"], "properties": {"mode": {"type": "string"}}}
       }

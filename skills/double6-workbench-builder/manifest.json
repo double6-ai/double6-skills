@@ -1,7 +1,7 @@
 {
   "skill_id": "double6-workbench-builder",
   "name": "double6-workbench-builder",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "status": "source_candidate",
   "workflow_mode": "public_runner_or_workflow",
   "skill_decision": "approved_public_shared",
