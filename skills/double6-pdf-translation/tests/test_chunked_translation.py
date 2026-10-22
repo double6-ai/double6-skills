@@ -359,17 +359,21 @@ class FakeChunkRunner:
 
     def __call__(self, wf_module, args, freeze_path, chunk, attempt, context_path):
         self.calls.append(chunk['id'])
+        self.attempt = attempt
         freeze = json.loads(Path(freeze_path).read_text())
         assert freeze['input'] == chunk['source_ref'] and freeze['pages'] == list(range(1, chunk['pages'] + 1))
         assert freeze['document_term_context_ref'] == wf.ref(context_path) and 'chunking_contract' not in freeze
+        context = json.loads(Path(context_path).read_text())
+        assert context['chunk'] == {k: chunk[k] for k in ('id', 'start', 'end')}
+        assert context['reference_region_open_at_start'] is (chunk.get('reference_region_open_at_start') is True)
         outcome = self.outcomes.get(chunk['id'])
         if callable(outcome):
             outcome = outcome(chunk)
         if outcome:
             return outcome
         out, receipts = attempt / 'out', attempt / 'receipts'
-        out.mkdir(parents=True)
-        receipts.mkdir(parents=True)
+        out.mkdir(parents=True, exist_ok=True)
+        receipts.mkdir(parents=True, exist_ok=True)
         mono = out / f"{chunk['id']}.no_watermark.zh.mono.pdf"
         shutil.copyfile(chunk['source_ref']['path'], mono)
         status = self.statuses.get(chunk['id'], 'pass')
@@ -586,3 +590,168 @@ def test_classify_chunk_outcomes():
     assert cw.classify({'status': 'blocked', 'error_code': 'ocr_table_unsupported'}, c) == 'blocked'
     assert cw.classify({'status': 'cleanup_unconfirmed', 'error_code': 'owned_tree_cleanup_unconfirmed'}, c) == 'cleanup_unconfirmed'
     assert cw.classify({'status': 'failed', 'error_code': 'internal_error'}, c) == 'transient'
+    # 墙钟跳变下既有启动身份核验抛错：瞬时（重试一次）；同一错误码的其它合同问题仍是确定拦截
+    race = dict(wf.blocked_result([wf.finding('input_or_contract_invalid', 'ValueError: bounded launch PID was reused')]),
+                error_code='input_or_contract_invalid')
+    assert cw.classify(race, c) == 'transient'
+    other = dict(wf.blocked_result([wf.finding('input_or_contract_invalid', 'ValueError: frozen input identity changed')]),
+                 error_code='input_or_contract_invalid')
+    assert cw.classify(other, c) == 'blocked'
+
+
+# ------------------------------------------------------------------ rc.9 第 2 轮（真实长文档运行发现）
+def _backend_manifest(attempt, errors):
+    (attempt / 'out').mkdir(parents=True, exist_ok=True)
+    (attempt / 'out' / 'render_manifest.json').write_text(json.dumps({'status': 'error', 'errors': errors}))
+
+
+def test_backend_internal_timeout_bisects_like_a_task_timeout(tmp_path, long_doc, monkeypatch, capsys):
+    # 实测：后端内部 110 s 超时后以 owned_descendants_after_command 结束，原先按瞬时失败重试（靠缓存过关）。
+    pdf, freeze_path = long_doc
+    runner = FakeChunkRunner()
+
+    def timeout(chunk):
+        if chunk['pages'] > 2:
+            _backend_manifest(runner.attempt, [{'error_type': 'timeout', 'timeout_seconds': 110}])
+            return {'status': 'stopped', 'stop_reason': 'owned_descendants_after_command', 'elapsed_seconds': 111.0}
+        return None
+    runner.outcomes = {'c002': timeout}
+    monkeypatch.setattr(cw, 'CHUNK_RUNNER', runner)
+    code, result = _main(chunked_args(tmp_path, pdf, freeze_path), capsys)
+    assert code == 0 and runner.calls == ['c001', 'c002', 'c002a', 'c002b', 'c003']
+    state = json.loads((tmp_path / 'rc' / cw.STATE_NAME).read_text())
+    first = state['chunk_table']['c002']['attempts'][0]
+    assert first['classification'] == 'resource_stop' and first['stop_reason'] == 'backend_timeout'
+    assert state['chunk_table']['c002']['split_into'] == ['c002a', 'c002b']
+
+
+def test_backend_nonzero_exit_without_timeout_is_still_only_retried(tmp_path, long_doc, monkeypatch, capsys):
+    pdf, freeze_path = long_doc
+    runner = FakeChunkRunner()
+
+    def crash(chunk):
+        _backend_manifest(runner.attempt, [{'error_type': 'nonzero_exit', 'returncode': 2}])
+        return {'status': 'stopped', 'stop_reason': 'owned_descendants_after_command'}
+    runner.outcomes = {'c002': crash}
+    monkeypatch.setattr(cw, 'CHUNK_RUNNER', runner)
+    code, result = _main(chunked_args(tmp_path, pdf, freeze_path), capsys)
+    assert code == wf.EXIT_BLOCKED and runner.calls == ['c001', 'c002', 'c002', 'c003']
+    state = json.loads((tmp_path / 'rc' / cw.STATE_NAME).read_text())
+    assert [a['classification'] for a in state['chunk_table']['c002']['attempts']] == ['transient', 'transient']
+    assert 'split_into' not in state['chunk_table']['c002']
+
+
+def _leave_live_tree(attempt):
+    """真实遗留：有界启动的任务树在尝试“结束”后仍存活（实测：墙钟跳变使身份核验抛错、未回收）。"""
+    receipts = attempt / 'receipts' / 'candidate'
+    receipts.mkdir(parents=True, exist_ok=True)
+    nonce = 'chunk-guard-' + os.urandom(6).hex()
+    env = dict(os.environ, PAPER_TRANSLATION_BOUNDED_OWNERS=nonce)
+    script = ('import subprocess,sys,time; subprocess.Popen([sys.executable,"-c","import time; time.sleep(120)"]); '
+              'time.sleep(120)')
+    launch = [sys.executable, str(SKILL / 'scripts/bounded_launch.py'), str(receipts / 'candidate.launch.json'),
+              nonce, sys.executable, '-c', script]
+    subprocess.Popen([sys.executable, '-c', f'import subprocess; subprocess.Popen({launch!r})'], env=env).wait(timeout=10)
+    deadline = time.time() + 10
+    while not (receipts / 'candidate.launch.json').is_file() and time.time() < deadline:
+        time.sleep(0.05)
+    root = psutil.Process(json.loads((receipts / 'candidate.launch.json').read_text())['pid'])
+    while not root.children() and time.time() < deadline:
+        time.sleep(0.05)
+    return [root] + root.children(recursive=True)
+
+
+def _dead(proc):
+    try:
+        return not proc.is_running() or proc.status() == psutil.STATUS_ZOMBIE
+    except psutil.Error:
+        return True
+
+
+@pytest.mark.skipif(os.name != 'posix', reason='process groups are POSIX only')
+def test_post_attempt_guard_reclaims_a_live_tree_before_the_next_chunk(tmp_path, long_doc, monkeypatch, capsys):
+    pdf, freeze_path = long_doc
+    runner, members = FakeChunkRunner(), []
+
+    def leaves_tree(chunk):
+        members.extend(_leave_live_tree(runner.attempt))
+        return dict(wf.blocked_result([wf.finding('input_or_contract_invalid', 'ValueError: bounded launch PID was reused')]),
+                    error_code='input_or_contract_invalid')
+    runner.outcomes = {'c001': leaves_tree}
+    monkeypatch.setattr(cw, 'CHUNK_RUNNER', runner)
+    try:
+        code, result = _main(chunked_args(tmp_path, pdf, freeze_path), capsys)
+        assert len(members) >= 4 and all(_dead(p) for p in members)       # 每次在下一次启动前已回收
+        assert runner.calls == ['c001', 'c001', 'c002', 'c003']             # 身份核验抛错：瞬时，重试一次
+        for n in (1, 2):
+            guard = json.loads((tmp_path / f'out/chunks/c001/attempt-{n}/POST_ATTEMPT_GUARD.json').read_text())
+            assert guard['live_after_attempt'] and guard['confirmed'] is True and guard['still_live'] == []
+        assert code == wf.EXIT_BLOCKED                                      # 重试后仍失败：整份照常失败关闭
+    finally:
+        for proc in members:
+            try:
+                proc.kill()
+            except psutil.Error:
+                pass
+
+
+@pytest.mark.skipif(os.name != 'posix', reason='process groups are POSIX only')
+def test_post_attempt_guard_unconfirmed_stops_scheduling_and_fails_closed(tmp_path, long_doc, monkeypatch, capsys):
+    pdf, freeze_path = long_doc
+    runner, members = FakeChunkRunner(), []
+
+    def leaves_tree(chunk):
+        members.extend(_leave_live_tree(runner.attempt))
+        return None                                                         # 块本身“成功”，但留下存活进程
+    runner.outcomes = {'c001': leaves_tree}
+    monkeypatch.setattr(cw, 'CHUNK_RUNNER', runner)
+    monkeypatch.setattr(cw, 'reclaim_stale', lambda roots: {'confirmed': False, 'reclaimed': [], 'receipts_scanned': 1,
+                                                            'already_gone': 0})
+    try:
+        code, result = _main(chunked_args(tmp_path, pdf, freeze_path), capsys)
+        assert runner.calls == ['c001']                                     # 不再启动任何块
+        assert code == wf.EXIT_BLOCKED and result['error_code'] == 'chunk_failed' and result.get('merged') is not True
+        failed = {c['id']: c for c in result['findings'][0]['details']['chunks']}
+        assert failed['c001']['error_code'] == 'chunk_cleanup_unconfirmed'
+        assert failed['c002']['status'] == failed['c003']['status'] == 'pending'
+    finally:
+        for proc in members:
+            try:
+                proc.kill()
+            except psutil.Error:
+                pass
+
+
+def test_reference_region_carry_in_matches_the_whole_document_check(tmp_path):
+    from render_residue_check import check_render_residue, reference_region_open_pages
+    sys.path.insert(0, str(SKILL / 'tests'))
+    from test_rc3_review_round2 import AUTHOR_YEAR_REFS, EN_PARA, ZH_PARA, Page, flow, save
+
+    def doc(body, font, tail=()):
+        first = Page(); y = flow(first, 50, 545, 50, [(body, font)] * 4)
+        y = flow(first, 50, 545, y + 6, [('References', 'hebo')])
+        flow(first, 50, 545, y, [(r, 'helv') for r in AUTHOR_YEAR_REFS[:2]])
+        second = Page(); flow(second, 50, 545, 50, [(t, 'helv') for t in list(tail) + AUTHOR_YEAR_REFS * 2])
+        return [first, second]
+    full_s, full_t = save(tmp_path / 's.pdf', doc(EN_PARA, 'helv')), save(tmp_path / 't.pdf', doc(ZH_PARA, 'china-s'))
+    with fitz.open(full_s) as d:
+        assert reference_region_open_pages(d) == [False, True]
+    whole = check_render_residue(full_s, full_t)
+    assert whole['pages'][1]['severity'] in ('ok', 'not_evaluated') and whole['severity'] != 'high'
+
+    def page2(src, name):
+        with fitz.open(src) as d:
+            out = fitz.open(); out.insert_pdf(d, from_page=1, to_page=1); out.save(str(tmp_path / name)); out.close()
+        return tmp_path / name
+    chunk_s, chunk_t = page2(full_s, 'cs.pdf'), page2(full_t, 'ct.pdf')
+    alone = check_render_residue(chunk_s, chunk_t)                         # 无带入：与整份检查结论不同（原缺陷）
+    assert alone['pages'][0]['severity'] == 'high' and 'reference_region_open_at_start' not in alone['excluded']
+    carried = check_render_residue(chunk_s, chunk_t, region_open_at_start=True)
+    assert carried['excluded']['reference_region_open_at_start'] is True
+    row = dict(carried['pages'][0]); row['page'] = 2
+    assert row == whole['pages'][1]                                         # 带入后与整份检查逐项相同
+    # 负例：带入的参考文献区里未翻译的英文正文照常计数（区内逐条规则不放宽）
+    prose_s = save(tmp_path / 'ps.pdf', doc(EN_PARA, 'helv', tail=[EN_PARA] * 3))
+    prose_t = save(tmp_path / 'pt.pdf', doc(ZH_PARA, 'china-s', tail=[EN_PARA] * 3))
+    carried_prose = check_render_residue(page2(prose_s, 'cps.pdf'), page2(prose_t, 'cpt.pdf'), region_open_at_start=True)
+    assert carried_prose['pages'][0]['severity'] == 'high'

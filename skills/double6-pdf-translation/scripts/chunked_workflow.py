@@ -101,10 +101,48 @@ def reclaim_stale(roots: list[Path]) -> dict[str, Any]:
     return report
 
 
+def attempt_nonces(attempt: Path) -> set[str]:
+    nonces = set()
+    for receipt in attempt.rglob('*.launch.json'):
+        try:
+            value = json.loads(receipt.read_text(encoding='utf-8')).get('nonce')
+        except (OSError, json.JSONDecodeError, AttributeError):
+            value = None
+        if value:
+            nonces.add(value)
+    return nonces
+
+
+def post_attempt_guard(attempt: Path) -> dict[str, Any]:
+    """尝试结束后：本尝试任何启动 nonce 仍挂在存活进程上（环境变量核验，不依赖墙钟 create_time）
+    即回收（reclaim_stale）并复查；复查仍存活或回收未核实 → confirmed=False（调用方失败关闭、停止调度）。"""
+    nonces = attempt_nonces(attempt)
+    live = nonces & _live_owner_nonces()
+    report: dict[str, Any] = {'protocol': 'launch_nonce_scan_v1', 'nonces': len(nonces), 'live_after_attempt': sorted(live),
+                              'confirmed': True}
+    if live:
+        reclaim = reclaim_stale([attempt])
+        still = nonces & _live_owner_nonces()
+        report.update(reclaim=reclaim, still_live=sorted(still), confirmed=bool(reclaim['confirmed']) and not still)
+    return report
+
+
 # ------------------------------------------------------------------ 块执行
+def chunk_context(wf, context_path: Path, context_ref: dict[str, str], chunk: dict[str, Any], directory: Path) -> Path:
+    """块级术语上下文：整份文档术语上下文原样 + 本块页范围 + 参考文献区带入状态（来自计划，
+    整份源文上计算）。块 FREEZE 以 document_term_context_ref 绑定此文件，_execute-digital 与渲染逐 sha 核对。"""
+    context = wf.read_json(context_path)
+    context.update(document_context_ref=context_ref,
+                   chunk={k: chunk[k] for k in ('id', 'start', 'end')},
+                   reference_region_open_at_start=chunk.get('reference_region_open_at_start') is True)
+    path = directory / 'CHUNK_TERM_CONTEXT.json'
+    wf.write_new(path, context)
+    return path
+
+
 def chunk_freeze(wf, parent: dict[str, Any], parent_ref: dict[str, str], plan_ref: dict[str, str],
                  chunk: dict[str, Any], context_ref: dict[str, str], directory: Path) -> Path:
-    directory.mkdir(parents=True, exist_ok=False)
+    directory.mkdir(parents=True, exist_ok=True)
     scope = directory / 'SCOPE_EVIDENCE.json'
     wf.write_new(scope, {'kind': 'chunk_of_frozen_document', 'parent_freeze_ref': parent_ref,
                          'parent_scope_evidence': parent.get('scope_evidence'), 'plan_ref': plan_ref,
@@ -152,7 +190,37 @@ def _stop_reason(result: dict[str, Any]) -> str | None:
     return None
 
 
-def classify(result: dict[str, Any], contract: dict[str, Any]) -> str:
+def backend_timed_out(attempt: Path | None) -> bool:
+    """后端在本任务内的内部超时：块输出 render_manifest.json 的 errors 含 error_type=timeout。"""
+    if attempt is None:
+        return False
+    path = attempt / 'out' / 'render_manifest.json'
+    try:
+        errors = json.loads(path.read_text(encoding='utf-8')).get('errors') or []
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return False
+    return any(isinstance(e, dict) and e.get('error_type') == 'timeout' for e in errors)
+
+
+def effective_stop_reason(result: dict[str, Any], attempt: Path | None = None) -> str | None:
+    reason = _stop_reason(result)
+    if result.get('status') not in ('succeeded', 'candidate') and backend_timed_out(attempt):
+        return 'backend_timeout'
+    return reason
+
+
+# 既有有界执行的启动身份核验（墙钟 create_time）在墙钟跳变时抛出的错误：环境原因，不是输入的确定性质。
+# 尝试后核查确认进程已回收后按瞬时失败重试一次（仍受 retry_transient_failures 限制）；其它 blocked 不变。
+LAUNCH_IDENTITY_RACE = ('ValueError: bounded launch PID was reused', 'ValueError: bounded launch identity mismatch')
+
+
+def launch_identity_race(result: dict[str, Any]) -> bool:
+    findings = result.get('findings') or []
+    return (result.get('error_code') == 'input_or_contract_invalid' and len(findings) == 1
+            and isinstance(findings[0], dict) and findings[0].get('message') in LAUNCH_IDENTITY_RACE)
+
+
+def classify(result: dict[str, Any], contract: dict[str, Any], attempt: Path | None = None) -> str:
     if result.get('status') in ('succeeded', 'candidate'):
         return 'completed'   # candidate 的有界任务成功（综合质量另计，fail 也是确定结果，照常合并后整份 fail）
     if result.get('status') == 'cleanup_unconfirmed' or result.get('error_code') == 'owned_tree_cleanup_unconfirmed':
@@ -160,6 +228,10 @@ def classify(result: dict[str, Any], contract: dict[str, Any]) -> str:
     reason = _stop_reason(result)
     if reason in contract['split_on_resource_stop']:
         return 'resource_stop'
+    if 'backend_timeout' in contract['split_on_resource_stop'] and backend_timed_out(attempt):
+        return 'resource_stop'
+    if result.get('status') == 'blocked' and launch_identity_race(result):
+        return 'transient'
     if result.get('status') == 'blocked':
         return 'blocked'
     return 'transient'
@@ -210,6 +282,8 @@ def verify_completed(entry: dict[str, Any]) -> list[str]:
     refs += [(role, value) for role, value in (record.get('outputs') or {}).items()]
     if record.get('backend_input'):
         refs.append(('backend_input', record['backend_input']))
+    if 'context_ref' in record:
+        refs.append(('chunk_context', record['context_ref']))
     for role, value in refs:
         if not value or not Path(value['path']).is_file() or sha256_file(value['path']) != value['sha256']:
             problems.append(role)
@@ -345,18 +419,28 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
                                     and a.get('invocation') == invocation)
             number = len(entry['attempts']) + 1
             attempt_dir = output / 'chunks' / cid / f'attempt-{number}'
-            freeze_path = chunk_freeze(wf, freeze, parent_ref, plan_ref, entry, context_ref, attempt_dir / 'freeze')
+            (attempt_dir / 'freeze').mkdir(parents=True, exist_ok=False)
+            entry_context = chunk_context(wf, context_path, context_ref, entry, attempt_dir / 'freeze')
+            freeze_path = chunk_freeze(wf, freeze, parent_ref, plan_ref, entry, wf.ref(entry_context), attempt_dir / 'freeze')
             record = {'number': number, 'invocation': invocation, 'status': 'started', 'dir': str(attempt_dir),
                       'freeze_ref': wf.ref(freeze_path), 'started_at': wf.datetime.now(wf.timezone.utc).isoformat()}
             entry['attempts'].append(record)
             entry['status'] = 'running'
             save_state(state_path, state)
             started = time.monotonic()
-            result = CHUNK_RUNNER(wf, args, freeze_path, entry, attempt_dir, context_path)
-            kind = classify(result, CHUNKING_CONTRACT)
+            result = CHUNK_RUNNER(wf, args, freeze_path, entry, attempt_dir, entry_context)
+            kind = classify(result, CHUNKING_CONTRACT, attempt_dir)
             record.update(status='finished', classification=kind, wall_seconds=round(time.monotonic() - started, 3),
                           measurements=_measure(result), error_code=result.get('error_code'))
+            if effective_stop_reason(result, attempt_dir) == 'backend_timeout':
+                record['stop_reason'] = 'backend_timeout'
             wf.write_new(attempt_dir / 'CHUNK_RESULT.json', result)
+            guard = post_attempt_guard(attempt_dir)
+            record['post_attempt_guard'] = {k: guard[k] for k in ('live_after_attempt', 'confirmed')}
+            if guard['live_after_attempt']:
+                wf.write_new(attempt_dir / 'POST_ATTEMPT_GUARD.json', guard)
+            if not guard['confirmed']:
+                kind = record['classification'] = 'cleanup_unconfirmed'
             record['pruned_bytes'] = prune_temporaries(wf, attempt_dir, CHUNKING_CONTRACT['prune_backend_temporaries'])['bytes']
             executed.append(cid)
             if kind == 'completed':
@@ -365,6 +449,7 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
                     kind = record['classification'] = 'missing_outputs'
                 else:
                     entry.update(status='completed', completed=dict(produced, freeze_ref=record['freeze_ref'],
+                                                                    context_ref=wf.ref(entry_context),
                                                                     attempt=number, invocation=invocation))
                     save_state(state_path, state)
                     index += 1
@@ -382,12 +467,15 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
                                                                   output / 'chunks' / f"{child['id']}.pdf")
                             child['page_kinds'] = entry['page_kinds'][child['start'] - entry['start']:
                                                                       child['end'] - entry['start'] + 1]
+                            opened = plan.get('reference_region_open_at_page_start') or []
+                            child['reference_region_open_at_start'] = (opened[child['start'] - 1]
+                                                                       if len(opened) >= child['start'] else False)
                             table[child['id']] = dict(child, status='pending', attempts=[], split_from=cid)
                     order[index:index + 1] = [c['id'] for c in children]
                     save_state(state_path, state)
                     continue
                 entry.update(status='failed', final_invocation=invocation, failure={
-                    'error_code': 'chunk_page_exceeds_task_budget', 'stop_reason': _stop_reason(result),
+                    'error_code': 'chunk_page_exceeds_task_budget', 'stop_reason': effective_stop_reason(result, attempt_dir),
                     'measurements': record['measurements'],
                     'message': '单页仍超出冻结的单任务资源预算；不放宽限制，整份失败关闭。'})
             elif kind == 'transient' and transient_retries < CHUNKING_CONTRACT['retry_transient_failures']:
@@ -395,8 +483,13 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
                 continue
             else:
                 entry.update(status='blocked' if kind == 'blocked' else 'failed', final_invocation=invocation,
-                             failure={'error_code': result.get('error_code') or kind, 'classification': kind,
-                                      'findings': result.get('findings', [])[:5]})
+                             failure={'error_code': ('chunk_cleanup_unconfirmed' if kind == 'cleanup_unconfirmed'
+                                                     else result.get('error_code') or kind),
+                                      'classification': kind, 'findings': result.get('findings', [])[:5]})
+                if kind == 'cleanup_unconfirmed':
+                    # 本块进程树无法核实已回收：不再启动任何块（重任务并发 1），整份失败关闭。
+                    save_state(state_path, state)
+                    break
             save_state(state_path, state)
             index += 1
         chunks = [table[cid] for cid in order]

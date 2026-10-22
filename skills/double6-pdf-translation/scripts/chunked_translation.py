@@ -35,12 +35,19 @@ CHUNKING_CONTRACT = {
     'max_pages_per_chunk': {'digital_pdf': 4, 'scanned_ocr': 2},
     'boundary_policy': 'safe_page_boundary_v1',
     'boundary_search_pages': 1,
-    'split_on_resource_stop': ['task_timeout', 'whole_job_deadline_exceeded', 'task_memory_limit'],
+    # backend_timeout：后端在本任务时限内的内部超时（render_manifest.errors 记 error_type=timeout），
+    # 同属时间预算耗尽，二分而不是指望重试命中缓存（实测见 references/chunked-translation.md）。
+    'split_on_resource_stop': ['task_timeout', 'whole_job_deadline_exceeded', 'task_memory_limit', 'backend_timeout'],
     'retry_transient_failures': 1,
     'merge': 'ordered_page_concat_v1',
     'quality': 'worst_chunk_fail_closed_v1',
     'terminology': 'document_term_context_v1',
     'resume': 'sha_verified_chunk_reuse_v1',
+    # 块从整份文档的参考文献区中间开始时，把区状态（整份源文上同一套标题判定）带入该块的残留检查。
+    'reference_region': 'document_state_carry_in_v1',
+    # 每次尝试结束后按启动 nonce（环境变量，不依赖墙钟）核查本尝试的进程是否仍存活；存活即回收并核实，
+    # 核实不了即失败关闭并停止调度后续块（重任务并发 1，不与残留进程重叠）。
+    'post_attempt_guard': 'launch_nonce_scan_v1',
     # 块完成并登记后删除的后端中间件（字体子集化临时 PDF，单块可达数百 MB；不被任何回执/门引用）。
     # 删除前在 CHUNK_PRUNED.json 登记文件名、字节数与 SHA-256。
     'prune_backend_temporaries': ['_backend_working/*/temp_subset_input_mono.pdf',
@@ -260,6 +267,10 @@ def build_plan(input_pdf: Path, preflight_path: Path, route: str, output: Path) 
             chunk['source_ref'] = write_chunk_pdf(document, chunk, output / 'chunks' / f"{chunk['id']}.pdf")
             chunk['page_kinds'] = kind_list[chunk['start'] - 1:chunk['end']]
         navigation = source_navigation(document)
+        from render_residue_check import reference_region_open_pages
+        region_open = reference_region_open_pages(document)
+        for chunk in chunks:
+            chunk['reference_region_open_at_start'] = region_open[chunk['start'] - 1]
     context = document_term_context(input_pdf, output / 'document_terms')
     write_json(output / 'DOCUMENT_TERM_CONTEXT.json', context)
     plan = {'schema_version': SCHEMA_VERSION, 'contract': CHUNKING_CONTRACT, 'input_ref': file_ref(input_pdf),
@@ -268,6 +279,7 @@ def build_plan(input_pdf: Path, preflight_path: Path, route: str, output: Path) 
             'cross_chunk_continuations': [c['boundary_after'] for c in chunks
                                           if c['boundary_after'] and not c['boundary_after']['safe']],
             'navigation': navigation,
+            'reference_region_open_at_page_start': region_open,
             'document_term_context_ref': file_ref(output / 'DOCUMENT_TERM_CONTEXT.json')}
     write_json(output / 'CHUNK_PLAN.json', plan)
     return plan
