@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -224,6 +225,7 @@ def _setsid_root(tmp_path, nonce):
     root = subprocess.Popen([sys.executable, str(tmp_path / 'worker.py'), 'root', str(tmp_path), 'detached'],
                             start_new_session=True, env=env, stdin=subprocess.DEVNULL,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    threading.Thread(target=root.wait, daemon=True).start()   # 与 run_command 一样及时回收根进程（不留僵尸占着进程组）
     for _ in range(500):
         if (tmp_path / 'ready').exists():
             break
