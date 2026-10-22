@@ -66,8 +66,8 @@ OCR 文字是机器输出，没有经过人工逐字核对，所以**永不作�
 
 推荐合同：5 GiB RSS（任务进程树 RSS 之和，`resource_limits.RSS_CONTRACT`；原 3 GiB）、120 s/任务、重任务并发 1。
 
-- OCR 阶段实测峰值约 0.15–0.35 GiB；
-- 随后的电子后端单进程约 2.3–2.6 GiB，加上工作流进程，合计 2.7–3.2 GiB，已贴近上限；
-- 超限时按 `task_memory_limit` 停止并回收，不放宽。
+- OCR 阶段实测峰值约 0.31–0.50 GiB（RSS 合计，含 tesseract）；
+- 随后的电子后端进程树 RSS 合计实测 2.5–3.3 GB（pdf2zh 子进程 2.0–2.6 GB；写时复制共享页按 RSS 重复计入，PSS 2.25–2.85 GiB）。旧 3 GiB 上限下 en-01 被内存门停止，rc.8 调为 5 GiB 后实测最高 3,336,155,136 B，余量约 1.89 GiB；
+- 超限时按 `task_memory_limit` 停止并回收。
 
 本版把 BabelDOC 的字体子集化与清理保存辅助进程改为 spawn 启动。fork 出的子进程会按父进程的全部 RSS 计数（写时复制页），曾使一次任务的 RSS 之和达到 5.9 GB。
