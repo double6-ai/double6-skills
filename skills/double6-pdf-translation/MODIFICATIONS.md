@@ -18,6 +18,30 @@
 
 源论文、译稿、字体、TeX、模型权重与验证证据不包含在公开运行包中。每份文档的完整语义、实际单语/双语页面、样式链接、阅读复制和冷重建仍须执行；本次维护没有授予任意输入的自动严格交付能力。
 
+## 2.0.0-rc.7 维护改动（2026-10-22）
+
+- 修改 `scripts/pdf_input_preflight.py`、`scripts/paper_translation_workflow.py`、`scripts/pdf_translation_cli.py`、`scripts/pdf_translation_commands.py`、`scripts/pdf_translation_render.py`、`scripts/pdf_translation_runtime.py`、`scripts/run_pdf_translation_context.py`、`scripts/qa_pipeline.py`、`scripts/render_residue_check.py`：`--target-language {zh,en}`、目标语言感知预检、中译英后端参数/提示词/术语过滤、渲染中文残留与保留字形压叠检查。
+- 修改 vendored BabelDOC：
+  - `utils/layout_helper.py`：`_is_cjk_no_space_pair`，汉字（含部首、全角标点）间小间隙与跨行不补空格（两处：`get_char_unicode_string`、`_add_space_dummy_chars_to_list`）；
+  - `midend/il_translator.py`：`passes_min_text_length`；中文源 → 非 CJK 目标时跳过不含汉字的段落；
+  - `midend/il_translator_llm_only.py`：最短长度判定改用 `passes_min_text_length`；
+  - `midend/table_figure_text.py`：中文源 → 非 CJK 目标时放行含汉字的紧凑标签；
+  - `midend/typesetting.py`：`english_word_break_extent`；拉丁目标语言单行段落右扩、可读下限处右/下扩（`_is_single_source_line`、`_latin_target_expanded_box`），扩框受矢量路径、Form XObject 与表格区域限制（`_latin_expansion_obstacles`、`_latin_vector_right_limit`、`_latin_vector_bottom_limit`）；
+  - `midend/il_translator.py`、`midend/il_translator_llm_only.py`：`classify_same_as_input_result` 增加 `lang_in`，中文源时含汉字的原样返回判未翻译。
+  - 上述文件头维护日期更新为 2026-10-22。
+- 评审第 1 轮修正：`scripts/qwen_pdf2zh_cli_translator.py`（`--target-language`、目标语言感知的修补/重试/术语）、`scripts/policy_utils.py`（`DEFAULT_SYSTEM_PROMPT_EN` 移入、`normalize_target_language`、`policy_item_matches_target`）、`scripts/pdf_input_preflight.py`（`inline_object_math`、`zh2en_inline_object_math_unsupported`、`target_language_route_unsupported`）、`scripts/paper_translation_workflow.py`（`check_target_language_route`）、`scripts/pdf_translation_render.py`（中译英拒绝 HY-MT 兼容代理/原生传输）、`scripts/render_residue_check.py`（短页整句残留、整份文件评估、压叠与矢量字形丢失判 high）、`scripts/qa_pipeline.py`（独立规则码）。
+- 评审第 2 轮修正：`scripts/pdf_input_preflight.py`（行内结构对象阈值 1、`with_objects` 定位明细、整页 Form 处理）、`scripts/render_residue_check.py`（`page_inline_object_damage` 逐对象核对丢失/压叠，压叠阈值 1 个字符）、`scripts/qa_pipeline.py`（`inline_object_damage_high`）。
+- 评审第 3 轮修正：`scripts/pdf_input_preflight.py`（`inline_object_math` 逐个 Form 归类为正文 Form/行内 Form，只清空行内 Form 求差集；新增 `_form_tree`、`_has_cjk_row` 与 `body_forms`/`inline_forms` 计数）。
+- 评审第 4 轮修正：`scripts/pdf_input_preflight.py`（带中文行的 Form 按宿主行结构判据再分类：新增 `_char_lines`、`_hosted_in_cjk_line`、`HOST_*` 阈值与 `hosted_cjk_forms` 计数）。
+- 评审第 5 轮修正：`scripts/pdf_input_preflight.py`（按 Form 自身内容分类 container/object/body/mixed，正文准入与数学证据 `_math_like_glyphs`/`_fraction_rules`，宿主正文行 `_host_lines`/`_in_flow`，needs_review 拒绝与 `reasons`、`needs_review_forms`/`standalone_mixed_forms`/`container_forms`/`form_rules` 计数；去掉第 4 轮的 `_hosted_in_cjk_line` 与 `HOST_*` 尺寸上限）、`scripts/render_residue_check.py`（`form_rule` 分数线逐个核对）；第 3、4 轮测试按新语义调整（见 CHANGELOG）。
+- 评审第 6 轮修正：`scripts/pdf_input_preflight.py`（页面等价 Form 类 `page_equivalent`；文字层数学字形 `text_layer_math` 列表与计数；`_char_records` 增加绘制顺序 `seq`，新增 `_same_line`、`_in_chinese_text_run`，`_math_like_glyphs` 增加 `admit_text_runs`）、`scripts/render_residue_check.py`（新增成品门 `page_text_layer_math_loss`/`text_layer_math_loss_pages`）；第 3、4 轮正例按 905dbf3 原样恢复，其中第 4 轮图注/旁注一页据端到端证据改为拒绝断言（输入不变）。
+- 评审第 7 轮修正：`scripts/render_residue_check.py`（`page_text_layer_math_loss` 改为逐实例匹配：新增 `_target_tokens`、`_standalone_letter`、`_target_math_instances`、`_eligible`，规则名 `per_instance_v1`）、`scripts/pdf_input_preflight.py`（`text_layer_math` 条目增加字体/字号/标志）、`scripts/bounded_execution.py`（`_unowned_codex_scan` 逐进程隔离错误；`snapshot` 记录 `unowned_scan`、`owned_monitor_errors`；`violation` 新增 `owned_process_monitor_unavailable`；`launched_members` 按 `psutil.pids()` 枚举并抛 `OwnedDiscoveryError`；`run_bounded` 监控异常 `resource_monitor_unavailable` 结构化停止）、`scripts/paper_translation_workflow.py`（停止时 `error_code`=`stop_reason`；未预期错误输出结构化 JSON 并写 `WORKFLOW_INTERNAL_ERROR.json`）。新增 `tests/test_pr19_review7_text_layer_counter.py`、`tests/test_pr19_review7_monitor_permissions.py`（评审原样，只改路径）、`tests/test_pr19_review7_fixes.py`、`tests/fixtures/pr19_review7/italic_x_backend_mono_chars.json`（真实后端成品的逐字符几何，不含 PDF）。
+- 评审第 8 轮修正：`scripts/bounded_execution.py`（`OwnedDiscoveryError` 携带启动身份与已确认成员；新增 `read_launch_identity`、`reclaim_owned_tree`、`_identity_state`、`_signal_pid`、`_signal_group`、`_group_empty`；`run_bounded` 保留可信身份、用核验过的后备回收替代 `stop_children`、结束时独立核实并输出 `cleanup`/`launch_identity`，无法确认时 `status=cleanup_unconfirmed`）、`scripts/paper_translation_workflow.py`（`error_code=owned_tree_cleanup_unconfirmed`）。新增 `tests/test_pr19_review8_discovery_cleanup.py`（评审原样，只改路径）、`tests/test_pr19_review8_owned_cleanup.py`。
+- 评审第 9 轮修正：`scripts/bounded_execution.py` 新增 `_raw_pids`、`_enumerate_all_pids`、`_owner_markers`、`_recovery_scan`。`reclaim_owned_tree` 增加 `nonce` 参数，在枚举失败后做恢复扫描并核实整树，新增 `tree_scope`、`recovered_members`，删除 `not_covered`。`run_bounded` 把恢复到的成员并入已确认成员，并汇总各轮扫描。新增 `tests/test_pr19_review9_cleanup_boundaries.py`（评审原样，只改路径）、`tests/test_pr19_review9_whole_tree.py`；调整 `tests/test_pr19_review8_owned_cleanup.py::test_root_exited_descendant_in_group_reclaimed`，改为只断言安全结果。
+- 评审第 10 轮修正：`scripts/bounded_execution.py::_recovery_scan`：已知成员先核实当前身份才作祖先起点（`ancestor_roots`、`rejected_ancestors`），每一跳重新核实父进程身份；指向被拒号码的无证据进程及其后代记为 `ownership_unknown`；复用号码按普通候选判定；最终核实扫描带已知身份。新增 `tests/test_pr19_review10_reused_ancestor.py`（评审原样，只改路径）、`tests/test_pr19_review10_ancestry_identity.py`。
+- 新增 `tests/test_zh2en_translation.py`、`tests/fixtures/zh2en/`、`tests/test_pr19_review_boundaries.py`、`tests/test_pr19_review2_sparse_math.py`、`tests/test_pr19_review3_wrapped_form.py`、`tests/test_pr19_review4_chinese_formula_form.py`、`tests/test_pr19_review5_mixed_form.py`、`tests/test_pr19_review6_text_runs.py`。
+- 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py` 更新为 2.0.0-rc.7。
+
 ## 2.0.0-rc.6 维护改动（2026-10-22）
 
 - 修改 vendored BabelDOC `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/styles_and_formulas.py`：公式分组在栏内视觉折行处断开；`merge_overlapping_formulas` 不跨折行合并、不合并中间夹正文的不相邻公式；按逗号拆分公式时保留下标/上标逗号；零高度/零宽度线段（分式线）按 0.5pt 线宽参与公式包含判定。文件头维护日期更新为 2026-10-18。

@@ -264,20 +264,56 @@ def prioritize_policy_items(items: list[dict[str, Any]], source_text: str, *, li
     return selected[:limit]
 
 
-def build_policy_context_prompt(context: dict[str, Any] | None, source_text: str = "") -> str:
+# 中译英（--target-language en）默认系统提示词。Qwen CLI 适配器在未显式传 --target-language 时，
+# 以“系统提示词等于此默认值”判定目标为英文；英译中默认提示词与行为保持不变。
+DEFAULT_SYSTEM_PROMPT_EN = (
+    "You are a professional, authentic machine translation engine. "
+    "Translate Chinese academic PDFs into fluent, natural academic English while preserving "
+    "formulas, citations, URLs, named entities, terminology, and layout-sensitive placeholders. "
+    "Only output the translated result without additional explanation. "
+    "Do not leave Chinese characters in the output: translate all Chinese prose, headings, captions and table text "
+    "into English unless they are protected spans, code, URLs, emails, or approved names. "
+    "Keep the English concise, because it must fit the space of the original Chinese layout."
+)
+
+_CJK_TEXT = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+
+
+def normalize_target_language(value: str | None) -> str:
+    return "en" if str(value or "zh").strip().lower().startswith("en") else "zh"
+
+
+def policy_item_matches_target(item: dict[str, Any], target_language: str = "zh") -> bool:
+    """中译英时丢弃译名/禁用译名含中文的英译中策略项，避免把英文译文引回中文。"""
+    if normalize_target_language(target_language) == "zh":
+        return True
+    values = [item.get("translation"), *(item.get("forbidden_translations") or [])]
+    return not any(_CJK_TEXT.search(str(value)) for value in values if value)
+
+
+def build_policy_context_prompt(context: dict[str, Any] | None, source_text: str = "", target_language: str = "zh") -> str:
     if not context:
         return ""
+    target = normalize_target_language(target_language)
     term_policy = context.get("term_policy") if isinstance(context.get("term_policy"), dict) else {}
     entity_map = context.get("entity_map") if isinstance(context.get("entity_map"), dict) else {}
     coverage_gate = context.get("coverage_gate") if isinstance(context.get("coverage_gate"), dict) else {}
     terms = term_policy.get("terms") if isinstance(term_policy.get("terms"), list) else []
     entities = entity_map.get("entities") if isinstance(entity_map.get("entities"), list) else []
+    if target != "zh":
+        terms = [item for item in terms if isinstance(item, dict) and policy_item_matches_target(item, target)]
+        entities = [item for item in entities if isinstance(item, dict) and policy_item_matches_target(item, target)]
     terms = prioritize_policy_items(terms, source_text, limit=16)
     entities = prioritize_policy_items(entities, source_text, limit=10)
+    prose_line = (
+        "Translate ordinary Chinese prose completely into English; keep only protected spans, code, URLs, emails, citations, model/system names, or explicitly approved terms unchanged."
+        if target == "en" else
+        "Translate ordinary English prose completely; keep only protected spans, code, URLs, emails, citations, model/system names, or explicitly approved terms in English."
+    )
     lines = [
         "Paper-level terminology, entity, and protected-span constraints:",
         "Use listed translations consistently when the source segment contains the term. Do not output explanations.",
-        "Translate ordinary English prose completely; keep only protected spans, code, URLs, emails, citations, model/system names, or explicitly approved terms in English.",
+        prose_line,
         "Keep supplied formatting-placeholder identifiers and citation labels attached to the corresponding translated phrases. Do not add spaces to imitate alignment or paragraph indentation.",
     ]
     lines.extend(compact_policy_items(entities, limit=10))
@@ -348,7 +384,10 @@ def dedupe_nested_person_parentheses(text: str) -> str:
     return value
 
 
-def apply_source_aware_replacements(source_text: str, translated_text: str) -> str:
+def apply_source_aware_replacements(source_text: str, translated_text: str, target_language: str = "zh") -> str:
+    # 这些是英译中的中文译名修补；中译英输出必须原样保留（例如 Stanford University 不得改回中文）。
+    if normalize_target_language(target_language) != "zh":
+        return translated_text
     source_lower = source_text.lower()
     repaired = dedupe_nested_person_parentheses(translated_text)
     if repaired.strip().lower() == "he":

@@ -61,6 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--openai-reasoning-effort", default=os.environ.get("PDF_TRANSLATION_OPENAI_REASONING_EFFORT", DEFAULT_REASONING_EFFORT))
     parser.add_argument("--temperature", type=float, default=float(os.environ.get("PDF_TRANSLATION_TEMPERATURE", str(DEFAULT_HYMT2_TEMPERATURE))))
     parser.add_argument("--cli-max-tokens", type=int, default=int(os.environ.get("PDF_TRANSLATION_CLI_MAX_TOKENS", str(DEFAULT_CLI_MAX_TOKENS))))
+    parser.add_argument("--target-language", choices=SUPPORTED_TARGET_LANGUAGES, default="zh",
+                        help="目标语言：zh=英译中（默认），en=中译英。")
     parser.add_argument("--custom-system-prompt", default=os.environ.get("PDF_TRANSLATION_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT))
     parser.add_argument("--source-override", "--latex-source", dest="source_override", help="Compatibility/debug override. Normal runs auto-discover LaTeX source and do not require this flag.")
     parser.add_argument('--source-cache-mode',choices=['collect','read'],help='显式当前attempt源请求收集/仅缓存渲染；强制ignore-cache，collector类型排版前停止')

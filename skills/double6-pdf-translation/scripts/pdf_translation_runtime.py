@@ -97,7 +97,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     source = Path(args.input_pdf).expanduser().resolve()
     output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else default_output_dir(source).resolve()
     result=attach_pipeline_quality(manifest, source=source, output_dir=output_dir,
-        review_ref={"path": str(Path(review).resolve()), "sha256": digest} if review else None)
+        review_ref={"path": str(Path(review).resolve()), "sha256": digest} if review else None,
+        target_language=getattr(args, "target_language", "zh") or "zh")
     if invocation_ref:bind_final_group_artifact(args,output_dir,result,invocation_ref)
     return result
 

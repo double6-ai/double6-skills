@@ -83,7 +83,10 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 | `permissions_restricted` | warning | 所有者权限限制（禁止修改/复制等）；请确认有权翻译 |
 | `page_limit_exceeded` | error | 超出当前路线页数（电子 PDF 1–5 页；扫描预检 `--max-pages`，默认 2、最大 20） |
 | `non_digital_pages` | error | 电子 PDF 路线遇到扫描图像页、文字转曲页或路由判为需复核的页 |
-| `source_language_matches_target` | error | 源文主要是中文；当前只支持英译中 |
+| `source_language_matches_target` | error | 源文主要语言已经是目标语言（英译中时源文为中文，中译英时源文为英文） |
+| `target_language_unsupported` | error | `--target-language` 不是 `zh`（英译中）或 `en`（中译英） |
+| `target_language_route_unsupported` | error | `--target-language en` 只支持 `candidate --route digital_pdf`；`latex_verified` 与 `collect` 的译者固定译成简体中文 |
+| `zh2en_inline_object_math_unsupported` | error | 中译英：中文正文行内的变量/公式由 Form XObject 文字或矢量路径字形绘制，无法随英文重排（`details.pages` 列出每页计数） |
 | `source_language_mixed` / `source_language_unknown` | warning / info | 中英混合或可抽取文字过少 |
 | `page_load_failed` | error | 部分页面无法解析 |
 | `resource_limit_invalid` | error | 资源参数越界 |
@@ -120,3 +123,21 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
   - 紧接在未结束的已剔除条目之后的栏首/页首残段会作为 `continuation` 剔除，即使其内容其实是正文；
   - 这些剔除都逐条列在 `entries_detail` / `reference_region_entries` 中，复核时请查看。
 - 误报路径：被否决的真实条目（标题含 `It's`、多个年份或谓语动词）、缺出处信号且无编号的条目、作者名格式特殊的条目会计数；无标题参考文献超过全文一半、不在文末或左边距不一致时整段计数，可能判 medium/high。
+
+## 中译英（`--target-language en`）
+
+`candidate --route digital_pdf` 加 `--target-language en` 把中文电子版 PDF 译成英文（默认 `zh` 为英译中，命令行与回执不变；`latex_verified`、`collect` 报 `target_language_route_unsupported`）。后端以 `--lang-in zh --lang-out en` 调用，默认提示词换成中译英版本（自定义提示词不替换），英译中方向的默认术语表（译法含汉字的条目）不注入提示词；本地 Qwen CLI 适配器同样收到目标语言，不做英译中译名修补。HY-MT 兼容代理与 LM Studio 原生传输只会译成中文，中译英时报 `target_language_backend_unsupported`。
+
+预检（只在中译英时）：中文正文行内只要有 1 个由 Form XObject 绘制的非中文字形或字形大小的填充矢量路径（Word/WPS 公式、MathJax/网页打印公式），以 `zh2en_inline_object_math_unsupported` 拒绝。这是失败关闭而不是修复：这类对象无法随英文重排，会与译文压叠或被丢弃。每个 Form XObject（含嵌套）只按自身内容分类：整页外壳等自身不画内容的 Form 只递归看内层；自身不画汉字的 Form，字形落在中文行内即为行内对象；自身画汉字的 Form 只有在没有任何数学证据（数学符号/希腊字母、数学或斜体字体、孤立单字母、与汉字字号明显不同的拉丁字母、分数线）时才算正文。有数学证据且落在中文正文行里的 Form 判 needs_review 并拒绝（`details.pages[].reasons` 含 `mixed_form_needs_review`），其数学字形与分数线计入成品门；不在正文行里的（图内标签）不计入。普通英文单词和数字不算数学证据；与同行中文同属一个按视觉顺序绘制的文本流（绘制顺序与 x 顺序一致、同字号，单字母还须同字体）的字母和斜体多字母单词也不算。页面等价 Form（整页外壳）自身的内容按页面级内容对待，包装不改变判定。页面级文字层的数学字形不拦截，由成品门 `text_layer_math_loss` 逐个核对是否仍在译文中（须匹配到同字符的独立字母、数学字体字形或数学符号，英文单词里的字母不算；有歧义的 a/A/I 须有字体证据），丢失即退出码 3。资源监控：非本任务进程的查询错误逐进程跳过；本任务进程无法计量时以 `owned_process_monitor_unavailable`/`resource_monitor_unavailable` 停止并清理进程树，写失败回执，退出码 1。进程树枚举失败时按已核验的启动身份（根 PID + create_time、启动进程组）回收并独立核实，回执 `cleanup` 列出已核实退出与未核实的对象；无法确认时 `status=cleanup_unconfirmed`、`error_code=owned_tree_cleanup_unconfirmed`。枚举失败后整树是否已核实单独记在 `cleanup.tree_scope`（`whole_tree_verified`、`reason`）；整树无法核实时同样是 `cleanup_unconfirmed`，`unverified` 非空。
+
+排版差异（只在中文源 → 非 CJK 目标时生效，英译中逐像素不变）：
+- 抽取中文源文时，字距调整/两端对齐造成的汉字间隙不补空格（间隙 < 0.5 字高）；表格单元格之间的大间隙照常补空格；
+- 不含汉字的段落（公式碎片、英文专名、数字）保留原字形，不送翻译；含汉字的短标签（表头“样本量”、组名）照常翻译；
+- 英文译文按整词宽度断行；单行段落（标题、图注）放不下时先借用右侧空白，到可读下限仍放不下时再借用右侧、下方空白。
+
+成品检查改为渲染中文残留检查（`render_chinese_residue`）：逐页比较源/译文可抽取汉字数，页残留率 ≥0.30 为高风险、≥0.10 为中风险，整体 ≥0.25 或存在高风险页判 `fail`（退出码 3）。源页汉字少于 100 时不按比例评估，但整行中文源句（≥12 字）逐字留在译文里判高风险；所有页都短时按整份文件合计评估。以下结构性问题同样判 `fail`：源文中文正文行内已定位的结构对象（矢量公式字形、Form XObject 变量）在成品原位丢失或与译文字形压叠，任何一个即判（`inline_object_damage_pages`，规则 `inline_object_damage_high`）；源文保留字形（非 Noto 字体）与英文译文字形压叠的页，1 个字符即判（`retained_glyph_overlap_pages`，规则 `retained_glyph_overlap_high`）；字形大小的填充矢量路径比源页少 ≥3 个且 ≥25% 的页（`vector_glyph_loss_pages`，规则 `vector_glyph_loss_high`）。
+
+已知局限：
+- 行内公式由 Form XObject 或矢量路径绘制的中文 PDF 不支持（预检拒绝，见上；只要定位到 1 个即拒绝）。定位依赖“对象中心落在中文行文字范围内、字形大小”的结构规则：中文行内的小图标也会被拒绝（误拦），不在行内的对象不检测；
+- Type3 字体的源文（如网页打印 PDF）英文无法沿用粗体；
+- 中文参考文献不剔除，按残留计数；图片里的中文不翻译（需要 OCR）。
