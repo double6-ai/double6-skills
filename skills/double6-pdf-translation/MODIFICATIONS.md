@@ -145,3 +145,4 @@
 - 文档：新增 `references/chunked-translation.md`；`SKILL.md`、`references/release-quickstart.md`（错误码 `chunk_failed`、`chunk_page_exceeds_task_budget`、`chunk_merge_failed`、块错误码 `chunk_cleanup_unconfirmed`）。
 - 新增 `tests/test_chunked_translation.py`。
 - 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py`、仓库 `README.md` 更新为 2.0.0-rc.9。
+- rc.9 第 3 次代码提交：`scripts/bounded_execution.py::reclaim_owned_tree`（`adopt` 对带本次启动 nonce、记录身份读作 `pid_reused` 的进程以观测 create_time 刷新身份并回收，组长同理恢复整组信号；报告新增 `identity_refreshed`、`process_group.identity_refreshed_by_nonce`）。新增 `tests/test_chunk_clock_step_reclaim.py`。

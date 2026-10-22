@@ -116,6 +116,13 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
 - 目录/页码标签/内部链接按原文恢复（指向原页）；外部 URI 链接由各块后端保留。
 - 每块单任务预算即冻结资源合同；整份文档没有总时限（块数 × 单块时间），也不并行（重任务并发 1）。
 - 单页超过单任务预算时不能翻译（失败关闭，记录实测），需要另行处理该页。
-- 既有有界执行（`bounded_execution`）的进程身份仍按墙钟 create_time 核对，本版未改。Linux 墙钟跳变时单块可能因
-  “PID 已复用”被拦截（该块失败关闭），尝试后核查保证不会留下进程、不会与下一块重叠；macOS 上 create_time 在进程创建时
-  记录，不随墙钟重新推算。
+- 既有有界执行（`bounded_execution`）的启动身份仍按 PID + create_time 核对。Linux 上 create_time = btime + 启动 jiffies，
+  虚拟机暂停/墙钟校正会让 btime 前跳（实测 +198 s 至 +4701 s），任务运行中会因“PID 已复用”被拦截：该尝试按瞬时失败重试一次；
+  尝试后核查以启动 nonce（环境变量）认出仍存活的进程树，回收时对“带本次 nonce 且记录身份读作 pid_reused”的进程以观测
+  create_time 刷新身份后回收（无 nonce 的复用号码仍绝不发信号）；仍无法核实即 `chunk_cleanup_unconfirmed`，停止调度。
+  macOS 上 create_time 在进程创建时记录，不随墙钟重新推算。
+- 资源门靠周期采样执行：整机冻结（虚拟机暂停期间 uptime 仍在走、采样线程不运行）时无法在冻结中途停止任务。实测两次：
+  nist48 c011（第 1 轮）121.64 s、c008（第 2 轮）123.96 s，冻结后第一个采样即以 `task_timeout` 停止、回收 0.12–0.17 s，
+  回执如实记 `deadline_met=false`。
+- 外层 `peakmem` 之类的整树合计计量会把重叠的两棵任务树相加（第 1 轮 arxiv2610 曾读到 5.172 GiB）；合同计量的是单个
+  有界任务（同次实测单任务峰值最高 3.03 GiB）。
