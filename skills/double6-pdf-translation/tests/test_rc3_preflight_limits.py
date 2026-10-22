@@ -49,7 +49,7 @@ def make_scan(path):
 def test_platform_defaults_and_precedence():
     big = 64 * GIB
     mac = rl.resolve_limits(platform='darwin', environ={}, total_memory=big)
-    assert (mac['task_rss_bytes'], mac['per_job_seconds'], mac['memory_metric']) == (3 * GIB, 120, 'rss')
+    assert (mac['task_rss_bytes'], mac['per_job_seconds'], mac['memory_metric']) == (5 * GIB, 120, 'rss')  # rc.8：RSS 上限 5 GiB
     lin = rl.resolve_limits(platform='linux', environ={}, total_memory=big)
     assert (lin['task_rss_bytes'], lin['per_job_seconds'], lin['memory_metric']) == (4 * GIB, 300, 'pss')
     env = {rl.ENV_MEMORY: '6144', rl.ENV_SECONDS: '600', rl.ENV_METRIC: 'rss'}
@@ -337,3 +337,42 @@ def test_candidate_preflight_block_still_exits_2(tmp_path, monkeypatch, capsys):
     code, result = _candidate_main(tmp_path, wf, make_pdf(tmp_path / 'in.pdf', text=ZH, cjk=True), capsys)
     assert code == wf.EXIT_BLOCKED == 2 and result['error_code'] == 'source_language_matches_target'
     assert not (tmp_path / 'out').exists()
+
+
+# ---------- rc.8：RSS 任务上限 5 GiB ----------
+
+def _snap(task_rss):
+    return {'owned_monitor_errors': [], 'codex': [], 'available': 64 * GIB, 'total': 64 * GIB,
+            'task_rss': task_rss, 'process_count': 3, 'swap_used': 0}
+
+
+def test_rss_contract_is_5gib_120s_single_and_rss_metric():
+    assert rl.RSS_TASK_LIMIT_BYTES == 5 * GIB == 5368709120
+    assert rl.RSS_CONTRACT == {'task_rss_bytes': 5 * GIB, 'per_job_seconds': 120, 'concurrency': 1, 'memory_metric': 'rss'}
+    assert rl.recommended_contract('darwin') == rl.RSS_CONTRACT
+    limits = rl.limits_from_frozen_contract(rl.RSS_CONTRACT, environ={}, total_memory=16 * GIB)
+    assert (limits['task_rss_bytes'], limits['per_job_seconds'], limits['memory_metric'], limits['concurrency']) == (5 * GIB, 120, 'rss', 1)
+    # Linux 默认仍是 4 GiB PSS / 300 s（不是 RSS 上限，未改）
+    assert rl.recommended_contract('linux') == {'task_rss_bytes': 4 * GIB, 'per_job_seconds': 300, 'concurrency': 1, 'memory_metric': 'pss'}
+
+
+def test_rss_limit_still_trips_at_and_above_5gib():
+    import bounded_execution as be
+    assert be.violation(_snap(5 * GIB - 1), _snap(0), rss_limit=rl.RSS_TASK_LIMIT_BYTES, max_processes=8) is None
+    assert be.violation(_snap(5 * GIB), _snap(0), rss_limit=rl.RSS_TASK_LIMIT_BYTES, max_processes=8) == 'task_memory_limit'
+    assert be.violation(_snap(5 * GIB + 1), _snap(0), rss_limit=rl.RSS_TASK_LIMIT_BYTES, max_processes=8) == 'task_memory_limit'
+
+
+def test_legacy_3gib_freeze_still_enforced_at_its_frozen_value():
+    limits = rl.limits_from_frozen_contract(rl.LEGACY_CONTRACT, environ={}, total_memory=16 * GIB)
+    assert limits['task_rss_bytes'] == 3 * GIB and limits['memory_metric'] == 'rss'
+    with pytest.raises(rl.ResourceLimitError, match='resource_override_conflicts_with_freeze'):
+        rl.limits_from_frozen_contract(rl.LEGACY_CONTRACT, memory_mib=5120, environ={}, total_memory=16 * GIB)
+
+
+def test_5gib_rss_needs_host_authorization():
+    # 冻结值最多物理内存 50%：8 GiB 主机拒绝 5 GiB；平台默认最多 25%，16 GiB 的 Mac 默认被夹到 4 GiB
+    with pytest.raises(rl.ResourceLimitError, match='exceeds_host_authorization'):
+        rl.limits_from_frozen_contract(rl.RSS_CONTRACT, environ={}, total_memory=8 * GIB)
+    mac16 = rl.resolve_limits(platform='darwin', environ={}, total_memory=16 * GIB)
+    assert mac16['task_rss_bytes'] == 4 * GIB and mac16['clamped_to_host_fraction']

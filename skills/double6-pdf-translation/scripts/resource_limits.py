@@ -4,7 +4,8 @@
 
 内存口径：Linux 默认按进程树 PSS（按共享页比例分摊）计量。pdf2zh/BabelDOC 会 fork
 出与父进程共享大量只读页的子进程，逐进程 RSS 相加会把共享页重复计算（实测 RSS 和
-5.16 GiB 对应 PSS 2.64 GiB）。macOS 保持 RSS 口径与原 3 GiB/120 s 合同不变。
+5.16 GiB 对应 PSS 2.64 GiB）。macOS 用 RSS 口径；rc.8 起 RSS 任务上限为 5 GiB（``RSS_TASK_LIMIT_BYTES``，
+原 3 GiB），120 s、并发 1 不变。旧 FREEZE 中的 3 GiB/120 s 合同（``LEGACY_CONTRACT``）照常接受并按其冻结值执行。
 """
 from __future__ import annotations
 
@@ -14,9 +15,13 @@ from typing import Any, Mapping
 
 GIB = 1024 ** 3
 MIB = 1024 ** 2
-LEGACY_CONTRACT = {'task_rss_bytes': 3 * GIB, 'per_job_seconds': 120, 'concurrency': 1}
+LEGACY_CONTRACT = {'task_rss_bytes': 3 * GIB, 'per_job_seconds': 120, 'concurrency': 1}  # 旧 FREEZE 合同，按冻结值执行
+# RSS 口径的任务内存上限（所有路线共用：macOS 平台默认、scanned_ocr 推荐合同）。rc.8 由 3 GiB 调为 5 GiB：
+# pdf2zh 后端进程树 RSS 合计实测 2.5–3.3 GB（写时复制共享页按 RSS 重复计入），3 GiB 下真实扫描件被内存门停止。
+RSS_TASK_LIMIT_BYTES = 5 * GIB
+RSS_CONTRACT = {'task_rss_bytes': RSS_TASK_LIMIT_BYTES, 'per_job_seconds': 120, 'concurrency': 1, 'memory_metric': 'rss'}
 PLATFORM_DEFAULTS = {
-    'darwin': {'task_rss_bytes': 3 * GIB, 'per_job_seconds': 120, 'memory_metric': 'rss'},
+    'darwin': {'task_rss_bytes': RSS_TASK_LIMIT_BYTES, 'per_job_seconds': 120, 'memory_metric': 'rss'},
     'linux': {'task_rss_bytes': 4 * GIB, 'per_job_seconds': 300, 'memory_metric': 'pss'},
 }
 FALLBACK_DEFAULT = {'task_rss_bytes': 4 * GIB, 'per_job_seconds': 300, 'memory_metric': 'rss'}
