@@ -4,7 +4,8 @@
   汉字 + 上标数字/字母、汉字 + 下标数字/字母、与汉字分离/像素粘连的上下标、汉字后的上标脚注号、带圈序号①、
   拉丁行粘连的 10³ / H₂O 必须拒绝（ocr_formula_unsupported，details.evidence='image_geometry'，带可疑框）；
   中文标点（，。、；：“”‘’（）《》，全/半角混排，行内数字与拉丁字母）、常用字段落、［1］式序号必须原样重建。
-- 纯函数：汉字之间的全角逗号可作解释；带圈序号的圆环判定不把“每”“细”“回”当成圆圈。"""
+- 纯函数：汉字之间的全角逗号可作解释；三簇拼成的汉字（“部”）里的点是笔画，汉字旁的上标数字不是；
+  带圈序号的圆环判定不把“每”“细”“回”当成圆圈。"""
 import sys
 from pathlib import Path
 
@@ -22,6 +23,17 @@ from test_ocr_route import needs_engine  # noqa: E402
 def test_fullwidth_comma_between_han_explains_a_lowered_mark():
     assert ocr_route._mark_zone('文献，此处', 'lowered') == '，'
     assert ocr_route._mark_zone('H,O', 'lowered') == ''
+
+
+def test_han_dot_that_needs_two_neighbours_is_a_stroke_but_a_script_digit_is_not():
+    # 真实扫描 zh-07 第 1 页“督管理部门依法登记”行（字高 52.6 px）的实测簇：左竖 + 点 + 右部三簇才拼成一个方块
+    em = 52.6
+    ordered = [{'box': b} for b in ([606, 1466, 612, 1518], [612, 1458, 620, 1470], [625, 1462, 651, 1519])]
+    assert ocr_route._han_part(1, ordered, em)
+    assert not ocr_route._han_part(1, ordered[1:], em)          # 只与一个邻簇合并时还不到一个方块宽
+    # 汉字后 0.25 字高外的上标数字不能拼进方块
+    han, sup = [454, 2872, 496, 2923], [505, 2863, 522, 2888]
+    assert not ocr_route._han_part(1, [{'box': han}, {'box': sup}], 51.0)
 
 
 def _ring(size=46, thick=3):

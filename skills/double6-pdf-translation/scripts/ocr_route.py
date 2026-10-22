@@ -552,17 +552,20 @@ def _mark_zone(word: str, kind: str) -> str:
 
 
 def _han_part(index: int, ordered: list[dict[str, Any]], em: float) -> bool:
-    """小簇能否与紧邻簇拼成一个汉字方块（见 HAN_* 常量）。"""
-    b = ordered[index]['box']
-    for j in (index - 1, index + 1):
-        if not 0 <= j < len(ordered):
-            continue
-        n = ordered[j]['box']
-        if max(n[0] - b[2], b[0] - n[2], 0) > HAN_PART_GAP * em:
-            continue
-        uw = max(b[2], n[2]) - min(b[0], n[0]); uh = max(b[3], n[3]) - min(b[1], n[1])
-        if HAN_CELL_WIDTH[0] * em <= uw <= HAN_CELL_WIDTH[1] * em and uh >= HAN_CELL_MIN_HEIGHT * em:
-            return True
+    """小簇能否与紧邻的 1–2 个簇（相邻间隙 ≤ HAN_PART_GAP）拼成一个汉字方块（见 HAN_* 常量）。
+    三个簇的情形：“部”= 点 + 立 + 阝，点与“立”合起来还不到一个方块宽。"""
+    n = len(ordered)
+    for lo in range(max(0, index - 2), index + 1):
+        for hi in range(index, min(n - 1, lo + 2) + 1):
+            if hi == lo:
+                continue
+            group = [ordered[j]['box'] for j in range(lo, hi + 1)]
+            if any(max(group[j + 1][0] - group[j][2], 0) > HAN_PART_GAP * em for j in range(len(group) - 1)):
+                continue
+            uw = max(g[2] for g in group) - min(g[0] for g in group)
+            uh = max(g[3] for g in group) - min(g[1] for g in group)
+            if HAN_CELL_WIDTH[0] * em <= uw <= HAN_CELL_WIDTH[1] * em and uh >= HAN_CELL_MIN_HEIGHT * em:
+                return True
     return False
 
 
