@@ -136,8 +136,15 @@ def test_multiple_variables_with_chinese_subscript_are_blocked_plain_and_wrapped
 
 
 def test_chinese_paragraph_caption_and_label_forms_are_body_plain_and_wrapped(tmp_path):
-    """正例：整段中文正文 Form（含英文术语）、小字号图注块 Form、行外中文标签 Form、
-    与页面级左栏同高的右栏中文行 Form（含英文术语）、紧邻正文行的两行旁注 Form、与正文行同高但不紧邻的行外标签 Form 都是正文载体，不拦截，成品门不定位对象。"""
+    """905dbf3 的原始输入，逐字保留（评审第 6 轮冻结正例）。原断言“整页不拦截、成品门不定位对象”被真实后端证伪，
+    改为拒绝（证据：report/pr19-review6，905dbf3 与预检旁路的端到端回放成品）：
+    - 图注 '图 1 均匀线阵的方向图（ 为阵元数）' 的 N 是在整行中文画完之后才另起一段画上去的（绘制顺序与视觉顺序不一致）。
+      后端按内容流抽取成 '…( 为阵元数)N'，成品为 '(is the number of elements)N'：变量从括号里被挪到行尾，语义错误；
+    - 旁注 '注一/见上' 的 a 同样是事后补画的另一字体单字母，成品里落在 Form 裁剪框外，只剩一个点；
+    两个 Form 都被判 needs_review（整页拒绝），定位的数学字形恰为 N 与 a，成品门据此核对。
+    其余 Form（正文段与右栏的 MIMO、图内标签、续表标签）仍不定位对象。
+    同样的字母若与中文同属一个按视觉顺序绘制的文本流（同字体、同字号），后端成品完整，见
+    test_pr19_review6_text_runs.py 的配对正例。"""
     d = fitz.open()
     page = d.new_page()
     page.insert_textbox(fitz.Rect(72, 60, 520, 130), b.ZH_FILL, fontname='china-s', fontsize=10.5)  # 页面级正文
@@ -158,13 +165,17 @@ def test_chinese_paragraph_caption_and_label_forms_are_body_plain_and_wrapped(tm
     page.insert_text((72, 530), '表格续页说明。', fontname='china-s', fontsize=10.5)
     tag = _text_block(50, 16, ['续表'], size=10.5, latin=[(0, 26, 'A')])
     page.show_pdf_page(fitz.Rect(450, 518, 500, 534), tag, 0)                                  # 同一纵向带但远离正文的行外标签 Form（按紧邻判为正文）
+    from pdf_input_preflight import inline_object_math
     for path in _variants(d, tmp_path, 'body-forms'):
         report, page_info = _inspect(path)
-        assert report['status'] != 'blocked', (path.name, report['findings'])
-        assert page_info['xobject_text_glyphs'] == 0 and page_info['needs_review_forms'] == 0, (path.name, page_info)
-        assert page_info['body_forms'] >= 6, (path.name, page_info)
+        assert report['status'] == 'blocked', (path.name, page_info)
+        assert page_info['needs_review_forms'] == 2 and page_info['xobject_text_glyphs'] == 2, (path.name, page_info)
+        with fitz.open(path) as src:
+            located = inline_object_math(src, 0, with_objects=True)['objects']
+        assert sorted(o['char'] for o in located) == ['N', 'a'], (path.name, located)
+        assert page_info['body_forms'] + page_info['standalone_mixed_forms'] >= 4, (path.name, page_info)
         gate = _gate(path, tmp_path)
-        assert gate['pages'][0]['inline_object_damage']['located'] == 0, path.name
+        assert gate['pages'][0]['inline_object_damage']['located'] == 2 and gate['quality_fail'], path.name
     d.close()
 
 

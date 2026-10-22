@@ -224,6 +224,7 @@ LATIN_SIZE_RATIO = (0.75, 1.33)  # 拉丁字母字号与 Form 自身汉字字号
 
 
 def _char_records(page) -> list[dict[str, Any]]:
+    # seq：字符在提取结果里的先后（未排序的 rawdict 保持内容流的绘制顺序），用于判断是否与中文同属一个视觉顺序的文本流。
     records = []
     for block in page.get_text('rawdict').get('blocks', []):
         for line in block.get('lines', []):
@@ -232,8 +233,34 @@ def _char_records(page) -> list[dict[str, Any]]:
                     if char['c'].strip():
                         records.append({'key': (char['c'], tuple(round(v) for v in char['bbox'])), 'c': char['c'],
                                         'bbox': tuple(char['bbox']), 'font': span.get('font', ''),
-                                        'size': span.get('size', 0.0), 'flags': span.get('flags', 0)})
+                                        'size': span.get('size', 0.0), 'flags': span.get('flags', 0),
+                                        'seq': len(records)})
     return records
+
+
+def _same_line(r: dict[str, Any], pool: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    y0, y1 = r['bbox'][1], r['bbox'][3]
+    h = max(y1 - y0, 1.0)
+    return [o for o in pool if abs((o['bbox'][1] + o['bbox'][3]) - (y0 + y1)) / 2 <= 0.5 * h]
+
+
+def _in_chinese_text_run(r: dict[str, Any], own: list[dict[str, Any]], *, word: bool) -> bool:
+    """拉丁字形是否与同一 Form 里的中文同属一个按视觉顺序绘制的文本流（PR #19 第 6 轮，后端往返证据）：
+    该行（同一 Form 自身、同一视觉行的字符）按 x 排序后绘制顺序严格递增（字形画在它左右邻字之间，
+    后端按内容流顺序抽取时它留在原位；乱序后画的字母会被后端挪到行尾或丢失）；
+    同行最近的汉字与它字号相同；孤立单字母还须与该汉字同一字体（同一文本流），
+    斜体/数学字体的字形只有作为多字母单词（word=True，如斜体物种名、书名）时才可准入。"""
+    line = sorted(_same_line(r, own), key=lambda o: (o['bbox'][0] + o['bbox'][2]) / 2)
+    if any(a['seq'] >= b['seq'] for a, b in zip(line, line[1:])):
+        return False
+    cx = (r['bbox'][0] + r['bbox'][2]) / 2
+    cjk = [o for o in line if _CJK.match(o['c'])]
+    if not cjk:
+        return False
+    near = min(cjk, key=lambda o: abs((o['bbox'][0] + o['bbox'][2]) / 2 - cx))
+    if abs(near['size'] - r['size']) > 0.05 * max(near['size'], 1.0):
+        return False
+    return word or near['font'] == r['font']
 
 
 def _drawing_keys(page) -> list[tuple[str, tuple[int, int, int, int]]]:
@@ -251,7 +278,8 @@ def _is_math_char(c: str) -> bool:
             or 0x2100 <= code <= 0x214F or 0x2200 <= code <= 0x22FF)
 
 
-def _math_like_glyphs(own: list[dict[str, Any]], page_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _math_like_glyphs(own: list[dict[str, Any]], page_records: list[dict[str, Any]], *,
+                      admit_text_runs: bool = False) -> list[dict[str, Any]]:
     """Form 自身绘制的非中文字形里，像数学变量/符号的那些（结构与字体证据，不用词表）：
     数学符号或希腊字母；数学/斜体字体；孤立的单个拉丁字母（前后紧邻处没有其它字母数字）；
     字号与 Form 自身汉字字号明显不同的拉丁字母（上下标、公式字号）。普通英文单词与数字不算。"""
@@ -263,21 +291,26 @@ def _math_like_glyphs(own: list[dict[str, Any]], page_records: list[dict[str, An
         c = r['c']
         if _CJK.match(c) or unicodedata.category(c)[0] in 'PZC':
             continue
-        if _is_math_char(c) or _MATH_FONT.search(r['font'] or '') or (r['flags'] & 2):
-            result.append(r)
+        if _is_math_char(c):
+            result.append(r)  # 数学符号、希腊字母：始终是数学证据
             continue
-        if not c.isalpha():
-            continue  # 数字不单独作为数学证据（正文年份、编号、引用上标）
         x0, y0, x1, y1 = r['bbox']
-        h = max(y1 - y0, 1.0)
         # 紧邻的前后字符（同一行、间隙 <= 0.3 个字号的任何字符）；只要有一侧是拉丁字母或数字，就是单词的一部分。
-        same_line = [o for o in page_records if o is not r and abs((o['bbox'][1] + o['bbox'][3]) - (y0 + y1)) / 2 <= 0.5 * h]
+        same_line = [o for o in _same_line(r, page_records) if o is not r]
         left = max((o for o in same_line if o['bbox'][2] <= x0 + 0.5), key=lambda o: o['bbox'][2], default=None)
         right = min((o for o in same_line if o['bbox'][0] >= x1 - 0.5), key=lambda o: o['bbox'][0], default=None)
         neighbours = [o for o in (left, right) if o is not None and
                       (x0 - o['bbox'][2] if o is left else o['bbox'][0] - x1) <= 0.3 * r['size']]
-        if not any(o['c'].isalnum() and not _CJK.match(o['c']) for o in neighbours):
-            result.append(r)  # 孤立单字母（两侧紧邻处没有拉丁字母或数字）
+        in_word = any(o['c'].isalnum() and not _CJK.match(o['c']) for o in neighbours)
+        if _MATH_FONT.search(r['font'] or '') or (r['flags'] & 2):
+            if not (admit_text_runs and c.isalpha() and in_word and _in_chinese_text_run(r, own, word=True)):
+                result.append(r)
+            continue
+        if not c.isalpha():
+            continue  # 数字不单独作为数学证据（正文年份、编号、引用上标）
+        if not in_word:
+            if not (admit_text_runs and _in_chinese_text_run(r, own, word=False)):
+                result.append(r)  # 孤立单字母（两侧紧邻处没有拉丁字母或数字）
             continue
         if cjk_size and not (LATIN_SIZE_RATIO[0] <= r['size'] / cjk_size <= LATIN_SIZE_RATIO[1]):
             result.append(r)
@@ -359,6 +392,7 @@ def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> d
         tree = _form_tree(scratch[0])
         drawn: dict[int, Counter] = {}
         drawn_paths: dict[int, Counter] = {}
+        owned: dict[int, Counter] = {}
         for xref in tree:
             saved = scratch.xref_stream(xref)
             scratch.update_stream(xref, b'')
@@ -374,11 +408,20 @@ def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> d
             if not own_chars and not own_paths:
                 classes[xref] = 'container'
                 continue
+            if drawn[xref] == original and drawn_paths[xref] == original_paths:
+                # 页面等价 Form：它（连同内层）画出了整页的全部文字与路径，页面内容流与外壳自身什么都不画
+                # （整页外壳 show_pdf_page / 打印驱动整页 Form）。后端对它自身内容的处理与页面级内容相同
+                # （同一请求、逐像素相同的成品，见 PR #19 第 6 轮证据），因此按页面级内容对待：
+                # 包装不改变判定。内层 Form 仍逐个分类。
+                classes[xref] = 'page_equivalent'
+                owned[xref] = Counter()
+                continue
+            owned[xref] = own_chars
             own = [rec for key in own_chars.elements() for rec in by_key.get(key, [])[:1]]
             if not any(_CJK.match(rec['c']) for rec in own):
                 classes[xref] = 'object'
                 continue
-            math = _math_like_glyphs(own, records)
+            math = _math_like_glyphs(own, records, admit_text_runs=True)
             rules = _fraction_rules(list(own_paths.elements()), own)
             if not math and not rules:
                 classes[xref] = 'body'
@@ -398,6 +441,16 @@ def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> d
             if kind == 'object':
                 # 只改内存中的临时副本：清空不画汉字的 Form，正文/混排/外壳 Form 保留。
                 scratch.update_stream(xref, b'')
+        # 文字层（页面级、或页面等价 Form 自身）中文正文行里的数学字形：预检不拦（后端按页面文字处理，
+        # 与包装无关），但逐个记入 text_layer_math，由成品门核对它们在译文页里仍然存在（丢失即失败关闭）。
+        form_owned = Counter()
+        for xref, kind in classes.items():
+            if kind not in ('container', 'page_equivalent'):
+                form_owned += owned.get(xref, Counter())
+        layer = [rec for key in (original - form_owned).elements() for rec in by_key.get(key, [])[:1]]
+        layer_lines = _host_lines(layer, body_size, 2)
+        text_layer_math = [{'kind': 'text_layer_glyph', 'char': rec['c'], 'bbox': [round(v, 1) for v in rec['bbox']]}
+                           for rec in _math_like_glyphs(layer, records) if _in_flow(rec['bbox'], layer_lines)]
         bare = scratch[0]
         rows = _cjk_rows(bare)
         remaining = Counter(_char_keys(bare))
@@ -425,14 +478,18 @@ def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> d
     rule_inline = sum(1 for o in objects if o['kind'] == 'form_rule')
     reasons = sorted({'mixed_form_needs_review' if o.get('source') else 'inline_object' for o in objects})
     result = {'page': page_index + 1, 'cjk_rows': len(rows), 'form_xobjects': len(classes),
-              'page_in_form': bool(count['body'] or count['needs_review'] or count['standalone_mixed']),
-              'container_forms': count['container'], 'body_forms': count['body'], 'inline_forms': count['object'],
+              'page_in_form': bool(count['body'] or count['needs_review'] or count['standalone_mixed'] or count['page_equivalent']),
+              'container_forms': count['container'], 'page_equivalent_forms': count['page_equivalent'],
+              # 页面等价 Form 承载的就是整页正文，计入 body_forms（另单列 page_equivalent_forms）。
+              'body_forms': count['body'] + count['page_equivalent'], 'inline_forms': count['object'],
               'needs_review_forms': count['needs_review'], 'standalone_mixed_forms': count['standalone_mixed'],
               'xobject_text_glyphs': xobject_inline, 'vector_glyphs': vector_inline, 'form_rules': rule_inline,
               'reasons': reasons, 'samples': objects[:5],
+              'text_layer_math_glyphs': len(text_layer_math),
               'flagged': xobject_inline + vector_inline + rule_inline >= INLINE_OBJECT_PAGE_MIN}
     if with_objects:
         result['objects'] = objects
+        result['text_layer_math'] = text_layer_math
     return result
 
 
