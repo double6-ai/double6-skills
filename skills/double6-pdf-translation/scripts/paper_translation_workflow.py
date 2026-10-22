@@ -27,9 +27,13 @@ from runtime_paths import workspace_root
 ROOT = workspace_root()
 PROJECT = ROOT / 'projects/paper-translation'
 MODEL = None
-ROUTES = {'digital_pdf': 'pdf_backend', 'latex_verified': 'latex_direct'}
+ROUTES = {'digital_pdf': 'pdf_backend', 'latex_verified': 'latex_direct', 'scanned_ocr': 'ocr_reconstruct_pdf_backend'}
 DIGITAL_ROUTING = {'selection':'explicit_pdf_backend_only','complete_native_pages_required':True,
                    'latex_discovery':'disabled','scan_or_mixed':'rejected'}
+# 扫描/混合 PDF 的常规 OCR 路线（rc.8）：只接受受支持版式；OCR 重建源随后走同一电子 PDF 后端与全部质量门。
+OCR_ROUTING = {'selection':'explicit_scanned_ocr','engine':'tesseract_cli','scan_or_mixed':'ocr_supported_pages_only',
+               'unsupported_layouts':'rejected','latex_discovery':'disabled','backend':'pdf_backend_on_reconstructed_source'}
+PDF_BACKEND_ROUTES = ('digital_pdf', 'scanned_ocr')
 
 
 def write_new(path, value):
@@ -71,7 +75,7 @@ def project_lock(path):
         yield
 
 
-def doctor(base_url, model=MODEL, provider_generation_required=True):
+def doctor(base_url, model=MODEL, provider_generation_required=True, include_ocr=False):
     """只检查首发必需项；扫描/OCR依赖不参与首发阻塞。"""
     dependencies = {name: importlib.util.find_spec(name) is not None
                     for name in ('fitz', 'psutil', 'PIL', 'requests', 'pdf2zh_next', 'babeldoc')}
@@ -101,7 +105,16 @@ def doctor(base_url, model=MODEL, provider_generation_required=True):
             'provider_generation_required':provider_generation_required,
             'resources': {key: memory[key] for key in ('total', 'available', 'swap_used', 'codex')},
             'supported_routes': list(ROUTES),
-            'recommended_resource_contract': recommended_contract()}
+            'recommended_resource_contract': recommended_contract(),
+            **({'ocr_engine': ocr_engine_status()} if include_ocr else {})}
+
+
+def ocr_engine_status():
+    """OCR 路线依赖（仅信息）：缺失只影响 --route scanned_ocr，不进入 doctor 阻断项。"""
+    from ocr_route import engine_info
+    info = engine_info()
+    return {k: info.get(k) for k in ('engine', 'available', 'version', 'languages', 'missing', 'tessdata_dir', 'traineddata')} | {
+        'blocks_routes': ['scanned_ocr'] if not info.get('available') else [], 'blocks_digital_route': False}
 
 
 def validate_freeze(freeze, input_pdf, route, model):
@@ -120,6 +133,8 @@ def validate_freeze(freeze, input_pdf, route, model):
         raise ValueError('route or model differs from freeze')
     if route=='digital_pdf' and freeze.get('routing_contract')!=DIGITAL_ROUTING:
         raise ValueError('frozen explicit digital routing contract differs')
+    if route=='scanned_ocr' and (freeze.get('routing_contract')!=OCR_ROUTING or freeze.get('source_cache_contract')):
+        raise ValueError('frozen explicit scanned OCR routing contract differs')
     if route=='digital_pdf' and freeze.get('source_cache_contract'):
         from pdf_source_cache import CONTRACT, GROUP_CONTRACT, REVISION_CONTRACT, RENDER_INVOCATION_PROTOCOL
         declared=freeze['source_cache_contract']
@@ -130,7 +145,7 @@ def validate_freeze(freeze, input_pdf, route, model):
             raise ValueError('source cache frozen contract changed')
         if expected in (GROUP_CONTRACT,REVISION_CONTRACT) and bound_json(freeze['render_invocation_policy_ref']).get('protocol')!=RENDER_INVOCATION_PROTOCOL:
             raise ValueError('actual group render invocation policy differs')
-    if route=='digital_pdf':
+    if route in PDF_BACKEND_ROUTES:
         api_contract=bound_json(freeze['model_fingerprint_ref']).get('api_contract')
         if api_contract not in (None,'lmstudio_native_chat_v1'):raise ValueError('unknown frozen API contract')
         expected_proxy = 'source_bound_native' if api_contract else ('hymt_compat' if 'hy-mt' in model.lower() else 'none')
@@ -180,9 +195,9 @@ def job_limits(args):
     return limits if limits else resolve_limits()
 
 
-def candidate_command(args, freeze):
+def candidate_command(args, freeze, input_pdf=None):
     timeouts = backend_timeouts(job_limits(args)['per_job_seconds'])
-    command = [sys.executable, str(SCRIPT_DIR / 'run_pdf_translation.py'), str(args.input.resolve()),
+    command = [sys.executable, str(SCRIPT_DIR / 'run_pdf_translation.py'), str(Path(input_pdf or args.input).resolve()),
                '--output-dir', str(args.output.resolve()), '--model', args.model, '--base-url', args.base_url,
                '--local-max-concurrency', '1', '--timeout', str(timeouts['timeout']), '--openai-timeout', str(timeouts['openai_timeout']),
                '--latex-render-timeout', str(timeouts['timeout']), '--latex-translate-timeout', str(timeouts['openai_timeout']),
@@ -196,7 +211,7 @@ def candidate_command(args, freeze):
     if args.route == 'latex_verified':
         command += ['--source-override', freeze['latex_source']['path'], '--latex-render-mode', 'required',
                     '--skip-pdf-backend-when-latex-direct']
-    elif args.route=='digital_pdf':command+=['--pdf-backend-only','--latex-render-mode','off']
+    elif args.route in PDF_BACKEND_ROUTES:command+=['--pdf-backend-only','--latex-render-mode','off']
     if args.smoke:
         if args.route == 'latex_verified':
             raise ValueError('LaTeX smoke requires a separately frozen complete source project')
@@ -204,11 +219,11 @@ def candidate_command(args, freeze):
     return command
 
 
-def run_job(args, command, operation):
+def run_job(args, command, operation, interval_seconds=2):
     limits = job_limits(args)
     with project_lock(args.lock_path):
         result = run_bounded(command, cwd=ROOT, receipt_dir=args.receipts / operation, operation=operation,
-            timeout_seconds=limits['per_job_seconds'], interval_seconds=2, rss_limit=limits['task_rss_bytes'], max_processes=8,
+            timeout_seconds=limits['per_job_seconds'], interval_seconds=interval_seconds, rss_limit=limits['task_rss_bytes'], max_processes=8,
             deadline_monotonic=getattr(args,'task_deadline_monotonic',None),
             memory_metric=limits['memory_metric'], max_total_fraction=limits['max_total_fraction'],
             env={**os.environ, **getattr(args, 'frozen_environment', {}), 'OMP_NUM_THREADS': '1', 'OPENBLAS_NUM_THREADS': '1', 'MKL_NUM_THREADS': '1'})
@@ -223,6 +238,68 @@ def run_job(args, command, operation):
     if child:
         # 子任务以结构化 JSON 报告的预检/路由拒绝：上浮为 blocked，并保留错误码与发现。
         result.update(status='blocked', error_code=child.get('error_code'), findings=child.get('findings', []))
+    return result
+
+
+def cap_ocr_quality(result):
+    """OCR 文本未经人工核对：重建源的文字层不构成验收，综合质量最高为 unverified（fail 保持 fail）。"""
+    if result.get('status') == 'blocked':
+        return
+    status = result.get('quality_status')
+    result['ocr_text_layer_is_acceptance'] = False
+    if status not in (None, 'fail', 'unverified'):
+        result['quality_status_before_ocr_cap'] = status
+        result['quality_status'] = 'unverified'
+    result.setdefault('quality_pending', []).append({'id': 'ocr_text_unverified',
+        'message': 'OCR 识别文本未经人工逐字核对；译文质量不因生成的文字层而被视为通过。'})
+
+
+def run_scanned_ocr_candidate(args, freeze):
+    """scanned_ocr：有界 OCR 重建（tesseract 子进程计入同一进程树计量与回收）→ 重建源电子预检 → 电子后端。
+    OCR 与后端共享同一单任务时限（FREEZE 资源合同的 per_job_seconds）。任何不受支持的版式在模型调用前以退出码 2 拒绝。"""
+    import ocr_route
+    info = ocr_route.engine_info()
+    engine = {k: info.get(k) for k in ('engine', 'version', 'available', 'missing', 'languages', 'traineddata', 'tessdata_dir')}
+    if not info['available']:
+        return dict(blocked_result([finding('ocr_engine_unavailable', ocr_route.CODES['ocr_engine_unavailable'],
+                                            missing=info.get('missing'))]), ocr_stage='ocr_engine', ocr_engine=engine)
+    limits = job_limits(args)
+    if getattr(args, 'task_deadline_monotonic', None) is None:
+        args.task_deadline_monotonic = time.monotonic() + limits['per_job_seconds']
+    workdir = (args.receipts / 'ocr').resolve()
+    target = getattr(args, 'target_language', 'zh')
+    job = run_job(args, [sys.executable, str(SCRIPT_DIR / 'ocr_route.py'), '--input', str(args.input.resolve()),
+                         '--workdir', str(workdir), '--target-language', target, '--tesseract', info['binary']],
+                  'ocr-reconstruct', interval_seconds=0.5)
+    manifest_path = workdir / 'OCR_MANIFEST.json'
+    ocr = {'engine': engine, 'job': {k: job.get(k) for k in ('status', 'stop_reason', 'error_code', 'elapsed_seconds',
+           'peak_task_memory_bytes', 'peak_task_rss_sum_bytes', 'rss_limit_bytes', 'memory_metric', 'resource_receipt',
+           'observed_owned_identities', 'launch_identity')} | {'cleanup_status': (job.get('cleanup') or {}).get('status')},
+           'manifest_ref': ref(manifest_path) if manifest_path.is_file() else None}
+    if job.get('status') != 'succeeded':
+        return dict(job, ocr_stage='ocr_reconstruct', ocr=ocr)
+    if not manifest_path.is_file():
+        raise ValueError('OCR reconstruction finished without its manifest')
+    manifest = read_json(manifest_path)
+    ocr['status'] = manifest['status']
+    ocr['pages'] = [{k: row.get(k) for k in ('page', 'kind', 'source_image_dpi', 'mean_word_conf', 'lines', 'osd', 'skew_degrees',
+                     'ruling_lines', 'tabular_lines', 'background_residue', 'reconstructed_page', 'text_line_count',
+                     'low_confidence_lines_written', 'refined_rows')} for row in manifest.get('pages', [])]
+    ocr['tesseract_processes'] = manifest.get('processes', [])
+    if manifest['status'] != 'ok':
+        return dict(blocked_result(manifest['findings']), ocr_stage='ocr_reconstruct', ocr=ocr)
+    rebuilt = Path(manifest['reconstructed_source']['path'])
+    ocr['reconstructed_source_ref'] = ref(rebuilt)
+    report = bounded_input_preflight(rebuilt, args.receipts / 'reconstructed-input', require_digital=True, target_language=target)
+    ocr['reconstructed_preflight'] = {k: report.get(k) for k in ('status', 'error_code', 'warnings', 'source_language', 'page_count')}
+    if report['status'] == 'blocked':
+        return dict(report, ocr_stage='ocr_reconstructed_preflight', ocr=ocr)
+    command = candidate_command(args, freeze, input_pdf=rebuilt)
+    result = run_job(args, [sys.executable, str(Path(__file__)), '_execute-digital', '--freeze', str(args.freeze.resolve()),
+                            '--ocr-manifest', str(manifest_path), '--ocr-manifest-sha256', sha(manifest_path),
+                            '--', *command[2:]], 'candidate')
+    result['ocr'] = ocr
+    result['ocr_stage'] = 'pdf_backend'
     return result
 
 
@@ -490,15 +567,25 @@ def validate_proxy_evidence(path, required, adapter=None):
     validate_proxy_quality(evidence.get('stats'),native=adapter=='source_bound_native')
 
 
-def execute_digital(freeze_path, command):
-    """子任务内核对真实页数和扫描路线，扫描禁止进入首发模型调用。"""
+def execute_digital(freeze_path, command, ocr_manifest=None):
+    """子任务内核对真实页数和扫描路线，扫描禁止进入首发模型调用。
+    scanned_ocr 路线：输入必须是同一 FREEZE 输入经 OCR 清单绑定的重建源（逐 sha 核对），其余守门与电子路线相同。"""
     import fitz
     import run_pdf_translation
     from scanned_raster.route_pdf import route_pdf
     freeze = read_json(freeze_path)
     args = run_pdf_translation.build_parser().parse_args(command)
-    if freeze.get('route')!='digital_pdf' or freeze.get('routing_contract')!=DIGITAL_ROUTING or not args.pdf_backend_only or args.latex_render_mode!='off':
-        raise ValueError('explicit digital route identity missing or changed')
+    if ocr_manifest is None:
+        if freeze.get('route')!='digital_pdf' or freeze.get('routing_contract')!=DIGITAL_ROUTING or not args.pdf_backend_only or args.latex_render_mode!='off':
+            raise ValueError('explicit digital route identity missing or changed')
+    else:
+        manifest = bound_json(ocr_manifest)
+        rebuilt = manifest.get('reconstructed_source') or {}
+        if (freeze.get('route')!='scanned_ocr' or freeze.get('routing_contract')!=OCR_ROUTING or not args.pdf_backend_only
+                or args.latex_render_mode!='off' or manifest.get('status')!='ok'
+                or manifest.get('input',{}).get('sha256')!=freeze['input']['sha256']
+                or ref(args.input_pdf)!={'path':rebuilt.get('path'),'sha256':rebuilt.get('sha256')}):
+            raise ValueError('explicit scanned OCR route identity or reconstructed source binding missing or changed')
     with fitz.open(args.input_pdf) as document:
         if list(range(1, len(document)+1)) != freeze['pages']:
             raise ValueError('actual PDF page scope differs from freeze')
@@ -708,6 +795,8 @@ def main(argv=None):
     continuation.add_argument('--lock-path', type=Path, default=PROJECT / 'logs/paper_translation_workflow.lock')
     internal = sub.add_parser('_execute-digital', help=argparse.SUPPRESS)
     internal.add_argument('--freeze', type=Path, required=True)
+    internal.add_argument('--ocr-manifest', type=Path)
+    internal.add_argument('--ocr-manifest-sha256')
     internal.add_argument('command', nargs=argparse.REMAINDER)
     revision = sub.add_parser('revise-latex', help='审校通过的完整源单元修订，另生成候选')
     revision.add_argument('--input', type=Path, required=True)
@@ -875,9 +964,9 @@ def check_target_language_route(args):
     target = getattr(args, 'target_language', 'zh') or 'zh'
     if target == 'zh':
         return
-    if args.route != 'digital_pdf' or args.action == 'collect':
+    if args.route not in PDF_BACKEND_ROUTES or args.action == 'collect':
         exc = PreflightError('target_language_route_unsupported',
-                             f'--target-language {target} 只支持 candidate --route digital_pdf；'
+                             f'--target-language {target} 只支持 candidate --route digital_pdf / scanned_ocr；'
                              f'当前 {args.action} --route {args.route} 的译者固定译成简体中文。',
                              target_language=target, route=args.route, action=args.action)
         exc.result = dict(blocked_result([finding('target_language_route_unsupported', target_language=target,
@@ -915,9 +1004,13 @@ def dispatch(args):
         with project_lock(args.lock_path):
             result = continue_digital({'path':str(args.contract.resolve()),'sha256':args.contract_sha256},args.receipt)
     elif args.action == '_execute-digital':
-        result = execute_digital(args.freeze, args.command[1:] if args.command[:1] == ['--'] else args.command)
+        manifest_ref = ({'path': str(args.ocr_manifest.resolve()), 'sha256': args.ocr_manifest_sha256}
+                        if args.ocr_manifest else None)
+        if args.ocr_manifest and not args.ocr_manifest_sha256:
+            raise ValueError('OCR manifest exact SHA required')
+        result = execute_digital(args.freeze, args.command[1:] if args.command[:1] == ['--'] else args.command, manifest_ref)
     elif args.action == 'doctor':
-        result = doctor(args.base_url, args.model)
+        result = doctor(args.base_url, args.model, include_ocr=True)
         if args.output:
             write_new(args.output, result)
     elif args.action == 'resume-latex':
@@ -982,6 +1075,8 @@ def dispatch(args):
             result=run_job(args,[sys.executable,str(Path(__file__)),'_execute-digital','--freeze',str(args.freeze.resolve()),'--',*command[2:]],'source-collect')
         elif args.route == 'latex_verified':
             result = run_latex_candidate(args, freeze)
+        elif args.route == 'scanned_ocr':
+            result = run_scanned_ocr_candidate(args, freeze)
         else:
             command = candidate_command(args, freeze)
             if freeze.get('source_cache_contract') and not args.source_cache_context:
@@ -997,10 +1092,12 @@ def dispatch(args):
         result.update(input_preflight={k: preflight_report[k] for k in ('status', 'warnings', 'source_language', 'page_count')},
                       resource_contract_frozen=freeze.get('resource_contract'))
         if args.route=='digital_pdf':result['routing_contract']=DIGITAL_ROUTING
+        if args.route=='scanned_ocr':result['routing_contract']=OCR_ROUTING
         if args.action=='collect':result.update(stage='source_only_collect',candidate_generated=False)
         else:
             # 任何路线（电子 PDF、LaTeX）都把综合质量结论上浮到回执；fail 时退出码 3。
             result.update(quality_verdict(args.output))
+            if args.route=='scanned_ocr':cap_ocr_quality(result)
         write_new(args.receipts / ('WORKFLOW_COLLECTION.json' if args.action=='collect' else 'WORKFLOW_CANDIDATE.json'), result)
     elif args.action == 'revise-latex':
         contract = read_json(args.contract)
