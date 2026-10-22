@@ -96,9 +96,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     from qa_pipeline import attach_pipeline_quality
     source = Path(args.input_pdf).expanduser().resolve()
     output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else default_output_dir(source).resolve()
+    from pdf_translation_render import load_document_term_context
+    # 分块翻译：块从整份文档的参考文献区中间开始时，带入区状态（上下文文件已按 SHA-256 绑定）。
+    chunk_context = load_document_term_context(args) or {}
     result=attach_pipeline_quality(manifest, source=source, output_dir=output_dir,
         review_ref={"path": str(Path(review).resolve()), "sha256": digest} if review else None,
-        target_language=getattr(args, "target_language", "zh") or "zh")
+        target_language=getattr(args, "target_language", "zh") or "zh",
+        region_open_at_start=chunk_context.get("reference_region_open_at_start") is True)
     if invocation_ref:bind_final_group_artifact(args,output_dir,result,invocation_ref)
     return result
 

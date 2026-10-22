@@ -456,13 +456,30 @@ def _decide_entries(seq: list[dict[str, Any]], label: str) -> list[dict[str, Any
     return rows
 
 
-def split_counted_text(document, allowed_pages: set[int] | None = None):
+def reference_region_open_pages(document) -> list[bool]:
+    """逐页返回“该页开始时参考文献区是否已打开”（与 split_counted_text 同一套标题判定）。
+
+    分块翻译在整份源文上计算一次，块从参考文献区中间开始时把状态带入该块的残留检查，
+    使块内结论与整份文档一次检查时相同（不是放宽：区内仍按同一套逐条规则剔除或计数）。"""
+    state, opened = False, []
+    for page in document:
+        opened.append(state)
+        for group in _page_groups(page):
+            if group['kind'] == 'reference_heading':
+                state = True
+            elif group['kind'] == 'end_heading':
+                state = False
+    return opened
+
+
+def split_counted_text(document, allowed_pages: set[int] | None = None, region_open_at_start: bool = False):
     """逐页返回计数文本、剔除统计、参考文献所在页与无标题参考文献审计记录。
 
     参考文献区按阅读顺序跨页延续，直到附录类标题；allowed_pages 不为 None 时（译文侧），
-    无标题参考文献只在这些页上接受。"""
+    无标题参考文献只在这些页上接受。region_open_at_start 只由分块翻译传入：整份源文在本块
+    第一页之前已打开参考文献区（reference_region_open_pages）。"""
     pages = [_page_groups(page) for page in document]
-    in_region = False
+    in_region = bool(region_open_at_start)
     for groups in pages:
         for group in groups:
             group['exclude'] = None
@@ -903,7 +920,8 @@ def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
     return result
 
 
-def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh') -> dict[str, Any]:
+def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh',
+                         region_open_at_start: bool = False) -> dict[str, Any]:
     import fitz
 
     if target_language == 'en':
@@ -924,10 +942,12 @@ def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh')
         # mono 成品与源页一一对应；页数不一致时只比较共同页并记录。
         count = min(len(source), len(target))
         result['page_count_source'], result['page_count_target'] = len(source), len(target)
-        source_text, source_excluded, source_refs, source_audit = split_counted_text(source)
+        source_text, source_excluded, source_refs, source_audit = split_counted_text(
+            source, region_open_at_start=region_open_at_start)
         source_runs = source_audit['headingless_runs']
         accepted_pages = {page for run in source_runs if run['accepted'] for page in run['pages']}
-        target_text, target_excluded, target_refs, target_audit = split_counted_text(target, accepted_pages)
+        target_text, target_excluded, target_refs, target_audit = split_counted_text(
+            target, accepted_pages, region_open_at_start=region_open_at_start)
         target_runs = target_audit['headingless_runs']
         for index in range(count):
             source_ex, target_ex = sum(source_excluded[index].values()), sum(target_excluded[index].values())
@@ -954,6 +974,9 @@ def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh')
             'source_words': sum(sum(p.values()) for p in source_excluded[:count]),
             'target_words': sum(sum(p.values()) for p in target_excluded[:count]),
         }
+        if region_open_at_start:
+            # 只在分块且块从参考文献区中间开始时出现；单份翻译的报告逐字不变。
+            result['excluded']['reference_region_open_at_start'] = True
     evaluated = [p for p in result['pages'] if p['evaluated']]
     total_source = sum(p['source_latin_words'] for p in evaluated)
     total_target = sum(p['target_latin_words'] for p in evaluated)
