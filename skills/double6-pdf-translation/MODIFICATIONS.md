@@ -18,6 +18,16 @@
 
 源论文、译稿、字体、TeX、模型权重与验证证据不包含在公开运行包中。每份文档的完整语义、实际单语/双语页面、样式链接、阅读复制和冷重建仍须执行；本次维护没有授予任意输入的自动严格交付能力。
 
+## 2.0.0-rc.8 维护改动（2026-10-22）
+
+- 新增 `scripts/ocr_route.py`：扫描页检测、格线/列间隙表格检测、OSD 旋转、Tesseract 调用（有界、超时即杀）、逐行置信与多遍核对、重建 PDF（PyMuPDF 内置 `china-s` 字体）、OCR 清单与阈值记录、`cap_ocr_quality`、`ocr_engine_status`。
+- 修改 `scripts/paper_translation_workflow.py`：`candidate --route scanned_ocr`（`run_scanned_ocr_candidate`），OCR 子任务经 `run_bounded`，`_execute-digital` 新增 `--ocr-manifest`/`--ocr-manifest-sha256` 绑定，`doctor` 报告 `ocr_engine_status`，冻结校验增加 OCR 合同字段。
+- 修改 vendored BabelDOC `format/pdf/document_il/backend/pdf_creater.py`：辅助子进程使用 `multiprocessing.get_context("spawn").Process`；文件头维护日期更新为 2026-10-22。
+- 文档：新增 `references/ocr-route.md`（设计、支持/拒绝矩阵、错误码）；`references/runtime-dependencies.md` 增加 Tesseract 与语言数据的版本与许可证声明；`references/release-quickstart.md`、`SKILL.md` 增加路线说明。
+- CI：`.github/workflows/tests.yml` 的 Linux PDF 作业安装 `tesseract-ocr`、`tesseract-ocr-eng`、`tesseract-ocr-chi-sim`、`tesseract-ocr-osd` 并列出版本。
+- 新增 `tests/test_ocr_route.py`（单元与真实引擎测试）、`tests/test_ocr_route_processes.py`（真实进程计量/回收正反例）。
+- 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py`、仓库 `README.md` 更新为 2.0.0-rc.8。
+
 ## 2.0.0-rc.7 维护改动（2026-10-22）
 
 - 修改 `scripts/pdf_input_preflight.py`、`scripts/paper_translation_workflow.py`、`scripts/pdf_translation_cli.py`、`scripts/pdf_translation_commands.py`、`scripts/pdf_translation_render.py`、`scripts/pdf_translation_runtime.py`、`scripts/run_pdf_translation_context.py`、`scripts/qa_pipeline.py`、`scripts/render_residue_check.py`：`--target-language {zh,en}`、目标语言感知预检、中译英后端参数/提示词/术语过滤、渲染中文残留与保留字形压叠检查。

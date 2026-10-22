@@ -88,6 +88,12 @@ jobs:
       - name: Install exactly as documented (scripts/setup_venv.sh, hash-locked)
         run: PDFTR_PYTHON="$(command -v python)" bash scripts/setup_venv.sh "$RUNNER_TEMP/pdftr-venv"
       - run: uv pip install --python "$RUNNER_TEMP/pdftr-venv/bin/python" pytest
+      - name: OCR route engine (Tesseract + chi_sim/eng/osd, Apache-2.0; optional for other routes)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim tesseract-ocr-osd
+          tesseract --version
+          tesseract --list-langs
       - name: Unit and CLI tests (no model, no network)
         env:
           PAPER_TRANSLATION_WORKSPACE: ${{ runner.temp }}/pdftr-ws
