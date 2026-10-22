@@ -468,6 +468,29 @@ CJK_SCRIPT_RAISED_BOTTOM = 0.35
 CJK_SCRIPT_LOWERED_TOP = 0.5
 CJK_SCRIPT_LOWERED_BOTTOM = -0.15
 CJK_SCRIPT_HEIGHT = (0.2, 0.6)
+# 汉字结构（PR #20 review 2）：汉字近似方块、填满行高。小部件若能与紧邻的簇（间隙 ≤ 0.25 字高）拼成
+# 宽 0.75–1.1、高 ≥ 0.75 字高的方块，就是该汉字的分离笔画（省、估、小）；拼不成方块的独立小字形才是上下标候选。
+HAN_PART_GAP = 0.25
+HAN_CELL_WIDTH = (0.75, 1.1)
+HAN_CELL_MIN_HEIGHT = 0.75
+CJK_MARK_MAX_HEIGHT = 0.4         # 汉字行：标点（，、。“”‘’）高 ≈ 0.2–0.35 字高；9 pt 数字/字母上下标 ≈ 0.45–0.55
+CJK_RAISED_MARK_MAX_WIDTH = 0.26  # 汉字行抬高记号单个簇宽 ≤ 0.26 字高（引号每撇 ≈ 0.16–0.19；9 pt 的 n/2 ≈ 0.33）
+CJK_MARK_WINDOW = 1.0             # 汉字行 OCR 词框常有偏移：在 ±1 字高窗口内的词里找能解释它的标点
+# 粘连：上下标墨迹与相邻字形连成一个连通域时，单独的小簇不存在。
+#  - 拉丁行：簇的一侧边缘有一段墨迹高出本行升部线（升部/大写字母顶端中位数）≥ 0.22 x 高，且这段只占簇宽的一部分；
+#  - 汉字行：簇宽 > 1.2 字高（汉字不超过 1.1），超出方块的那一侧墨迹只占行高的一部分（小字形），按上下标候选判定。
+TOUCH_ASC_PROTRUDE = 0.22
+TOUCH_RUN_WIDTH = (0.2, 0.7)      # 高出部分宽度：≥ 0.2 x 高，≤ 0.7 × 簇宽
+CJK_TOUCH_RUN_WIDTH = (0.15, 0.6)  # 汉字行粘连下标：方块边缘露出的纯下标列宽 0.15–0.6 字高
+CJK_TOUCH_MIN_EXTENT = 0.4        # 露出部分墨迹总高 ≥ 0.4 字高
+CJK_TOUCH_PROTRUDE = 0.12         # 粘连上标：边缘纯上标列的顶端高出本行汉字顶端中位数 ≥ 0.12 字高
+CJK_TOUCH_LOW_DEPTH = 0.1         # 纯下标列底端低于基线 ≥ 0.1 字高
+TOUCH_LOW_DEPTH = 0.2             # 拉丁行粘连下标：边缘墨迹低于基线 ≥ 0.2 x 高
+TOUCH_LOW_TOP = (0.25, 0.75)      # 且这几列墨迹顶端在基线上方 0.25–0.75 x 高
+ENCLOSED_SIZE = (0.6, 1.15)        # 汉字行带圈序号（①）：外圈约 0.6–1.15 字高、近似正方（宽高比 0.8–1.25），
+ENCLOSED_ASPECT = (0.8, 1.25)      # 圈内另有完整连通域（数字），且外框四角（各 0.12 边长）无墨——圆形；
+ENCLOSED_RING = (0.72, 1.05)       # 归一化半径的环带
+ENCLOSED_CORNER = 0.12             # 圆外接正方形角上 ≈0.146 边长内无圆周；口/回/国 等方框四角有笔画，不算。tesseract chi_sim 会把 ① 读成“中”“@”等，序号丢失
 RAISED_MARKS = {"'": 1, '"': 2, '\u2018': 1, '\u2019': 1, '\u201c': 2, '\u201d': 2, '`': 1, '\u00b4': 1, '\u2032': 1,
                 '\u2033': 2, '*': 1, '\u00b0': 1, '^': 1, '\u00ba': 1, '\u00aa': 1}
 LOWERED_MARKS = {',': 1, ';': 1, '\uff0c': 1, '\uff1b': 1, '\u3001': 1}
@@ -523,9 +546,150 @@ def _mark_zone(word: str, kind: str) -> str:
     抬高记号（引号、撇号、*、°）整词都算（don't、’s）。"""
     if kind == 'raised':
         return word
-    def alnum(i: int) -> bool:
-        return 0 <= i < len(word) and word[i].isalnum()
+    def alnum(i: int) -> bool:   # 只看拉丁字母数字：汉字之间的“，”照常可作解释
+        return 0 <= i < len(word) and word[i].isascii() and word[i].isalnum()
     return ''.join(ch for i, ch in enumerate(word) if ch in LOWERED_MARKS and not (alnum(i - 1) and alnum(i + 1)))
+
+
+def _han_part(index: int, ordered: list[dict[str, Any]], em: float) -> bool:
+    """小簇能否与紧邻簇拼成一个汉字方块（见 HAN_* 常量）。"""
+    b = ordered[index]['box']
+    for j in (index - 1, index + 1):
+        if not 0 <= j < len(ordered):
+            continue
+        n = ordered[j]['box']
+        if max(n[0] - b[2], b[0] - n[2], 0) > HAN_PART_GAP * em:
+            continue
+        uw = max(b[2], n[2]) - min(b[0], n[0]); uh = max(b[3], n[3]) - min(b[1], n[1])
+        if HAN_CELL_WIDTH[0] * em <= uw <= HAN_CELL_WIDTH[1] * em and uh >= HAN_CELL_MIN_HEIGHT * em:
+            return True
+    return False
+
+
+def _runs(flags) -> list[tuple[int, int]]:
+    runs, start = [], None
+    for i, v in enumerate(list(flags) + [False]):
+        if v and start is None:
+            start = i
+        elif not v and start is not None:
+            runs.append((start, i)); start = None
+    return runs
+
+
+def _latin_low_touching(sub_ink, box: list[int], baseline: float, xh: float) -> list[list[int]]:
+    """拉丁行：宽 ≥ 1.2 x 高的簇，边缘一段连续的“纯下标列”：该列墨迹底端低于基线 ≥ TOUCH_LOW_DEPTH，
+    顶端在基线上方 TOUCH_LOW_TOP 区间内（下标数字/字母顶端约 0.55–0.6；g/p/q 的这几列向上一直到 x 高线，
+    y/j 的尾巴整列都在基线以下，都不算）。交给后续按“压低”判定与逗号解释。"""
+    import numpy as np
+    bx0, by0, bx1, by1 = box
+    width = bx1 - bx0
+    if width < 1.2 * xh or (baseline - by1) / xh > -TOUCH_LOW_DEPTH:
+        return []
+    has = sub_ink.any(axis=0)
+    rows = np.arange(sub_ink.shape[0])[:, None]
+    top = np.where(sub_ink, rows, sub_ink.shape[0]).min(axis=0)
+    bot = np.where(sub_ink, rows, -1).max(axis=0)
+    top_rel = (baseline - (by0 + top)) / xh
+    bot_rel = (baseline - (by0 + bot + 1)) / xh
+    pure = has & (top_rel >= TOUCH_LOW_TOP[0]) & (top_rel <= TOUCH_LOW_TOP[1]) & (bot_rel <= -TOUCH_LOW_DEPTH)
+    out = []
+    for a, b in _runs(pure):
+        at_edge = a <= 0.1 * xh or b >= width - 0.1 * xh
+        if at_edge and TOUCH_RUN_WIDTH[0] * xh <= b - a <= TOUCH_RUN_WIDTH[1] * width:
+            out.append([bx0 + a, by0 + int(top[a:b].min()), bx0 + b, by0 + int(bot[a:b].max()) + 1, 'latin_low_protrusion'])
+    return out
+
+
+def _touching_pieces(k: dict[str, Any], ink, origin: tuple[int, int], baseline: float, xh: float, asc: float | None,
+                     cjk: bool) -> list[list[int]]:
+    """粘连上下标的候选部分（像素框）。拉丁行：边缘高出升部线的一段 / 边缘的纯下标列；汉字行：方块边缘的纯下标列。"""
+    import numpy as np
+    bx0, by0, bx1, by1 = k['box']
+    ox, oy = origin
+    sub_ink = ink[by0 - oy:by1 - oy, bx0 - ox:bx1 - ox]
+    if sub_ink.size == 0:
+        return []
+    width = bx1 - bx0
+    pieces = []
+    if not cjk:
+        pieces += _latin_low_touching(sub_ink, k['box'], baseline, xh)
+        if asc is None or (baseline - by0) / xh < asc + TOUCH_ASC_PROTRUDE or width < 0.9 * xh:
+            return pieces
+        limit = int(round(baseline - (asc + 0.1) * xh)) - by0     # 行内坐标：高于此行的墨迹算“高出”
+        if limit <= 0:
+            return pieces
+        for a, b in _runs(sub_ink[:limit].any(axis=0)):
+            at_edge = a <= 0.1 * xh or b >= width - 0.1 * xh
+            if at_edge and TOUCH_RUN_WIDTH[0] * xh <= b - a <= TOUCH_RUN_WIDTH[1] * width:
+                rows = np.where(sub_ink[:, a:b].any(axis=1))[0]
+                # 只取高出部分自身（向下到第一行空白或与主体相接处）：用该列段在升部线以上的墨迹框
+                top_rows = rows[rows < limit]
+                pieces.append([bx0 + a, by0 + int(top_rows.min()), bx0 + b, by0 + int(rows.max()) + 1, 'latin_protrusion'])
+        return pieces
+    # 汉字行：汉字方块（高 ≥ 0.75 字高）的左/右边缘一段“纯下标列”（每列顶端 ≤ 0.5、底端低于基线 ≥ 0.1 字高），
+    # 且这段墨迹总高 ≥ 0.4 字高。汉字字面几乎不低于基线，真实扫描中没有这种列。
+    # 粘连上标：大量汉字边缘本身就是只在上半部的笔画（真实扫描 zh-01/02/03 中宽 0.43–0.52、高 0.38–0.67 字高），
+    # 单看“纯上标列”无法区分；只有当这段墨迹顶端还高出本行汉字顶端中位数 ≥ CJK_TOUCH_PROTRUDE 时才算
+    # （真实扫描 2212 个汉字簇最多高出 0.11 字高；粘连的 9 pt 上标高出 0.14）。高出不足的粘连上标仍检测不到。
+    if (by1 - by0) < HAN_CELL_MIN_HEIGHT * xh:
+        return []
+    has = sub_ink.any(axis=0)
+    rows = np.arange(sub_ink.shape[0])[:, None]
+    top = np.where(sub_ink, rows, sub_ink.shape[0]).min(axis=0)
+    bot = np.where(sub_ink, rows, -1).max(axis=0)
+    top_rel = (baseline - (by0 + top)) / xh
+    bot_rel = (baseline - (by0 + bot + 1)) / xh
+    zones = [('cjk_touching_lowered', has & (top_rel <= CJK_SCRIPT_LOWERED_TOP) & (bot_rel <= -CJK_TOUCH_LOW_DEPTH))]
+    if asc is not None and (baseline - by0) / xh >= asc + CJK_TOUCH_PROTRUDE:
+        zones.append(('cjk_touching_raised', has & (bot_rel >= CJK_SCRIPT_RAISED_BOTTOM)))
+    for name, pure in zones:
+        for a, b in _runs(pure):
+            at_edge = a <= 0.1 * xh or b >= width - 0.1 * xh
+            if not (at_edge and CJK_TOUCH_RUN_WIDTH[0] * xh <= b - a <= CJK_TOUCH_RUN_WIDTH[1] * xh):
+                continue
+            t, u = int(top[a:b].min()), int(bot[a:b].max()) + 1
+            if name == 'cjk_touching_raised' and (baseline - (by0 + t)) / xh < asc + CJK_TOUCH_PROTRUDE:
+                continue      # 这段边缘墨迹本身没有高出汉字顶端：是汉字笔画
+            if (u - t) >= CJK_TOUCH_MIN_EXTENT * xh:
+                pieces.append([bx0 + a, by0 + t, bx0 + b, by0 + u, name])
+    return pieces
+
+
+def _enclosed_numerals(comps: list[list[int]], ink, origin: tuple[int, int], em: float) -> list[dict[str, Any]]:
+    """汉字行的带圈序号（①②…⑩）：圆形外圈连通域内含另一个完整连通域。OCR 读不出这些字符（会改写成别的字），
+    在覆盖原图之前作为几何证据报告。"""
+    import numpy as np
+    ox, oy = origin
+    found = []
+    for c in comps:
+        w, h = c[2] - c[0], c[3] - c[1]
+        if not (ENCLOSED_SIZE[0] * em <= min(w, h) and max(w, h) <= ENCLOSED_SIZE[1] * em
+                and ENCLOSED_ASPECT[0] <= w / max(h, 1) <= ENCLOSED_ASPECT[1]):
+            continue
+        if not any(d is not c and d[0] > c[0] and d[2] < c[2] and d[1] > c[1] and d[3] < c[3] for d in comps):
+            continue
+        k = max(1, int(ENCLOSED_CORNER * min(w, h)))
+        x0, y0, x1, y1 = c[0] - ox, c[1] - oy, c[2] - ox, c[3] - oy
+        corners = (ink[y0:y0 + k, x0:x0 + k], ink[y0:y0 + k, x1 - k:x1], ink[y1 - k:y1, x0:x0 + k], ink[y1 - k:y1, x1 - k:x1])
+        if any(part.any() for part in corners):
+            continue
+        # 外圈必须是圆环：圈内完整连通域之外的墨迹 ≥ 90% 落在半径 0.72–1.05 的环带里，且 16 个方向都有环带墨迹
+        # （“每”“细”等字四角也空、也含封闭小部件，但笔画穿过中心，不是环）
+        region = ink[y0:y1, x0:x1].astype(bool).copy()
+        for d in comps:
+            if d is not c and d[0] > c[0] and d[2] < c[2] and d[1] > c[1] and d[3] < c[3]:
+                region[d[1] - c[1]:d[3] - c[1], d[0] - c[0]:d[2] - c[0]] = False
+        ys, xs = np.nonzero(region)
+        if xs.size == 0:
+            continue
+        cxr, cyr, r = (w - 1) / 2, (h - 1) / 2, max(w, h) / 2
+        dist = np.hypot((xs - cxr) / (w / 2), (ys - cyr) / (h / 2))
+        ring = (dist >= ENCLOSED_RING[0]) & (dist <= ENCLOSED_RING[1])
+        sectors = np.unique((np.degrees(np.arctan2(ys[ring] - cyr, xs[ring] - cxr)) % 360 // 22.5).astype(int))
+        if ring.mean() >= 0.9 and sectors.size == 16:
+            found.append({'kind': 'enclosed', 'box_px': c[:4], 'height_xh': round(h / em, 2),
+                          'reason': 'enclosed_numeral_not_representable_by_ocr'})
+    return found
 
 
 def line_script_evidence(gray, line: dict[str, Any], threshold: int) -> dict[str, Any]:
@@ -552,28 +716,47 @@ def line_script_evidence(gray, line: dict[str, Any], threshold: int) -> dict[str
     suspects = []
     cjk = bool(_CJK.search(line.get('text', '')))
     skipped_cjk = 0
-    for k in clusters:
+    ordered = sorted(clusters, key=lambda c: c['box'][0])
+    asc_tops = [(baseline - c['box'][1]) / xh for c in clusters if (baseline - c['box'][1]) / xh >= 1.2]
+    asc = statistics.median(asc_tops) if len(asc_tops) >= 5 else None
+    if cjk:   # 汉字行的“升部线”= 汉字方块（高 ≥ 0.75 字高）顶端的中位数
+        han_tops = [(baseline - c['box'][1]) / xh for c in clusters if (c['box'][3] - c['box'][1]) >= HAN_CELL_MIN_HEIGHT * xh]
+        asc = statistics.median(han_tops) if len(han_tops) >= 5 else None
+    if cjk:
+        suspects.extend(_enclosed_numerals(comps, ink, (cx0, cy0), xh))
+    candidates = []
+    for index, k in enumerate(ordered):
+        for piece in _touching_pieces(k, ink, (cx0, cy0), baseline, xh, asc, cjk):
+            candidates.append(({'box': piece[:4]}, piece[4]))
+        candidates.append((k, index))
+    for k, origin in candidates:
+        touching = isinstance(origin, str)
         bx0, by0, bx1, by1 = k['box']
         if bx1 - bx0 < max(SCRIPT_MIN_WIDTH_PX, SCRIPT_MIN_WIDTH * xh):
             continue
         centre = (bx0 + bx1) / 2
         height = (by1 - by0) / xh
+        window = (CJK_MARK_WINDOW if cjk else MARK_SEARCH) * xh
         near = sorted((max(b[0] - centre, centre - b[2], 0), i) for i, b in enumerate(boxes) if i < len(texts))
-        near = [(d, i) for d, i in near if d <= (0.5 if cjk else MARK_SEARCH) * xh]
+        near = [(d, i) for d, i in near if d <= window]
         local = baseline
         if cjk:
             if not CJK_SCRIPT_HEIGHT[0] <= height <= CJK_SCRIPT_HEIGHT[1]:
                 continue
-            if not near or _CJK.search(texts[near[0][1]]):
-                # 汉字行：分离的笔画（省、学、心的上部点画）与小号上标在几何上无法区分，且汉字 OCR 词框常有偏移。
-                # 只检查落在拉丁/数字词旁（0.5 字高内）的小字形；靠近汉字词或不在任何词旁的视为汉字笔画（已知局限，见 ocr-route.md）。
+            if not touching and height <= CJK_MARK_MAX_HEIGHT and _han_part(origin, ordered, xh):
+                # 能与紧邻簇拼成汉字方块的小部件是汉字笔画（省、估的分离部件）；
+                # 高于 0.4 字高的小簇（9 pt 数字/字母上下标 ≈ 0.45–0.55）即使能拼成方块也不跳过（文献¹ 的 1 与“献”能拼成方块）
                 skipped_cjk += 1
                 continue
-            # 汉字行里的拉丁/数字词：基线取该词自身其它字形的底边中位数（汉字字面常比拉丁基线更低）
-            wb = boxes[near[0][1]]
-            own = [o['box'][3] for o in clusters if o is not k and wb[0] - 0.1 * xh <= (o['box'][0] + o['box'][2]) / 2 <= wb[2] + 0.1 * xh]
-            if own:
-                local = statistics.median(own)
+            latin = [i for d, i in near if d <= 0.5 * xh and not _CJK.search(texts[i]) and re.search(r'[A-Za-z0-9]', texts[i])]
+            if latin and near and near[0][1] == latin[0]:
+                # 汉字行里的拉丁/数字词：基线取该词自身其它字形的底边中位数（汉字字面常比拉丁基线更低）
+                wb = boxes[latin[0]]
+                own = [o['box'][3] for o in clusters if o is not k and wb[0] - 0.1 * xh <= (o['box'][0] + o['box'][2]) / 2 <= wb[2] + 0.1 * xh]
+                if own:
+                    local = statistics.median(own)
+        elif not touching and height < SCRIPT_MIN_HEIGHT:
+            continue
         bottom = (local - by1) / xh; top = (local - by0) / xh
         if cjk:
             raised = bottom >= CJK_SCRIPT_RAISED_BOTTOM
@@ -581,10 +764,20 @@ def line_script_evidence(gray, line: dict[str, Any], threshold: int) -> dict[str
         else:
             raised = bottom >= SCRIPT_RAISED_BOTTOM and top >= SCRIPT_RAISED_TOP and height >= SCRIPT_MIN_HEIGHT
             lowered = top <= SCRIPT_LOWERED_TOP and bottom <= SCRIPT_LOWERED_BOTTOM and height >= SCRIPT_MIN_HEIGHT
+        if origin == 'latin_protrusion':
+            raised, lowered = True, False
+        elif origin == 'latin_low_protrusion':
+            raised, lowered = False, True
         if not (raised or lowered):
             continue
         item = {'kind': 'raised' if raised else 'lowered', 'box_px': [bx0, by0, bx1, by1],
                 'bottom_over_baseline_xh': round(bottom, 2), 'top_over_baseline_xh': round(top, 2), 'height_xh': round(height, 2)}
+        if touching:
+            item['touching'] = origin
+            if origin == 'latin_protrusion':   # 高出升部线的粘连墨迹：没有任何标点处在这个位置
+                item.update(kind='raised', reason='touching_script_protrudes_above_ascender')
+                suspects.append(item)
+                continue
         kind = 'raised' if raised else 'lowered'
         marks = RAISED_MARKS if raised else LOWERED_MARKS
         if not near:
@@ -592,9 +785,14 @@ def line_script_evidence(gray, line: dict[str, Any], threshold: int) -> dict[str
             suspects.append(item)
             continue
         with_marks = [i for d, i in near if _mark_count(_mark_zone(texts[i], kind), marks)]
-        owner = with_marks[0] if with_marks else near[0][1]
+        table = raised_by_word if raised else lowered_by_word
+        # 依次归给窗口内还有剩余记号的最近词（“附录二” 两侧引号各归各的词）；都用完了才归最近的有记号词
+        spare = [i for i in with_marks if len(table.get(i, [])) < _mark_count(_mark_zone(texts[i], kind), marks)]
+        owner = spare[0] if spare else (with_marks[0] if with_marks else near[0][1])
         item['word'] = texts[owner]
-        if raised:
+        if cjk:
+            mark_shaped = height <= CJK_MARK_MAX_HEIGHT and (bx1 - bx0) / xh <= (CJK_RAISED_MARK_MAX_WIDTH if raised else MARK_MAX_WIDTH)
+        elif raised:
             mark_shaped = height <= MARK_MAX_HEIGHT and (bx1 - bx0) / xh <= MARK_MAX_WIDTH
         else:
             mark_shaped = top <= COMMA_MAX_TOP and (bx1 - bx0) / xh <= MARK_MAX_WIDTH
@@ -901,7 +1099,9 @@ def analyse_scanned_page(page, index: int, *, binary: str, lang: str, lang_key: 
     if script_lines or bars:
         # 复用公式拒绝码（错误码集合保持稳定）；details.evidence 区分图像几何证据与文字证据
         f.append(finding('ocr_formula_unsupported', page=page_no, evidence='image_geometry', kind='math_script_or_stacked_fraction',
-                         script_lines=len(script_lines), fraction_bars=len(bars), samples=script_lines[:5],
+                         script_lines=len(script_lines), fraction_bars=len(bars),
+                         enclosed_numerals=sum(q['kind'] == 'enclosed' for x in script_lines for q in x['suspects']),
+                         samples=script_lines[:5],
                          fraction_samples=bars[:3]))
     if f:
         record['line_details'] = [{k: l[k] for k in ('key', 'bbox_px', 'text', 'mean_conf', 'class', 'math')} for l in lines]

@@ -27,6 +27,36 @@ PUNCT_TEXT = ('He said, "It\'s the samples\' state; don\'t retest them," and lef
 ZH_TEXT = ('本研究在稳定的实验室条件下比较了若干样品的响应。每个样品单独存放，并在测试前仔细检查。'
            '测量重复进行，以验证观察结果的可靠性。最终结果清楚地描述了所观察到的行为和实际结论。') * 4
 
+# PR #20 review 2：reviewer probe_math_geometry.py 的正文与两张汉字变量上下标页（逐字相同的生成方式）
+REVIEW2_BODY = ('本研究对不同条件下的样本开展系统观察，并比较各项测量结果。为了确保记录可靠，每个样本都在相同环境下重复测试。'
+                '研究人员根据测量记录分析数据，给出清晰的描述和结论。所有原始记录均按照统一标准保存，以便后续核对。') * 5
+REVIEW2 = {'cjk-variable-sup': -7, 'cjk-variable-sub': 4}
+ZH_PUNCT_TEXT = ('他说：“结果（见表1）稳定，‘样本’共12个；《报告》第3页、第5页均有记录。”然后，团队复核了A组、B组和C组的数据：'
+                 '均值为3.5，方差为0.25；误差约2%。问题是：为什么？答案很简单：数据足够。'
+                 '缩写PDF和OCR保持原样。半角标点也会出现,例如逗号;以及冒号:如此。') * 2
+ZH_COMMON_TEXT = ('春天来了，小河边的柳树发出新芽，孩子们在草地上放风筝。学校图书馆新到了一批关于历史、地理、物理和化学的书籍，'
+                  '老师鼓励同学们每周至少读完一本。城市交通日益便利，地铁线路通往主要街区，公共汽车更加准时。'
+                  '医院改进了挂号流程，病人等候时间缩短；农民利用新技术种植水稻和小麦，产量稳步增长。'
+                  '心理学家认为，良好的睡眠、适量运动与均衡饮食对健康至关重要。我们应当珍惜时间，努力学习，关心他人。') * 2
+# 汉字行手工排版片段：(文字, 字体, 字号 pt, 抬高 pt（负为压低）, 之后前进 pt（None=按字宽）, 起笔前横移 pt)
+HAN = 'china-s'
+ZH_LINES = {
+    'zh_han_sup_digit': [('估计量乙', HAN, 14, 0), ('3', 'tiro', 9, 7, 7), ('的数值用于比较所有样本。', HAN, 14, 0)],
+    'zh_han_sub_digit': [('估计量乙', HAN, 14, 0), ('1', 'tiro', 9, -4, 7), ('的数值用于比较所有样本。', HAN, 14, 0)],
+    'zh_han_sup_letter': [('估计量甲', HAN, 14, 0), ('n', 'tiro', 9, 7, 7), ('的数值用于比较所有样本。', HAN, 14, 0)],
+    'zh_han_sub_letter': [('估计量甲', HAN, 14, 0), ('i', 'tiro', 9, -4, 6), ('的数值用于比较所有样本。', HAN, 14, 0)],
+    'zh_han_sup_touching': [('估计量甲', HAN, 14, 0), ('2', 'tiro', 9, 7, 4.5, -3.0), ('的数值用于比较所有样本。', HAN, 14, 0)],
+    'zh_han_sub_touching': [('估计量甲', HAN, 14, 0), ('2', 'tiro', 9, -4, 4.5, -3.0), ('的数值用于比较所有样本。', HAN, 14, 0)],
+    'zh_footnote_sup': [('这一结论见于早期文献', HAN, 14, 0), ('1', 'tiro', 9, 7, 7), ('，此处不再展开。', HAN, 14, 0)],
+    'zh_footnote_circled': [('这一结论见于早期文献①，此处不再展开。', HAN, 14, 0)],
+    'zh_footnote_bracket': [('这一结论见于早期文献［1］，此处不再展开。', HAN, 14, 0)],
+    'zh_punct_mix': [('他说：“结果（见表1）稳定，‘样本’共12个。”', HAN, 14, 0)],
+    'zh_common_chars': [('心理学家认为，良好的睡眠与均衡饮食对健康至关重要。', HAN, 14, 0)],
+    'touch_sup_latin': [('The tolerance was set to 10', 'tiro', 14, 0), ('3', 'tiro', 8.7, 5.0, 3.6), ('for each run.', 'tiro', 14, 0, None, -0.9)],
+    'touch_sub_latin': [('Each molecule of H', 'tiro', 14, 0), ('2', 'tiro', 8.7, -2.4, 3.6), ('O was counted twice.', 'tiro', 14, 0, None, -0.9)],
+}
+ZH_BODIES = {'zh_punct_mix': ZH_PUNCT_TEXT, 'zh_common_chars': ZH_COMMON_TEXT}
+
 # 行内片段：(文字, 字号比例, 抬高 em；正为上标、负为下标)
 SUP, SUB = (0.62, 0.36), (0.62, -0.17)
 LINES = {
@@ -51,6 +81,7 @@ REVIEWER = {
 }
 CASES = list(REVIEWER) + [c for c in LINES if not c.startswith('zh_')] + ['frac_stacked', 'plain_paragraphs',
                                                                           'punctuation_heavy'] + [c for c in LINES if c.startswith('zh_')]
+CASES_REVIEW2 = list(REVIEW2) + list(ZH_LINES)
 GEOM = 'image_geometry'   # blocked 且必须有 details.evidence == 'image_geometry' 的 ocr_formula_unsupported
 EXPECTED = {  # 期望：blocked + 证据（GEOM = 图像几何；或文字门的错误码），或 ok（原样重建）
     'ordinary': ('ok', None), 'superscript': ('blocked', GEOM),
@@ -65,10 +96,21 @@ EXPECTED = {  # 期望：blocked + 证据（GEOM = 图像几何；或文字门�
     'zh_plain': ('ok', None), 'zh_sup_m2': ('blocked', GEOM),
     'zh_sub_h2o': ('blocked', GEOM),
 }
+# PR #20 review 2：汉字旁的上下标（分离/粘连）、带圈序号必须在覆盖前拒绝；中文标点/常用字/［1］式序号原样通过
+EXPECTED_REVIEW2 = {
+    'cjk-variable-sup': ('blocked', GEOM), 'cjk-variable-sub': ('blocked', GEOM),
+    'zh_han_sup_digit': ('blocked', GEOM), 'zh_han_sub_digit': ('blocked', GEOM),
+    'zh_han_sup_letter': ('blocked', GEOM), 'zh_han_sub_letter': ('blocked', GEOM),
+    'zh_han_sup_touching': ('blocked', GEOM), 'zh_han_sub_touching': ('blocked', GEOM),
+    'zh_footnote_sup': ('blocked', GEOM), 'zh_footnote_circled': ('blocked', GEOM),
+    'zh_footnote_bracket': ('ok', None), 'zh_punct_mix': ('ok', None), 'zh_common_chars': ('ok', None),
+    'touch_sup_latin': ('blocked', GEOM), 'touch_sub_latin': ('blocked', GEOM),
+}
+EXPECTED.update(EXPECTED_REVIEW2)
 
 
 def target_for(name: str) -> str:
-    return 'en' if name.startswith('zh_') else 'zh'
+    return 'en' if name.startswith(('zh_', 'cjk-')) else 'zh'
 
 
 def _rasterise(page, path: Path) -> Path:
@@ -81,11 +123,45 @@ def _rasterise(page, path: Path) -> Path:
     return path
 
 
+def make_review2_case(name: str, out_dir: Path) -> Path:
+    """与 reviewer probe_math_geometry.py 逐字相同的排版（china-s 正文 12 pt；末行“估计量甲”14 pt，tiro 9 pt 的 2 抬高 7 pt / 压低 4 pt）。"""
+    import fitz
+    out_dir.mkdir(parents=True, exist_ok=True)
+    shift = REVIEW2[name]
+    doc = fitz.open(); p = doc.new_page(width=595, height=842); font = fitz.Font('china-s')
+    p.insert_font(fontname='cjk', fontbuffer=font.buffer)
+    p.insert_textbox((65, 60, 530, 630), REVIEW2_BODY, fontname='cjk', fontsize=12, lineheight=1.4)
+    prefix = '估计量甲'; suffix = '的结果用于分析所有样本的变化。'
+    p.insert_text((65, 700), prefix, fontname='cjk', fontsize=14); x = 65 + font.text_length(prefix, 14)
+    p.insert_text((x, 700 + shift), '2', fontname='tiro', fontsize=9); p.insert_text((x + 7, 700), suffix, fontname='cjk', fontsize=14)
+    return _rasterise(p, out_dir / f'{name}.pdf')
+
+
 def make_case(name: str, out_dir: Path) -> Path:
     import fitz
+    if name in REVIEW2:
+        return make_review2_case(name, out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     d = fitz.open()
     p = d.new_page(width=595, height=842)
+    if name in ZH_LINES:
+        # 与 reviewer probe 相同：china-s 字形以嵌入字体（insert_font）写入，标点按真实字形落位
+        han = fitz.Font(HAN)
+        p.insert_font(fontname='cjk', fontbuffer=han.buffer)
+        if name.startswith('touch_'):
+            p.insert_textbox((65, 70, 530, 650), TEXT, fontsize=12, fontname='tiro', lineheight=1.4)
+        else:
+            p.insert_textbox((65, 70, 530, 650), ZH_BODIES.get(name, ZH_TEXT), fontsize=12, fontname='cjk', lineheight=1.6)
+        x = 65.0
+        for seg in ZH_LINES[name]:
+            text, fnt, fs, rise = seg[:4]
+            advance = seg[4] if len(seg) > 4 else None
+            x += seg[5] if len(seg) > 5 else 0
+            p.insert_text((x, 700 - rise), text, fontsize=fs, fontname='cjk' if fnt == HAN else fnt)
+            if advance is None:
+                advance = han.text_length(text, fs) if fnt == HAN else fitz.get_text_length(text, fontname=fnt, fontsize=fs)
+            x += advance
+        return _rasterise(p, out_dir / f'{name}.pdf')
     font = 'china-s' if name.startswith('zh_') else 'tiro'
     if font == 'china-s':
         p.insert_textbox((65, 70, 530, 650), ZH_TEXT, fontsize=12, fontname=font, lineheight=1.6)
@@ -155,7 +231,7 @@ def run_case(name: str, out_dir: Path, *, source: Path | None = None, target: st
 
 if __name__ == '__main__':
     out = Path(sys.argv[1])
-    for case in sys.argv[2:] or CASES:
+    for case in sys.argv[2:] or CASES + CASES_REVIEW2:
         row = run_case(case, out)
         print(case, row['job_status'], row['ocr_status'], row['error_code'], EXPECTED.get(case), row['seconds'], flush=True)
 
@@ -180,3 +256,26 @@ def reviewer_root() -> Path:
         run_case('superscript', root / 'ocr-independent')
         _ROOT = root
     return _ROOT
+
+
+_ROOT2: Path | None = None
+
+
+def reviewer2_root() -> Path:
+    """PR #20 review 2 reviewer 测试的 R：按 reviewer probe_math_geometry.py 的同一排版真实生成并运行
+    cjk-variable-sup / cjk-variable-sub，返回含 geometry-independent/<case>.result.json 的目录。tesseract 不在时 skip（不 mock）。"""
+    global _ROOT2
+    import atexit
+    import shutil
+    import tempfile
+    import pytest
+    import ocr_route
+    if not (shutil.which('tesseract') and ocr_route.engine_info().get('available')):
+        pytest.skip('tesseract + chi_sim/eng/osd not installed (OCR route optional)', allow_module_level=True)
+    if _ROOT2 is None:
+        root = Path(tempfile.mkdtemp(prefix='ocr-math-review2-'))
+        atexit.register(shutil.rmtree, root, True)
+        for case in REVIEW2:
+            run_case(case, root / 'geometry-independent')
+        _ROOT2 = root
+    return _ROOT2
