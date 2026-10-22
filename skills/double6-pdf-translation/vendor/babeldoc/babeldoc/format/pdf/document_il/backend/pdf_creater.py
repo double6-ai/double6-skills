@@ -9,7 +9,13 @@ import time
 import unicodedata
 from abc import ABC
 from abc import abstractmethod
-from multiprocessing import Process
+import multiprocessing as _multiprocessing
+
+# Double6 Skills rc.8: font-subset / clean-save helpers run in a *spawned* child instead of a
+# fork of the multi-GiB backend process. A forked child shares the parent's pages copy-on-write but
+# reports the full parent RSS, which double-counts against the task RSS budget; a spawned child only
+# holds what the helper actually needs. Target functions and arguments are module-level/plain values.
+Process = _multiprocessing.get_context("spawn").Process
 from pathlib import Path
 
 import freetype
