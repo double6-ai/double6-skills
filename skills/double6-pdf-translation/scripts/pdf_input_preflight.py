@@ -133,9 +133,10 @@ def _has_pdf_trailer(path: Path) -> bool:
     return b'%%EOF' in tail or b'startxref' in tail
 
 
-# 中译英行内对象公式检测（结构规则，不用词表）：一行中文正文内部出现 >= INLINE_OBJECT_PAGE_MIN 个
-# “行内对象”（Form XObject 绘制的非中文字形，或字形大小的填充矢量路径）即判定该页不受支持。
-INLINE_OBJECT_PAGE_MIN = 3
+# 中译英行内对象公式检测（结构规则，不用词表）：中文正文行内部只要定位到 1 个“行内结构对象”
+# （Form XObject 绘制的非中文字形，或字形大小的填充矢量路径）即判定该页不受支持（失败关闭）。
+# 这类对象不能随英文重排：留在原坐标会与译文压叠，或被排版引擎丢弃；单个变量（例如 M）也是公式信息。
+INLINE_OBJECT_PAGE_MIN = 1
 
 
 def _cjk_rows(page) -> list[tuple[float, float, float, float]]:
@@ -181,8 +182,19 @@ def _inside_row(cx: float, cy: float, rows) -> tuple[float, float, float, float]
     return None
 
 
-def inline_object_math(doc, page_index: int) -> dict[str, Any]:
-    """统计一页中文正文行内的 Form XObject 字形与矢量路径字形（结构证据，只读，不改源文件）。"""
+def _is_vector_glyph(rect, row_height: float) -> bool:
+    # 字形大小：不超过约两个字宽、不高于行高的 1.6 倍，且不是细线（下划线、分数线）。
+    return (rect.width <= 2.0 * row_height and rect.height <= 1.6 * row_height
+            and min(rect.width, rect.height) >= 0.12 * row_height and max(rect.width, rect.height) >= 0.25 * row_height)
+
+
+def inline_object_math(doc, page_index: int, *, with_objects: bool = False) -> dict[str, Any]:
+    """定位一页中文正文行内的 Form XObject 字形与矢量路径字形（结构证据，只读，不改源文件）。
+
+    ``objects`` 列出每个对象的类型、字符与 bbox，供成品门逐个核对是否丢失或与译文压叠。
+    整页被包进 Form XObject 时（清空 Form 后没有页面级中文行），改用原页的中文行定位矢量字形，
+    并不把 Form 内文字当作行内对象（此时 Form 内文字就是正文本身）。
+    """
     import fitz
     from collections import Counter
 
@@ -205,27 +217,31 @@ def inline_object_math(doc, page_index: int) -> dict[str, Any]:
                 xobject_chars.append(key)
     finally:
         scratch.close()
-    xobject_inline = 0
+    page_in_form = False
+    if not rows and forms:
+        page_rows = _cjk_rows(page)
+        if page_rows:
+            page_in_form, rows, xobject_chars = True, page_rows, []
+    objects: list[dict[str, Any]] = []
     for char, (x0, y0, x1, y1) in xobject_chars:
         if not _CJK.match(char) and _inside_row((x0 + x1) / 2, (y0 + y1) / 2, rows):
-            xobject_inline += 1
-    vector_inline = 0
+            objects.append({'kind': 'xobject_text', 'char': char, 'bbox': [x0, y0, x1, y1]})
     for drawing in page.get_drawings():
         if drawing.get('fill') is None:
             continue
         rect = drawing['rect']
-        cx, cy = (rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2
-        row = _inside_row(cx, cy, rows)
-        if not row:
-            continue
-        height = row[3] - row[1]
-        # 字形大小：不超过约两个字宽、不高于行高的 1.6 倍，且不是细线（下划线/分数线另由文字判断）。
-        if rect.width <= 2.0 * height and rect.height <= 1.6 * height and min(rect.width, rect.height) >= 0.12 * height \
-                and max(rect.width, rect.height) >= 0.25 * height:
-            vector_inline += 1
-    return {'page': page_index + 1, 'cjk_rows': len(rows), 'form_xobjects': len(forms),
-            'xobject_text_glyphs': xobject_inline, 'vector_glyphs': vector_inline,
-            'flagged': xobject_inline >= INLINE_OBJECT_PAGE_MIN or vector_inline >= INLINE_OBJECT_PAGE_MIN}
+        row = _inside_row((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2, rows)
+        if row and _is_vector_glyph(rect, row[3] - row[1]):
+            objects.append({'kind': 'vector_glyph', 'bbox': [round(v, 2) for v in (rect.x0, rect.y0, rect.x1, rect.y1)]})
+    xobject_inline = sum(1 for o in objects if o['kind'] == 'xobject_text')
+    vector_inline = sum(1 for o in objects if o['kind'] == 'vector_glyph')
+    result = {'page': page_index + 1, 'cjk_rows': len(rows), 'form_xobjects': len(forms), 'page_in_form': page_in_form,
+              'xobject_text_glyphs': xobject_inline, 'vector_glyphs': vector_inline,
+              'samples': objects[:5],
+              'flagged': xobject_inline + vector_inline >= INLINE_OBJECT_PAGE_MIN}
+    if with_objects:
+        result['objects'] = objects
+    return result
 
 
 def inspect_pdf(path, *, max_pages: int | None = DIGITAL_MAX_PAGES, target_language: str = 'zh',
