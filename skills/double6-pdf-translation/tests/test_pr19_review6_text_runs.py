@@ -242,3 +242,24 @@ def test_run_admission_requires_same_size_font_and_order(tmp_path, case):
         report, info, detail = inspect(path)
         assert report['status'] == 'blocked' and info['needs_review_forms'] == 1, (path.name, info)
     d.close()
+
+
+@pytest.mark.parametrize('order', ['visual', 'latin_last'])
+def test_italic_words_admitted_only_in_visual_order(tmp_path, order):
+    """配对：斜体物种名与书名（多字母斜体词）按视觉顺序夹在中文之间 → 正文，不拦（第 6 轮证据 c4：成品词句完整、位置正确，
+    斜体样式不保留）；同样的词事后补画 → needs_review（证据 c3：词被挪到句末或丢失、后端排版失败）。"""
+    d = fitz.open()
+    pg = d.new_page()
+    pg.insert_textbox(fitz.Rect(72, 60, 520, 130), ZH, fontname='china-s', fontsize=10.5)
+    pg.insert_text((72, 160), '下面给出两个例子，说明斜体词的处理方式：', fontname='china-s', fontsize=10.5)
+    sp = runs_form(440, 20, [('人类（', 'china-s'), ('Homo sapiens', 'tiit'), ('）的基因组已经完成测序。', 'china-s')], order=order)
+    pg.show_pdf_page(fitz.Rect(72, 170, 512, 190), sp, 0)
+    bk = runs_form(440, 20, [('该算法最早见于 ', 'china-s'), ('The Art of Computer Programming', 'tiit'), (' 一书。', 'china-s')], order=order)
+    pg.show_pdf_page(fitz.Rect(72, 200, 512, 220), bk, 0)
+    for path in variants(d, tmp_path, f'italic-{order}'):
+        report, info, detail = inspect(path)
+        if order == 'visual':
+            assert report['status'] != 'blocked' and info['needs_review_forms'] == 0, (path.name, info)
+        else:
+            assert report['status'] == 'blocked' and info['needs_review_forms'] == 2, (path.name, info)
+    d.close()
