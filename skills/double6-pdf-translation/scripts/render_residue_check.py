@@ -555,7 +555,8 @@ def page_chinese_residue(source_text: str, target_text: str) -> dict[str, Any]:
 # 中译英时英文译文用 babeldoc 自带的 Noto 字体排版；源文保留字形（未翻译的公式碎片、变量）仍是原字体。
 TRANSLATED_FONT_PATTERN = re.compile(r'Noto', re.IGNORECASE)
 OVERLAP_MIN_FRACTION = 0.5
-OVERLAP_PAGE_MIN_CHARS = 10
+# 任何一个源文保留字形与译文字形压叠都判 high（评审第 2 轮：不按整页净计数放行）。
+OVERLAP_PAGE_MIN_CHARS = 1
 
 
 def _glyph_boxes(page):
@@ -620,6 +621,69 @@ def page_vector_glyph_loss(source_page, target_page) -> dict[str, Any]:
             'flagged': lost >= VECTOR_GLYPH_LOSS_MIN and lost >= VECTOR_GLYPH_LOSS_FRACTION * source}
 
 
+# 源文中文正文行内已定位的结构对象（矢量公式字形、Form XObject 变量）在成品中的核对容差（pt）。
+INLINE_OBJECT_MATCH_TOLERANCE = 1.5
+INLINE_OBJECT_COLLISION_FRACTION = 0.3
+
+
+def _target_text_boxes(page):
+    import fitz
+
+    boxes = []
+    for block in page.get_text('rawdict')['blocks']:
+        for line in block.get('lines', []):
+            for span in line['spans']:
+                for char in span['chars']:
+                    if char['c'].strip():
+                        boxes.append((char['c'], fitz.Rect(char['bbox'])))
+    return boxes
+
+
+def _collides(rect, others, fraction=INLINE_OBJECT_COLLISION_FRACTION) -> str | None:
+    area = rect.get_area()
+    for char, other in others:
+        inter = rect & other
+        if area > 0 and not inter.is_empty and inter.get_area() > fraction * min(area, other.get_area() or area):
+            return char
+    return None
+
+
+def page_inline_object_damage(source_doc, page_index: int, target_page) -> dict[str, Any]:
+    """逐个核对源页中文正文行内已定位的结构对象：成品中缺失（丢失）或与译文字形压叠，任何一个都判 high。"""
+    import fitz
+    from pdf_input_preflight import inline_object_math
+
+    located = inline_object_math(source_doc, page_index, with_objects=True)['objects']
+    tol = INLINE_OBJECT_MATCH_TOLERANCE
+    text = _target_text_boxes(target_page)
+    paths = [d['rect'] for d in target_page.get_drawings() if d.get('fill') is not None] if located else []
+    used: set[int] = set()
+    lost, collided = [], []
+    for obj in located:
+        rect = fitz.Rect(obj['bbox'])
+        if obj['kind'] == 'vector_glyph':
+            match = next((r for r in paths if abs(r.x0 - rect.x0) <= tol and abs(r.y0 - rect.y0) <= tol
+                          and abs(r.x1 - rect.x1) <= tol and abs(r.y1 - rect.y1) <= tol), None)
+            if match is None:
+                lost.append(obj)
+            elif (hit := _collides(match, text)):
+                collided.append(dict(obj, with_text=hit))
+        else:
+            cx, cy = (rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2
+            index = next((i for i, (char, box) in enumerate(text) if i not in used and char == obj['char']
+                          and abs((box.x0 + box.x1) / 2 - cx) <= tol + 1 and abs((box.y0 + box.y1) / 2 - cy) <= tol + 1), None)
+            if index is None:
+                lost.append(obj)
+                continue
+            used.add(index)
+            box = text[index][1]
+            others = [item for i, item in enumerate(text) if i != index]
+            if (hit := _collides(box, others, OVERLAP_MIN_FRACTION)):
+                collided.append(dict(obj, with_text=hit))
+    return {'located': len(located), 'lost': len(lost), 'collided': len(collided),
+            'samples': (lost + collided)[:5], 'flagged': bool(lost or collided)}
+
+
 def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
     """中译英：基于最终 PDF 的中文残留检查（不依赖 translation blocks 自报）。"""
     import fitz
@@ -642,6 +706,7 @@ def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
             row['page'] = index + 1
             row['retained_glyph_overlap'] = page_retained_glyph_overlap(target[index])
             row['vector_glyph_loss'] = page_vector_glyph_loss(source[index], target[index])
+            row['inline_object_damage'] = page_inline_object_damage(source, index, target[index])
             result['pages'].append(row)
     evaluated = [p for p in result['pages'] if p['evaluated']]
     scope = 'pages'
@@ -658,17 +723,22 @@ def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
     short_verbatim_pages = [p['page'] for p in result['pages'] if p.get('short_page_verbatim')]
     overlap_pages = [p['page'] for p in result['pages'] if p['retained_glyph_overlap']['flagged']]
     vector_loss_pages = [p['page'] for p in result['pages'] if p['vector_glyph_loss']['flagged']]
+    inline_damage_pages = [p['page'] for p in result['pages'] if p['inline_object_damage']['flagged']]
     # 源文保留字形（行内变量、公式碎片）与英文译文压叠时读者无法辨认，按失败关闭处理（high，退出码 3）。
     # 矢量路径公式字形在成品中丢失同样失败关闭。
+    # 中文正文行内已定位的结构对象：任何一个丢失或与译文压叠都失败关闭。
     severity = ('high' if (evaluated and overall >= ZH_DOCUMENT_HIGH) or high_pages or overlap_pages or vector_loss_pages
+                or inline_damage_pages
                 else 'medium' if medium_pages else 'ok')
     result['thresholds'].update(overlap_min_fraction=OVERLAP_MIN_FRACTION, overlap_page_min_chars=OVERLAP_PAGE_MIN_CHARS,
                                 vector_glyph_loss_min=VECTOR_GLYPH_LOSS_MIN,
-                                vector_glyph_loss_fraction=VECTOR_GLYPH_LOSS_FRACTION)
+                                vector_glyph_loss_fraction=VECTOR_GLYPH_LOSS_FRACTION,
+                                inline_object_match_tolerance=INLINE_OBJECT_MATCH_TOLERANCE,
+                                inline_object_damage_min=1)
     result.update(status='evaluated' if evaluated else 'not_evaluated', evaluation_scope=scope,
                   overall_residue_ratio=round(overall, 4), high_pages=high_pages, medium_pages=medium_pages,
                   short_page_verbatim_pages=short_verbatim_pages, retained_glyph_overlap_pages=overlap_pages,
-                  vector_glyph_loss_pages=vector_loss_pages,
+                  vector_glyph_loss_pages=vector_loss_pages, inline_object_damage_pages=inline_damage_pages,
                   severity=severity, quality_fail=severity == 'high')
     return result
 

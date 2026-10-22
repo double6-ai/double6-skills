@@ -327,7 +327,8 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, ta
         # 基于实际成品的大面积源语言残留（英译中=英文，中译英=中文）属于高风险失败，不能只记为 warn。
         rule=residue.get('check','render_english_residue')
         structural={'retained_glyph_overlap':residue.get('retained_glyph_overlap_pages'),
-                    'vector_glyph_loss':residue.get('vector_glyph_loss_pages')}
+                    'vector_glyph_loss':residue.get('vector_glyph_loss_pages'),
+                    'inline_object_damage':residue.get('inline_object_damage_pages')}
         if residue.get('high_pages') or not any(structural.values()):
             result.setdefault('issues',[]).append({'id':rule,'rule':rule+'_high',
                 'severity':'high','pages':residue.get('high_pages'),'overall_residue_ratio':residue.get('overall_residue_ratio'),
@@ -344,8 +345,8 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, ta
     fields={'quality_status':result['status'],'quality_pass':result['quality_pass'],
             'quality_delivery_blocked':not result['quality_pass'],'comprehensive_quality':file_ref(path),
             'render_residue':{k:residue.get(k) for k in ('severity','overall_residue_ratio','high_pages','medium_pages',
-                                                         'retained_glyph_overlap_pages','vector_glyph_loss_pages')
-                              if k not in ('retained_glyph_overlap_pages','vector_glyph_loss_pages') or k in residue}}
+                                                         'retained_glyph_overlap_pages','vector_glyph_loss_pages','inline_object_damage_pages')
+                              if k not in ('retained_glyph_overlap_pages','vector_glyph_loss_pages','inline_object_damage_pages') or k in residue}}
     manifest.update(fields)
     for name in ('render_manifest.json','backend_run_manifest.json'):
         existing=output_dir/name
@@ -393,4 +394,6 @@ def render_residue_summary(residue):
         text += f'源文保留字形（未翻译公式碎片）与译文压叠页 {residue["retained_glyph_overlap_pages"]}（判定失败）。'
     if residue.get('vector_glyph_loss_pages'):
         text += f'矢量路径公式字形丢失页 {residue["vector_glyph_loss_pages"]}（判定失败）。'
+    if residue.get('inline_object_damage_pages'):
+        text += f'中文正文行内结构对象（矢量公式字形、Form XObject 变量）丢失或与译文压叠页 {residue["inline_object_damage_pages"]}（判定失败）。'
     return text
