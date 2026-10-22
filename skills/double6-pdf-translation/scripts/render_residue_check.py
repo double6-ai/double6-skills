@@ -689,6 +689,29 @@ def page_inline_object_damage(source_doc, page_index: int, target_page) -> dict[
             'samples': (lost + collided)[:5], 'flagged': bool(lost or collided)}
 
 
+def page_text_layer_math_loss(source_doc, page_index: int, target_page) -> dict[str, Any]:
+    """文字层（页面级或页面等价 Form 自身）中文正文行里的数学字形（数学符号/希腊字母、数学或斜体字体、
+    孤立单字母，判据与预检相同）在译文页里是否仍然存在：按字符计数，源页的每个这类字形都须在译文页里
+    有一个同字符的字形；少一个即判丢失（high，失败关闭）。
+    译文段落会重排、变量两侧换成英文单词，所以不按位置、也不按“是否孤立”核对，只按字符多重集核对：
+    可能漏判（英文单词里的同一字母会掩盖变量丢失，例如 a、x），不会因为重排或换邻字误判。
+    数学符号与希腊字母（×、λ 等）在英文正文里很少出现，丢失几乎总能查出。"""
+    from collections import Counter
+    from pdf_input_preflight import _char_records, inline_object_math
+
+    located = inline_object_math(source_doc, page_index, with_objects=True)['text_layer_math']
+    if not located:
+        return {'located': 0, 'lost': 0, 'samples': [], 'flagged': False}
+    kept = Counter(r['c'] for r in _char_records(target_page))
+    lost = []
+    for obj in located:
+        if kept[obj['char']] > 0:
+            kept[obj['char']] -= 1
+        else:
+            lost.append(obj)
+    return {'located': len(located), 'lost': len(lost), 'samples': lost[:5], 'flagged': bool(lost)}
+
+
 def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
     """中译英：基于最终 PDF 的中文残留检查（不依赖 translation blocks 自报）。"""
     import fitz
@@ -712,6 +735,7 @@ def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
             row['retained_glyph_overlap'] = page_retained_glyph_overlap(target[index])
             row['vector_glyph_loss'] = page_vector_glyph_loss(source[index], target[index])
             row['inline_object_damage'] = page_inline_object_damage(source, index, target[index])
+            row['text_layer_math_loss'] = page_text_layer_math_loss(source, index, target[index])
             result['pages'].append(row)
     evaluated = [p for p in result['pages'] if p['evaluated']]
     scope = 'pages'
@@ -729,22 +753,23 @@ def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
     overlap_pages = [p['page'] for p in result['pages'] if p['retained_glyph_overlap']['flagged']]
     vector_loss_pages = [p['page'] for p in result['pages'] if p['vector_glyph_loss']['flagged']]
     inline_damage_pages = [p['page'] for p in result['pages'] if p['inline_object_damage']['flagged']]
+    text_layer_loss_pages = [p['page'] for p in result['pages'] if p['text_layer_math_loss']['flagged']]
     # 源文保留字形（行内变量、公式碎片）与英文译文压叠时读者无法辨认，按失败关闭处理（high，退出码 3）。
     # 矢量路径公式字形在成品中丢失同样失败关闭。
     # 中文正文行内已定位的结构对象：任何一个丢失或与译文压叠都失败关闭。
     severity = ('high' if (evaluated and overall >= ZH_DOCUMENT_HIGH) or high_pages or overlap_pages or vector_loss_pages
-                or inline_damage_pages
+                or inline_damage_pages or text_layer_loss_pages
                 else 'medium' if medium_pages else 'ok')
     result['thresholds'].update(overlap_min_fraction=OVERLAP_MIN_FRACTION, overlap_page_min_chars=OVERLAP_PAGE_MIN_CHARS,
                                 vector_glyph_loss_min=VECTOR_GLYPH_LOSS_MIN,
                                 vector_glyph_loss_fraction=VECTOR_GLYPH_LOSS_FRACTION,
                                 inline_object_match_tolerance=INLINE_OBJECT_MATCH_TOLERANCE,
-                                inline_object_damage_min=1)
+                                inline_object_damage_min=1, text_layer_math_loss_min=1)
     result.update(status='evaluated' if evaluated else 'not_evaluated', evaluation_scope=scope,
                   overall_residue_ratio=round(overall, 4), high_pages=high_pages, medium_pages=medium_pages,
                   short_page_verbatim_pages=short_verbatim_pages, retained_glyph_overlap_pages=overlap_pages,
                   vector_glyph_loss_pages=vector_loss_pages, inline_object_damage_pages=inline_damage_pages,
-                  severity=severity, quality_fail=severity == 'high')
+                  text_layer_math_loss_pages=text_layer_loss_pages, severity=severity, quality_fail=severity == 'high')
     return result
 
 

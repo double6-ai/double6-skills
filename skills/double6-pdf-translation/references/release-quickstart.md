@@ -128,7 +128,7 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 
 `candidate --route digital_pdf` 加 `--target-language en` 把中文电子版 PDF 译成英文（默认 `zh` 为英译中，命令行与回执不变；`latex_verified`、`collect` 报 `target_language_route_unsupported`）。后端以 `--lang-in zh --lang-out en` 调用，默认提示词换成中译英版本（自定义提示词不替换），英译中方向的默认术语表（译法含汉字的条目）不注入提示词；本地 Qwen CLI 适配器同样收到目标语言，不做英译中译名修补。HY-MT 兼容代理与 LM Studio 原生传输只会译成中文，中译英时报 `target_language_backend_unsupported`。
 
-预检（只在中译英时）：中文正文行内只要有 1 个由 Form XObject 绘制的非中文字形或字形大小的填充矢量路径（Word/WPS 公式、MathJax/网页打印公式），以 `zh2en_inline_object_math_unsupported` 拒绝。这是失败关闭而不是修复：这类对象无法随英文重排，会与译文压叠或被丢弃。每个 Form XObject（含嵌套）只按自身内容分类：整页外壳等自身不画内容的 Form 只递归看内层；自身不画汉字的 Form，字形落在中文行内即为行内对象；自身画汉字的 Form 只有在没有任何数学证据（数学符号/希腊字母、数学或斜体字体、孤立单字母、与汉字字号明显不同的拉丁字母、分数线）时才算正文。有数学证据且落在中文正文行里的 Form 判 needs_review 并拒绝（`details.pages[].reasons` 含 `mixed_form_needs_review`），其数学字形与分数线计入成品门；不在正文行里的（图内标签）不计入。普通英文单词和数字不算数学证据。
+预检（只在中译英时）：中文正文行内只要有 1 个由 Form XObject 绘制的非中文字形或字形大小的填充矢量路径（Word/WPS 公式、MathJax/网页打印公式），以 `zh2en_inline_object_math_unsupported` 拒绝。这是失败关闭而不是修复：这类对象无法随英文重排，会与译文压叠或被丢弃。每个 Form XObject（含嵌套）只按自身内容分类：整页外壳等自身不画内容的 Form 只递归看内层；自身不画汉字的 Form，字形落在中文行内即为行内对象；自身画汉字的 Form 只有在没有任何数学证据（数学符号/希腊字母、数学或斜体字体、孤立单字母、与汉字字号明显不同的拉丁字母、分数线）时才算正文。有数学证据且落在中文正文行里的 Form 判 needs_review 并拒绝（`details.pages[].reasons` 含 `mixed_form_needs_review`），其数学字形与分数线计入成品门；不在正文行里的（图内标签）不计入。普通英文单词和数字不算数学证据；与同行中文同属一个按视觉顺序绘制的文本流（绘制顺序与 x 顺序一致、同字号，单字母还须同字体）的字母和斜体多字母单词也不算。页面等价 Form（整页外壳）自身的内容按页面级内容对待，包装不改变判定。页面级文字层的数学字形不拦截，由成品门 `text_layer_math_loss` 核对是否仍在译文中，丢失即退出码 3。
 
 排版差异（只在中文源 → 非 CJK 目标时生效，英译中逐像素不变）：
 - 抽取中文源文时，字距调整/两端对齐造成的汉字间隙不补空格（间隙 < 0.5 字高）；表格单元格之间的大间隙照常补空格；

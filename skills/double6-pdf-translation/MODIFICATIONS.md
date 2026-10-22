@@ -34,7 +34,8 @@
 - 评审第 3 轮修正：`scripts/pdf_input_preflight.py`（`inline_object_math` 逐个 Form 归类为正文 Form/行内 Form，只清空行内 Form 求差集；新增 `_form_tree`、`_has_cjk_row` 与 `body_forms`/`inline_forms` 计数）。
 - 评审第 4 轮修正：`scripts/pdf_input_preflight.py`（带中文行的 Form 按宿主行结构判据再分类：新增 `_char_lines`、`_hosted_in_cjk_line`、`HOST_*` 阈值与 `hosted_cjk_forms` 计数）。
 - 评审第 5 轮修正：`scripts/pdf_input_preflight.py`（按 Form 自身内容分类 container/object/body/mixed，正文准入与数学证据 `_math_like_glyphs`/`_fraction_rules`，宿主正文行 `_host_lines`/`_in_flow`，needs_review 拒绝与 `reasons`、`needs_review_forms`/`standalone_mixed_forms`/`container_forms`/`form_rules` 计数；去掉第 4 轮的 `_hosted_in_cjk_line` 与 `HOST_*` 尺寸上限）、`scripts/render_residue_check.py`（`form_rule` 分数线逐个核对）；第 3、4 轮测试按新语义调整（见 CHANGELOG）。
-- 新增 `tests/test_zh2en_translation.py`、`tests/fixtures/zh2en/`、`tests/test_pr19_review_boundaries.py`、`tests/test_pr19_review2_sparse_math.py`、`tests/test_pr19_review3_wrapped_form.py`、`tests/test_pr19_review4_chinese_formula_form.py`、`tests/test_pr19_review5_mixed_form.py`。
+- 评审第 6 轮修正：`scripts/pdf_input_preflight.py`（页面等价 Form 类 `page_equivalent`；文字层数学字形 `text_layer_math` 列表与计数；`_char_records` 增加绘制顺序 `seq`，新增 `_same_line`、`_in_chinese_text_run`，`_math_like_glyphs` 增加 `admit_text_runs`）、`scripts/render_residue_check.py`（新增成品门 `page_text_layer_math_loss`/`text_layer_math_loss_pages`）；第 3、4 轮正例按 905dbf3 原样恢复，其中第 4 轮图注/旁注一页据端到端证据改为拒绝断言（输入不变）。
+- 新增 `tests/test_zh2en_translation.py`、`tests/fixtures/zh2en/`、`tests/test_pr19_review_boundaries.py`、`tests/test_pr19_review2_sparse_math.py`、`tests/test_pr19_review3_wrapped_form.py`、`tests/test_pr19_review4_chinese_formula_form.py`、`tests/test_pr19_review5_mixed_form.py`、`tests/test_pr19_review6_text_runs.py`。
 - 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py` 更新为 2.0.0-rc.7。
 
 ## 2.0.0-rc.6 维护改动（2026-10-22）
