@@ -111,18 +111,67 @@ def test_rule_is_reported(tmp_path):
     assert loss['rule'] == 'per_instance_v1'
 
 
-# ---- P1(1) 真实后端缺陷样例：Linux 回放（无模型）得到的成品 ----
+# ---- P1(1) 真实后端缺陷样例：Linux 回放（2386a99，无模型）得到的成品，按逐字符几何存为 JSON（仓库不提交 PDF） ----
 
-REAL = SKILL / 'tests' / 'fixtures' / 'pr19_review7'
+REAL = json.loads((SKILL / 'tests' / 'fixtures' / 'pr19_review7' / 'italic_x_backend_mono_chars.json').read_text())
 
 
-@pytest.mark.skipif(not (REAL / 'italic_x_source.pdf').is_file(), reason='real-backend fixture not present')
-def test_real_backend_italic_x_output_is_rejected():
-    """后端把斜体 x 留在原坐标、与重排后的英文重叠：成品门判失败（重叠门），不会以“保留”放行。"""
-    qa = check_render_residue(REAL / 'italic_x_source.pdf', REAL / 'italic_x_backend_mono.pdf', target_language='en')
-    assert qa['quality_fail'], qa
-    pages = qa.get('pages') or qa.get('page_results') or []
-    assert qa.get('retained_glyph_overlap_pages') or qa.get('text_layer_math_loss_pages'), qa
+def _noto_serif():
+    for base in (os.environ.get('HOME', ''), '/home/box'):
+        path = Path(base) / '.cache/babeldoc/fonts/NotoSerif-Regular.ttf'
+        if path.is_file():
+            return str(path)
+    return None
+
+
+def _rebuild_real(tmp_path, *, drop_italic=False):
+    """按 JSON 重建真实成品页：Times-Italic 字形用内置 Times-Italic，译文用 babeldoc 的 NotoSerif（本机缓存；
+    CI 没有时退回 Helvetica，此时重叠门无法识别译文字体，相关断言跳过）。"""
+    from test_pr19_review7_text_layer_counter import write_source
+    src, tgt = tmp_path / 'source.pdf', tmp_path / 'target.pdf'
+    write_source(src, False)
+    noto = _noto_serif()
+    d = fitz.open()
+    page = d.new_page(width=REAL['page'][0], height=REAL['page'][1])
+    for span in REAL['spans']:
+        italic = 'Italic' in span['font']
+        if italic and drop_italic:
+            continue
+        for c, origin, _ in span['chars']:
+            if italic:
+                page.insert_text(origin, c, fontname='tiit', fontsize=span['size'])
+            elif noto:
+                page.insert_text(origin, c, fontname='NotoSerif', fontfile=noto, fontsize=span['size'])
+            else:
+                page.insert_text(origin, c, fontname='helv', fontsize=span['size'])
+    d.save(tgt)
+    d.close()
+    return src, tgt, noto
+
+
+def test_real_backend_italic_x_output_is_rejected(tmp_path):
+    """后端把斜体 x 留在原坐标（Times-Italic），与重排后的英文重叠：x 仍在（逐实例门不判丢失），
+    成品由重叠门判失败——不是“丢了 x 却退出 0”。"""
+    src, tgt, noto = _rebuild_real(tmp_path)
+    with fitz.open(src) as s, fitz.open(tgt) as t:
+        loss = page_text_layer_math_loss(s, 0, t[0])
+    assert (loss['located'], loss['lost']) == (1, 0), loss
+    if not noto:
+        pytest.skip('NotoSerif not cached; overlap gate needs the translated font')
+    qa = check_render_residue(src, tgt, target_language='en')
+    assert qa['quality_fail'] and qa['retained_glyph_overlap_pages'] == [1], qa
+
+
+def test_real_backend_output_with_variable_removed_is_lost(tmp_path):
+    """同一真实成品去掉保留的斜体 x（英文里仍有 expressions 等带 x 的单词）：逐实例门必须判丢失。"""
+    src, tgt, _ = _rebuild_real(tmp_path, drop_italic=True)
+    with fitz.open(tgt) as t:
+        assert 'x' in ''.join(c for sp in REAL['spans'] if 'Italic' not in sp['font'] for c, _, _ in sp['chars'])
+    with fitz.open(src) as s, fitz.open(tgt) as t:
+        loss = page_text_layer_math_loss(s, 0, t[0])
+    assert (loss['located'], loss['lost']) == (1, 1), loss
+    assert loss['samples'][0]['unresolved'] == 'only_inside_words'
+    assert check_render_residue(src, tgt, target_language='en')['quality_fail']
 
 
 # ---- P1(2) 资源监控 ----
