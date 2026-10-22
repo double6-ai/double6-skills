@@ -74,8 +74,18 @@ def _strip_protected_passthrough_tokens(text: str) -> str:
 CONTEXT_RELEASED_IDENTITY = "context_released_source_identity"
 
 
-def classify_same_as_input_result(text: str) -> str:
+_CJK_IDEOGRAPH_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+
+def classify_same_as_input_result(text: str, lang_in: str | None = None) -> str:
+    """原样返回的段落是否属于可放行的受保护内容。
+
+    英译中（默认）只把含拉丁字母的剩余文本视为未翻译正文，行为不变；中译英源语言为中文时，
+    去掉受保护片段（占位符、URL、邮箱、引用、代码、LaTeX 命令）后仍含汉字即为未翻译中文正文。
+    """
     residue = _strip_protected_passthrough_tokens(text)
+    if residue and str(lang_in or "").lower().startswith("zh") and _CJK_IDEOGRAPH_PATTERN.search(residue):
+        return "ordinary_same_as_input"
     if not residue or not re.search(r"[A-Za-z]", residue):
         return "protected_or_passthrough"
     return "ordinary_same_as_input"
@@ -1348,7 +1358,9 @@ class ILTranslator:
             return True
         if translated_text == input_unicode:
             if llm_translate_tracker := tracker.last_llm_translate_tracker():
-                classification = classify_same_as_input_result(input_unicode)
+                classification = classify_same_as_input_result(
+                    input_unicode, getattr(getattr(self, "translation_config", None), "lang_in", None)
+                )
                 llm_translate_tracker.set_error_message(f"same_as_input:{classification}")
                 if classification != "protected_or_passthrough":
                     llm_translate_tracker.set_placeholder_full_match()

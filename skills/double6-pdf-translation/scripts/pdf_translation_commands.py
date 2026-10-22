@@ -36,6 +36,10 @@ def build_qwen_cli_command(args: argparse.Namespace, context_file: Path | None =
         "--system-prompt",
         args.custom_system_prompt,
     ]
+    target_language = getattr(args, "target_language", "zh") or "zh"
+    if target_language != "zh":
+        # 中译英：显式把目标语言传给适配器；英译中命令行保持逐字不变。
+        command.extend(["--target-language", target_language])
     if context_file:
         command.extend(["--context-file", str(context_file)])
     return " ".join(shlex.quote(item) for item in command)

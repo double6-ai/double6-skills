@@ -45,8 +45,24 @@ def compact_items(items: list[dict[str, Any]], *, key: str, limit: int = 12) -> 
     return lines
 
 
-def load_context_prompt(path_value: str | None) -> str:
-    prompt = policy_utils.build_policy_context_prompt(policy_utils.load_policy_context(path_value))
+def resolve_target_language(args: argparse.Namespace) -> str:
+    """显式 --target-language 优先；未传时，系统提示词以中译英默认提示词开头即判定为 en，否则保持 zh（英译中默认不变）。"""
+    explicit = getattr(args, "target_language", None)
+    if explicit:
+        return policy_utils.normalize_target_language(explicit)
+    prompt = str(getattr(args, "system_prompt", "") or "")
+    return "en" if prompt.startswith(policy_utils.DEFAULT_SYSTEM_PROMPT_EN) else "zh"
+
+
+def effective_system_prompt(args: argparse.Namespace) -> str:
+    # 中译英但沿用了本适配器的英译中默认提示词时，换成中译英默认提示词。
+    if resolve_target_language(args) == "en" and args.system_prompt == DEFAULT_SYSTEM_PROMPT:
+        return policy_utils.DEFAULT_SYSTEM_PROMPT_EN
+    return args.system_prompt
+
+
+def load_context_prompt(path_value: str | None, target_language: str = "zh") -> str:
+    prompt = policy_utils.build_policy_context_prompt(policy_utils.load_policy_context(path_value), target_language=target_language)
     return ("\n" + prompt) if prompt else ""
 
 
@@ -83,22 +99,26 @@ def missing_protected_values(source_text: str, translated_text: str) -> list[str
     return policy_utils.missing_protected_values(source_text, translated_text)
 
 
-def build_retry_user_input(text: str, missing_values: list[str]) -> str:
+TARGET_LANGUAGE_NAMES = {"zh": "Simplified Chinese", "en": "English"}
+
+
+def build_retry_user_input(text: str, missing_values: list[str], target_language: str = "zh") -> str:
     values = "\n".join(f"- {value}" for value in missing_values)
+    target_name = TARGET_LANGUAGE_NAMES[policy_utils.normalize_target_language(target_language)]
     return (
-        "The previous translation omitted protected spans. Translate the source again into Simplified Chinese, "
+        f"The previous translation omitted protected spans. Translate the source again into {target_name}, "
         "and preserve every protected span exactly as written.\n\n"
         f"Protected spans that must appear verbatim:\n{values}\n\n"
         f"Source:\n{text}"
     )
 
 
-def apply_source_aware_replacements(source_text: str, translated_text: str) -> str:
-    return policy_utils.apply_source_aware_replacements(source_text, translated_text)
+def apply_source_aware_replacements(source_text: str, translated_text: str, target_language: str = "zh") -> str:
+    return policy_utils.apply_source_aware_replacements(source_text, translated_text, target_language)
 
 
 def request_translation(user_text: str, system_prompt: str, args: argparse.Namespace) -> str:
-    context_prompt = load_context_prompt(args.context_file)
+    context_prompt = load_context_prompt(args.context_file, resolve_target_language(args))
     if context_prompt:
         system_prompt = f"{system_prompt}\n\n{context_prompt}"
     payload: dict[str, Any] = {
@@ -138,21 +158,23 @@ def request_translation(user_text: str, system_prompt: str, args: argparse.Names
 
 
 def translate(text: str, args: argparse.Namespace) -> str:
-    first = request_translation(text, args.system_prompt, args)
+    target = resolve_target_language(args)
+    system_prompt = effective_system_prompt(args)
+    first = request_translation(text, system_prompt, args)
     if policy_utils.policy_note_leaks(text, first, policy_utils.load_policy_context(getattr(args, "context_file", None))):
         raise RuntimeError("policy_instruction_leak: model output copied document policy notes")
-    first = apply_source_aware_replacements(text, first)
+    first = apply_source_aware_replacements(text, first, target)
     missing = missing_protected_values(text, first)
     if not missing:
         return first
     retry_prompt = (
-        args.system_prompt
+        system_prompt
         + "\nProtected span validation failed on the previous attempt. The retry must include every listed protected span verbatim."
     )
-    second = request_translation(build_retry_user_input(text, missing), retry_prompt, args)
+    second = request_translation(build_retry_user_input(text, missing, target), retry_prompt, args)
     if policy_utils.policy_note_leaks(text, second, policy_utils.load_policy_context(getattr(args, "context_file", None))):
         raise RuntimeError("policy_instruction_leak: model output copied document policy notes")
-    second = apply_source_aware_replacements(text, second)
+    second = apply_source_aware_replacements(text, second, target)
     still_missing = missing_protected_values(text, second)
     if still_missing:
         raise RuntimeError("Qwen CLI translator omitted protected spans after retry: " + "; ".join(still_missing[:8]))
@@ -169,6 +191,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-tokens", type=int, default=4096)
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--system-prompt", default=DEFAULT_SYSTEM_PROMPT)
+    parser.add_argument("--target-language", choices=("zh", "en"), default=None,
+                        help="翻译目标语言；未传时按系统提示词推断（中译英默认提示词 -> en，否则 zh）。")
     parser.add_argument("--context-file", help="Optional document_memory.json with global terminology/entity constraints.")
     return parser
 

@@ -326,17 +326,26 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, ta
     if residue.get('severity')=='high':
         # 基于实际成品的大面积源语言残留（英译中=英文，中译英=中文）属于高风险失败，不能只记为 warn。
         rule=residue.get('check','render_english_residue')
-        result.setdefault('issues',[]).append({'id':rule,'rule':rule+'_high',
-            'severity':'high','pages':residue.get('high_pages'),'overall_residue_ratio':residue.get('overall_residue_ratio'),
-            'evidence':residue.get('report_ref')})
+        structural={'retained_glyph_overlap':residue.get('retained_glyph_overlap_pages'),
+                    'vector_glyph_loss':residue.get('vector_glyph_loss_pages')}
+        if residue.get('high_pages') or not any(structural.values()):
+            result.setdefault('issues',[]).append({'id':rule,'rule':rule+'_high',
+                'severity':'high','pages':residue.get('high_pages'),'overall_residue_ratio':residue.get('overall_residue_ratio'),
+                'evidence':residue.get('report_ref')})
+        # 中译英结构性失败（源文保留字形与译文压叠、矢量路径公式字形丢失）各自给出独立规则码。
+        for name,pages in structural.items():
+            if pages:
+                result.setdefault('issues',[]).append({'id':name,'rule':name+'_high','severity':'high','pages':pages,
+                    'evidence':residue.get('report_ref')})
         result['quality_pass']=False
         result['status']='fail'
     path=output_dir/'comprehensive_quality.json'
     path.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
     fields={'quality_status':result['status'],'quality_pass':result['quality_pass'],
             'quality_delivery_blocked':not result['quality_pass'],'comprehensive_quality':file_ref(path),
-            'render_residue':{k:residue.get(k) for k in ('severity','overall_residue_ratio','high_pages','medium_pages','retained_glyph_overlap_pages')
-                              if k!='retained_glyph_overlap_pages' or k in residue}}
+            'render_residue':{k:residue.get(k) for k in ('severity','overall_residue_ratio','high_pages','medium_pages',
+                                                         'retained_glyph_overlap_pages','vector_glyph_loss_pages')
+                              if k not in ('retained_glyph_overlap_pages','vector_glyph_loss_pages') or k in residue}}
     manifest.update(fields)
     for name in ('render_manifest.json','backend_run_manifest.json'):
         existing=output_dir/name
@@ -381,5 +390,7 @@ def render_residue_summary(residue):
     text = (f'{name}：{label}；整体残留率 {residue.get("overall_residue_ratio")}；'
             f'高风险页 {residue.get("high_pages") or "无"}；中风险页 {residue.get("medium_pages") or "无"}。')
     if residue.get('retained_glyph_overlap_pages'):
-        text += f'源文保留字形（未翻译公式碎片）与译文压叠页 {residue["retained_glyph_overlap_pages"]}，需人工复核。'
+        text += f'源文保留字形（未翻译公式碎片）与译文压叠页 {residue["retained_glyph_overlap_pages"]}（判定失败）。'
+    if residue.get('vector_glyph_loss_pages'):
+        text += f'矢量路径公式字形丢失页 {residue["vector_glyph_loss_pages"]}（判定失败）。'
     return text

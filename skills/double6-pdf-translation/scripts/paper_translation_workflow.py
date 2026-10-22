@@ -839,6 +839,23 @@ def bounded_input_preflight(input_pdf, receipts, *, require_digital, target_lang
     return report
 
 
+def check_target_language_route(args):
+    """中译英只支持 candidate --route digital_pdf：LaTeX 路线的译者与 collect 的源绑定原生传输都写死译成简体中文。
+    在预检、FREEZE、doctor 与任何模型调用之前以退出码 2 拒绝，避免静默产出错误方向的译文。"""
+    target = getattr(args, 'target_language', 'zh') or 'zh'
+    if target == 'zh':
+        return
+    if args.route != 'digital_pdf' or args.action == 'collect':
+        exc = PreflightError('target_language_route_unsupported',
+                             f'--target-language {target} 只支持 candidate --route digital_pdf；'
+                             f'当前 {args.action} --route {args.route} 的译者固定译成简体中文。',
+                             target_language=target, route=args.route, action=args.action)
+        exc.result = dict(blocked_result([finding('target_language_route_unsupported', target_language=target,
+                                                  route=args.route, action=args.action)]),
+                          stage='target_language_route')
+        raise exc
+
+
 def candidate_input_preflight(args):
     """candidate/collect 在验证 FREEZE 与启动重任务前先做轻量结构化输入预检。"""
     receipts = Path(args.receipts)
@@ -891,6 +908,7 @@ def dispatch(args):
         result.update(quality_verdict(args.output))
         write_new(args.receipts/'WORKFLOW_RESUMED_CANDIDATE.json', result)
     elif args.action in ('candidate','collect'):
+        check_target_language_route(args)
         preflight_report = candidate_input_preflight(args)
         freeze = read_json(args.freeze)
         pages = validate_freeze(freeze, args.input, args.route, args.model)

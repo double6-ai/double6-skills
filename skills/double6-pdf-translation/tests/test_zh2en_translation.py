@@ -283,9 +283,9 @@ def test_english_word_break_extent_counts_word_once_for_latin_target():
     assert english_word_break_extent(False, 5.0, 0.0) == 5.0
 
 
-# ---------- 中译英成品：源文保留字形与英文译文压叠的提示 ----------
+# ---------- 中译英成品：源文保留字形与英文译文压叠（达到阈值即失败关闭，见 test_pr19_review_boundaries） ----------
 
-def test_retained_glyph_overlap_is_flagged_for_review_not_failed(tmp_path):
+def test_retained_glyph_overlap_detection_and_font_scope(tmp_path):
     import re
     from render_residue_check import page_retained_glyph_overlap
     doc = fitz.open()

@@ -522,6 +522,8 @@ ZH_PAGE_HIGH = 0.30
 ZH_PAGE_MEDIUM = 0.10
 ZH_DOCUMENT_HIGH = 0.25
 ZH_VERBATIM_MIN_CHARS = 12
+# 所有页都短于 ZH_MIN_SOURCE_CHARS 时，按整份文件合计评估的最低中文字符数。
+ZH_DOCUMENT_MIN_SOURCE_CHARS = 24
 # 中文残留计数含康熙部首/部首补充与兼容汉字：部分中文 PDF 字体把常用字映射到这些码位。
 CJK_WIDE = re.compile(r'[\u2e80-\u2fdf\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]')
 CJK_PUNCT = re.compile(r'[\u3000-\u303f\uff01\uff08\uff09\uff0c\uff1a\uff1b\uff1f]')
@@ -538,11 +540,16 @@ def page_chinese_residue(source_text: str, target_text: str) -> dict[str, Any]:
     evaluated = source_chars >= ZH_MIN_SOURCE_CHARS
     severity = (('high' if ratio >= ZH_PAGE_HIGH else 'medium' if ratio >= ZH_PAGE_MEDIUM else 'ok')
                 if evaluated else 'not_evaluated')
+    # 短页（源文中文不足 ZH_MIN_SOURCE_CHARS）不按比例评估，但整行中文源句（>= ZH_VERBATIM_MIN_CHARS 个汉字）
+    # 逐字出现在译文里是直接的未翻译证据，判 high。
+    short_page_verbatim = not evaluated and verbatim > 0
+    if short_page_verbatim:
+        severity = 'high'
     return {'source_cjk_chars': source_chars, 'target_cjk_chars': target_chars,
             'target_cjk_punctuation': len(CJK_PUNCT.findall(target_text)),
             'target_latin_words': len(LATIN_WORD.findall(target_text)), 'residue_ratio': round(ratio, 4),
             'verbatim_source_lines': verbatim, 'source_lines_checked': len(candidates),
-            'evaluated': evaluated, 'severity': severity}
+            'evaluated': evaluated, 'short_page_verbatim': short_page_verbatim, 'severity': severity}
 
 
 # 中译英时英文译文用 babeldoc 自带的 Noto 字体排版；源文保留字形（未翻译的公式碎片、变量）仍是原字体。
@@ -564,8 +571,9 @@ def _glyph_boxes(page):
     return boxes
 
 
-def page_retained_glyph_overlap(page, translated_font_pattern=TRANSLATED_FONT_PATTERN) -> dict[str, Any]:
-    """源文保留字形与英文译文字形相互压叠的字符数（启发式，只用于提示人工复核）。"""
+def page_retained_glyph_overlap(page, translated_font_pattern=None) -> dict[str, Any]:
+    """源文保留字形与英文译文字形相互压叠的字符数；达到 OVERLAP_PAGE_MIN_CHARS 时该页判 high（失败关闭）。"""
+    translated_font_pattern = translated_font_pattern or TRANSLATED_FONT_PATTERN
     boxes = _glyph_boxes(page)
     translated = [b for b in boxes if translated_font_pattern.search(b[0])]
     retained = [b for b in boxes if not translated_font_pattern.search(b[0])]
@@ -586,6 +594,32 @@ def page_retained_glyph_overlap(page, translated_font_pattern=TRANSLATED_FONT_PA
             'flagged': count >= OVERLAP_PAGE_MIN_CHARS}
 
 
+# 字形大小的填充矢量路径（MathJax/网页打印公式把数学字形画成路径）。排版引擎会丢弃译文段落内的这类路径，
+# 成品比源页少 >= VECTOR_GLYPH_LOSS_MIN 个且 >= VECTOR_GLYPH_LOSS_FRACTION 时判 high（失败关闭）。
+VECTOR_GLYPH_MAX_SIDE = 24.0
+VECTOR_GLYPH_LOSS_MIN = 3
+VECTOR_GLYPH_LOSS_FRACTION = 0.25
+
+
+def _vector_glyph_count(page) -> int:
+    count = 0
+    for drawing in page.get_drawings():
+        if drawing.get('fill') is None:
+            continue
+        rect = drawing['rect']
+        if (rect.width <= VECTOR_GLYPH_MAX_SIDE and rect.height <= VECTOR_GLYPH_MAX_SIDE
+                and max(rect.width, rect.height) >= 2 and min(rect.width, rect.height) >= 0.8):
+            count += 1
+    return count
+
+
+def page_vector_glyph_loss(source_page, target_page) -> dict[str, Any]:
+    source, target = _vector_glyph_count(source_page), _vector_glyph_count(target_page)
+    lost = max(0, source - target)
+    return {'source_vector_glyphs': source, 'target_vector_glyphs': target, 'lost': lost,
+            'flagged': lost >= VECTOR_GLYPH_LOSS_MIN and lost >= VECTOR_GLYPH_LOSS_FRACTION * source}
+
+
 def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
     """中译英：基于最终 PDF 的中文残留检查（不依赖 translation blocks 自报）。"""
     import fitz
@@ -594,7 +628,8 @@ def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
                               'source': str(source_pdf), 'target': str(target_pdf) if target_pdf else None,
                               'thresholds': {'page_high': ZH_PAGE_HIGH, 'page_medium': ZH_PAGE_MEDIUM,
                                              'document_high': ZH_DOCUMENT_HIGH, 'min_source_chars': ZH_MIN_SOURCE_CHARS,
-                                             'verbatim_min_chars': ZH_VERBATIM_MIN_CHARS},
+                                             'verbatim_min_chars': ZH_VERBATIM_MIN_CHARS,
+                                             'document_min_source_chars': ZH_DOCUMENT_MIN_SOURCE_CHARS},
                               'pages': []}
     if not target_pdf or not Path(target_pdf).is_file():
         result.update(status='not_evaluated', severity='ok', reason='target_pdf_missing')
@@ -606,20 +641,34 @@ def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
             row = page_chinese_residue(source[index].get_text(), target[index].get_text())
             row['page'] = index + 1
             row['retained_glyph_overlap'] = page_retained_glyph_overlap(target[index])
+            row['vector_glyph_loss'] = page_vector_glyph_loss(source[index], target[index])
             result['pages'].append(row)
     evaluated = [p for p in result['pages'] if p['evaluated']]
+    scope = 'pages'
+    if not evaluated:
+        # 每页都太短时改按整份文件合计评估，避免短文件整份原样返回也被判为 not_evaluated/ok。
+        whole = [p for p in result['pages'] if p['source_cjk_chars']]
+        if sum(p['source_cjk_chars'] for p in whole) >= ZH_DOCUMENT_MIN_SOURCE_CHARS:
+            evaluated, scope = whole, 'document'
     total_source = sum(p['source_cjk_chars'] for p in evaluated)
     total_target = sum(p['target_cjk_chars'] for p in evaluated)
     overall = total_target / total_source if total_source else 0.0
-    high_pages = [p['page'] for p in evaluated if p['severity'] == 'high']
-    medium_pages = [p['page'] for p in evaluated if p['severity'] == 'medium']
+    high_pages = [p['page'] for p in result['pages'] if p['severity'] == 'high']
+    medium_pages = [p['page'] for p in result['pages'] if p['severity'] == 'medium']
+    short_verbatim_pages = [p['page'] for p in result['pages'] if p.get('short_page_verbatim')]
     overlap_pages = [p['page'] for p in result['pages'] if p['retained_glyph_overlap']['flagged']]
-    # 压叠是启发式信号：只把总体等级提到 medium（提示人工复核），不单独判定失败。
-    severity = ('high' if (evaluated and overall >= ZH_DOCUMENT_HIGH) or high_pages
-                else 'medium' if medium_pages or overlap_pages else 'ok')
-    result['thresholds'].update(overlap_min_fraction=OVERLAP_MIN_FRACTION, overlap_page_min_chars=OVERLAP_PAGE_MIN_CHARS)
-    result.update(status='evaluated' if evaluated else 'not_evaluated', overall_residue_ratio=round(overall, 4),
-                  high_pages=high_pages, medium_pages=medium_pages, retained_glyph_overlap_pages=overlap_pages,
+    vector_loss_pages = [p['page'] for p in result['pages'] if p['vector_glyph_loss']['flagged']]
+    # 源文保留字形（行内变量、公式碎片）与英文译文压叠时读者无法辨认，按失败关闭处理（high，退出码 3）。
+    # 矢量路径公式字形在成品中丢失同样失败关闭。
+    severity = ('high' if (evaluated and overall >= ZH_DOCUMENT_HIGH) or high_pages or overlap_pages or vector_loss_pages
+                else 'medium' if medium_pages else 'ok')
+    result['thresholds'].update(overlap_min_fraction=OVERLAP_MIN_FRACTION, overlap_page_min_chars=OVERLAP_PAGE_MIN_CHARS,
+                                vector_glyph_loss_min=VECTOR_GLYPH_LOSS_MIN,
+                                vector_glyph_loss_fraction=VECTOR_GLYPH_LOSS_FRACTION)
+    result.update(status='evaluated' if evaluated else 'not_evaluated', evaluation_scope=scope,
+                  overall_residue_ratio=round(overall, 4), high_pages=high_pages, medium_pages=medium_pages,
+                  short_page_verbatim_pages=short_verbatim_pages, retained_glyph_overlap_pages=overlap_pages,
+                  vector_glyph_loss_pages=vector_loss_pages,
                   severity=severity, quality_fail=severity == 'high')
     return result
 

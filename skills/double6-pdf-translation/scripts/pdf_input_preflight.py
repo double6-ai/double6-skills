@@ -30,6 +30,9 @@ CODES: dict[str, tuple[str, str]] = {
     'non_digital_pages': ('error', '存在非原生电子页（扫描图像页或无文字层页）；电子 PDF 路线要求全部页面为原生文字层。'),
     'source_language_matches_target': ('error', '源文主要语言已经是目标语言；当前版本支持英译中（en→zh）与中译英（zh→en），不会静默输出原文。'),
     'target_language_unsupported': ('error', '目标语言不受支持；当前版本只支持 zh（英译中）与 en（中译英）。'),
+    'zh2en_inline_object_math_unsupported': ('error', '中译英：中文正文行内的变量或公式由 Form XObject 文字或矢量路径字形绘制（例如 MathJax/网页打印公式、嵌入式行内变量）；'
+                                             '排版引擎无法让这些对象随英文译文重排，会与译文压叠或丢失，因此在翻译前拒绝。请提供公式为普通文字层的 PDF 或 LaTeX 源。'),
+    'target_language_route_unsupported': ('error', '中译英（--target-language en）只支持 candidate --route digital_pdf；LaTeX 路线与 collect 的译者固定译成简体中文。'),
     'source_language_mixed': ('warning', '源文中英混合比例较高，语言判定不确定；请确认源文主体语言与所选翻译方向一致。'),
     'source_language_unknown': ('info', '可抽取文字过少，无法判定源语言（常见于扫描件或文字转曲）。'),
     'page_load_failed': ('error', '部分页面无法解析。'),
@@ -130,6 +133,101 @@ def _has_pdf_trailer(path: Path) -> bool:
     return b'%%EOF' in tail or b'startxref' in tail
 
 
+# 中译英行内对象公式检测（结构规则，不用词表）：一行中文正文内部出现 >= INLINE_OBJECT_PAGE_MIN 个
+# “行内对象”（Form XObject 绘制的非中文字形，或字形大小的填充矢量路径）即判定该页不受支持。
+INLINE_OBJECT_PAGE_MIN = 3
+
+
+def _cjk_rows(page) -> list[tuple[float, float, float, float]]:
+    """页面级（不含 Form XObject）中文正文行：同一文本块内按纵向重叠合并的行，返回 (x0, y0, x1, y1)。"""
+    rows = []
+    for block in page.get_text('rawdict').get('blocks', []):
+        lines = []
+        for line in block.get('lines', []):
+            chars = [c for span in line['spans'] for c in span['chars'] if c['c'].strip()]
+            if sum(1 for c in chars if _CJK.match(c['c'])) >= 2:
+                lines.append([min(c['bbox'][0] for c in chars), min(c['bbox'][1] for c in chars),
+                              max(c['bbox'][2] for c in chars), max(c['bbox'][3] for c in chars)])
+        lines.sort(key=lambda b: (b[1], b[0]))
+        merged: list[list[float]] = []
+        for box in lines:
+            last = merged[-1] if merged else None
+            if last and min(last[3], box[3]) - max(last[1], box[1]) > 0.5 * min(last[3] - last[1], box[3] - box[1]):
+                last[:] = [min(last[0], box[0]), min(last[1], box[1]), max(last[2], box[2]), max(last[3], box[3])]
+            else:
+                merged.append(list(box))
+        rows.extend(tuple(box) for box in merged)
+    return rows
+
+
+def _char_keys(page) -> list[tuple[str, tuple[int, int, int, int]]]:
+    keys = []
+    for block in page.get_text('rawdict').get('blocks', []):
+        for line in block.get('lines', []):
+            for span in line['spans']:
+                for char in span['chars']:
+                    if char['c'].strip():
+                        keys.append((char['c'], tuple(round(v) for v in char['bbox'])))
+    return keys
+
+
+def _inside_row(cx: float, cy: float, rows) -> tuple[float, float, float, float] | None:
+    for row in rows:
+        x0, y0, x1, y1 = row
+        height = y1 - y0
+        # 行首左侧（项目符号）不算行内；行内对象中心须落在该行文字范围内部。
+        if x0 + 0.3 * height < cx < x1 and y0 <= cy <= y1:
+            return row
+    return None
+
+
+def inline_object_math(doc, page_index: int) -> dict[str, Any]:
+    """统计一页中文正文行内的 Form XObject 字形与矢量路径字形（结构证据，只读，不改源文件）。"""
+    import fitz
+    from collections import Counter
+
+    page = doc[page_index]
+    scratch = fitz.open()
+    try:
+        scratch.insert_pdf(doc, from_page=page_index, to_page=page_index)
+        bare = scratch[0]
+        forms = {item[0] for item in bare.get_xobjects()}
+        for xref in forms:
+            # 只改内存中的临时副本：清空 Form XObject 内容流，差集即为 Form 绘制的文字。
+            scratch.update_stream(xref, b'')
+        rows = _cjk_rows(bare)
+        remaining = Counter(_char_keys(bare))
+        xobject_chars = []
+        for key in _char_keys(page):
+            if remaining[key] > 0:
+                remaining[key] -= 1
+            else:
+                xobject_chars.append(key)
+    finally:
+        scratch.close()
+    xobject_inline = 0
+    for char, (x0, y0, x1, y1) in xobject_chars:
+        if not _CJK.match(char) and _inside_row((x0 + x1) / 2, (y0 + y1) / 2, rows):
+            xobject_inline += 1
+    vector_inline = 0
+    for drawing in page.get_drawings():
+        if drawing.get('fill') is None:
+            continue
+        rect = drawing['rect']
+        cx, cy = (rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2
+        row = _inside_row(cx, cy, rows)
+        if not row:
+            continue
+        height = row[3] - row[1]
+        # 字形大小：不超过约两个字宽、不高于行高的 1.6 倍，且不是细线（下划线/分数线另由文字判断）。
+        if rect.width <= 2.0 * height and rect.height <= 1.6 * height and min(rect.width, rect.height) >= 0.12 * height \
+                and max(rect.width, rect.height) >= 0.25 * height:
+            vector_inline += 1
+    return {'page': page_index + 1, 'cjk_rows': len(rows), 'form_xobjects': len(forms),
+            'xobject_text_glyphs': xobject_inline, 'vector_glyphs': vector_inline,
+            'flagged': xobject_inline >= INLINE_OBJECT_PAGE_MIN or vector_inline >= INLINE_OBJECT_PAGE_MIN}
+
+
 def inspect_pdf(path, *, max_pages: int | None = DIGITAL_MAX_PAGES, target_language: str = 'zh',
                 require_digital: bool = False, language_pages: int = 3) -> dict[str, Any]:
     """返回结构化预检结果；不抛异常，所有问题都进入 findings。"""
@@ -208,6 +306,13 @@ def inspect_pdf(path, *, max_pages: int | None = DIGITAL_MAX_PAGES, target_langu
             findings.append(finding('source_language_mixed', **language))
         elif language['language'] == 'unknown':
             findings.append(finding('source_language_unknown', **language))
+        if target_language == 'en' and language['language'] == 'zh' and not failed:
+            inline = [inline_object_math(doc, index) for index in range(min(count, 200))]
+            facts['inline_object_math'] = inline
+            flagged = [row for row in inline if row['flagged']]
+            if flagged:
+                findings.append(finding('zh2en_inline_object_math_unsupported', pages=flagged,
+                                        page_min=INLINE_OBJECT_PAGE_MIN))
     return summarize(findings, **facts)
 
 

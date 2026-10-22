@@ -800,7 +800,8 @@ class ILTranslatorLLMOnly:
                     same_as_input = trimed_input == output_unicode
                     if same_as_input and input_token_count > 10:
                         same_class = il_translator.classify_same_as_input_result(
-                            input_unicode
+                            input_unicode,
+                            getattr(self.translation_config, "lang_in", None),
                         )
                         if same_class == "protected_or_passthrough":
                             llm_translate_tracker.set_error_message(
