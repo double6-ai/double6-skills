@@ -27,6 +27,7 @@ metadata:
 | 已经核过的 LaTeX | `candidate`，固定参数 `--route latex_verified` |
 | 中文电子版 PDF 译成英文 | `candidate --route digital_pdf` 加 `--target-language en`（默认 `zh` 为英译中）；行内公式由 Form XObject/矢量路径绘制的 PDF 预检拒绝 |
 | 扫描件或扫描/电子混合 PDF（1–5 页，横排正文） | `candidate --route scanned_ocr`（可加 `--target-language en`）：本地 Tesseract 识别受支持页，重建源再走电子后端与全部质量门；表格、公式、低分辨率、低置信度、不确定方向等以稳定错误码退出码 2 拒绝，OCR 文字不作验收，综合质量最高 `unverified`。见 [references/ocr-route.md](references/ocr-route.md) |
+| 超过 5 页、一个有界任务做不完的长文档（最多 500 页，电子、扫描或混合） | `chunked-candidate --route digital_pdf\|scanned_ocr\|per_chunk`：按安全页边界切成有界块（电子 ≤4 页、扫描 ≤2 页），每块是一次普通 `candidate`（原路线、原门、同一冻结资源合同），按原页序合并并恢复目录/页码标签/内部链接；任一块失败整份 `chunk_failed`（退出码 2、不交付部分结果），合并质量不好于最差的一块；`--resume` 回收遗留进程树、只复用逐 sha 核对一致的块。见 [references/chunked-translation.md](references/chunked-translation.md) |
 
 扫描这条不能套到所有 PDF。隐藏文字层要单独决定走不走，不能悄悄换模型，也不能悄悄改页面尺寸。
 
