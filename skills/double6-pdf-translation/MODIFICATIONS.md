@@ -18,6 +18,12 @@
 
 源论文、译稿、字体、TeX、模型权重与验证证据不包含在公开运行包中。每份文档的完整语义、实际单语/双语页面、样式链接、阅读复制和冷重建仍须执行；本次维护没有授予任意输入的自动严格交付能力。
 
+## 2.0.0-rc.6 维护改动（2026-10-22）
+
+- 修改 vendored BabelDOC `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/styles_and_formulas.py`：公式分组在栏内视觉折行处断开；`merge_overlapping_formulas` 不跨折行合并、不合并中间夹正文的不相邻公式；按逗号拆分公式时保留下标/上标逗号；零高度/零宽度线段（分式线）按 0.5pt 线宽参与公式包含判定。文件头维护日期更新为 2026-10-18。
+- 新增 `tests/test_inline_math_wrap.py` 与 `tests/fixtures/inline_math/`（真实 arXiv CC BY 4.0 论文的单段字符几何 JSON，不含 PDF）。
+- 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py` 更新为 2.0.0-rc.6（原 rc.4，合并到 rc.5 之上后改号）。
+
 ## 2.0.0-rc.5 维护改动（2026-10-18）
 
 - 新增 vendored BabelDOC `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/table_figure_text.py`：填充节点内多行合并、紧凑标签翻译范围判定、单行源基线记录。
