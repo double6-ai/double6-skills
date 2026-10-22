@@ -81,7 +81,7 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 | `pdf_truncated_or_corrupt` | error | 无法打开、缺少文件尾或修复后 0 页 |
 | `encrypted_user_password_required` | error | 需要打开密码；不猜测、不破解 |
 | `permissions_restricted` | warning | 所有者权限限制（禁止修改/复制等）；请确认有权翻译 |
-| `page_limit_exceeded` | error | 超出当前路线页数（电子 PDF 1–5 页；扫描预检 `--max-pages`，默认 2、最大 20） |
+| `page_limit_exceeded` | error | 超出当前路线页数（电子 PDF 1–5 页；扫描预检 `--max-pages`，默认 2、最大 20；`chunked-candidate` 1–500 页） |
 | `non_digital_pages` | error | 电子 PDF 路线遇到扫描图像页、文字转曲页或路由判为需复核的页 |
 | `source_language_matches_target` | error | 源文主要语言已经是目标语言（英译中时源文为中文，中译英时源文为英文） |
 | `target_language_unsupported` | error | `--target-language` 不是 `zh`（英译中）或 `en`（中译英） |
@@ -94,6 +94,10 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 | `task_memory_limit_exceeds_host_authorization` | error | 内存上限超过物理内存 50% |
 | `preflight_guard_stopped` | error | 输入预检子进程超出 1.5 GiB／60 秒预算被停止 |
 | `input_or_contract_invalid` | error | FREEZE 或其它输入合同不符，`message` 给出原因 |
+| `chunk_failed` | error | `chunked-candidate`：至少一块没有产物（`details.chunks[]` 给出每块页范围、状态和原错误码）；不合并、不交付部分结果 |
+| `chunk_page_exceeds_task_budget` | error | `chunked-candidate`：资源停止的块已二分到单页，单页仍超出冻结的单任务预算（`details.chunks[].measurements` 给出实测） |
+| `chunk_merge_failed` | error | `chunked-candidate`：有界合并任务未完成 |
+| `chunk_cleanup_unconfirmed` | error | `chunked-candidate`（`details.chunks[]` 内的块错误码）：某块尝试结束后仍有本尝试的进程存活且无法核实已回收；停止调度后续块，整份 `chunk_failed` |
 
 ## 渲染英文残留检查
 
@@ -149,3 +153,7 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 FREEZE 的 `route` 为 `scanned_ocr`，`routing_contract` 须逐字等于 `paper_translation_workflow.OCR_ROUTING`，不得带 `source_cache_contract`，`implementation_refs` 应包含 `scripts/ocr_route.py`。推荐资源合同：`{"task_rss_bytes": 5368709120, "per_job_seconds": 120, "concurrency": 1, "memory_metric": "rss"}`（`resource_limits.RSS_CONTRACT`；rc.8 由 3 GiB 调为 5 GiB）；OCR 与后端共享同一单任务时限。
 
 回执：`receipts/ocr/OCR_MANIFEST.json`（逐页渲染图、识别文字、背景图、行明细、每个 tesseract 进程身份）、`receipts/ocr-reconstruct/`（有界执行资源采样与回收结论）、`receipts/reconstructed-input/`（重建源电子预检）、`receipts/candidate/`（后端）。`WORKFLOW_CANDIDATE.json` 的 `ocr` 字段汇总引擎身份、逐页结论、重建源 sha256；`ocr_stage` 指出停在哪一步。支持/拒绝矩阵与错误码见 [ocr-route.md](ocr-route.md)。
+
+## 长文档分块：`chunked-candidate`（rc.9）
+
+超过 5 页或一个有界任务做不完的文档用 `chunked-candidate`（参数与 `candidate` 相同，另有 `--resume`；`--route` 可取 `digital_pdf`、`scanned_ocr`、`per_chunk`）。parent FREEZE 的 `pages` 为完整 1..N（N ≤ 500），`chunking_contract` 逐字等于 `chunked_translation.CHUNKING_CONTRACT`，`implementation_refs` 包含 `scripts/chunked_translation.py`；`per_chunk` 的 `routing_contract` 为 `PER_CHUNK_ROUTING`。每块派生自己的 FREEZE，以普通 `candidate` 运行，受同一冻结资源合同约束；合并质量不好于最差的一块，任一块没有产物即 `chunk_failed`（退出码 2）。设计、回执、续跑与限制见 [chunked-translation.md](chunked-translation.md)。

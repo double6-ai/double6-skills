@@ -134,3 +134,14 @@
 - 实际回放与技术审查不授予任意输入的自动严格验收，也不自动等同于软件发布或用户接受。
 
 - 安装验收：除入口帮助外，以独立进程实际导入 PyMuPDF、ONNX/ONNX Runtime、OpenCV、scikit-learn 及 DocLayout 主路径原生扩展；单线程、180 秒安装核验上限，失败时不宣告环境已准备。未改变论文任务 3 GiB／120 秒预算。
+
+## 2.0.0-rc.9 维护改动（2026-10-23）
+
+- 新增 `scripts/chunked_translation.py`：冻结分块合同 `CHUNKING_CONTRACT`、安全页边界信号与划分、块源 PDF、原文导航（目录/页码标签/内部链接）、整份文档术语上下文、按页序合并与逐页核对、合并综合质量（不好于最差的一块）、跨块术语一致性检查；`plan`/`merge` 子命令只在有界任务内运行。
+- 新增 `scripts/chunked_workflow.py`：`chunked-candidate` 编排（块级 FREEZE 派生、每块普通 `candidate`、资源停止二分、瞬时失败重试 1 次、失败关闭、原子运行状态、`--resume` 的遗留进程树回收与逐 sha 复用、后端字体子集化临时件登记后删除）。
+- 修改 `scripts/paper_translation_workflow.py`：新增 `chunked-candidate` 动作与 `PER_CHUNK_ROUTING`；`validate_freeze` 增加仅关键字参数 `chunked`（默认 False 时行为不变）；`bounded_input_preflight` 增加 `max_pages`（默认仍为 5）；`candidate_command` 在给出整份术语上下文时追加 `--document-term-context(-sha256)`；`_execute-digital` 核对块 FREEZE 的 `document_term_context_ref`；`check_target_language_route` 允许 `chunked-candidate --route per_chunk`。
+- 修改 `scripts/pdf_translation_cli.py`（`--document-term-context`、`--document-term-context-sha256`）、`scripts/pdf_translation_render.py`（`load_document_term_context`，sha 不符即拒绝）、`scripts/pdf_translation_commands.py`（`build_backend_system_prompt` 可选 `document_context`：文档级条目在前、块内新条目在后；不传时输出不变）。
+- 第 2 轮（真实长文档运行发现，同一 PR）：`chunked_workflow.py` 把后端内部超时（块 `render_manifest.json` 的 `errors` 含 `timeout`）按资源停止 `backend_timeout` 二分；新增尝试后核查（按启动 nonce 扫描存活进程，回收并复查，无法核实即 `chunk_cleanup_unconfirmed` 并停止调度后续块；`owned_tree_cleanup_unconfirmed` 同样停止调度）；块级上下文 `CHUNK_TERM_CONTEXT.json`。`scripts/render_residue_check.py` 新增 `reference_region_open_pages` 与 `check_render_residue(..., region_open_at_start=False)`、`split_counted_text(..., region_open_at_start=False)`；`scripts/qa_pipeline.py` 的 `attach_pipeline_quality` / `render_residue_gate` 增加同名可选参数；`scripts/pdf_translation_runtime.py` 从已按 sha 核对的块上下文读取该状态。默认值下单份翻译的行为与报告逐字不变。
+- 文档：新增 `references/chunked-translation.md`；`SKILL.md`、`references/release-quickstart.md`（错误码 `chunk_failed`、`chunk_page_exceeds_task_budget`、`chunk_merge_failed`、块错误码 `chunk_cleanup_unconfirmed`）。
+- 新增 `tests/test_chunked_translation.py`。
+- 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py`、仓库 `README.md` 更新为 2.0.0-rc.9。
