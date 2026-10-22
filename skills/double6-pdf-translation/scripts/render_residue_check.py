@@ -649,20 +649,25 @@ def _collides(rect, others, fraction=INLINE_OBJECT_COLLISION_FRACTION) -> str | 
 
 
 def page_inline_object_damage(source_doc, page_index: int, target_page) -> dict[str, Any]:
-    """逐个核对源页中文正文行内已定位的结构对象：成品中缺失（丢失）或与译文字形压叠，任何一个都判 high。"""
+    """逐个核对源页中文正文行内已定位的结构对象（行内 Form 字形、矢量字形、needs_review 混排 Form 的数学字形与分数线）：
+    成品中缺失（丢失）或与译文字形压叠，任何一个都判 high。"""
     import fitz
     from pdf_input_preflight import inline_object_math
 
     located = inline_object_math(source_doc, page_index, with_objects=True)['objects']
     tol = INLINE_OBJECT_MATCH_TOLERANCE
     text = _target_text_boxes(target_page)
-    paths = [d['rect'] for d in target_page.get_drawings() if d.get('fill') is not None] if located else []
+    drawings = target_page.get_drawings() if located else []
+    paths = [d['rect'] for d in drawings if d.get('fill') is not None]
+    strokes = [d['rect'] for d in drawings]
     used: set[int] = set()
     lost, collided = [], []
     for obj in located:
         rect = fitz.Rect(obj['bbox'])
-        if obj['kind'] == 'vector_glyph':
-            match = next((r for r in paths if abs(r.x0 - rect.x0) <= tol and abs(r.y0 - rect.y0) <= tol
+        if obj['kind'] in ('vector_glyph', 'form_rule'):
+            # 分数线（混排 Form 里的细横线）可以是描边路径，因此在全部路径里找；矢量字形只在填充路径里找。
+            candidates = paths if obj['kind'] == 'vector_glyph' else strokes
+            match = next((r for r in candidates if abs(r.x0 - rect.x0) <= tol and abs(r.y0 - rect.y0) <= tol
                           and abs(r.x1 - rect.x1) <= tol and abs(r.y1 - rect.y1) <= tol), None)
             if match is None:
                 lost.append(obj)
