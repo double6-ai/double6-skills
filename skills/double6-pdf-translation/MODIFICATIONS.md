@@ -202,3 +202,6 @@
     或不同归属间有 ≥1.5 字号空白（`_continuous`）的行。`split_table_rows_at_column_gutters` 不拆落在 `table_cell` 类单元格框内的段落，
     丢弃被单元格框横跨的空白，并要求 `_column_evidence`（他行已分段 / 竖直表格线 / 单元格分界）。新增
     `tests/test_pr24_review1_layout_boundaries.py`（评审原测试，仅改路径）、`tests/test_layout_boundaries_adjacent.py`。
+  - PR #24 review-2：`line_fragments.py` 新增 `VALUE_TOKEN`、`ANCHOR_TOLERANCE`、`_segment_text`、`_stacks`；
+    `_column_evidence` 增加“数据行相邻值记号在此分开且右值与他行片段列锚点对齐”的证据。新增 `tests/test_table_value_columns.py`
+    与夹具 `arxiv2512.18979-p5-table2-header.json`。
