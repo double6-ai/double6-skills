@@ -55,24 +55,72 @@ def run_lock(path: Path):
 
 
 # ------------------------------------------------------------------ 遗留进程回收
-def _live_owner_nonces() -> set[str]:
+GUARD_PROTOCOL = 'launch_receipt_recovery_scan_v2'
+
+
+def owner_nonce_scan() -> dict[str, Any]:
+    """全机一次：环境里带 ``PAPER_TRANSLATION_BOUNDED_OWNERS`` 的进程的 nonce 集合（只用于记录，不用于判定已清理）。
+    读不到环境的同用户非僵尸进程计入 ``unreadable``；枚举本身失败即 ``complete=False``。"""
     import psutil
-    found: set[str] = set()
-    for pid in psutil.pids():
+    from bounded_execution import PROCESS_QUERY_ERRORS, _enumerate_all_pids, _query_failure_counts
+    report: dict[str, Any] = {'complete': False, 'nonces': set(), 'unreadable': 0, 'method': None}
+    try:
+        pids, report['method'], _ = _enumerate_all_pids()
+    except Exception as exc:  # noqa: BLE001 - 枚举失败只说明本次扫描不完整
+        report['error'] = f'{type(exc).__name__}: {exc}'[:200]
+        return report
+    for pid in pids:
+        proc = None
         try:
-            value = psutil.Process(pid).environ().get('PAPER_TRANSLATION_BOUNDED_OWNERS', '')
-        except (psutil.Error, OSError):
+            proc = psutil.Process(pid)
+            value = proc.environ().get('PAPER_TRANSLATION_BOUNDED_OWNERS', '')
+        except psutil.NoSuchProcess:
             continue
-        found.update(filter(None, value.split(',')))
-    return found
+        except PROCESS_QUERY_ERRORS:
+            if _query_failure_counts(proc):
+                report['unreadable'] += 1
+            continue
+        report['nonces'].update(filter(None, value.split(',')))
+    report['complete'] = True
+    return report
+
+
+def _reason_codes(rows: list[dict[str, Any]]) -> list[str]:
+    return sorted({str(row.get('reason') or 'unverified') for row in rows})
+
+
+def _verify_receipt(identity: dict[str, Any]) -> dict[str, Any]:
+    """一张 launch 回执的整树核实。先做一次只读预检（与回收同一套恢复扫描：nonce / 本次进程组 / 已核验父链，
+    查询失败的同用户进程记为归属未知）；只有预检“完整、无所属存活、无归属未知、根已退出或号码已复用、
+    原进程组已空”才记为 already_gone。否则交给 ``reclaim_owned_tree(discovery_failed=True)``：
+    已知可信根/成员按 PID + create_time 回收（时钟跳变带有效 nonce 的按 nonce 刷新身份），归属未知的进程
+    不发信号、记入 unverified（confirmed=False）。"""
+    from bounded_execution import _group_empty, _identity_state, _recovery_scan, reclaim_owned_tree
+    pid, born = int(identity['pid']), float(identity['created_at'])
+    nonce = identity.get('nonce')
+    state = _identity_state(pid, born)[0]
+    pgid = identity.get('process_group')
+    own_group = bool(pgid) and pgid == pid and os.name == 'posix'
+    group_trusted = own_group and state in ('alive', 'zombie', 'dead')
+    group_empty = _group_empty(pgid) if own_group and state != 'pid_reused' else True
+    pre = _recovery_scan(identity, {pid: born}, nonce, group_trusted, 'guard_precheck')
+    precheck = {'root_state': state, 'group_empty': group_empty, 'complete': pre['complete'],
+                'owned_found': len(pre['owned_found']), 'ownership_unknown': len(pre['ownership_unknown'])}
+    if (state in ('dead', 'pid_reused') and group_empty is True and pre['complete']
+            and not pre['owned_found'] and not pre['ownership_unknown']):
+        return {'already_gone': True, 'confirmed': True, 'precheck': precheck, 'unverified': []}
+    outcome = reclaim_owned_tree(identity, {}, time.monotonic() + 15, discovery_failed=True, nonce=nonce)
+    return {'already_gone': False, 'confirmed': bool(outcome.get('confirmed')), 'precheck': precheck,
+            'status': outcome.get('status'), 'unverified': list(outcome.get('unverified') or []),
+            'identity_refreshed': outcome.get('identity_refreshed', [])}
 
 
 def reclaim_stale(roots: list[Path]) -> dict[str, Any]:
-    """扫描本次运行目录下所有 launch 回执；仍有存活成员（根进程、原进程组或继承 nonce 的进程）的
-    逐个以 ``reclaim_owned_tree(discovery_failed=True)`` 回收并核实。任何一个未核实即 confirmed=False。"""
-    from bounded_execution import _group_empty, _identity_state, reclaim_owned_tree
-    nonces = _live_owner_nonces()
-    report: dict[str, Any] = {'confirmed': True, 'receipts_scanned': 0, 'reclaimed': [], 'already_gone': 0}
+    """扫描运行目录下所有 launch 回执，逐张整树核实/回收（``_verify_receipt``）。回执读不了、核实抛错、
+    或任何一张未核实 → confirmed=False，且 ``unverified`` 非空（带稳定原因码 ``reason_codes``）。
+    不再以全机 nonce 扫描（读不到环境的进程会被漏掉）判定“已无残留”（PR #21 review-1）。"""
+    report: dict[str, Any] = {'protocol': GUARD_PROTOCOL, 'confirmed': True, 'receipts_scanned': 0,
+                              'reclaimed': [], 'already_gone': 0, 'unverified': []}
     for root in roots:
         if not root.exists():
             continue
@@ -80,24 +128,29 @@ def reclaim_stale(roots: list[Path]) -> dict[str, Any]:
             report['receipts_scanned'] += 1
             try:
                 identity = json.loads(receipt.read_text(encoding='utf-8'))
-            except (OSError, json.JSONDecodeError) as exc:
+                verdict = _verify_receipt(identity)
+            except Exception as exc:  # noqa: BLE001 - 核实不了即未核实（失败关闭），不当作已清理
+                row = {'receipt': str(receipt), 'reason': 'receipt_verification_error',
+                       'error': f'{type(exc).__name__}: {exc}'[:200]}
                 report['confirmed'] = False
-                report['reclaimed'].append({'receipt': str(receipt), 'error': f'{type(exc).__name__}: {exc}'[:200]})
+                report['unverified'].append(row)
+                report['reclaimed'].append(dict(row, confirmed=False))
                 continue
-            state = _identity_state(int(identity['pid']), float(identity['created_at']))[0]
-            pgid = identity.get('process_group')
-            group_busy = bool(pgid) and pgid == identity.get('pid') and state != 'pid_reused' and _group_empty(pgid) is False
-            if state not in ('alive', 'zombie', 'unknown') and not group_busy and identity.get('nonce') not in nonces:
+            if verdict['already_gone']:
                 report['already_gone'] += 1
                 continue
-            outcome = reclaim_owned_tree(identity, {}, time.monotonic() + 15, discovery_failed=True,
-                                         nonce=identity.get('nonce'))
             report['reclaimed'].append({'receipt': str(receipt), 'pid': identity.get('pid'),
-                                        'root_state': state, 'group_busy': group_busy,
-                                        'confirmed': outcome.get('confirmed'), 'status': outcome.get('status'),
-                                        'unverified': outcome.get('unverified')})
-            if not outcome.get('confirmed'):
+                                        'root_state': verdict['precheck']['root_state'],
+                                        'group_busy': verdict['precheck']['group_empty'] is False,
+                                        'precheck': verdict['precheck'],
+                                        'confirmed': verdict['confirmed'], 'status': verdict.get('status'),
+                                        'unverified': verdict['unverified'],
+                                        'identity_refreshed': verdict.get('identity_refreshed', [])})
+            if not verdict['confirmed']:
                 report['confirmed'] = False
+                report['unverified'] += [dict(row, receipt=str(receipt)) for row in verdict['unverified']] or [
+                    {'receipt': str(receipt), 'reason': 'reclaim_unconfirmed'}]
+    report['reason_codes'] = _reason_codes(report['unverified'])
     return report
 
 
@@ -114,16 +167,25 @@ def attempt_nonces(attempt: Path) -> set[str]:
 
 
 def post_attempt_guard(attempt: Path) -> dict[str, Any]:
-    """尝试结束后：本尝试任何启动 nonce 仍挂在存活进程上（环境变量核验，不依赖墙钟 create_time）
-    即回收（reclaim_stale）并复查；复查仍存活或回收未核实 → confirmed=False（调用方失败关闭、停止调度）。"""
+    """尝试结束后：本尝试每张 launch 回执都做整树核实（``reclaim_stale([attempt])``）；存活的本任务进程
+    回收后核实，归属无法判定、枚举不完整或回收未核实 → confirmed=False、unverified 非空（调用方失败关闭、
+    停止调度后续块；重任务并发 1）。全机 nonce 扫描只作记录（``live_after_attempt``），不作“已清理”的依据。"""
     nonces = attempt_nonces(attempt)
-    live = nonces & _live_owner_nonces()
-    report: dict[str, Any] = {'protocol': 'launch_nonce_scan_v1', 'nonces': len(nonces), 'live_after_attempt': sorted(live),
-                              'confirmed': True}
-    if live:
-        reclaim = reclaim_stale([attempt])
-        still = nonces & _live_owner_nonces()
-        report.update(reclaim=reclaim, still_live=sorted(still), confirmed=bool(reclaim['confirmed']) and not still)
+    before = owner_nonce_scan()
+    reclaim = reclaim_stale([attempt])
+    after = owner_nonce_scan()
+    still = nonces & after['nonces']
+    report: dict[str, Any] = {'protocol': GUARD_PROTOCOL, 'nonces': len(nonces),
+                              'live_after_attempt': sorted(nonces & before['nonces']),
+                              'nonce_scan': {k: before[k] for k in ('complete', 'unreadable', 'method')},
+                              'reclaim': reclaim, 'still_live': sorted(still)}
+    unverified = list(reclaim.get('unverified') or [])
+    if not reclaim.get('confirmed') and not unverified:
+        unverified.append({'reason': 'reclaim_unconfirmed'})
+    if still:
+        unverified.append({'reason': 'owned_nonce_still_live', 'nonces': sorted(still)})
+    report.update(unverified=unverified, reason_codes=_reason_codes(unverified),
+                  confirmed=bool(reclaim['confirmed']) and not unverified)
     return report
 
 
@@ -326,8 +388,8 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
         if args.resume:
             stale = reclaim_stale([receipts, output])
             wf.write_new(inv_dir / 'STALE_RECLAIM.json', stale)
-            inv['stale_reclaim'] = {k: stale[k] for k in ('confirmed', 'receipts_scanned', 'already_gone')} | {
-                'reclaimed': len(stale['reclaimed'])}
+            inv['stale_reclaim'] = {k: stale[k] for k in ('confirmed', 'receipts_scanned', 'already_gone', 'reason_codes')} | {
+                'reclaimed': len(stale['reclaimed']), 'unverified': len(stale['unverified'])}
             if not stale['confirmed']:
                 save_state(state_path, state)
                 return dict(wf.blocked_result([wf.finding('owned_tree_cleanup_unconfirmed',
@@ -439,8 +501,8 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
                 record['stop_reason'] = 'backend_timeout'
             wf.write_new(attempt_dir / 'CHUNK_RESULT.json', result)
             guard = post_attempt_guard(attempt_dir)
-            record['post_attempt_guard'] = {k: guard[k] for k in ('live_after_attempt', 'confirmed')}
-            if guard['live_after_attempt']:
+            record['post_attempt_guard'] = {k: guard[k] for k in ('live_after_attempt', 'confirmed', 'reason_codes')}
+            if guard['live_after_attempt'] or guard['reclaim'].get('reclaimed') or not guard['confirmed']:
                 wf.write_new(attempt_dir / 'POST_ATTEMPT_GUARD.json', guard)
             if not guard['confirmed']:
                 kind = record['classification'] = 'cleanup_unconfirmed'

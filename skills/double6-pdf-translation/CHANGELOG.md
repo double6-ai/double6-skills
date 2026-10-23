@@ -15,6 +15,18 @@
 - 第 3 轮实测（提交 17e7bbd）：真实运行中再遇墙钟跳变（btime +39 s、+36 s、+1937 s、+672 s、+77 s），nist48 c009a / c008aa、arxiv2610 c009 / c015 的身份竞态均由尝试后核查以 nonce 认出并回收（`root_state=pid_reused`，核实确认），重试后完成，未与下一块重叠、未留孤儿。nist48-rerun 仅因第 1、16、48 页非原生电子页被路线门拦截（rc 2）；arxiv2610 c012 / c013 / c016 为图表区原生回写超出可读下限（与第 1 轮相同块，页内既有门）；circ150 由 OCR 门拦截；arxiv2501 合并完成，p8 渲染残留高 → 质量失败（rc 3，合并质量 = 最差块）。单任务最高 3.282 GiB；nist48-rerun c008a 用时 157.02 s：整机冻结 88 s（独立采样器同期停顿 93 s、uptime 照走）后第一个采样即 `task_timeout` 停止，回收已核实，回执记 `deadline_met=false`。
 - CI 修正（提交 17e7bbd）：有界 `chunk-plan` 以运行目录为 cwd，CI 的全新 `PAPER_TRANSLATION_WORKSPACE` 尚不存在时整份退出 1；现先建运行目录，被普通文件占用则失败关闭。成对测试。
 - 非分块 `candidate` 路径同样受墙钟跳变影响：回归中 ocr-zh-03 一次因“PID 已复用”失败关闭（单次 candidate 不重试），新目录重跑与 bd220a1 逐像素相同。
+- PR #21 review-1（P1，同一 rc.9 普通提交系列）：尝试后核查与续跑回收把“查询失败”误当“已清理”。旧 `_live_owner_nonces` 把
+  `Process.environ()` 的 AccessDenied 静默丢弃，nonce 集合为空即 `post_attempt_guard` confirmed=true；`reclaim_stale` 在根已退出、
+  原组已空、脱组孤儿仍在时同样因 nonce 扫描漏掉孤儿而记 `already_gone`。修复：
+  - 守卫/续跑逐张 launch 回执整树核实（`launch_receipt_recovery_scan_v2`），复用既有恢复扫描与 `reclaim_owned_tree`；归属未知
+    不发信号、`unverified` 非空、稳定 `reason_codes`；无法核实即失败关闭并停止后续块。全机 nonce 扫描只作记录。
+  - 同类相邻缺口：`launched_members` 运行期组外进程 environ/create_time 查询失败不再静默跳过（记 `ownership_unknown_during_run`，
+    最终回收转恢复扫描核实）；恢复扫描 ppid 查询失败计为归属未知；带本次 nonce 但因墙钟回拨看起来早于根进程的后代按 nonce
+    认定；僵尸与其它用户进程不计为未知；回执缺字段/核实抛错记 `receipt_verification_error`。
+  - 不变：5 GiB / 120 s / 重任务并发 1、质量门、OCR 与中文路线、时钟跳变带有效 nonce 的回收、无 nonce PID 复用不发信号、原 34 项独立测试。
+  - 测试 `tests/test_pr21_review1_guard_query_failures.py`：审稿 4 例（root/orphan × 正常/environ 拒绝）、run_bounded 真实脱组孤儿正反例、
+    恢复扫描逐项查询失败正反例、resume 失败关闭/正常续跑，以及 PR #19 第 10 轮真实多跳父链的加固副本（标记原子发布、只读完整 JSON、
+    启动后全程 try/finally；真实覆盖未知时接受严格 unconfirmed 且 unverified 非空）。原文件属于原 34 项，未改动。
 - 版本号：2.0.0-rc.9。
 
 ## 2.0.0-rc.8 本地发布候选 · 2026-10-22
