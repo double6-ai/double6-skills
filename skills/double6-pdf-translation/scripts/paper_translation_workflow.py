@@ -34,6 +34,10 @@ DIGITAL_ROUTING = {'selection':'explicit_pdf_backend_only','complete_native_page
 OCR_ROUTING = {'selection':'explicit_scanned_ocr','engine':'tesseract_cli','scan_or_mixed':'ocr_supported_pages_only',
                'unsupported_layouts':'rejected','latex_discovery':'disabled','backend':'pdf_backend_on_reconstructed_source'}
 PDF_BACKEND_ROUTES = ('digital_pdf', 'scanned_ocr')
+# 长文档分块（rc.9）：parent FREEZE 声明整份页数 + 冻结分块合同；每块派生自己的 FREEZE 走上面两条既有路线之一。
+CHUNK_ROUTES = ('digital_pdf', 'scanned_ocr', 'per_chunk')
+PER_CHUNK_ROUTING = {'selection':'per_chunk_explicit','native_text_pages':'digital_pdf','scanned_pages':'scanned_ocr',
+                     'sparse_pages':'attach_to_neighbour_run','digital':DIGITAL_ROUTING,'scanned':OCR_ROUTING}
 
 
 def write_new(path, value):
@@ -117,13 +121,28 @@ def ocr_engine_status():
         'blocks_routes': ['scanned_ocr'] if not info.get('available') else [], 'blocks_digital_route': False}
 
 
-def validate_freeze(freeze, input_pdf, route, model):
-    if route not in ROUTES:
+def validate_freeze(freeze, input_pdf, route, model, *, chunked=False):
+    if route not in ROUTES and not (chunked and route == 'per_chunk'):
         raise ValueError('route outside limited first release')
+    if chunked and route == 'latex_verified':
+        raise ValueError('chunked translation supports digital_pdf, scanned_ocr and per_chunk only')
     if freeze.get('input') != ref(input_pdf):
         raise ValueError('input identity changed')
     pages = freeze.get('pages')
-    if not isinstance(pages, list) or pages != list(range(1, len(pages) + 1)) or not 1 <= len(pages) <= DIGITAL_MAX_PAGES:
+    if chunked:
+        from chunked_translation import CHUNKING_CONTRACT
+        if freeze.get('chunking_contract') != CHUNKING_CONTRACT:
+            raise ValueError('frozen chunking contract missing or changed')
+        limit = CHUNKING_CONTRACT['max_document_pages']
+        if not isinstance(pages, list) or pages != list(range(1, len(pages) + 1)) or not 1 <= len(pages) <= limit:
+            raise PreflightError('page_limit_exceeded', f'分块 FREEZE.pages 必须是从 1 开始的完整连续 1–{limit} 页。',
+                                 declared_pages=len(pages) if isinstance(pages, list) else None, max_pages=limit)
+        closure = {str(Path(e.get('path', '')).resolve()) for e in freeze.get('implementation_refs') or [] if isinstance(e, dict)}
+        if str((SCRIPT_DIR / 'chunked_translation.py').resolve()) not in closure:
+            raise ValueError('frozen implementation closure must include chunked_translation.py')
+        if freeze.get('source_cache_contract'):
+            raise ValueError('source cache contracts are not supported by chunked translation')
+    elif not isinstance(pages, list) or pages != list(range(1, len(pages) + 1)) or not 1 <= len(pages) <= DIGITAL_MAX_PAGES:
         raise PreflightError('page_limit_exceeded', 'FREEZE.pages 必须是从 1 开始的完整连续 1–5 页。',
                              declared_pages=pages if isinstance(pages, list) and len(pages) <= 50 else None,
                              max_pages=DIGITAL_MAX_PAGES)
@@ -135,6 +154,8 @@ def validate_freeze(freeze, input_pdf, route, model):
         raise ValueError('frozen explicit digital routing contract differs')
     if route=='scanned_ocr' and (freeze.get('routing_contract')!=OCR_ROUTING or freeze.get('source_cache_contract')):
         raise ValueError('frozen explicit scanned OCR routing contract differs')
+    if route=='per_chunk' and freeze.get('routing_contract')!=PER_CHUNK_ROUTING:
+        raise ValueError('frozen per-chunk routing contract differs')
     if route=='digital_pdf' and freeze.get('source_cache_contract'):
         from pdf_source_cache import CONTRACT, GROUP_CONTRACT, REVISION_CONTRACT, RENDER_INVOCATION_PROTOCOL
         declared=freeze['source_cache_contract']
@@ -145,7 +166,7 @@ def validate_freeze(freeze, input_pdf, route, model):
             raise ValueError('source cache frozen contract changed')
         if expected in (GROUP_CONTRACT,REVISION_CONTRACT) and bound_json(freeze['render_invocation_policy_ref']).get('protocol')!=RENDER_INVOCATION_PROTOCOL:
             raise ValueError('actual group render invocation policy differs')
-    if route in PDF_BACKEND_ROUTES:
+    if route in PDF_BACKEND_ROUTES or route == 'per_chunk':
         api_contract=bound_json(freeze['model_fingerprint_ref']).get('api_contract')
         if api_contract not in (None,'lmstudio_native_chat_v1'):raise ValueError('unknown frozen API contract')
         expected_proxy = 'source_bound_native' if api_contract else ('hymt_compat' if 'hy-mt' in model.lower() else 'none')
@@ -206,6 +227,10 @@ def candidate_command(args, freeze, input_pdf=None):
     if target_language != 'zh':
         # 只有非默认方向才追加参数，英译中命令行与既有回执保持逐字不变。
         command += ['--target-language', target_language]
+    context = getattr(args, 'document_term_context', None)
+    if context:
+        # 分块翻译：整份文档术语上下文（每块 FREEZE 以 document_term_context_ref 绑定，_execute-digital 核对）。
+        command += ['--document-term-context', str(Path(context).resolve()), '--document-term-context-sha256', sha(context)]
     if freeze.get('model_fingerprint_ref') and bound_json(freeze['model_fingerprint_ref']).get('api_contract')=='lmstudio_native_chat_v1':
         command+=['--translation-transport','lmstudio_native_chat_v1','--translator-mode','openai']
     if args.route == 'latex_verified':
@@ -303,10 +328,16 @@ def run_scanned_ocr_candidate(args, freeze):
     return result
 
 
+def run_chunked_candidate(args):
+    """长文档分块（rc.9）：编排见 chunked_workflow.py；每块是一次普通 candidate。"""
+    import chunked_workflow
+    return chunked_workflow.run(args, sys.modules[__name__])
+
+
 CHILD_RESULT_MARKER = 'PAPER_TRANSLATION_STRUCTURED_RESULT '
 EXIT_OK, EXIT_ERROR, EXIT_BLOCKED, EXIT_QUALITY_FAIL = 0, 1, 2, 3
 # FREEZE 绑定的动作：冻结的 resource_contract 是唯一权威预算（见 resource_limits.limits_from_frozen_contract）。
-FREEZE_BOUND_ACTIONS = {'candidate', 'collect', 'resume-latex'}
+FREEZE_BOUND_ACTIONS = {'candidate', 'collect', 'resume-latex', 'chunked-candidate'}
 # 输入预检子进程自身的有界预算：只读、最多解析 5 页，不需要作业级预算。
 PREFLIGHT_RSS_BYTES = 1536 * 1024 ** 2
 PREFLIGHT_SECONDS = 60
@@ -589,6 +620,10 @@ def execute_digital(freeze_path, command, ocr_manifest=None):
     with fitz.open(args.input_pdf) as document:
         if list(range(1, len(document)+1)) != freeze['pages']:
             raise ValueError('actual PDF page scope differs from freeze')
+    given_context = ({'path': str(Path(args.document_term_context).resolve()), 'sha256': args.document_term_context_sha256}
+                     if args.document_term_context else None)
+    if freeze.get('document_term_context_ref') != given_context or (given_context and sha(given_context['path']) != given_context['sha256']):
+        raise ValueError('document term context binding missing or changed')
     expected_transport=read_json(Path(freeze['model_fingerprint_ref']['path'])).get('api_contract') or 'openai_compatible'
     if args.translation_transport!=expected_transport or (expected_transport!='openai_compatible' and args.translator_mode!='openai'):
         raise ValueError('frozen explicit transport changed')
@@ -857,6 +892,19 @@ def main(argv=None):
             p.add_argument('--source-cache-context-sha256')
         else:
             p.add_argument('--candidate', type=Path, required=True)
+    chunked = sub.add_parser('chunked-candidate', help='长文档：按页范围分成有界块逐块走既有路线，按原页序合并；任何一块失败即整份失败关闭')
+    chunked.add_argument('--input', type=Path, required=True)
+    chunked.add_argument('--output', type=Path, required=True)
+    chunked.add_argument('--receipts', type=Path, required=True)
+    chunked.add_argument('--freeze', type=Path, required=True)
+    chunked.add_argument('--route', choices=list(CHUNK_ROUTES), required=True,
+                         help='digital_pdf / scanned_ocr：全部块同一路线；per_chunk：原生文字页走 digital_pdf，扫描页走 scanned_ocr')
+    chunked.add_argument('--model', required=True)
+    chunked.add_argument('--base-url', required=True)
+    chunked.add_argument('--target-language', choices=('zh', 'en'), default='zh')
+    chunked.add_argument('--cjk-font', default='Songti SC')
+    chunked.add_argument('--resume', action='store_true', help='在同一 --output/--receipts 续跑：已完成块逐 sha 核对后复用，未完成块重跑')
+    chunked.add_argument('--lock-path', type=Path, default=PROJECT / 'logs/paper_translation_workflow.lock')
     for action in ('preflight', 'deliver', 'preflight-finite', 'deliver-finite'):
         p = sub.add_parser(action)
         p.add_argument('--packet', type=Path, required=True)
@@ -932,13 +980,13 @@ def structured_failure(args, exc):
     return result
 
 
-def bounded_input_preflight(input_pdf, receipts, *, require_digital, target_language='zh'):
+def bounded_input_preflight(input_pdf, receipts, *, require_digital, target_language='zh', max_pages=DIGITAL_MAX_PAGES):
     """在有界子进程中解析 PDF（内存/时限受监控）；页数超限时子进程不再逐页解析。"""
     receipt_dir = Path(receipts) / 'input-preflight'
     report_path = receipt_dir / 'input_preflight_report.json'
     receipt_dir.mkdir(parents=True, exist_ok=True)
     command = [sys.executable, str(SCRIPT_DIR / 'pdf_input_preflight.py'), '--input', str(Path(input_pdf).resolve()),
-               '--max-pages', str(DIGITAL_MAX_PAGES), '--target-language', target_language, '--output', str(report_path)]
+               '--max-pages', str(max_pages), '--target-language', target_language, '--output', str(report_path)]
     if require_digital:
         command.append('--require-digital')
     outcome = run_bounded(command, cwd=SCRIPT_DIR, receipt_dir=receipt_dir, operation='input-preflight',
@@ -964,7 +1012,8 @@ def check_target_language_route(args):
     target = getattr(args, 'target_language', 'zh') or 'zh'
     if target == 'zh':
         return
-    if args.route not in PDF_BACKEND_ROUTES or args.action == 'collect':
+    allowed = PDF_BACKEND_ROUTES + (('per_chunk',) if args.action == 'chunked-candidate' else ())
+    if args.route not in allowed or args.action == 'collect':
         exc = PreflightError('target_language_route_unsupported',
                              f'--target-language {target} 只支持 candidate --route digital_pdf / scanned_ocr；'
                              f'当前 {args.action} --route {args.route} 的译者固定译成简体中文。',
@@ -1099,6 +1148,8 @@ def dispatch(args):
             result.update(quality_verdict(args.output))
             if args.route=='scanned_ocr':cap_ocr_quality(result)
         write_new(args.receipts / ('WORKFLOW_COLLECTION.json' if args.action=='collect' else 'WORKFLOW_CANDIDATE.json'), result)
+    elif args.action == 'chunked-candidate':
+        result = run_chunked_candidate(args)
     elif args.action == 'revise-latex':
         contract = read_json(args.contract)
         if contract.get('source_pdf_ref') != ref(args.input):

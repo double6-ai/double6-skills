@@ -1,5 +1,50 @@
 # 变更记录
 
+## 2.0.0-rc.9 本地发布候选 · 2026-10-23
+
+- 新增长文档分块翻译 `chunked-candidate`（基线 item 5）。此前 `candidate` 只接受完整 1–5 页（FREEZE 页门 `page_limit_exceeded`），一份不能在一个有界任务（120 s、5 GiB RSS、重任务并发 1）内完成的长文档无法翻译。现在把文档按页范围切成一串有界块，每块是一次**普通** `candidate`（`digital_pdf` 或 `scanned_ocr` 原路线、原门），再按原页序合并。详见 `references/chunked-translation.md`。
+  - 划分：电子块 ≤4 页、扫描块 ≤2 页；安全页边界（跨页表格、续表/续图题注、“continued on next page”、行尾开放运算符不切；段落未结束为软信号，避不开时记录到 `cross_chunk_continuations`）；`per_chunk` 路线按页类别把原生文字页送 `digital_pdf`、扫描页送 `scanned_ocr`。
+  - 每块：块级 FREEZE（块 PDF 身份、1..k 页、parent FREEZE 与计划作为作用域证据、同一冻结资源合同）+ 块级上下文 `CHUNK_TERM_CONTEXT.json`（整份文档术语表/专名，sha 绑定）；单块单任务预算 = FREEZE 资源合同（120 s、5 GiB RSS、并发 1）。
+  - 资源停止（任务超时、整任务时限、内存、后端内部超时 `backend_timeout`）二分到单页，单页仍超限 `chunk_page_exceeds_task_budget`；瞬时失败重试 1 次；门拦截与质量 fail 不重试；任一块无产物 → `chunk_failed`（退出码 2），不合并、不交付部分结果。
+  - 合并（有界任务）：按页序拼接、逐页核对（页数/尺寸/旋转/图片指纹 vs 该块实际后端输入）、恢复目录/页码标签/内部链接并在写出的文件上核对、跨块字体与术语一致性；合并综合质量取最差的一块（OCR 封顶保留），永远不好于最差的一块。
+  - 续跑 `--resume`：先回收遗留的本任务进程树（无法核实即失败关闭），已完成块的块 PDF、FREEZE、上下文、产物、质量、回执逐 sha 一致才复用。
+  - 参考文献区跨块延续：整份源文上算出每页开始时参考文献区是否已打开，块从区中间开始时该块的渲染残留检查以“区已打开”起算（与整份一次检查相同；区内逐条规则不变）。
+  - 尝试后核查：每次尝试后按启动 nonce 扫描存活进程，回收并复查；无法核实 → `chunk_cleanup_unconfirmed`、停止调度后续块。
+- 实测发现并如实记录（第 1 轮证据，提交 86a6f61）：本机墙钟多次跳变（`/proc/stat` btime 02:43→03:19 共 +481 s）。既有 `bounded_execution` 以墙钟推算的 create_time 核对启动身份，跳变时把仍在运行的任务根进程判为“PID 已复用”并抛错，**未回收**该进程树；分块编排随即启动下一块，两棵重任务树重叠运行（违反重任务并发 1 / 不留孤儿），其中一次下一块被系统内存压力门停止。第 2 轮加入尝试后核查后，这种情况在下一块启动前回收并核实；身份核验错误按瞬时失败重试一次。第 1 轮共 4 次“PID 已复用”遗留树（nist48 c011a；arxiv2610 c001、c010 第 2 次、c017），其中 3 次与下一块重叠（nist48 c011a/c011b；arxiv2610 c001/c002，03:06:18 人工结束 c001 的进程组；arxiv2610 c010/c011）；c017 是最后一块，没有重叠，自行退出。arxiv2610 外层 `peakmem` 整树合计读到 5.172 GiB，是 c010 遗留树（约 2.47 GiB）与 c011（约 2.85 GiB）同时在跑的相加值；按块回执，单任务峰值最高 3,252,244,480 B（3.03 GiB），单任务最长 113.0 s，没有单个任务超过 5 GiB。
+- 第 2 轮实测（提交 95d43ce）：虚拟机多次暂停（btime 前跳 +1054 s 至 +4701 s，uptime 不走）。nist48 c005 身份竞态按瞬时失败重试后完成；但 nist48 c008a、circ150 c001、arxiv2610 c001 的尝试后核查认出存活 nonce，回收却把根进程判为 pid_reused 而不发信号，只能失败关闭、停止调度，遗留树跑到自行退出（单个孤儿，未与下一块重叠）。修复：`reclaim_owned_tree` 对带本次启动 nonce、记录身份读作 pid_reused 的进程以观测 create_time 刷新身份后回收；无 nonce 的复用号码仍不发信号；成对测试 `tests/test_chunk_clock_step_reclaim.py`。另有两次单任务用时 121.64 s / 123.96 s：整机冻结期间采样线程不运行，冻结后第一个采样即停止，回执记 `deadline_met=false`（见限制）。
+- 第 3 轮实测（提交 17e7bbd）：真实运行中再遇墙钟跳变（btime +39 s、+36 s、+1937 s、+672 s、+77 s），nist48 c009a / c008aa、arxiv2610 c009 / c015 的身份竞态均由尝试后核查以 nonce 认出并回收（`root_state=pid_reused`，核实确认），重试后完成，未与下一块重叠、未留孤儿。nist48-rerun 仅因第 1、16、48 页非原生电子页被路线门拦截（rc 2）；arxiv2610 c012 / c013 / c016 为图表区原生回写超出可读下限（与第 1 轮相同块，页内既有门）；circ150 由 OCR 门拦截；arxiv2501 合并完成，p8 渲染残留高 → 质量失败（rc 3，合并质量 = 最差块）。单任务最高 3.282 GiB；nist48-rerun c008a 用时 157.02 s：整机冻结 88 s（独立采样器同期停顿 93 s、uptime 照走）后第一个采样即 `task_timeout` 停止，回收已核实，回执记 `deadline_met=false`。
+- CI 修正（提交 17e7bbd）：有界 `chunk-plan` 以运行目录为 cwd，CI 的全新 `PAPER_TRANSLATION_WORKSPACE` 尚不存在时整份退出 1；现先建运行目录，被普通文件占用则失败关闭。成对测试。
+- 非分块 `candidate` 路径同样受墙钟跳变影响：回归中 ocr-zh-03 一次因“PID 已复用”失败关闭（单次 candidate 不重试），新目录重跑与 bd220a1 逐像素相同。
+- PR #21 review-1（P1，同一 rc.9 普通提交系列）：尝试后核查与续跑回收把“查询失败”误当“已清理”。旧 `_live_owner_nonces` 把
+  `Process.environ()` 的 AccessDenied 静默丢弃，nonce 集合为空即 `post_attempt_guard` confirmed=true；`reclaim_stale` 在根已退出、
+  原组已空、脱组孤儿仍在时同样因 nonce 扫描漏掉孤儿而记 `already_gone`。修复：
+  - 守卫/续跑逐张 launch 回执整树核实（`launch_receipt_recovery_scan_v2`），复用既有恢复扫描与 `reclaim_owned_tree`；归属未知
+    不发信号、`unverified` 非空、稳定 `reason_codes`；无法核实即失败关闭并停止后续块。全机 nonce 扫描只作记录。
+  - 同类相邻缺口：`launched_members` 运行期组外进程 environ/create_time 查询失败不再静默跳过（记 `ownership_unknown_during_run`，
+    最终回收转恢复扫描核实）；恢复扫描 ppid 查询失败计为归属未知；带本次 nonce 但因墙钟回拨看起来早于根进程的后代按 nonce
+    认定；僵尸与其它用户进程不计为未知；回执缺字段/核实抛错记 `receipt_verification_error`。
+  - 不变：5 GiB / 120 s / 重任务并发 1、质量门、OCR 与中文路线、时钟跳变带有效 nonce 的回收、无 nonce PID 复用不发信号、原 34 项独立测试。
+  - 测试 `tests/test_pr21_review1_guard_query_failures.py`：审稿 4 例（root/orphan × 正常/environ 拒绝）、run_bounded 真实脱组孤儿正反例、
+    恢复扫描逐项查询失败正反例、resume 失败关闭/正常续跑，以及 PR #19 第 10 轮真实多跳父链的加固副本（标记原子发布、只读完整 JSON、
+    启动后全程 try/finally；真实覆盖未知时接受严格 unconfirmed 且 unverified 非空）。原文件属于原 34 项，未改动。
+  - CI（提交 7b84c5a，pdf Linux smoke 499 passed / 1 failed / 1 skipped）：`test_chunk_clock_step_reclaim.py` 的无 nonce 负例在 runner 上得到
+    严格 unconfirmed（机器上另有属性读不到的同用户进程 → 归属未知，未发信号、无关进程存活）；该例与本轮相关正例改为接受严格
+    unconfirmed（原因只能是归属未知、unverified 非空、未知项不是本例进程，并以警告输出明细），安全断言不变。这也意味着在存在这类
+    进程的主机上，守卫会保守地停止后续块（不会误杀）。
+- PR #21 review-2（同一 P1 的相邻情形）：42bd58c 的 `_recovery_scan` 在“按墙钟早于根进程”分支读 nonce 失败后
+  `except: pass` 再 `continue`，把未知直接丢掉——墙钟回拨 + environ 读不到时，真实所属的脱组孤儿仍在写，却得到
+  already_gone=1 / confirmed=true / unverified=[]（审稿 Mac 与本机均复现）。review-1 文档写的“不能识别”与代码不符，已更正。修复：
+  - 新增 `scripts/launch_clock.py`（进程启动单调证据：Linux starttime 滴答 + boot_id；macOS ri_proc_start_abstime + bootsessionuuid）；
+    `bounded_launch` 在回执写入 `start_evidence`；`reclaim_owned_tree` 对没有证据的身份在根仍存活时现场读取并固定。
+  - `_recovery_scan` / `launched_members`：早于根进程且读不到 nonce → 仅当单调证据证明其早于根进程启动才排除，否则归属未知
+    （`code=older_than_root_nonce_unreadable`）；nonce 匹配但 status 读不到的旧进程仍按所属（此前同样被丢弃）。
+  - `_verify_receipt`：单调读数与回执一致的“看似复用”根进程记 `root_identity_clock_shifted`；预检发现、仍存活的归属未知不会因回收端
+    再扫一次没看到而消失；`reclaim_stale` / `post_attempt_guard` 输出 `detail_codes`。
+  - 不变：时钟回拨带有效 nonce 的回收、较早无 nonce 无关进程不误杀、原 34 项与原 4 个守卫用例的输入与断言、5 GiB / 120 s / 并发 1、
+    质量门、OCR/中文/分块续跑。review-1 自己的 FakeTable 用例 `older-unreadable` 参数断言的正是被丢弃的行为，已移除并由新用例取代。
+  - 测试 `tests/test_pr21_review2_clock_rollback_unknown.py`（18 项）。
+- 版本号：2.0.0-rc.9。
+
 ## 2.0.0-rc.8 本地发布候选 · 2026-10-22
 
 - 新增扫描件 / 混合 PDF 的常规 OCR 路线 `candidate --route scanned_ocr`（基线 item 4）。原 `digital_pdf` 路线遇到扫描页一律在预检以 `scanned_pdf_route_required` 拒绝，`scanned_raster` 只能整页重绘、不产生可翻译文字层；现在可把扫描页 OCR 重建为带文字层的数字 PDF，再走**原有**数字后端、全部质量门和严格验收。

@@ -79,20 +79,39 @@ def _policy_item_is_active(item: dict[str, Any]) -> bool:
     from policy_utils import policy_item_is_active
     return policy_item_is_active(item)
 
-def build_backend_system_prompt(base_prompt: str, output_dir: Path, target_language: str = "zh") -> str:
+def _document_policy_items(document_context: dict[str, Any] | None, name: str) -> list[dict[str, Any]]:
+    if not document_context:
+        return []
+    key, field = ("entity_map", "entities") if name == "entity_map.json" else ("term_policy", "terms")
+    items = (document_context.get(key) or {}).get(field)
+    return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+
+
+def build_backend_system_prompt(base_prompt: str, output_dir: Path, target_language: str = "zh",
+                                document_context: dict[str, Any] | None = None) -> str:
+    """document_context（分块翻译）：整份文档的术语/专名策略排在前面、各块相同，块内新出现的条目随后；
+    不传时与单份翻译完全相同。"""
     sections: list[str] = []
     for name, title in [
         ("entity_map.json", "专名实体策略"),
         ("term_policy.json", "术语策略"),
     ]:
         path = output_dir / name
-        if not path.exists():
+        document_items = _document_policy_items(document_context, name)
+        if not path.exists() and not document_items:
             continue
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         except json.JSONDecodeError:
-            continue
+            if not document_items:
+                continue
+            data = {}
         raw_items = data.get("entities") if name == "entity_map.json" else data.get("terms")
+        if document_items:
+            known = {str(item.get("source_term") or item.get("source") or item.get("value") or "") for item in document_items}
+            local = [item for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
+            raw_items = document_items + [item for item in local
+                                          if str(item.get("source_term") or item.get("source") or item.get("value") or "") not in known]
         if isinstance(raw_items, list):
             lines = _compact_policy_items(
                 [item for item in raw_items if isinstance(item, dict) and _policy_item_is_active(item)

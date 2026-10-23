@@ -18,6 +18,14 @@ def main() -> int:
     current = psutil.Process()
     identity = {"nonce": nonce, "pid": current.pid, "parent_pid": current.ppid(),
                 "created_at": current.create_time(), "process_group": os.getpgrp() if os.name == "posix" else None}
+    # 启动顺序的单调证据（不受墙钟跳变影响；取不到则不写，核实端按证据缺失失败关闭）——PR #21 review-2。
+    try:
+        from launch_clock import start_evidence
+        evidence = start_evidence(current.pid)
+    except Exception:  # noqa: BLE001 - 证据缺失不影响启动
+        evidence = None
+    if evidence:
+        identity["start_evidence"] = evidence
     # 发布完整 JSON 后才能被监控端读取；已有 attempt 不可覆盖。
     path = Path(receipt)
     temporary = path.with_suffix(".pending")

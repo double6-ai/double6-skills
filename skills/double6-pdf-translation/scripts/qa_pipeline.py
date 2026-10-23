@@ -311,7 +311,8 @@ def audit_technical_receipt(manifest, *, source_ref, target_ref):
     except (ValueError,OSError,KeyError,TypeError,json.JSONDecodeError):
         return {'issues':[],'pending':[{'rule':'quality_technical_evidence_missing_changed_or_invalid'}]}
 
-def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, target_language='zh'):
+def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, target_language='zh',
+                            region_open_at_start=False):
     """每条渲染路线都会写综合结果；技术渲染status单独保留。"""
     result=evaluate_quality_packet(source,final_pdf_from_manifest(manifest,source=source),review_ref=review_ref)
     technical=audit_technical_receipt(manifest,source_ref=file_ref(source),target_ref=result.get('target'))
@@ -321,7 +322,8 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, ta
         result['quality_pass']=False
         result['status']='fail' if result.get('status')=='fail' or result['issues'] else 'unverified'
     output_dir=Path(output_dir)
-    residue=render_residue_gate(source,final_pdf_from_manifest(manifest,source=source),output_dir,target_language=target_language)
+    residue=render_residue_gate(source,final_pdf_from_manifest(manifest,source=source),output_dir,target_language=target_language,
+                                region_open_at_start=region_open_at_start)
     result['render_residue_check']=residue
     if residue.get('severity')=='high':
         # 基于实际成品的大面积源语言残留（英译中=英文，中译英=中文）属于高风险失败，不能只记为 warn。
@@ -369,11 +371,13 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, ta
     return manifest
 
 
-def render_residue_gate(source, target, output_dir, target_language='zh'):
-    """最小版渲染成品英文残留检查；检查本身出错时记为未评估，不伪造通过。"""
+def render_residue_gate(source, target, output_dir, target_language='zh', region_open_at_start=False):
+    """最小版渲染成品英文残留检查；检查本身出错时记为未评估，不伪造通过。
+    region_open_at_start 只由分块翻译传入（块从整份文档的参考文献区中间开始）。"""
     try:
         from render_residue_check import check_render_residue
-        residue=check_render_residue(source,target,target_language=target_language)
+        residue=(check_render_residue(source,target,target_language=target_language,region_open_at_start=True)
+                 if region_open_at_start else check_render_residue(source,target,target_language=target_language))
     except Exception as exc:  # 解析器异常类型不固定
         residue={'status':'not_evaluated','severity':'ok','reason':f'{type(exc).__name__}: {exc}'[:300]}
     path=Path(output_dir)/'render_residue_check.json'

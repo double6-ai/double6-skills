@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 import psutil
 from daily_skill_research.execution import _redact_text, run_command, write_failure_receipt
+from launch_clock import start_evidence as _start_evidence, started_before as _started_before
 
 
 # psutil 对单个进程取属性时可能抛出的错误：进程消失/僵尸（NoSuchProcess、ZombieProcess）、无权限（AccessDenied、
@@ -152,7 +153,33 @@ def read_launch_identity(identity_path: Path, nonce: str) -> dict[str, Any]:
     return identity
 
 
-def launched_members(identity_path: Path, nonce: str) -> tuple[dict[str, Any], list[psutil.Process]]:
+def _query_failure_counts(proc: psutil.Process | None) -> bool:
+    """属性查询失败的进程是否必须记为“归属未知”：僵尸（不占资源、不再运行）与其它用户的进程（本任务进程
+    无法改变真实 UID）不计；其余（含 status/uids 本身也查不到的）一律计为未知，不当作“不是本任务”。"""
+    if proc is None:
+        return True
+    try:
+        if proc.status() == psutil.STATUS_ZOMBIE:
+            return False
+    except psutil.NoSuchProcess:
+        return False
+    except PROCESS_QUERY_ERRORS:
+        pass
+    if hasattr(os, "getuid"):
+        try:
+            return proc.uids().real == os.getuid()
+        except psutil.NoSuchProcess:
+            return False
+        except PROCESS_QUERY_ERRORS:
+            return True
+    return True
+
+
+def launched_members(identity_path: Path, nonce: str,
+                     unknown: list[dict[str, Any]] | None = None) -> tuple[dict[str, Any], list[psutil.Process]]:
+    """本任务进程树：根进程 + 子孙 + 本次进程组 + 环境里带本次 nonce 的进程（组外孤儿）。
+    ``unknown`` 非 None 时，归属查询失败（AccessDenied 等，非僵尸、同用户）的组外进程追加到该列表，
+    由调用方在最终回收时做恢复扫描并核实；不再静默跳过（PR #21 review-1）。"""
     identity = read_launch_identity(identity_path, nonce)
     if not identity:
         return {}, []
@@ -169,9 +196,10 @@ def launched_members(identity_path: Path, nonce: str) -> tuple[dict[str, Any], l
     except PROCESS_QUERY_ERRORS as exc:
         # 身份已核验：保留根进程（若已确认）交给后备回收，不把未知当空。
         raise OwnedDiscoveryError(f"children of {pid}: {type(exc).__name__}: {exc}"[:300], identity, members) from exc
-    # 父命令退出后仍可能有继承 stdout 的孙进程；仅补收本次独立进程组。
+    # 父命令退出后仍可能有继承 stdout 的孙进程；仅补收本次独立进程组与继承本次 nonce 的组外进程。
     if os.name == "posix" and identity.get("process_group") == pid:
         by_pid = {p.pid: p for p in members}
+        root_ev = root_start_evidence(identity)
         # 按 PID 列表逐个检查（不用 process_iter 迭代器）：单个非本任务进程的查询错误只跳过该进程；
         # 取不到 PID 列表本身则无法确认本任务进程树，抛出 OwnedDiscoveryError（带身份与已确认成员）。
         try:
@@ -179,17 +207,38 @@ def launched_members(identity_path: Path, nonce: str) -> tuple[dict[str, Any], l
         except PROCESS_QUERY_ERRORS as exc:
             raise OwnedDiscoveryError(f"pids: {type(exc).__name__}: {exc}"[:300], identity, members) from exc
         for other in pids:
-            if other in by_pid:
+            if other in by_pid or other == os.getpid():
                 continue
+            proc = None
             try:
                 proc = psutil.Process(other)
-                same_group = os.getpgid(proc.pid) == pid
-                inherited_owner = (proc.create_time() >= identity['created_at']-.001
-                    and nonce in proc.environ().get('PAPER_TRANSLATION_BOUNDED_OWNERS','').split(',')) if not same_group else False
-                if same_group or inherited_owner:
+                try:
+                    if os.getpgid(proc.pid) == pid:
+                        by_pid[proc.pid] = proc
+                        continue
+                except ProcessLookupError:
+                    continue
+                except OSError:
+                    pass   # 进程组查不到：继续按 nonce 判定
+                older = proc.create_time() < identity["created_at"] - .001
+                try:
+                    owned = nonce in _owner_markers(proc)
+                except psutil.NoSuchProcess:
+                    continue
+                except PROCESS_QUERY_ERRORS:
+                    # 早于根进程（按当前墙钟）且读不到 nonce：只有单调启动证据证明其早于根进程启动才跳过；
+                    # 否则与其它查询失败一样记为归属未知（PR #21 review-2）。
+                    if older and older_unreadable_verdict(proc.pid, root_ev) == "excluded":
+                        continue
+                    raise
+                if owned:
+                    # nonce 是本次启动唯一标识：即使墙钟回拨使其 create_time 看起来早于根进程，也属于本任务。
                     by_pid[proc.pid] = proc
-            except (ProcessLookupError, *PROCESS_QUERY_ERRORS):
+            except psutil.NoSuchProcess:
                 continue
+            except PROCESS_QUERY_ERRORS as exc:
+                if unknown is not None and _query_failure_counts(proc):
+                    unknown.append({"pid": other, "error": f"{type(exc).__name__}: {exc}"[:160]})
         members = list(by_pid.values())
     return identity, members
 
@@ -295,6 +344,29 @@ def _owner_markers(proc: psutil.Process) -> list[str]:
     return [tok for tok in proc.environ().get(OWNER_ENV, "").split(",") if tok]
 
 
+OLDER_NONCE_UNREADABLE = "older_than_root_nonce_unreadable"
+
+
+def root_start_evidence(identity: dict[str, Any]) -> dict[str, Any] | None:
+    """根进程启动的单调证据：优先用回执记录（bounded_launch 写入）；回执没有时，仅当根进程仍存活且
+    PID + create_time 与记录一致，才现场读取。都没有返回 None（不得据此排除任何进程）。"""
+    recorded = identity.get("start_evidence")
+    if isinstance(recorded, dict):
+        return recorded
+    pid, born = identity.get("pid"), identity.get("created_at")
+    if pid is None or born is None:
+        return None
+    state, _ = _identity_state(int(pid), float(born))
+    return _start_evidence(int(pid)) if state in ("alive", "zombie") else None
+
+
+def older_unreadable_verdict(pid: int, root_evidence: dict[str, Any] | None) -> str:
+    """按当前墙钟早于根进程、又读不到 nonce 的进程：只有单调启动证据证明它启动早于根进程（同一次开机）
+    才排除（"excluded"）；否则（无证据/不同开机/读不到/不早于根）一律记为归属未知（"unknown"）。
+    墙钟回拨后本次真实后代的 create_time 也会早于根进程，不能仅凭墙钟把它丢掉（PR #21 review-2）。"""
+    return "excluded" if _started_before(pid, root_evidence) is True else "unknown"
+
+
 def _recovery_scan(identity: dict[str, Any], targets: dict[int, float], nonce: str | None,
                    group_trusted: bool, phase: str) -> dict[str, Any]:
     """所属进程树枚举失败后的恢复扫描：完整枚举一次，只把“正面核验为本次任务”的进程判为所属：
@@ -305,7 +377,8 @@ def _recovery_scan(identity: dict[str, Any], targets: dict[int, float], nonce: s
     连同其后代，记为 ownership_unknown（整树未核实，绝不发信号）。每一跳在判定时重新核实父进程的 PID + create_time；
     复用号码上的新进程作为普通候选按自身证据判定。"""
     scan: dict[str, Any] = {"phase": phase, "complete": False, "method": None, "attempts": [],
-                            "candidates": 0, "owned_found": [], "ownership_unknown": []}
+                            "candidates": 0, "owned_found": [], "ownership_unknown": [],
+                            "older_excluded_by_start_clock": 0, "root_start_evidence": None}
     try:
         pids, method, attempts = _enumerate_all_pids()
     except Exception as exc:  # noqa: BLE001
@@ -324,26 +397,53 @@ def _recovery_scan(identity: dict[str, Any], targets: dict[int, float], nonce: s
             roots[pid] = born
         else:
             poisoned[pid] = state
+    root_ev = root_start_evidence(identity)
+    scan["root_start_evidence"] = (root_ev or {}).get("clock")
     scan["ancestor_roots"] = [{"pid": pid, "created_at": born} for pid, born in sorted(roots.items())]
     scan["rejected_ancestors"] = [{"pid": pid, "created_at": targets[pid], "state": state} for pid, state in sorted(poisoned.items())]
     info: dict[int, dict[str, Any]] = {}
     for pid in pids:
         if pid in (me, 0) or pid in roots:
             continue
+        proc = None
         try:
             proc = psutil.Process(pid)
             born = proc.create_time()
             if born < root_ct - IDENTITY_TOLERANCE:
+                # 按当前墙钟早于根进程：有本次 nonce 即所属（墙钟回拨时本次后代的 create_time 也会整体前移）。
+                # 读不到 nonce：只有单调启动证据证明它早于根进程启动才排除；否则记为归属未知（不发信号），
+                # 不再静默丢弃（PR #21 review-2）。
+                try:
+                    markers = _owner_markers(proc)
+                except psutil.NoSuchProcess:
+                    continue
+                except PROCESS_QUERY_ERRORS as exc:
+                    if older_unreadable_verdict(pid, root_ev) == "excluded":
+                        scan["older_excluded_by_start_clock"] += 1
+                        continue
+                    info[pid] = {"proc": proc, "created_at": born, "ppid": None, "match": None, "code": OLDER_NONCE_UNREADABLE,
+                                 "unknown": f"{OLDER_NONCE_UNREADABLE}: {type(exc).__name__}: {exc}"[:160]}
+                    continue
+                if nonce and nonce in markers:
+                    try:
+                        zombie = proc.status() == psutil.STATUS_ZOMBIE
+                    except psutil.NoSuchProcess:
+                        continue
+                    except PROCESS_QUERY_ERRORS:
+                        zombie = False   # 状态读不到：按存活的所属进程处理（回收时逐个核验身份）
+                    if not zombie:
+                        info[pid] = {"proc": proc, "created_at": born, "ppid": None, "match": "launch_nonce", "unknown": None}
                 continue
             if proc.status() == psutil.STATUS_ZOMBIE:
                 continue
             row: dict[str, Any] = {"proc": proc, "created_at": born, "ppid": None, "match": None, "unknown": None}
+            ppid_error = None
             try:
                 row["ppid"] = proc.ppid()
             except psutil.NoSuchProcess:
                 continue
-            except PROCESS_QUERY_ERRORS:
-                pass
+            except PROCESS_QUERY_ERRORS as exc:
+                ppid_error = f"ppid: {type(exc).__name__}: {exc}"[:160]
             if group_trusted and pgid and os.name == "posix":
                 try:
                     if os.getpgid(pid) == pgid:
@@ -360,11 +460,14 @@ def _recovery_scan(identity: dict[str, Any], targets: dict[int, float], nonce: s
                     continue
                 except PROCESS_QUERY_ERRORS as exc:
                     row["unknown"] = f"{type(exc).__name__}: {exc}"[:160]
+            if row["match"] is None and row["unknown"] is None and ppid_error:
+                # 父进程查不到：祖先链证据缺失，不能当作“不是本任务”（PR #21 review-1）。
+                row["unknown"] = ppid_error
             info[pid] = row
         except psutil.NoSuchProcess:
             continue
         except PROCESS_QUERY_ERRORS as exc:
-            info[pid] = {"proc": None, "created_at": None, "ppid": None, "match": None,
+            info[pid] = {"proc": proc, "created_at": None, "ppid": None, "match": None,
                          "unknown": f"{type(exc).__name__}: {exc}"[:160]}
     scan["candidates"] = len(info)
     owned = dict(roots)
@@ -412,16 +515,12 @@ def _recovery_scan(identity: dict[str, Any], targets: dict[int, float], nonce: s
         if row["match"]:
             scan["owned_found"].append({"pid": pid, "created_at": row["created_at"], "match": row["match"]})
         elif row["unknown"]:
-            same_user = True
-            if row["proc"] is not None and uid is not None:
-                try:
-                    same_user = row["proc"].uids().real == uid
-                except psutil.NoSuchProcess:
-                    continue
-                except PROCESS_QUERY_ERRORS:
-                    same_user = True
-            if same_user:
-                scan["ownership_unknown"].append({"pid": pid, "created_at": row["created_at"], "error": row["unknown"]})
+            if uid is not None and not _query_failure_counts(row["proc"]):
+                continue   # 僵尸或其它用户的进程（本任务进程无法改变真实 UID）
+            entry = {"pid": pid, "created_at": row["created_at"], "error": row["unknown"]}
+            if row.get("code"):
+                entry["code"] = row["code"]
+            scan["ownership_unknown"].append(entry)
     scan["complete"] = True
     return scan
 
@@ -442,6 +541,13 @@ def reclaim_owned_tree(identity: dict[str, Any], known: dict[int, float], deadli
        恢复扫描不完整、存在归属未知的进程、或仍有所属进程存活，整树即未核实（tree_scope.whole_tree_verified=False，
        unverified 写入 whole_tree 条目），confirmed=False。"""
     budget = 2.0 if deadline is None else max(0.5, min(2.0, deadline - time.monotonic()))
+    identity = dict(identity)   # 本地副本：nonce 核验后可能刷新根进程 create_time（见 adopt）
+    if not isinstance(identity.get("start_evidence"), dict):
+        # 回执没有单调启动证据（旧回执/手写身份）：根进程此刻仍存活且身份一致时现场读取并固定下来，
+        # 供信号后（根已退出）的恢复扫描排除“确实早于根进程启动”的旧进程（PR #21 review-2）。
+        live_evidence = root_start_evidence(identity)
+        if live_evidence:
+            identity["start_evidence"] = live_evidence
     targets = dict(known)
     if identity.get("pid") and identity.get("created_at") is not None:
         targets[int(identity["pid"])] = float(identity["created_at"])
@@ -523,8 +629,30 @@ def reclaim_owned_tree(identity: dict[str, Any], known: dict[int, float], deadli
     group_trusted = bool(group.get("pgid")) and group.get("leader") in ("alive", "zombie", "dead")
 
     def adopt(scan: dict[str, Any]) -> list[int]:
+        nonlocal group_ok, group_trusted
         added = []
         for row in scan["owned_found"]:
+            pid, born = row["pid"], float(row["created_at"])
+            if pid in targets and abs(targets[pid] - born) > IDENTITY_TOLERANCE:
+                # 墙钟跳变（Linux：create_time = btime + 启动 jiffies，btime 随墙钟校正而变）：同一进程报告的
+                # create_time 与回执不同，按 PID + create_time 会被误判为 pid_reused 而不回收（chunk-r2 实测孤儿）。
+                # 仅当该进程环境里带本次启动 nonce（正面所属证据）且记录身份已判为 pid_reused 时，才以观测值刷新身份；
+                # 无 nonce 的复用号码仍按复用处理，绝不发信号。
+                if row.get("match") != "launch_nonce" or _identity_state(pid, targets[pid])[0] != "pid_reused":
+                    continue
+                report.setdefault("identity_refreshed", []).append(
+                    {"pid": pid, "recorded_created_at": targets[pid], "observed_created_at": born, "evidence": "launch_nonce"})
+                targets[pid] = born
+                if identity.get("pid") == pid:
+                    identity["created_at"] = born
+                    if group.get("pgid") == pid and group.get("leader") == "pid_reused":
+                        group["leader"], group["empty_verified"] = "alive", None
+                        group["identity_refreshed_by_nonce"] = True
+                        group_ok = group_trusted = True
+                if _identity_state(pid, born)[0] == "alive":
+                    report["alive_before"].append({"pid": pid, "created_at": born})
+                added.append(pid)
+                continue
             if row["pid"] not in targets:
                 targets[row["pid"]] = float(row["created_at"])
                 added.append(row["pid"])
@@ -598,7 +726,7 @@ def reclaim_owned_tree(identity: dict[str, Any], known: dict[int, float], deadli
         for pid, row in sorted(unknown.items()):
             if any(r2["pid"] == pid for r2 in final_scan["ownership_unknown"]) or not final_scan["complete"]:
                 report["unverified"].append({"pid": pid, "created_at": row["created_at"], "reason": "ownership_unknown",
-                                             "error": row["error"]})
+                                             "error": row["error"], **({"code": row["code"]} if row.get("code") else {})})
         if scope["whole_tree_verified"] is False and scope["reason"] is None:
             scope["reason"] = "ownership_unverifiable"
     report["tree_scope"] = scope
@@ -695,8 +823,9 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
 
     def discover() -> tuple[dict[str, Any], list[psutil.Process]]:
         # 本任务进程树枚举失败：保留已核验的启动身份与已确认成员（后备回收用），并记为监控失败（结构化停止）。
+        unknown: list[dict[str, Any]] = []
         try:
-            identity, members = launched_members(identity_path, nonce)
+            identity, members = launched_members(identity_path, nonce, unknown)
         except OwnedDiscoveryError as exc:
             monitor_error.setdefault("detail", str(exc))
             monitor_error["owned_discovery_failed"] = True
@@ -706,6 +835,13 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
                 identities.setdefault(int(identity["pid"]), float(identity["created_at"]))
             remember(members)
             return identity, list(children.values())
+        if unknown:
+            # 组外进程归属查询失败（非僵尸、同用户）：不当作“不是本任务”。不中止任务，但此后每次回收都做
+            # 恢复扫描并核实；最终仍无法判定归属即 cleanup_unconfirmed（失败关闭）。
+            seen = monitor_error.setdefault("ownership_unknown_during_run", [])
+            for row in unknown:
+                if len(seen) < 20 and all(r["pid"] != row["pid"] for r in seen):
+                    seen.append(row)
         if identity:
             launch_identity.update(identity)
             identities.setdefault(int(identity["pid"]), float(identity["created_at"]))
@@ -714,7 +850,8 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
 
     def reclaim() -> dict[str, Any]:
         report = reclaim_owned_tree(launch_identity, identities, deadline,
-                                    discovery_failed=bool(monitor_error.get("owned_discovery_failed")), nonce=nonce)
+                                    discovery_failed=bool(monitor_error.get("owned_discovery_failed")
+                                                         or monitor_error.get("ownership_unknown_during_run")), nonce=nonce)
         # 恢复扫描正面核验为所属的进程并入已确认成员，后续每一轮回收与最终核实都逐个核对它们。
         for row in report.get("recovered_members", []):
             identities.setdefault(int(row["pid"]), float(row["created_at"]))
@@ -835,6 +972,7 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
                "exception": result.get("exception"),
                "exception_message": result.get("exception_message"),
                "monitor_error": monitor_error.get("detail"),
+               "ownership_unknown_during_run": monitor_error.get("ownership_unknown_during_run", []),
                "launch_identity": {k: launch_identity.get(k) for k in ("pid", "created_at", "process_group")} if launch_identity else None,
                "cleanup": cleanup}
     if trigger or result.get("exception") or not cleanup["confirmed"]:
