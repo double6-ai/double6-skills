@@ -311,6 +311,37 @@ def audit_technical_receipt(manifest, *, source_ref, target_ref):
     except (ValueError,OSError,KeyError,TypeError,json.JSONDecodeError):
         return {'issues':[],'pending':[{'rule':'quality_technical_evidence_missing_changed_or_invalid'}]}
 
+OVERFLOW_SOURCE_FALLBACK='overflow_source_fallback'
+
+
+def audit_overflow_source_fallbacks(output_dir):
+    """读取本次后端排版回执（_backend_working/*/typesetting_writeback_report.json）中的原文保留降级。
+
+    每条降级都是待复核项（pending，稳定代码 overflow_source_fallback），综合质量因此不可能为 pass；
+    回执存在但无法解析时同样记 pending，不当作没有降级。"""
+    receipts,pending,count=[],[],0
+    for path in sorted(Path(output_dir).glob('_backend_working/*/typesetting_writeback_report.json')):
+        try:
+            data=json.loads(path.read_text(encoding='utf-8'))
+            rows=data.get('source_fallbacks') or []
+            if not isinstance(rows,list) or any(not isinstance(r,dict) for r in rows):
+                raise ValueError('source_fallbacks_not_list')
+        except (OSError,ValueError,TypeError,json.JSONDecodeError):
+            pending.append({'id':OVERFLOW_SOURCE_FALLBACK,'rule':'overflow_source_fallback_receipt_invalid','evidence':str(path)})
+            continue
+        ref=file_ref(path)
+        receipts.append({'receipt':ref,'count':len(rows),'cap':data.get('source_fallback_cap')})
+        if rows:
+            count+=len(rows)
+            pending.append({'id':OVERFLOW_SOURCE_FALLBACK,'rule':OVERFLOW_SOURCE_FALLBACK,'severity':'needs_review',
+                            'count':len(rows),'pages':sorted({int(r['page_index'])+1 for r in rows if isinstance(r.get('page_index'),int)}),
+                            'segments':[{k:r.get(k) for k in ('page_index','paragraph_id','role','category','source_text','translated_text')}
+                                        for r in rows[:200]],
+                            'message':'译文在可读字号下限仍放不下，该短结构片段保留了原文，需人工复核',
+                            'evidence':ref})
+    return {'count':count,'receipts':receipts,'pending':pending}
+
+
 def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, target_language='zh',
                             region_open_at_start=False):
     """每条渲染路线都会写综合结果；技术渲染status单独保留。"""
@@ -322,6 +353,13 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, ta
         result['quality_pass']=False
         result['status']='fail' if result.get('status')=='fail' or result['issues'] else 'unverified'
     output_dir=Path(output_dir)
+    overflow=audit_overflow_source_fallbacks(output_dir)
+    result['overflow_source_fallback_check']={'count':overflow['count'],'receipts':overflow['receipts']}
+    if overflow['pending']:
+        # 原文保留降级永远不是通过：至少 unverified（待复核）；已有 fail 保持 fail。
+        result.setdefault('pending',[]).extend(overflow['pending'])
+        result['quality_pass']=False
+        result['status']='fail' if result.get('status')=='fail' or result.get('issues') else 'unverified'
     residue=render_residue_gate(source,final_pdf_from_manifest(manifest,source=source),output_dir,target_language=target_language,
                                 region_open_at_start=region_open_at_start)
     result['render_residue_check']=residue
@@ -345,6 +383,9 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, ta
     path=output_dir/'comprehensive_quality.json'
     path.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
     fields={'quality_status':result['status'],'quality_pass':result['quality_pass'],
+            'overflow_source_fallback_count':overflow['count'],
+            'reference_exclusion':{k:v for k,v in (((residue.get('excluded') or {}).get('reference_exclusion_summary') or {}).get('target') or {}).items()
+                                   if k in ('excluded_entries','excluded_words','counted_entries','by_reason','excluded_words_by_page')},
             'quality_delivery_blocked':not result['quality_pass'],'comprehensive_quality':file_ref(path),
             'render_residue':{k:residue.get(k) for k in ('severity','overall_residue_ratio','high_pages','medium_pages',
                                                          'retained_glyph_overlap_pages','vector_glyph_loss_pages','inline_object_damage_pages')

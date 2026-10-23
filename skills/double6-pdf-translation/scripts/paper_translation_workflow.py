@@ -363,6 +363,17 @@ def quality_verdict(output_dir, manifest=None):
                else 'render_manifest.json'}
     if manifest.get('render_residue') is not None:
         verdict['render_residue'] = manifest['render_residue']
+    # 原文保留降级（overflow_source_fallback）与参考文献剔除计数：单份取回执字段，分块取汇总。
+    fallback_count = quality.get('overflow_source_fallback_count')
+    if fallback_count is None:
+        fallback_count = (quality.get('overflow_source_fallback_check') or {}).get('count')
+    if fallback_count is None:
+        fallback_count = manifest.get('overflow_source_fallback_count')
+    if fallback_count is not None:
+        verdict['overflow_source_fallback_count'] = fallback_count
+    reference_exclusion = quality.get('reference_exclusion') or manifest.get('reference_exclusion')
+    if reference_exclusion:
+        verdict['reference_exclusion'] = reference_exclusion
     if status == 'fail':
         verdict.update(quality_gate_failure(output_dir, manifest))
     return verdict
