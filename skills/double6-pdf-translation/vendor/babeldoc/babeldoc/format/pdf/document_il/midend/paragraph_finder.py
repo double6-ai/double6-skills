@@ -1,4 +1,4 @@
-# Double6 Skills 维护版本（2026-10-18）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
+# Double6 Skills 维护版本（2026-10-23）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 import logging
 import copy
 import json
@@ -36,6 +36,8 @@ from babeldoc.format.pdf.document_il.utils.layout_helper import (
 )
 from babeldoc.format.pdf.document_il.utils.layout_helper import is_author_byline
 from babeldoc.format.pdf.document_il.utils.layout_helper import is_text_layout
+from babeldoc.format.pdf.document_il.midend.line_fragments import split_table_rows_at_column_gutters
+from babeldoc.format.pdf.document_il.midend.line_fragments import unify_line_layouts
 from babeldoc.format.pdf.document_il.utils.paragraph_helper import is_cid_paragraph
 from babeldoc.format.pdf.document_il.utils.style_helper import INDIGO
 from babeldoc.format.pdf.document_il.utils.style_helper import WHITE
@@ -331,6 +333,9 @@ class ParagraphFinder:
             self.process_paragraph_spacing(paragraph)
             self.update_paragraph_data(paragraph)
 
+        # 表格行跨越全表共有的列间空白时按列拆成单元格（见 line_fragments）。
+        split_table_rows_at_column_gutters(self, page, paragraphs, generate_base58_id)
+
         # 第四步：计算所有行宽度的中位数
         median_width = self.calculate_median_line_width(paragraphs)
 
@@ -535,8 +540,12 @@ class ParagraphFinder:
         current_layout: Layout | None = None
         skip_chars = []
 
-        for char in page.pdf_character:
-            char_layout = get_character_layout(char, layout_index, layout_map)
+        # 先算每个字符的版面归属，再按物理行统一（见 line_fragments.unify_line_layouts）：
+        # 文字框比实际行窄或两个同级框重叠时，同一行不再被切成几段。
+        char_layouts = [get_character_layout(char, layout_index, layout_map) for char in page.pdf_character]
+        unify_line_layouts(page.pdf_character, char_layouts, layout_index, layout_map, Layout,
+                           lambda c: bool(SPACE_REGEX.match(c.char_unicode or "")))
+        for char, char_layout in zip(page.pdf_character, char_layouts):
             # Check if character is in any formula layout and set formula_layout_id
             char.formula_layout_id = is_character_in_formula_layout(
                 char, page, layout_index, layout_map
