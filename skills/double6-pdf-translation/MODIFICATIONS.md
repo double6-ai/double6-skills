@@ -98,6 +98,7 @@
 - `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/diagram_nodes.py`
 - `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/il_translator.py`
 - `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/il_translator_llm_only.py`
+- `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/overflow_source_fallback.py`（Double6 新增模块）
 - `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/paragraph_finder.py`
 - `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/styles_and_formulas.py`
 - `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/typesetting.py`
@@ -149,3 +150,38 @@
 - rc.9 第 4 次代码提交：`scripts/chunked_workflow.py::run` 在启动有界 `chunk-plan` 前创建运行目录（`wf.ROOT`，有界任务的 cwd）；CI 的全新 `PAPER_TRANSLATION_WORKSPACE` 尚不存在时此前整份退出 1。新增成对测试 `test_chunked_run_creates_a_missing_workspace_root` / `test_chunked_run_fails_closed_when_workspace_root_is_a_file`。
 - rc.9 第 5 次代码提交（PR #21 review-1）：`scripts/chunked_workflow.py`（`owner_nonce_scan` 只作记录；`_verify_receipt` 逐回执预检 + `reclaim_owned_tree(discovery_failed=True)`；`reclaim_stale`/`post_attempt_guard` 输出 `unverified`/`reason_codes`，协议 `launch_receipt_recovery_scan_v2`）、`scripts/chunked_translation.py`（分块合同 `post_attempt_guard` 协议名）、`scripts/bounded_execution.py`（`_query_failure_counts`；`launched_members` 的 `unknown` 收集；`run_bounded` 遇归属未知时回收转恢复扫描并记 `ownership_unknown_during_run`；`_recovery_scan` 的 ppid 查询失败、墙钟回拨 nonce、僵尸/其它用户过滤）。新增 `tests/test_pr21_review1_guard_query_failures.py`。
 - rc.9 第 6 次代码提交（PR #21 review-2）：新增 `scripts/launch_clock.py`；`scripts/bounded_launch.py`（回执 `start_evidence`）；`scripts/bounded_execution.py`（`root_start_evidence`、`older_unreadable_verdict`、`OLDER_NONCE_UNREADABLE`；`_recovery_scan`/`launched_members` 较早且读不到 nonce 的进程按单调证据排除否则归属未知；`reclaim_owned_tree` 固定现场证据；未知项带 `code`）；`scripts/chunked_workflow.py`（`_verify_receipt` 的 `root_identity_clock_shifted` 与预检未知保留；`detail_codes`）。新增 `tests/test_pr21_review2_clock_rollback_unknown.py`；`tests/test_pr21_review1_guard_query_failures.py` 移除断言旧丢弃行为的 `older-unreadable` 参数。
+- rc.9 后续修复（realmodel-r1 真实模型评测的两个首要问题，2026-10-23）：
+  - 溢出降级：新增 vendored BabelDOC `midend/overflow_source_fallback.py`（准入 `admission`、按页/按文档上限 `cap_violations`）；
+    `il_version_1.py` 的 `PdfParagraph` 新增不序列化字段 `overflow_source_backup`；`midend/il_translator.py` 新增
+    `_backup_source_for_overflow_fallback`（只对目录/表格/图内标签角色与 `fallback_line` 备份源组合）；`midend/typesetting.py`
+    在既有缩字/折行/扩框全部失败、段落被记为 `hard_readable_floor_overflow` 后调用 `_apply_overflow_source_fallback`
+    （原字形原位置直通，`writeback_status=overflow_source_fallback`），`_enforce_overflow_fallback_cap` 超限整批撤销，
+    `typesetting_writeback_report.json` 新增 `source_fallbacks` / `source_fallback_count` / `source_fallback_cap` 与
+    `status=needs_review`，失败行新增 `source_fallback_rejected`。`scripts/qa_pipeline.py` 新增 `audit_overflow_source_fallbacks`
+    （pending `overflow_source_fallback`，综合质量最多 unverified）；`scripts/chunked_translation.py::aggregate_quality` 汇总
+    `overflow_source_fallback_count`、`reference_exclusion`；`scripts/paper_translation_workflow.py::quality_verdict` 输出两项计数。
+  - 参考文献剔除：`scripts/render_residue_check.py` 在 References 标题区内（无标题路径不变）新增 `title_verb_waiver`、
+    `author_year_sequence`、按含文字行计行数、出处缩写行尾续接，以及回执汇总 `reference_exclusion_summary`；阈值不变。
+  - 新增 `tests/test_overflow_source_fallback.py`、`tests/test_reference_residue_exclusion.py`。
+- PR #23 review-1 修复（2026-10-23）：
+  - `scripts/render_residue_check.py`：新增 `entry_fields`（纯作者名单/题名/其余字段的结构证明）；`title_verb_waiver` 只豁免已证明题名字段内的动词。
+  - vendored BabelDOC `midend/overflow_source_fallback.py`：`cap_violations` 输出原始分母 `paragraphs_per_page`、`segment_count`；
+    新增 `document_cap_scope()`（环境变量 `DOUBLE6_OVERFLOW_FALLBACK_DOCUMENT_CAP=chunk_merge`）与回执不完整码。
+    `midend/typesetting.py::_enforce_overflow_fallback_cap`：分块作用域下只执行按页上限，整份违规记入 `deferred_violations`。
+  - `scripts/pdf_translation_render.py`：仅当已按 SHA-256 绑定的块上下文带 `chunk` 字段时设置该变量，否则清除。
+  - `scripts/qa_pipeline.py`：回执审计带出上限、原始分母、作用域与逐条降级记录；`attach_pipeline_quality(chunk_mode=)`，
+    非分块出现推迟作用域即 `overflow_source_fallback_cap_scope_mismatch`；`scripts/pdf_translation_runtime.py` 传入 `chunk_mode`。
+  - `scripts/chunked_translation.py`：新增 `document_fallback_cap`（逐块核对回执完整性，按原始页码统一计算整份/按页上限），
+    `aggregate_quality` 超限或不完整记 blocker；`scripts/chunked_workflow.py` 合并后遇这两种码整份阻断（exit 2，不交付）。
+  - 新增 `tests/test_pr23_review1_reference_narrative.py`、`tests/test_pr23_review1_document_fallback_cap.py`（复审原测试，仅改路径）、
+    `tests/fixtures/pr23_review1/`、`tests/test_pr23_review1_reference_fields.py`、`tests/test_pr23_review1_fallback_document_cap.py`；
+    `tests/test_overflow_source_fallback.py` 的分块汇总用例改为提供完整回执（另加无回执失败关闭用例与分块作用域用例）。
+- PR #23 review-2 修复（2026-10-23）：
+  - vendored BabelDOC `midend/overflow_source_fallback.py` 新增 `validate_receipt`（回执自身一致性核对，纯函数）。
+  - `scripts/qa_pipeline.py::audit_overflow_source_fallbacks` 用它核对每份回执，不一致的记入 `invalid`（不计入 receipts、
+    不折算成 0），`attach_pipeline_quality` 记 blocker `overflow_source_fallback_receipt_incomplete`。
+  - `scripts/chunked_translation.py`：新增 `_receipt_problems`（逐块恰好一份回执、按 SHA-256 重读、重新核对、摘要与原文一致、
+    分母覆盖块页、作用域为 chunk_merge）；`document_fallback_cap` 有任何问题即 `incomplete`，不再在无声明降级时返回 `none`。
+  - 新增 `tests/test_pr23_review2_incomplete_fallback_receipt.py`（复审原测试，仅改路径）、`tests/test_pr23_review2_receipt_consistency.py`；
+    `tests/test_chunked_translation.py` 的块质量夹具改为带真实格式的 0 降级回执（`zero_fallback_quality`），
+    `tests/test_overflow_source_fallback.py` 的 qa 用例回执补全上限字段；断言不变。

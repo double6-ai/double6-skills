@@ -1,4 +1,4 @@
-# Double6 Skills 维护版本（2026-10-22）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
+# Double6 Skills 维护版本（2026-10-23）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 from __future__ import annotations
 
 import copy
@@ -232,6 +232,18 @@ def _safe_set_paragraph_attr(paragraph: PdfParagraph, name: str, value: str) -> 
         setattr(paragraph, name, value)
     except AttributeError:
         pass
+
+
+def _backup_source_for_overflow_fallback(paragraph: PdfParagraph) -> None:
+    """目录/表格/图内短标签：写入译文前备份源组合，供排版阶段 overflow_source_fallback 使用。
+    其它角色不备份（它们溢出时照旧失败）。"""
+    from babeldoc.format.pdf.document_il.midend import overflow_source_fallback as osf
+    label = (getattr(paragraph, "layout_label", None) or "").lower()
+    if label in osf.TOC_ROLES | osf.TABLE_ROLES | osf.FIGURE_ROLES | osf.GEOMETRY_CONFIRMED_ROLES:
+        try:
+            paragraph.overflow_source_backup = list(paragraph.pdf_paragraph_composition or [])
+        except AttributeError:
+            pass
 
 
 def _plain_style_fallback_text(
@@ -1500,6 +1512,7 @@ class ILTranslator:
                             _safe_set_paragraph_attr(paragraph, "writeback_status", "rejected")
                     _safe_set_paragraph_attr(paragraph, "writeback_reason", "placeholder_full_match_failed")
                     return False
+        _backup_source_for_overflow_fallback(paragraph)
         paragraph.unicode = translated_text
         paragraph.pdf_paragraph_composition = parsed_compositions
         for composition in paragraph.pdf_paragraph_composition:

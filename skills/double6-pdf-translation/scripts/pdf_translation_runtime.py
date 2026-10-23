@@ -102,7 +102,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     result=attach_pipeline_quality(manifest, source=source, output_dir=output_dir,
         review_ref={"path": str(Path(review).resolve()), "sha256": digest} if review else None,
         target_language=getattr(args, "target_language", "zh") or "zh",
-        region_open_at_start=chunk_context.get("reference_region_open_at_start") is True)
+        region_open_at_start=chunk_context.get("reference_region_open_at_start") is True,
+        chunk_mode=isinstance(chunk_context.get("chunk"), dict))
     if invocation_ref:bind_final_group_artifact(args,output_dir,result,invocation_ref)
     return result
 
