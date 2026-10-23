@@ -520,6 +520,19 @@ class TypesettingUnit:
         box = self.box
         return box.y2 - box.y
 
+    @property
+    def line_metric_height(self) -> float:
+        """行距用的高度：原文字形单元取字号（em 框），不取墨迹框。
+
+        原样搬运的原文字形（链接样式、引用串、保留的拉丁词）的 ``height`` 是可见墨迹高度，
+        小写字母约半个字号、标点更小。整行几乎都是这类单元时按墨迹高算行距，行距只剩
+        正常的一半左右，下一行压到这一行上（引用串、蓝色链接行互相重叠）。新排的 unicode
+        单元本来就按字号计高，公式单元保持自己的框高。"""
+        height = self.height
+        if self.char is not None and self.char.pdf_style is not None and self.char.pdf_style.font_size:
+            return max(height, float(self.char.pdf_style.font_size))
+        return height
+
     def relocate(
         self,
         x: float,
@@ -2152,7 +2165,7 @@ class Typesetting:
 
             # 添加当前单元的高度到当前行高度列表
             if not unit.is_space:
-                current_line_heights.append(unit_height)
+                current_line_heights.append(unit.line_metric_height * scale)
 
             prev_x = current_x
             # 更新 x 坐标
