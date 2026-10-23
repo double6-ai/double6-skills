@@ -146,3 +146,4 @@
 - 新增 `tests/test_chunked_translation.py`。
 - 版本号：`SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py`、仓库 `README.md` 更新为 2.0.0-rc.9。
 - rc.9 第 3 次代码提交：`scripts/bounded_execution.py::reclaim_owned_tree`（`adopt` 对带本次启动 nonce、记录身份读作 `pid_reused` 的进程以观测 create_time 刷新身份并回收，组长同理恢复整组信号；报告新增 `identity_refreshed`、`process_group.identity_refreshed_by_nonce`）。新增 `tests/test_chunk_clock_step_reclaim.py`。
+- rc.9 第 4 次代码提交：`scripts/chunked_workflow.py::run` 在启动有界 `chunk-plan` 前创建运行目录（`wf.ROOT`，有界任务的 cwd）；CI 的全新 `PAPER_TRANSLATION_WORKSPACE` 尚不存在时此前整份退出 1。新增成对测试 `test_chunked_run_creates_a_missing_workspace_root` / `test_chunked_run_fails_closed_when_workspace_root_is_a_file`。
