@@ -19,12 +19,14 @@
 * ``split_table_rows_at_column_gutters``：表格区域内，行聚类会把字距较小的表头整行聚成一个
   ``fallback_line``，译后整行左对齐，和下面各列错位。全表共有的空白本身不算列证据（单列单元格里的
   词间空白也会对齐）；只在该空白另有可信列结构时才拆：同表某一行在这里已经是两个独立段落、
-  有竖直表格线穿过、或有两个单元格框在这里分界。版面检测的单元格框是可信结构：落在单元格框里的段落
-  不拆，单元格框横跨的空白不是列边界。
+  有竖直表格线穿过、有两个单元格框在这里分界，或同表某一数据行的两个相邻值记号（数字、布尔量等，
+  ``VALUE_TOKEN``）在这里分开、且右侧的值与另一行的片段在同一列锚点上（左边、右边或中线相差 ≤2 pt）。
+  版面检测的单元格框是可信结构：落在单元格框里的段落不拆，单元格框横跨的空白不是列边界。
 """
 from __future__ import annotations
 
 import copy
+import re
 
 BODY_LABELS = frozenset({
     "plain text", "text", "title", "paragraph_title", "abstract", "content", "doc_title",
@@ -40,6 +42,13 @@ MIN_VERTICAL_COVER = 0.6
 CONTAIN_TOLERANCE = 1.5
 # 同一行里归属不同的相邻字符，间距小于这么多个字号才算同一段连续文字（栏间空白远大于它）。
 CONTINUOUS_GAP = 1.5
+# 数据单元格里的“值”记号：数字（含正负号、小数、千分位、百分号、科学计数、括号、显著性星号）、布尔字面量与常见占位符号。
+# 两个相邻的值记号之间的空白是值与值的分界，不是词间空白；“New York”这类词与词的空白不算。
+VALUE_TOKEN = re.compile(
+    r"[(\[]?[+\-\u2212\u2013\u00b1]?(?:\d+(?:[.,]\d+)*|[.,]\d+)(?:[eE][+\-\u2212]?\d+)?%?[)\]]?\**"
+    r"|(?i:true|false)|[\u2014\u2013\-\u2713\u2717\u00d7]|(?i:n/?a|nan)")
+# 列锚点对齐：值记号与另一行的片段左边、右边或中线相差不超过这么多 pt。
+ANCHOR_TOLERANCE = 2.0
 # 嵌套同类框被当作重复检测时，内框至少覆盖外框宽度的这个比例。
 MIN_DUPLICATE_WIDTH = 0.6
 
@@ -240,6 +249,17 @@ def _font_size(chars):
     return sizes[len(sizes) // 2] if sizes else 0.0
 
 
+def _segment_text(segment) -> str:
+    return "".join((c.char_unicode or "") for c in segment[2]).strip()
+
+
+def _stacks(segment, others) -> bool:
+    """片段在另一行有左边、右边或中线对齐的片段（同一数据列的锚点）。"""
+    t = ANCHOR_TOLERANCE
+    x, x2 = segment[0], segment[1]
+    return any(abs(o[0] - x) <= t or abs(o[1] - x2) <= t or abs((o[0] + o[1]) - (x + x2)) <= 2 * t for o in others)
+
+
 def _column_evidence(gutter, rows, cells, rules) -> bool:
     """列间空白是否有空白之外的可信列证据。"""
     g0, g1 = gutter
@@ -256,7 +276,20 @@ def _column_evidence(gutter, rows, cells, rules) -> bool:
     t = CONTAIN_TOLERANCE
     ends = [c.x2 for c in cells if g0 - t <= c.x2 <= g1 + t]
     starts = [c.x for c in cells if g0 - t <= c.x <= g1 + t]
-    return bool(ends and starts)
+    if ends and starts:
+        return True
+    # 数据行里两个相邻的值记号（数字、布尔量等）在这里分开，且右侧的值与另一行的片段在同一列锚点上：
+    # 这是数据列本身的位置，不只是对齐的词间空白。
+    segs_by_row = [[s for _, chars, size, _ in row for s in _segments(chars, size)] for row in rows]
+    for r, segs in enumerate(segs_by_row):
+        segs = sorted(segs, key=lambda s: s[0])
+        others = [s for k, row_segs in enumerate(segs_by_row) if k != r for s in row_segs]
+        for a, b in zip(segs, segs[1:]):
+            if min(b[0], g1) - max(a[1], g0) <= 0:
+                continue
+            if VALUE_TOKEN.fullmatch(_segment_text(a)) and VALUE_TOKEN.fullmatch(_segment_text(b)) and _stacks(b, others):
+                return True
+    return False
 
 
 def split_table_rows_at_column_gutters(finder, page, paragraphs, new_id) -> int:
