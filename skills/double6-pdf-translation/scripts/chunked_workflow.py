@@ -89,6 +89,11 @@ def _reason_codes(rows: list[dict[str, Any]]) -> list[str]:
     return sorted({str(row.get('reason') or 'unverified') for row in rows})
 
 
+def _detail_codes(rows: list[dict[str, Any]]) -> list[str]:
+    """细分原因码（如 older_than_root_nonce_unreadable：按墙钟早于根进程、读不到 nonce、无单调证据可排除）。"""
+    return sorted({str(row['code']) for row in rows if row.get('code')})
+
+
 def _verify_receipt(identity: dict[str, Any]) -> dict[str, Any]:
     """一张 launch 回执的整树核实。先做一次只读预检（与回收同一套恢复扫描：nonce / 本次进程组 / 已核验父链，
     查询失败的同用户进程记为归属未知）；只有预检“完整、无所属存活、无归属未知、根已退出或号码已复用、
@@ -96,12 +101,30 @@ def _verify_receipt(identity: dict[str, Any]) -> dict[str, Any]:
     已知可信根/成员按 PID + create_time 回收（时钟跳变带有效 nonce 的按 nonce 刷新身份），归属未知的进程
     不发信号、记入 unverified（confirmed=False）。"""
     from bounded_execution import _group_empty, _identity_state, _recovery_scan, reclaim_owned_tree
+    import psutil
+    from launch_clock import start_evidence
     pid, born = int(identity['pid']), float(identity['created_at'])
     nonce = identity.get('nonce')
     state = _identity_state(pid, born)[0]
+    recorded_ev = identity.get('start_evidence') if isinstance(identity.get('start_evidence'), dict) else None
+
+    def clock_shifted_root() -> bool:
+        # create_time 不符（看似 PID 复用），但同一次开机内的单调启动读数与回执一致：仍是原根进程，只是墙钟跳变
+        # （PR #21 review-2）。不能按“号码已复用”把它当已退出，也不能据此跳过原进程组的探测。
+        if not recorded_ev or _identity_state(pid, born)[0] != 'pid_reused' or start_evidence(pid) != recorded_ev:
+            return False
+        try:
+            return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
+        except psutil.NoSuchProcess:
+            return False
+        except Exception:  # noqa: BLE001 - 状态读不到：按仍存活处理（失败关闭）
+            return True
+    shifted = state == 'pid_reused' and clock_shifted_root()
+    if shifted:
+        state = 'alive_clock_shifted'
     pgid = identity.get('process_group')
     own_group = bool(pgid) and pgid == pid and os.name == 'posix'
-    group_trusted = own_group and state in ('alive', 'zombie', 'dead')
+    group_trusted = own_group and state in ('alive', 'zombie', 'dead', 'alive_clock_shifted')
     group_empty = _group_empty(pgid) if own_group and state != 'pid_reused' else True
     pre = _recovery_scan(identity, {pid: born}, nonce, group_trusted, 'guard_precheck')
     precheck = {'root_state': state, 'group_empty': group_empty, 'complete': pre['complete'],
@@ -110,9 +133,19 @@ def _verify_receipt(identity: dict[str, Any]) -> dict[str, Any]:
             and not pre['owned_found'] and not pre['ownership_unknown']):
         return {'already_gone': True, 'confirmed': True, 'precheck': precheck, 'unverified': []}
     outcome = reclaim_owned_tree(identity, {}, time.monotonic() + 15, discovery_failed=True, nonce=nonce)
-    return {'already_gone': False, 'confirmed': bool(outcome.get('confirmed')), 'precheck': precheck,
-            'status': outcome.get('status'), 'unverified': list(outcome.get('unverified') or []),
-            'identity_refreshed': outcome.get('identity_refreshed', [])}
+    unverified = list(outcome.get('unverified') or [])
+    if shifted and clock_shifted_root():
+        # 无 nonce 刷新身份时回收端按“号码复用”不发信号；原根进程仍在 → 未核实（不发信号、停止后续调度）。
+        unverified.append({'pid': pid, 'created_at': born, 'reason': 'root_identity_clock_shifted',
+                           'detail': 'create_time moved with the wall clock; boot-relative start matches the receipt'})
+    if pre['ownership_unknown'] and not unverified:
+        # 预检发现的归属未知不能因回收端的再次扫描“恰好没看到”而消失（例如查询结果抖动）：保留为未核实。
+        unverified += [dict(row, reason='ownership_unknown') for row in pre['ownership_unknown']
+                       if row.get('created_at') is None
+                       or _identity_state(int(row['pid']), float(row['created_at']))[0] in ('alive', 'unknown')]
+    return {'already_gone': False, 'confirmed': bool(outcome.get('confirmed')) and not unverified, 'precheck': precheck,
+            'status': outcome.get('status') if not unverified or outcome.get('status') != 'confirmed' else 'unconfirmed',
+            'unverified': unverified, 'identity_refreshed': outcome.get('identity_refreshed', [])}
 
 
 def reclaim_stale(roots: list[Path]) -> dict[str, Any]:
@@ -151,6 +184,7 @@ def reclaim_stale(roots: list[Path]) -> dict[str, Any]:
                 report['unverified'] += [dict(row, receipt=str(receipt)) for row in verdict['unverified']] or [
                     {'receipt': str(receipt), 'reason': 'reclaim_unconfirmed'}]
     report['reason_codes'] = _reason_codes(report['unverified'])
+    report['detail_codes'] = _detail_codes(report['unverified'])
     return report
 
 
@@ -184,7 +218,7 @@ def post_attempt_guard(attempt: Path) -> dict[str, Any]:
         unverified.append({'reason': 'reclaim_unconfirmed'})
     if still:
         unverified.append({'reason': 'owned_nonce_still_live', 'nonces': sorted(still)})
-    report.update(unverified=unverified, reason_codes=_reason_codes(unverified),
+    report.update(unverified=unverified, reason_codes=_reason_codes(unverified), detail_codes=_detail_codes(unverified),
                   confirmed=bool(reclaim['confirmed']) and not unverified)
     return report
 
