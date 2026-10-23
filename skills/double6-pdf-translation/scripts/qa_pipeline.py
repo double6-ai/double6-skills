@@ -330,7 +330,12 @@ def audit_overflow_source_fallbacks(output_dir):
             pending.append({'id':OVERFLOW_SOURCE_FALLBACK,'rule':'overflow_source_fallback_receipt_invalid','evidence':str(path)})
             continue
         ref=file_ref(path)
-        receipts.append({'receipt':ref,'count':len(rows),'cap':data.get('source_fallback_cap')})
+        cap=data.get('source_fallback_cap') if isinstance(data.get('source_fallback_cap'),dict) else {}
+        # 原始分母与逐条降级（页、段落 id）全部保留：分块合并据此在整份范围统一执行上限。
+        receipts.append({'receipt':ref,'count':len(rows),'cap':cap or None,
+                         'paragraphs_per_page':cap.get('paragraphs_per_page'),'segment_count':cap.get('segment_count'),
+                         'document_cap_scope':cap.get('document_cap_scope','document'),
+                         'fallbacks':[{k:r.get(k) for k in ('page_index','paragraph_id','role','category')} for r in rows]})
         if rows:
             count+=len(rows)
             pending.append({'id':OVERFLOW_SOURCE_FALLBACK,'rule':OVERFLOW_SOURCE_FALLBACK,'severity':'needs_review',
@@ -343,7 +348,7 @@ def audit_overflow_source_fallbacks(output_dir):
 
 
 def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, target_language='zh',
-                            region_open_at_start=False):
+                            region_open_at_start=False, chunk_mode=False):
     """每条渲染路线都会写综合结果；技术渲染status单独保留。"""
     result=evaluate_quality_packet(source,final_pdf_from_manifest(manifest,source=source),review_ref=review_ref)
     technical=audit_technical_receipt(manifest,source_ref=file_ref(source),target_ref=result.get('target'))
@@ -355,6 +360,14 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, ta
     output_dir=Path(output_dir)
     overflow=audit_overflow_source_fallbacks(output_dir)
     result['overflow_source_fallback_check']={'count':overflow['count'],'receipts':overflow['receipts']}
+    # 整份上限推迟到分块合并的回执只能出现在分块翻译里；单份翻译出现即失败关闭（上限未在任何地方执行）。
+    deferred=[r for r in overflow['receipts'] if r.get('document_cap_scope')=='chunk_merge']
+    if deferred and not chunk_mode:
+        result.setdefault('issues',[]).append({'id':'overflow_source_fallback_cap_scope_mismatch',
+            'rule':'overflow_source_fallback_cap_scope_mismatch','severity':'blocker',
+            'message':'排版回执把整份降级上限推迟到分块合并，但本次不是分块翻译；整份上限没有执行，失败关闭',
+            'evidence':[r['receipt'] for r in deferred]})
+        result['quality_pass']=False;result['status']='fail'
     if overflow['pending']:
         # 原文保留降级永远不是通过：至少 unverified（待复核）；已有 fail 保持 fail。
         result.setdefault('pending',[]).extend(overflow['pending'])

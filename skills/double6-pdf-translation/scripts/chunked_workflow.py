@@ -633,16 +633,29 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
                 result.update(error_code='chunk_merge_failed', merged=False, merge_job=_measure(job))
             else:
                 manifest = wf.read_json(manifest_path)
-                result = dict(base, status='candidate', merged=True, merge_job=_measure(job),
-                              merged_output_dir=str(merged_dir), merge_manifest_ref=wf.ref(manifest_path),
-                              outputs=manifest['outputs'], merge_issues=manifest['issues'], links=manifest['links'],
-                              toc_entries=manifest['toc_entries'], page_labels=manifest['page_labels'])
-                result.update(wf.quality_verdict(merged_dir))
-                worst = max((c['completed']['quality_status'] or 'fail' for c in chunks),
-                            key=lambda s: {'pass': 0, 'unverified': 1}.get(s, 2))
-                order_rank = {'pass': 0, 'unverified': 1, 'fail': 2}
-                if order_rank.get(result.get('quality_status'), 2) < order_rank.get(worst, 2):
-                    raise AssertionError('merged quality better than the worst chunk')
+                merged_quality_path = merged_dir / 'comprehensive_quality.json'
+                merged_quality = wf.read_json(merged_quality_path) if merged_quality_path.is_file() else {}
+                blocking = [i for i in merged_quality.get('issues', []) if isinstance(i, dict) and i.get('id') in
+                            ('overflow_source_fallback_cap_exceeded', 'overflow_source_fallback_receipt_incomplete')]
+                if blocking:
+                    code = blocking[0]['id']
+                    result = dict(wf.blocked_result([wf.finding(code, '原文保留降级的整份文档上限未满足或无法核对；整份失败关闭，不交付合并结果。',
+                                  document_cap=merged_quality.get('overflow_source_fallback_document_cap'))]), **base)
+                    result.update(error_code=code, merged=False, merge_job=_measure(job), quality_status='fail',
+                                  merge_manifest_ref=wf.ref(manifest_path),
+                                  overflow_source_fallback_document_cap=merged_quality.get('overflow_source_fallback_document_cap'))
+                else:
+                    result = dict(base, status='candidate', merged=True, merge_job=_measure(job),
+                                  merged_output_dir=str(merged_dir), merge_manifest_ref=wf.ref(manifest_path),
+                                  outputs=manifest['outputs'], merge_issues=manifest['issues'], links=manifest['links'],
+                                  toc_entries=manifest['toc_entries'], page_labels=manifest['page_labels'])
+                    result.update(wf.quality_verdict(merged_dir))
+                    result['overflow_source_fallback_document_cap'] = merged_quality.get('overflow_source_fallback_document_cap')
+                    worst = max((c['completed']['quality_status'] or 'fail' for c in chunks),
+                                key=lambda s: {'pass': 0, 'unverified': 1}.get(s, 2))
+                    order_rank = {'pass': 0, 'unverified': 1, 'fail': 2}
+                    if order_rank.get(result.get('quality_status'), 2) < order_rank.get(worst, 2):
+                        raise AssertionError('merged quality better than the worst chunk')
         inv['finished_at'] = wf.datetime.now(wf.timezone.utc).isoformat()
         inv['status'] = result.get('status')
         save_state(state_path, state)

@@ -1,4 +1,4 @@
-# Double6 Skills 维护版本（2026-10-23）：新增模块，见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
+# Double6 Skills 维护版本（2026-10-23，PR #23 review-1 更新）：新增模块，见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 """硬可读字号下限溢出时的“保留原文”降级（overflow_source_fallback）。
 
 背景：排版先在可读字号下限以内缩字、在原框内折行、再按既有规则借用空白；全部试过仍放不下时，
@@ -23,6 +23,11 @@ import re
 
 CODE = "overflow_source_fallback"
 CAP_CODE = "overflow_source_fallback_cap_exceeded"
+RECEIPT_INCOMPLETE_CODE = "overflow_source_fallback_receipt_incomplete"
+# 分块翻译：每块后端只执行按页上限，整份文档上限在合并时按原始整份段落数统一执行（不能每块各给一份最低额度）。
+# 由分块流程按已绑定的块上下文设置；单份翻译不设置，后端照常执行整份上限。
+DOCUMENT_CAP_SCOPE_ENV = "DOUBLE6_OVERFLOW_FALLBACK_DOCUMENT_CAP"
+DOCUMENT_CAP_SCOPE_CHUNK_MERGE = "chunk_merge"
 
 TOC_ROLES = frozenset({"toc_entry", "chapter_index_entry"})
 TABLE_ROLES = frozenset({"table_header", "table_cell"})
@@ -143,6 +148,13 @@ def doc_cap(paragraph_count: int) -> int:
     return max(DOC_CAP_MIN, math.ceil(DOC_CAP_FRACTION * max(paragraph_count, 0)))
 
 
+def document_cap_scope() -> str:
+    """当前后端的整份上限作用域：``document``（本份文档）或 ``chunk_merge``（分块合并时统一执行）。"""
+    import os
+    value = os.environ.get(DOCUMENT_CAP_SCOPE_ENV, "")
+    return DOCUMENT_CAP_SCOPE_CHUNK_MERGE if value == DOCUMENT_CAP_SCOPE_CHUNK_MERGE else "document"
+
+
 def cap_violations(fallback_pages: list[int], paragraphs_per_page: dict[int, int]) -> dict:
     """fallback_pages：每条降级所在页；paragraphs_per_page：每页段落数。返回上限与违例（空 violations 表示未超限）。"""
     total = sum(paragraphs_per_page.values())
@@ -158,4 +170,7 @@ def cap_violations(fallback_pages: list[int], paragraphs_per_page: dict[int, int
     if len(fallback_pages) > cap:
         violations.append({"scope": "document", "count": len(fallback_pages), "cap": cap})
     return {"document_cap": cap, "page_caps": {str(p): page_cap(paragraphs_per_page.get(p, 0)) for p in counts},
-            "count": len(fallback_pages), "violations": violations}
+            "count": len(fallback_pages), "violations": violations,
+            # 原始分母：每页段落数与整份段落数（分块合并据此在整份范围重算上限）。
+            "paragraphs_per_page": {str(p): int(n) for p, n in sorted(paragraphs_per_page.items())},
+            "segment_count": int(total)}

@@ -144,6 +144,11 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
     context_file = output_dir / "document_memory.json"
     target_language = getattr(args, "target_language", "zh") or "zh"
     document_context = load_document_term_context(args)
+    # 原文保留降级的整份上限：分块（已按 SHA-256 绑定的块上下文带 chunk 字段）时推迟到合并统一执行；
+    # 其它情况一律在本份文档执行（清掉可能从外部继承的同名变量）。
+    env.pop("DOUBLE6_OVERFLOW_FALLBACK_DOCUMENT_CAP", None)
+    if isinstance(document_context, dict) and isinstance(document_context.get("chunk"), dict):
+        env["DOUBLE6_OVERFLOW_FALLBACK_DOCUMENT_CAP"] = "chunk_merge"
     args.custom_system_prompt = build_backend_system_prompt(
         resolve_system_prompt(args.custom_system_prompt, target_language), output_dir, target_language=target_language,
         **({'document_context': document_context} if document_context is not None else {}))
