@@ -176,3 +176,12 @@
   - 新增 `tests/test_pr23_review1_reference_narrative.py`、`tests/test_pr23_review1_document_fallback_cap.py`（复审原测试，仅改路径）、
     `tests/fixtures/pr23_review1/`、`tests/test_pr23_review1_reference_fields.py`、`tests/test_pr23_review1_fallback_document_cap.py`；
     `tests/test_overflow_source_fallback.py` 的分块汇总用例改为提供完整回执（另加无回执失败关闭用例与分块作用域用例）。
+- PR #23 review-2 修复（2026-10-23）：
+  - vendored BabelDOC `midend/overflow_source_fallback.py` 新增 `validate_receipt`（回执自身一致性核对，纯函数）。
+  - `scripts/qa_pipeline.py::audit_overflow_source_fallbacks` 用它核对每份回执，不一致的记入 `invalid`（不计入 receipts、
+    不折算成 0），`attach_pipeline_quality` 记 blocker `overflow_source_fallback_receipt_incomplete`。
+  - `scripts/chunked_translation.py`：新增 `_receipt_problems`（逐块恰好一份回执、按 SHA-256 重读、重新核对、摘要与原文一致、
+    分母覆盖块页、作用域为 chunk_merge）；`document_fallback_cap` 有任何问题即 `incomplete`，不再在无声明降级时返回 `none`。
+  - 新增 `tests/test_pr23_review2_incomplete_fallback_receipt.py`（复审原测试，仅改路径）、`tests/test_pr23_review2_receipt_consistency.py`；
+    `tests/test_chunked_translation.py` 的块质量夹具改为带真实格式的 0 降级回执（`zero_fallback_quality`），
+    `tests/test_overflow_source_fallback.py` 的 qa 用例回执补全上限字段；断言不变。
