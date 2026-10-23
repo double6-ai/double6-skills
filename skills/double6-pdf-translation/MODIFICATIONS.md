@@ -163,3 +163,16 @@
   - 参考文献剔除：`scripts/render_residue_check.py` 在 References 标题区内（无标题路径不变）新增 `title_verb_waiver`、
     `author_year_sequence`、按含文字行计行数、出处缩写行尾续接，以及回执汇总 `reference_exclusion_summary`；阈值不变。
   - 新增 `tests/test_overflow_source_fallback.py`、`tests/test_reference_residue_exclusion.py`。
+- PR #23 review-1 修复（2026-10-23）：
+  - `scripts/render_residue_check.py`：新增 `entry_fields`（纯作者名单/题名/其余字段的结构证明）；`title_verb_waiver` 只豁免已证明题名字段内的动词。
+  - vendored BabelDOC `midend/overflow_source_fallback.py`：`cap_violations` 输出原始分母 `paragraphs_per_page`、`segment_count`；
+    新增 `document_cap_scope()`（环境变量 `DOUBLE6_OVERFLOW_FALLBACK_DOCUMENT_CAP=chunk_merge`）与回执不完整码。
+    `midend/typesetting.py::_enforce_overflow_fallback_cap`：分块作用域下只执行按页上限，整份违规记入 `deferred_violations`。
+  - `scripts/pdf_translation_render.py`：仅当已按 SHA-256 绑定的块上下文带 `chunk` 字段时设置该变量，否则清除。
+  - `scripts/qa_pipeline.py`：回执审计带出上限、原始分母、作用域与逐条降级记录；`attach_pipeline_quality(chunk_mode=)`，
+    非分块出现推迟作用域即 `overflow_source_fallback_cap_scope_mismatch`；`scripts/pdf_translation_runtime.py` 传入 `chunk_mode`。
+  - `scripts/chunked_translation.py`：新增 `document_fallback_cap`（逐块核对回执完整性，按原始页码统一计算整份/按页上限），
+    `aggregate_quality` 超限或不完整记 blocker；`scripts/chunked_workflow.py` 合并后遇这两种码整份阻断（exit 2，不交付）。
+  - 新增 `tests/test_pr23_review1_reference_narrative.py`、`tests/test_pr23_review1_document_fallback_cap.py`（复审原测试，仅改路径）、
+    `tests/fixtures/pr23_review1/`、`tests/test_pr23_review1_reference_fields.py`、`tests/test_pr23_review1_fallback_document_cap.py`；
+    `tests/test_overflow_source_fallback.py` 的分块汇总用例改为提供完整回执（另加无回执失败关闭用例与分块作用域用例）。
