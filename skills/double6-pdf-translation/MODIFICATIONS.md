@@ -98,6 +98,7 @@
 - `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/diagram_nodes.py`
 - `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/il_translator.py`
 - `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/il_translator_llm_only.py`
+- `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/line_fragments.py`（Double6 新增模块）
 - `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/overflow_source_fallback.py`（Double6 新增模块）
 - `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/paragraph_finder.py`
 - `vendor/babeldoc/babeldoc/format/pdf/document_il/midend/styles_and_formulas.py`
@@ -185,3 +186,12 @@
   - 新增 `tests/test_pr23_review2_incomplete_fallback_receipt.py`（复审原测试，仅改路径）、`tests/test_pr23_review2_receipt_consistency.py`；
     `tests/test_chunked_translation.py` 的块质量夹具改为带真实格式的 0 降级回执（`zero_fallback_quality`），
     `tests/test_overflow_source_fallback.py` 的 qa 用例回执补全上限字段；断言不变。
+- layout-r1 版面修复（realmodel-r1 评测问题 #3、#4、#5，2026-10-23）：
+  - 新增 vendored BabelDOC `midend/line_fragments.py`：`unify_line_layouts`（同一 `fallback_line` 物理行的字符统一归入完整覆盖
+    或唯一纵向覆盖 ≥60% 的正文类版面框；同类正文框嵌套时归外层，`_prefer_outer_duplicates`）、`split_table_rows_at_column_gutters`
+    （表格区内单行行段落按全表共有列间空白拆成单元格段落）。
+  - `midend/paragraph_finder.py`：`_group_characters_into_paragraphs` 先算逐字版面再调用 `unify_line_layouts`；在计算行宽中位数前
+    调用 `split_table_rows_at_column_gutters`。文件头日期更新为 2026-10-23。
+  - `midend/typesetting.py`：`TypesettingUnit.line_metric_height`（带字号的字符单元取 max(高度, 字号)），`_layout_typesetting_units`
+    的行高统计改用它。
+  - 新增 `tests/test_layout_line_fragments.py`、`tests/fixtures/layout_fragments/`。
