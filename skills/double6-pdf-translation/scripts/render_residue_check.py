@@ -33,7 +33,8 @@
 - 只在已确认的 References/参考文献 标题区内（无标题段不适用）另有三条补充，均要求条目开头的结构证据：
   行数上限只数含文字的行（等宽 URL 碎行不算）；题名里的动词（"What … to train if you have …"）只触发
   sentence_like 软否决时，若同时有作者/编号开头、年份、出处信号且无第一人称/句首连接词，按 strong 处理
-  （reason=strong_entry_title_verbs_waived）；只缺出处信号的 weak 条目，若作者开头 + 作者-年份日期位（纯作者列表 +
+  （reason=strong_entry_title_verbs_waived；2026-10-23 PR #23 复审：先用 entry_fields 证明“纯作者列表 + 题名 +
+  含年份的出处字段”结构，题名之外不得有任何否决，作者开头的叙述正文照常计数）；只缺出处信号的 weak 条目，若作者开头 + 作者-年份日期位（纯作者列表 +
   ". 2019." + ≤30 词题名）、虚词比例 ≤0.25、且紧邻 strong 条目，剔除（reason=author_year_sequence）。正文段、硬否决（指标、小数、多年份、
   叙述式引用）以及只是出现 References 字样的普通页照旧计数。
 """
@@ -268,13 +269,78 @@ def author_year_slot(text: str) -> bool:
     return len(LATIN_WORD.findall(match.group('rest'))) <= AUTHOR_YEAR_SLOT_MAX_TITLE_WORDS
 
 
-def title_verb_waiver(text: str, veto: list[str], lead: str | None, features: dict[str, Any]) -> bool:
-    """参考文献标题区内：题名里的普通动词只触发 sentence_like 软否决时放行。
+_FIELD_END = re.compile(r'[.?!](?=\s+\S)|[.?!]\s*$')
 
-    仍要求 strong 的全部结构证据（作者/编号开头、年份、出处信号），且没有第一人称和句首连接词；
-    指标、小数、多年份、叙述式引用等硬否决一律不放行。"""
-    return (veto == ['sentence_like'] and lead is not None and features['year'] and features['venue']
-            and not PRONOUN.search(text) and not SENTENCE_START.search(text))
+
+def _field_boundary(text: str, start: int = 0) -> int | None:
+    """从 start 起第一个字段结束符（. ? !）的位置；作者缩写（"J."、"M."）与常见缩写不算字段结束。"""
+    for match in _FIELD_END.finditer(text, start):
+        if match.group(0)[0] == '.':
+            token = text[:match.start()].rsplit(None, 1)[-1] if text[:match.start()].strip() else ''
+            token = token.lstrip('([')
+            if re.fullmatch(r"[A-Z]|[A-Z][a-z]?|al|et|Jr|Sr|St|vs", token):
+                continue
+        return match.start()
+    return None
+
+
+def _pure_author_list(segment: str) -> bool:
+    """纯作者列表：只由人名词（首字母大写）、缩写与 and/et al. 等小品词组成，且至少两个人名词。"""
+    tokens = [t.strip(',;:') for t in segment.split()]
+    tokens = [t for t in tokens if t and t != '&']
+    return len(tokens) >= 2 and all(_is_name_token(t) for t in tokens)
+
+
+def entry_fields(text: str) -> dict[str, str] | None:
+    """条目结构证据：拆出 作者 / 题名 / 其余（出处、年份）三个字段；拆不出返回 None。
+
+    两种已确认的结构：
+    * 作者-年份：``[n] 纯作者列表. 2019. 题名. 出处…``（与 author_year_slot 同一日期位）；
+    * 作者-题名：``[n] 纯作者列表. 题名. 出处…, 2019.``（年份在题名之后的字段里）。
+    作者字段必须是纯作者列表；叙述句（作者后紧跟普通小写词）拆不出作者字段。"""
+    flat = re.sub(r'(\w)-\s+([a-z])', r'\1\2', ' '.join(text.split()))
+    body = LEADING_MARKER.sub('', flat, count=1).strip()
+    slot = AUTHOR_YEAR_SLOT.match(body)
+    if slot and _pure_author_list(slot.group('authors')):
+        rest = slot.group('rest')
+        end = _field_boundary(rest)
+        if end is None:
+            return None
+        year = YEAR.search(body[slot.end('authors'):slot.start('rest')])
+        return {'authors': slot.group('authors'), 'title': rest[:end + 1].strip(),
+                'rest': (year.group(0) if year else '') + ' ' + rest[end + 1:].strip(), 'style': 'author_year'}
+    end = _field_boundary(body)
+    if end is None or not _pure_author_list(body[:end]):
+        return None
+    after = body[end + 1:].strip()
+    title_end = _field_boundary(after)
+    if title_end is None:
+        return None
+    rest = after[title_end + 1:].strip()
+    if not YEAR.search(rest):
+        return None
+    return {'authors': body[:end], 'title': after[:title_end + 1].strip(), 'rest': rest, 'style': 'author_title'}
+
+
+def title_verb_waiver(text: str, veto: list[str], lead: str | None, features: dict[str, Any]) -> bool:
+    """参考文献标题区内：只有题名字段里的普通动词触发 sentence_like 软否决时放行。
+
+    先证明条目结构（entry_fields：纯作者列表 + 题名字段 + 含年份的其余字段），题名之外的作者/出处字段
+    必须没有任何否决（谓语动词、第一人称、句首连接词等都不允许出现在题名之外），且出处信号在题名之外；
+    指标、小数、多年份、叙述式引用等硬否决一律不放行。作者开头的叙述正文拆不出作者字段，照常计数。"""
+    if veto != ['sentence_like'] or lead is None or not features['year'] or not features['venue']:
+        return False
+    if PRONOUN.search(text) or SENTENCE_START.search(text):
+        return False
+    fields = entry_fields(text)
+    if fields is None or not LATIN_WORD.search(fields['title']):
+        return False
+    if len(LATIN_WORD.findall(fields['title'])) > AUTHOR_YEAR_SLOT_MAX_TITLE_WORDS:
+        return False
+    outside = fields['authors'] + '. ' + fields['rest']
+    if prose_veto(outside) or RESEARCH_VERB.search(outside) or BE_HAVE.search(outside):
+        return False
+    return bool(VENUE.search(fields['rest']) or re.match(r'\s*(?:(?:19|20)\d{2}[a-z]?\s+)?In\s+[A-Z0-9]', fields['rest']))
 
 
 def headingless_entry_class(group: dict[str, Any], *, region: bool = False) -> str:
