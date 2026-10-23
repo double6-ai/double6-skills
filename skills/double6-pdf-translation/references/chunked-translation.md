@@ -123,6 +123,8 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
   macOS 上 create_time 在进程创建时记录，不随墙钟重新推算。
 - 资源门靠周期采样执行：整机冻结（虚拟机暂停期间 uptime 仍在走、采样线程不运行）时无法在冻结中途停止任务。实测两次：
   nist48 c011（第 1 轮）121.64 s、c008（第 2 轮）123.96 s，冻结后第一个采样即以 `task_timeout` 停止、回收 0.12–0.17 s，
-  回执如实记 `deadline_met=false`。
+  回执如实记 `deadline_met=false`；第 3 轮 nist48-rerun c008a 157.02 s（冻结 88 s）同理。
+- 非分块的单次 `candidate` 没有“身份竞态按瞬时失败重试一次”，墙钟跳变时该次运行失败关闭（需重跑）。
+- 块按顺序逐个执行（重任务并发 1），不做并行翻译。
 - 外层 `peakmem` 之类的整树合计计量会把重叠的两棵任务树相加（第 1 轮 arxiv2610 曾读到 5.172 GiB）；合同计量的是单个
   有界任务（同次实测单任务峰值最高 3.03 GiB）。
