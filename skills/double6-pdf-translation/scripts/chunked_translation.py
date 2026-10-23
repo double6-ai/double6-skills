@@ -45,9 +45,9 @@ CHUNKING_CONTRACT = {
     'resume': 'sha_verified_chunk_reuse_v1',
     # 块从整份文档的参考文献区中间开始时，把区状态（整份源文上同一套标题判定）带入该块的残留检查。
     'reference_region': 'document_state_carry_in_v1',
-    # 每次尝试结束后按启动 nonce（环境变量，不依赖墙钟）核查本尝试的进程是否仍存活；存活即回收并核实，
-    # 核实不了即失败关闭并停止调度后续块（重任务并发 1，不与残留进程重叠）。
-    'post_attempt_guard': 'launch_nonce_scan_v1',
+    # 每次尝试结束后逐张 launch 回执做整树核实（恢复扫描：nonce / 本次进程组 / 已核验父链；查询失败的同用户
+    # 进程记为归属未知，不当作已清理）；存活即回收并核实，核实不了即失败关闭并停止调度后续块（重任务并发 1）。
+    'post_attempt_guard': 'launch_receipt_recovery_scan_v2',
     # 块完成并登记后删除的后端中间件（字体子集化临时 PDF，单块可达数百 MB；不被任何回执/门引用）。
     # 删除前在 CHUNK_PRUNED.json 登记文件名、字节数与 SHA-256。
     'prune_backend_temporaries': ['_backend_working/*/temp_subset_input_mono.pdf',

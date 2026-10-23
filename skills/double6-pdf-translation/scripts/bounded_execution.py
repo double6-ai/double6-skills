@@ -152,7 +152,33 @@ def read_launch_identity(identity_path: Path, nonce: str) -> dict[str, Any]:
     return identity
 
 
-def launched_members(identity_path: Path, nonce: str) -> tuple[dict[str, Any], list[psutil.Process]]:
+def _query_failure_counts(proc: psutil.Process | None) -> bool:
+    """属性查询失败的进程是否必须记为“归属未知”：僵尸（不占资源、不再运行）与其它用户的进程（本任务进程
+    无法改变真实 UID）不计；其余（含 status/uids 本身也查不到的）一律计为未知，不当作“不是本任务”。"""
+    if proc is None:
+        return True
+    try:
+        if proc.status() == psutil.STATUS_ZOMBIE:
+            return False
+    except psutil.NoSuchProcess:
+        return False
+    except PROCESS_QUERY_ERRORS:
+        pass
+    if hasattr(os, "getuid"):
+        try:
+            return proc.uids().real == os.getuid()
+        except psutil.NoSuchProcess:
+            return False
+        except PROCESS_QUERY_ERRORS:
+            return True
+    return True
+
+
+def launched_members(identity_path: Path, nonce: str,
+                     unknown: list[dict[str, Any]] | None = None) -> tuple[dict[str, Any], list[psutil.Process]]:
+    """本任务进程树：根进程 + 子孙 + 本次进程组 + 环境里带本次 nonce 的进程（组外孤儿）。
+    ``unknown`` 非 None 时，归属查询失败（AccessDenied 等，非僵尸、同用户）的组外进程追加到该列表，
+    由调用方在最终回收时做恢复扫描并核实；不再静默跳过（PR #21 review-1）。"""
     identity = read_launch_identity(identity_path, nonce)
     if not identity:
         return {}, []
@@ -169,7 +195,7 @@ def launched_members(identity_path: Path, nonce: str) -> tuple[dict[str, Any], l
     except PROCESS_QUERY_ERRORS as exc:
         # 身份已核验：保留根进程（若已确认）交给后备回收，不把未知当空。
         raise OwnedDiscoveryError(f"children of {pid}: {type(exc).__name__}: {exc}"[:300], identity, members) from exc
-    # 父命令退出后仍可能有继承 stdout 的孙进程；仅补收本次独立进程组。
+    # 父命令退出后仍可能有继承 stdout 的孙进程；仅补收本次独立进程组与继承本次 nonce 的组外进程。
     if os.name == "posix" and identity.get("process_group") == pid:
         by_pid = {p.pid: p for p in members}
         # 按 PID 列表逐个检查（不用 process_iter 迭代器）：单个非本任务进程的查询错误只跳过该进程；
@@ -179,17 +205,36 @@ def launched_members(identity_path: Path, nonce: str) -> tuple[dict[str, Any], l
         except PROCESS_QUERY_ERRORS as exc:
             raise OwnedDiscoveryError(f"pids: {type(exc).__name__}: {exc}"[:300], identity, members) from exc
         for other in pids:
-            if other in by_pid:
+            if other in by_pid or other == os.getpid():
                 continue
+            proc = None
             try:
                 proc = psutil.Process(other)
-                same_group = os.getpgid(proc.pid) == pid
-                inherited_owner = (proc.create_time() >= identity['created_at']-.001
-                    and nonce in proc.environ().get('PAPER_TRANSLATION_BOUNDED_OWNERS','').split(',')) if not same_group else False
-                if same_group or inherited_owner:
+                try:
+                    if os.getpgid(proc.pid) == pid:
+                        by_pid[proc.pid] = proc
+                        continue
+                except ProcessLookupError:
+                    continue
+                except OSError:
+                    pass   # 进程组查不到：继续按 nonce 判定
+                older = proc.create_time() < identity["created_at"] - .001
+                try:
+                    owned = nonce in _owner_markers(proc)
+                except psutil.NoSuchProcess:
+                    continue
+                except PROCESS_QUERY_ERRORS:
+                    if older:
+                        continue   # 早于根进程（按当前时钟）的进程只接受正面 nonce 证据
+                    raise
+                if owned:
+                    # nonce 是本次启动唯一标识：即使墙钟回拨使其 create_time 看起来早于根进程，也属于本任务。
                     by_pid[proc.pid] = proc
-            except (ProcessLookupError, *PROCESS_QUERY_ERRORS):
+            except psutil.NoSuchProcess:
                 continue
+            except PROCESS_QUERY_ERRORS as exc:
+                if unknown is not None and _query_failure_counts(proc):
+                    unknown.append({"pid": other, "error": f"{type(exc).__name__}: {exc}"[:160]})
         members = list(by_pid.values())
     return identity, members
 
@@ -330,20 +375,29 @@ def _recovery_scan(identity: dict[str, Any], targets: dict[int, float], nonce: s
     for pid in pids:
         if pid in (me, 0) or pid in roots:
             continue
+        proc = None
         try:
             proc = psutil.Process(pid)
             born = proc.create_time()
             if born < root_ct - IDENTITY_TOLERANCE:
+                # 按当前时钟早于根进程：只接受正面 nonce 证据（墙钟回拨时本次后代的 create_time 也会整体前移）；
+                # 读不到环境的旧进程不计为未知（否则全机旧进程都会被计入）。
+                try:
+                    if nonce and nonce in _owner_markers(proc) and proc.status() != psutil.STATUS_ZOMBIE:
+                        info[pid] = {"proc": proc, "created_at": born, "ppid": None, "match": "launch_nonce", "unknown": None}
+                except PROCESS_QUERY_ERRORS:
+                    pass
                 continue
             if proc.status() == psutil.STATUS_ZOMBIE:
                 continue
             row: dict[str, Any] = {"proc": proc, "created_at": born, "ppid": None, "match": None, "unknown": None}
+            ppid_error = None
             try:
                 row["ppid"] = proc.ppid()
             except psutil.NoSuchProcess:
                 continue
-            except PROCESS_QUERY_ERRORS:
-                pass
+            except PROCESS_QUERY_ERRORS as exc:
+                ppid_error = f"ppid: {type(exc).__name__}: {exc}"[:160]
             if group_trusted and pgid and os.name == "posix":
                 try:
                     if os.getpgid(pid) == pgid:
@@ -360,11 +414,14 @@ def _recovery_scan(identity: dict[str, Any], targets: dict[int, float], nonce: s
                     continue
                 except PROCESS_QUERY_ERRORS as exc:
                     row["unknown"] = f"{type(exc).__name__}: {exc}"[:160]
+            if row["match"] is None and row["unknown"] is None and ppid_error:
+                # 父进程查不到：祖先链证据缺失，不能当作“不是本任务”（PR #21 review-1）。
+                row["unknown"] = ppid_error
             info[pid] = row
         except psutil.NoSuchProcess:
             continue
         except PROCESS_QUERY_ERRORS as exc:
-            info[pid] = {"proc": None, "created_at": None, "ppid": None, "match": None,
+            info[pid] = {"proc": proc, "created_at": None, "ppid": None, "match": None,
                          "unknown": f"{type(exc).__name__}: {exc}"[:160]}
     scan["candidates"] = len(info)
     owned = dict(roots)
@@ -412,16 +469,9 @@ def _recovery_scan(identity: dict[str, Any], targets: dict[int, float], nonce: s
         if row["match"]:
             scan["owned_found"].append({"pid": pid, "created_at": row["created_at"], "match": row["match"]})
         elif row["unknown"]:
-            same_user = True
-            if row["proc"] is not None and uid is not None:
-                try:
-                    same_user = row["proc"].uids().real == uid
-                except psutil.NoSuchProcess:
-                    continue
-                except PROCESS_QUERY_ERRORS:
-                    same_user = True
-            if same_user:
-                scan["ownership_unknown"].append({"pid": pid, "created_at": row["created_at"], "error": row["unknown"]})
+            if uid is not None and not _query_failure_counts(row["proc"]):
+                continue   # 僵尸或其它用户的进程（本任务进程无法改变真实 UID）
+            scan["ownership_unknown"].append({"pid": pid, "created_at": row["created_at"], "error": row["unknown"]})
     scan["complete"] = True
     return scan
 
@@ -718,8 +768,9 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
 
     def discover() -> tuple[dict[str, Any], list[psutil.Process]]:
         # 本任务进程树枚举失败：保留已核验的启动身份与已确认成员（后备回收用），并记为监控失败（结构化停止）。
+        unknown: list[dict[str, Any]] = []
         try:
-            identity, members = launched_members(identity_path, nonce)
+            identity, members = launched_members(identity_path, nonce, unknown)
         except OwnedDiscoveryError as exc:
             monitor_error.setdefault("detail", str(exc))
             monitor_error["owned_discovery_failed"] = True
@@ -729,6 +780,13 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
                 identities.setdefault(int(identity["pid"]), float(identity["created_at"]))
             remember(members)
             return identity, list(children.values())
+        if unknown:
+            # 组外进程归属查询失败（非僵尸、同用户）：不当作“不是本任务”。不中止任务，但此后每次回收都做
+            # 恢复扫描并核实；最终仍无法判定归属即 cleanup_unconfirmed（失败关闭）。
+            seen = monitor_error.setdefault("ownership_unknown_during_run", [])
+            for row in unknown:
+                if len(seen) < 20 and all(r["pid"] != row["pid"] for r in seen):
+                    seen.append(row)
         if identity:
             launch_identity.update(identity)
             identities.setdefault(int(identity["pid"]), float(identity["created_at"]))
@@ -737,7 +795,8 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
 
     def reclaim() -> dict[str, Any]:
         report = reclaim_owned_tree(launch_identity, identities, deadline,
-                                    discovery_failed=bool(monitor_error.get("owned_discovery_failed")), nonce=nonce)
+                                    discovery_failed=bool(monitor_error.get("owned_discovery_failed")
+                                                         or monitor_error.get("ownership_unknown_during_run")), nonce=nonce)
         # 恢复扫描正面核验为所属的进程并入已确认成员，后续每一轮回收与最终核实都逐个核对它们。
         for row in report.get("recovered_members", []):
             identities.setdefault(int(row["pid"]), float(row["created_at"]))
@@ -858,6 +917,7 @@ def run_bounded(argv: list[str], *, cwd: Path, receipt_dir: Path, operation: str
                "exception": result.get("exception"),
                "exception_message": result.get("exception_message"),
                "monitor_error": monitor_error.get("detail"),
+               "ownership_unknown_during_run": monitor_error.get("ownership_unknown_during_run", []),
                "launch_identity": {k: launch_identity.get(k) for k in ("pid", "created_at", "process_group")} if launch_identity else None,
                "cleanup": cleanup}
     if trigger or result.get("exception") or not cleanup["confirmed"]:

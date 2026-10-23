@@ -63,9 +63,15 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
      内部超时后任务以 `owned_descendants_after_command` 结束，原先按瞬时失败重试，第二次靠翻译缓存在 74–114 s 内完成；
      现在与任务超时同样二分，不依赖缓存。
    - 瞬时失败（内部错误等）重试 1 次；预检/路由/OCR 门拦截（`blocked`）与综合质量 `fail` 是确定结果，不重试。
-   - 尝试后核查（`post_attempt_guard`）：每次尝试结束后，按本尝试 launch 回执里的启动 nonce 扫描存活进程（环境变量
-     `PAPER_TRANSLATION_BOUNDED_OWNERS`，不依赖墙钟 create_time）。仍有存活 → 先回收（与续跑相同的 `reclaim_stale`）再复查，
-     记录 `POST_ATTEMPT_GUARD.json`；回收无法核实或复查仍存活 → 该块 `chunk_cleanup_unconfirmed`，**停止调度后续块**，整份失败关闭。
+   - 尝试后核查（`post_attempt_guard`，协议 `launch_receipt_recovery_scan_v2`）：每次尝试结束后，对本尝试**每张** launch 回执
+     做整树核实：先只读预检（与回收同一套恢复扫描——环境变量 `PAPER_TRANSLATION_BOUNDED_OWNERS` 里的本次 nonce、本次进程组、
+     逐环核验身份的父链），只有“扫描完整、无所属存活、无归属未知、根已退出或号码已复用、原进程组已空”才记为已无残留；
+     否则按 `reclaim_owned_tree(discovery_failed=True)` 回收并核实（已知可信根/成员按 PID + create_time 回收，带有效 nonce 的
+     时钟跳变按 nonce 刷新身份）。属性查询失败（environ/ppid/create_time 的 AccessDenied 等；僵尸与其它用户进程除外）的进程
+     记为归属未知、**不发信号**、写入 `unverified`（稳定原因码 `reason_codes`，如 `ownership_unknown`、
+     `descendant_enumeration_incomplete`、`receipt_verification_error`）；有任何一项 → 该块 `chunk_cleanup_unconfirmed`，
+     **停止调度后续块**，整份失败关闭。全机 nonce 扫描只作记录（`live_after_attempt`），不作“已清理”的依据（PR #21 review-1：
+     旧实现把读不到环境的进程静默丢弃，nonce 集合为空即 confirmed=true）。记录 `POST_ATTEMPT_GUARD.json`。
      实测原因：Linux 上 psutil 的 create_time 由 btime 推算，墙钟跳变（本机一次 +37 s）后既有身份核验把仍在运行的任务根进程
      判为“PID 已复用”而抛错、未回收，该树与下一块重叠运行（下一块被系统内存压力门停止）。
    - 进程树无法核实已回收（`owned_tree_cleanup_unconfirmed`）：不重试、不二分，失败关闭，并停止调度后续块（重任务并发 1）。
@@ -101,8 +107,9 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
 ## 续跑（`--resume`）
 
 - 同一 `--output`/`--receipts`；FREEZE、输入、路线、目标语言、模型、服务地址、分块合同必须与第一次完全相同，否则拒绝。
-- 先扫描本次运行目录下所有 launch 回执：仍有存活成员（根进程按 PID + create_time、原进程组、或继承本任务 nonce 的进程）
-  的逐个按 `reclaim_owned_tree(discovery_failed=True)` 回收并核实；任何一个无法核实即失败关闭，不续跑。
+- 先对本次运行目录下所有 launch 回执逐张做与尝试后核查相同的整树核实/回收（`reclaim_stale`）；回执读不了、缺字段、
+  归属未知、枚举不完整或回收未核实，任何一项即失败关闭（`owned_tree_cleanup_unconfirmed`，`STALE_RECLAIM.json` 的
+  `unverified` 非空、带 `reason_codes`），不续跑。
 - 上次 `started` 未结束的尝试记为 `abandoned`，新尝试用新目录（`attempt-N+1`）；旧目录保留作证据。
 - 已完成块只有在块 PDF、块 FREEZE、主版式译文、QA 可读件、综合质量、渲染清单、块回执（扫描块另含 OCR 重建源）的
   sha 全部一致时才复用；任何一个变化 → 记录 `invalidated.changed` 并重跑该块。
@@ -116,6 +123,10 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
 - 目录/页码标签/内部链接按原文恢复（指向原页）；外部 URI 链接由各块后端保留。
 - 每块单任务预算即冻结资源合同；整份文档没有总时限（块数 × 单块时间），也不并行（重任务并发 1）。
 - 单页超过单任务预算时不能翻译（失败关闭，记录实测），需要另行处理该页。
+- 归属判定只认正面证据（本次 nonce、本次进程组、已核验父链）；一个后代若离开进程组、清除该环境变量并在被观测前成为孤儿，
+  仍无法识别（`WHOLE_TREE_ASSUMPTIONS`）。反过来，创建于本任务之后、环境读不到的同用户进程（非僵尸）会被计为归属未知而
+  失败关闭——在 macOS 上若有这类常驻进程，守卫会保守地停止后续块（不会误杀）。墙钟回拨后看起来早于根进程的进程只接受
+  正面 nonce 证据；回拨 + 环境读不到同时出现的后代不能识别。
 - 既有有界执行（`bounded_execution`）的启动身份仍按 PID + create_time 核对。Linux 上 create_time = btime + 启动 jiffies，
   虚拟机暂停/墙钟校正会让 btime 前跳（实测 +198 s 至 +4701 s），任务运行中会因“PID 已复用”被拦截：该尝试按瞬时失败重试一次；
   尝试后核查以启动 nonce（环境变量）认出仍存活的进程树，回收时对“带本次 nonce 且记录身份读作 pid_reused”的进程以观测
