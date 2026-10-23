@@ -352,11 +352,11 @@ def test_clock_step_back_descendant_with_nonce_is_owned_and_reclaimed(monkeypatc
     assert t.signals == [93000002] and report['confirmed'] is True, report
 
 
-@pytest.mark.parametrize('env', [{be.OWNER_ENV: 'other' * 6}, None], ids=['older-other-nonce', 'older-unreadable'])
+# review-2：原先的 'older-unreadable' 参数断言“早于根进程且读不到 nonce → 不算未知、confirmed=True”，正是审稿指出的
+# 丢弃未知的行为；该组合（无单调启动证据时必须记为未知）移到 test_pr21_review2_clock_rollback_unknown.py。
+@pytest.mark.parametrize('env', [{be.OWNER_ENV: 'other' * 6}], ids=['older-other-nonce'])
 def test_older_process_without_this_nonce_is_neither_owned_nor_unknown(monkeypatch, env):
     row = {'created_at': 40.0, 'ppid': 1, 'env': env or {}}
-    if env is None:
-        row['fail'] = {'environ': psutil.AccessDenied}
     t = FakeTable({93000002: row}).install(monkeypatch)
     report = be.reclaim_owned_tree(IDENT, {ROOT: 100.0}, discovery_failed=True, nonce=NONCE)
     assert t.signals == [] and report['confirmed'] is True, report

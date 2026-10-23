@@ -31,6 +31,18 @@
     严格 unconfirmed（机器上另有属性读不到的同用户进程 → 归属未知，未发信号、无关进程存活）；该例与本轮相关正例改为接受严格
     unconfirmed（原因只能是归属未知、unverified 非空、未知项不是本例进程，并以警告输出明细），安全断言不变。这也意味着在存在这类
     进程的主机上，守卫会保守地停止后续块（不会误杀）。
+- PR #21 review-2（同一 P1 的相邻情形）：42bd58c 的 `_recovery_scan` 在“按墙钟早于根进程”分支读 nonce 失败后
+  `except: pass` 再 `continue`，把未知直接丢掉——墙钟回拨 + environ 读不到时，真实所属的脱组孤儿仍在写，却得到
+  already_gone=1 / confirmed=true / unverified=[]（审稿 Mac 与本机均复现）。review-1 文档写的“不能识别”与代码不符，已更正。修复：
+  - 新增 `scripts/launch_clock.py`（进程启动单调证据：Linux starttime 滴答 + boot_id；macOS ri_proc_start_abstime + bootsessionuuid）；
+    `bounded_launch` 在回执写入 `start_evidence`；`reclaim_owned_tree` 对没有证据的身份在根仍存活时现场读取并固定。
+  - `_recovery_scan` / `launched_members`：早于根进程且读不到 nonce → 仅当单调证据证明其早于根进程启动才排除，否则归属未知
+    （`code=older_than_root_nonce_unreadable`）；nonce 匹配但 status 读不到的旧进程仍按所属（此前同样被丢弃）。
+  - `_verify_receipt`：单调读数与回执一致的“看似复用”根进程记 `root_identity_clock_shifted`；预检发现、仍存活的归属未知不会因回收端
+    再扫一次没看到而消失；`reclaim_stale` / `post_attempt_guard` 输出 `detail_codes`。
+  - 不变：时钟回拨带有效 nonce 的回收、较早无 nonce 无关进程不误杀、原 34 项与原 4 个守卫用例的输入与断言、5 GiB / 120 s / 并发 1、
+    质量门、OCR/中文/分块续跑。review-1 自己的 FakeTable 用例 `older-unreadable` 参数断言的正是被丢弃的行为，已移除并由新用例取代。
+  - 测试 `tests/test_pr21_review2_clock_rollback_unknown.py`（18 项）。
 - 版本号：2.0.0-rc.9。
 
 ## 2.0.0-rc.8 本地发布候选 · 2026-10-22

@@ -125,8 +125,15 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
 - 单页超过单任务预算时不能翻译（失败关闭，记录实测），需要另行处理该页。
 - 归属判定只认正面证据（本次 nonce、本次进程组、已核验父链）；一个后代若离开进程组、清除该环境变量并在被观测前成为孤儿，
   仍无法识别（`WHOLE_TREE_ASSUMPTIONS`）。反过来，创建于本任务之后、环境读不到的同用户进程（非僵尸）会被计为归属未知而
-  失败关闭——在 macOS 上若有这类常驻进程，守卫会保守地停止后续块（不会误杀）。墙钟回拨后看起来早于根进程的进程只接受
-  正面 nonce 证据；回拨 + 环境读不到同时出现的后代不能识别。
+  失败关闭——在 macOS 上若有这类常驻进程，守卫会保守地停止后续块（不会误杀）。
+- 墙钟回拨后看起来早于根进程的进程（review-2 更正：此前文档写“不能识别”，实际代码在 42bd58c 及以前是把它静默丢弃、
+  仍报 confirmed）：带本次 nonce 即所属并回收；读不到 nonce 时，只有单调启动证据（launch 回执的 `start_evidence`：
+  Linux `/proc/<pid>/stat` starttime 滴答 + boot_id，macOS `ri_proc_start_abstime` + `kern.bootsessionuuid`；回执没有时仅在
+  根进程仍存活且身份一致时现场读取）证明它在同一次开机内启动早于根进程，才排除；否则记为归属未知
+  （`reason=ownership_unknown`，`code=older_than_root_nonce_unreadable`），不发信号、`unverified` 非空，守卫与续跑失败关闭、
+  停止后续块。create_time 看似复用但单调启动读数与回执一致的根进程记为 `root_identity_clock_shifted`（不当作已退出）。
+  代价：没有单调证据时（旧回执/手写身份且根已退出、或其它平台），任何读不到环境的同用户旧进程都会让守卫 unconfirmed；
+  新回执在 Linux/macOS 上带证据，这类早于根进程启动的无关旧进程按证据排除，不受影响。
 - 既有有界执行（`bounded_execution`）的启动身份仍按 PID + create_time 核对。Linux 上 create_time = btime + 启动 jiffies，
   虚拟机暂停/墙钟校正会让 btime 前跳（实测 +198 s 至 +4701 s），任务运行中会因“PID 已复用”被拦截：该尝试按瞬时失败重试一次；
   尝试后核查以启动 nonce（环境变量）认出仍存活的进程树，回收时对“带本次 nonce 且记录身份读作 pid_reused”的进程以观测
