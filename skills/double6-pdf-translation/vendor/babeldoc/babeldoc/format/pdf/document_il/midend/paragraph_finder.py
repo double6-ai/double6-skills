@@ -368,6 +368,10 @@ class ParagraphFinder:
                 paragraph.page_height = page_height
             code_label = self._classify_code_label_paragraph(paragraph)
             layout_sensitive_label = self._classify_layout_sensitive_paragraph(paragraph)
+            if (layout_sensitive_label == "table_caption" and paragraph.toc_row_group_json
+                    and paragraph.layout_label in {"toc_entry", "chapter_index_entry"}):
+                # 目录拆行已证明这是“表目录”条目（Table N … 页码），不是表题。
+                layout_sensitive_label = None
             if code_label:
                 paragraph.layout_label = code_label
             elif layout_sensitive_label:
@@ -988,7 +992,8 @@ class ParagraphFinder:
 
     def _separate_toc_page_numbers(self, paragraphs: list[PdfParagraph]) -> None:
         """目录单行的页码原位保留；仅在原字符几何证明存在独立右列时拆分。"""
-        has_toc_heading = any(re.fullmatch(r'(?:table of |chapter )?contents|目录',
+        # 词间距不足时标题会读成 “Table ofContents”，按词序匹配、不依赖空格。
+        has_toc_heading = any(re.fullmatch(r'(?:table\s*of\s*|chapter\s*)?contents|目录',
             self._paragraph_text_ascii(p).strip(), re.I) for p in paragraphs)
         result = []
         for paragraph in paragraphs:

@@ -192,6 +192,8 @@
     （表格区内单行行段落按全表共有列间空白拆成单元格段落）。
   - `midend/paragraph_finder.py`：`_group_characters_into_paragraphs` 先算逐字版面再调用 `unify_line_layouts`；在计算行宽中位数前
     调用 `split_table_rows_at_column_gutters`。文件头日期更新为 2026-10-23。
+    角色判定时，目录拆行产生的 `toc_entry`/`chapter_index_entry`（带 `toc_row_group_json`）不再被改标为 `table_caption`；
+    `_separate_toc_page_numbers` 的目录标题匹配改为 `(?:table\s*of\s*|chapter\s*)?contents|目录`。
   - `midend/typesetting.py`：`TypesettingUnit.line_metric_height`（带字号的字符单元取 max(高度, 字号)），`_layout_typesetting_units`
     的行高统计改用它。
   - 新增 `tests/test_layout_line_fragments.py`、`tests/fixtures/layout_fragments/`。
