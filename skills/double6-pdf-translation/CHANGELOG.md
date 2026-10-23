@@ -27,6 +27,10 @@
   - 测试 `tests/test_pr21_review1_guard_query_failures.py`：审稿 4 例（root/orphan × 正常/environ 拒绝）、run_bounded 真实脱组孤儿正反例、
     恢复扫描逐项查询失败正反例、resume 失败关闭/正常续跑，以及 PR #19 第 10 轮真实多跳父链的加固副本（标记原子发布、只读完整 JSON、
     启动后全程 try/finally；真实覆盖未知时接受严格 unconfirmed 且 unverified 非空）。原文件属于原 34 项，未改动。
+  - CI（提交 7b84c5a，pdf Linux smoke 499 passed / 1 failed / 1 skipped）：`test_chunk_clock_step_reclaim.py` 的无 nonce 负例在 runner 上得到
+    严格 unconfirmed（机器上另有属性读不到的同用户进程 → 归属未知，未发信号、无关进程存活）；该例与本轮相关正例改为接受严格
+    unconfirmed（原因只能是归属未知、unverified 非空、未知项不是本例进程，并以警告输出明细），安全断言不变。这也意味着在存在这类
+    进程的主机上，守卫会保守地停止后续块（不会误杀）。
 - 版本号：2.0.0-rc.9。
 
 ## 2.0.0-rc.8 本地发布候选 · 2026-10-22
