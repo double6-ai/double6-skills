@@ -755,3 +755,28 @@ def test_reference_region_carry_in_matches_the_whole_document_check(tmp_path):
     prose_t = save(tmp_path / 'pt.pdf', doc(ZH_PARA, 'china-s', tail=[EN_PARA] * 3))
     carried_prose = check_render_residue(page2(prose_s, 'cps.pdf'), page2(prose_t, 'cpt.pdf'), region_open_at_start=True)
     assert carried_prose['pages'][0]['severity'] == 'high'
+
+
+def test_chunked_run_creates_a_missing_workspace_root(tmp_path, long_doc, monkeypatch, capsys):
+    # CI：PAPER_TRANSLATION_WORKSPACE 指向尚不存在的目录；有界任务以它为 cwd，须先建好再启动 chunk-plan。
+    pdf, freeze_path = long_doc
+    root = tmp_path / 'fresh-workspace' / 'nested'
+    monkeypatch.setattr(wf, 'ROOT', root)
+    runner = FakeChunkRunner()
+    monkeypatch.setattr(cw, 'CHUNK_RUNNER', runner)
+    code, result = _main(chunked_args(tmp_path, pdf, freeze_path), capsys)
+    assert root.is_dir()
+    assert code == 0 and result['merged'] is True and runner.calls == ['c001', 'c002', 'c003']
+
+
+def test_chunked_run_fails_closed_when_workspace_root_is_a_file(tmp_path, long_doc, monkeypatch, capsys):
+    # 负例：工作区路径被普通文件占用——不得改写该文件，不启动任何块，非零退出。
+    pdf, freeze_path = long_doc
+    root = tmp_path / 'occupied'
+    root.write_text('not a directory')
+    monkeypatch.setattr(wf, 'ROOT', root)
+    runner = FakeChunkRunner()
+    monkeypatch.setattr(cw, 'CHUNK_RUNNER', runner)
+    code = wf.main(chunked_args(tmp_path, pdf, freeze_path))
+    capsys.readouterr()
+    assert code != 0 and runner.calls == [] and root.read_text() == 'not a directory'

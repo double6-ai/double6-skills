@@ -356,6 +356,9 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
         health = wf.doctor(args.base_url, args.model, include_ocr=args.route != 'digital_pdf')
         if health['blockers']:
             raise ValueError('required environment not ready')
+        # 有界任务（chunk-plan / 块 / chunk-merge）以运行目录为 cwd：首次使用的新工作区（如 CI 的
+        # PAPER_TRANSLATION_WORKSPACE）此时可能尚不存在，先建好；路径被普通文件占用则照常报错失败关闭。
+        wf.ROOT.mkdir(parents=True, exist_ok=True)
         identity = {'freeze_ref': wf.ref(args.freeze), 'input_ref': wf.ref(args.input), 'route': args.route,
                     'target_language': args.target_language, 'model': args.model, 'base_url': args.base_url,
                     'contract': CHUNKING_CONTRACT}
