@@ -1,4 +1,4 @@
-# Double6 Skills 维护版本（2026-10-23，PR #23 review-1 更新）：新增模块，见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
+# Double6 Skills 维护版本（2026-10-23，PR #23 review-2 更新）：新增模块，见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 """硬可读字号下限溢出时的“保留原文”降级（overflow_source_fallback）。
 
 背景：排版先在可读字号下限以内缩字、在原框内折行、再按既有规则借用空白；全部试过仍放不下时，
@@ -174,3 +174,77 @@ def cap_violations(fallback_pages: list[int], paragraphs_per_page: dict[int, int
             # 原始分母：每页段落数与整份段落数（分块合并据此在整份范围重算上限）。
             "paragraphs_per_page": {str(p): int(n) for p, n in sorted(paragraphs_per_page.items())},
             "segment_count": int(total)}
+
+
+CAP_STATUSES = ("none", "applied", "revoked_cap_exceeded")
+CAP_SCOPES = ("document", DOCUMENT_CAP_SCOPE_CHUNK_MERGE)
+
+
+def _int(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def validate_receipt(data) -> list[str]:
+    """核对排版回执（typesetting_writeback_report.json）自身是否一致；返回问题码列表（空 = 可核对）。
+
+    声明计数（``source_fallback_count``、``source_fallback_cap.count``）、逐条数组 ``source_fallbacks``、
+    回执状态、上限状态、作用域与原始分母必须相互一致。任何缺失或矛盾都不能折算成“0 条降级”：
+    调用方据此失败关闭（``overflow_source_fallback_receipt_incomplete``）。没有旧格式兼容规则——
+    缺这些字段的回执同样视为不可核对。"""
+    if not isinstance(data, dict):
+        return ["receipt_not_object"]
+    problems = []
+    rows = data.get("source_fallbacks")
+    if not isinstance(rows, list) or any(not isinstance(r, dict) for r in rows):
+        problems.append("source_fallbacks_missing_or_not_list")
+        rows = None
+    failures = data.get("failures")
+    if not isinstance(failures, list):
+        problems.append("failures_missing_or_not_list")
+    declared = data.get("source_fallback_count")
+    if not _int(declared):
+        problems.append("declared_count_missing")
+    elif rows is not None and declared != len(rows):
+        problems.append("declared_count_mismatch")
+    cap = data.get("source_fallback_cap")
+    if not isinstance(cap, dict):
+        return problems + ["cap_missing"]
+    cap_count = cap.get("count")
+    if not _int(cap_count):
+        problems.append("cap_count_missing")
+    cap_status = cap.get("status")
+    if "status" not in cap and rows is not None:
+        # 上限状态未写出时只按“已应用 / 无降级”理解，并且照样要求计数一致（撤销状态必须显式写出）。
+        cap_status = "applied" if rows else "none"
+    if cap_status not in CAP_STATUSES:
+        problems.append("cap_status_invalid")
+    if cap.get("document_cap_scope") not in CAP_SCOPES:
+        problems.append("cap_scope_invalid")
+    ppp = cap.get("paragraphs_per_page")
+    if (not isinstance(ppp, dict) or not ppp or not all(isinstance(k, str) and k.isdigit() for k in ppp)
+            or not all(_int(v) for v in ppp.values())):
+        problems.append("segment_counts_missing")
+        ppp = None
+    else:
+        if cap.get("segment_count") != sum(ppp.values()):
+            problems.append("segment_count_mismatch")
+        if "page_count" in data and data.get("page_count") != len(ppp):
+            problems.append("page_count_mismatch")
+    if rows is not None:
+        if any(not _int(r.get("page_index")) or not isinstance(r.get("paragraph_id"), str) or not r.get("paragraph_id")
+               or (ppp is not None and str(r.get("page_index")) not in ppp) for r in rows):
+            problems.append("fallback_record_invalid")
+        if _int(cap_count):
+            if cap_status == "applied" and not (cap_count == len(rows) and rows):
+                problems.append("cap_count_mismatch")
+            if cap_status == "none" and (cap_count or rows):
+                problems.append("cap_count_mismatch")
+            if cap_status == "revoked_cap_exceeded" and (rows or not cap_count):
+                problems.append("cap_count_mismatch")
+        if isinstance(failures, list):
+            expected = "blocked" if failures else ("needs_review" if rows else "passed")
+            if data.get("status") != expected:
+                problems.append("receipt_status_inconsistent")
+            if cap_status == "revoked_cap_exceeded" and not failures:
+                problems.append("receipt_status_inconsistent")
+    return sorted(set(problems))

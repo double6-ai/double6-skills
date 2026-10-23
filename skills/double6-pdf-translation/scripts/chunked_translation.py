@@ -463,54 +463,91 @@ def _fallback_rules():
     return module
 
 
+def _receipt_problems(osf, cid: str, pages: int, quality: dict[str, Any], check: Any) -> tuple[list[dict], dict | None]:
+    """逐块核对：恰好一份可核对的排版回执；回执文件按 SHA-256 重新读取并重新核对（续跑复用时同样执行）；
+    块综合质量中的摘要必须与回执原文一致。返回 (问题列表, 回执摘要)。"""
+    problems = []
+    for item in quality.get('pending') or []:
+        if isinstance(item, dict) and item.get('rule') == 'overflow_source_fallback_receipt_invalid':
+            problems.append({'chunk': cid, 'reason': 'receipt_invalid', 'evidence': item.get('evidence'),
+                             'problems': item.get('problems'), 'declared_count': item.get('declared_count')})
+    for item in quality.get('issues') or []:
+        if isinstance(item, dict) and item.get('id') == osf.RECEIPT_INCOMPLETE_CODE:
+            problems.append({'chunk': cid, 'reason': 'chunk_quality_receipt_incomplete'})
+    if not isinstance(check, dict):
+        return problems + [{'chunk': cid, 'reason': 'fallback_check_missing'}], None
+    if check.get('invalid') or check.get('count_verifiable') is False:
+        problems.append({'chunk': cid, 'reason': 'receipt_invalid', 'invalid': check.get('invalid')})
+    receipts = check.get('receipts')
+    if not isinstance(receipts, list) or len(receipts) != 1 or not isinstance(receipts[0], dict):
+        reason = 'typesetting_receipt_missing' if not receipts else 'typesetting_receipt_not_unique'
+        return problems + [{'chunk': cid, 'reason': reason}], None
+    summary = receipts[0]
+    ref = summary.get('receipt') if isinstance(summary.get('receipt'), dict) else {}
+    path = Path(str(ref.get('path') or ''))
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return problems + [{'chunk': cid, 'reason': 'receipt_file_missing', 'path': str(path)}], None
+    if hashlib.sha256(raw).hexdigest() != ref.get('sha256'):
+        return problems + [{'chunk': cid, 'reason': 'receipt_file_changed', 'path': str(path)}], None
+    try:
+        data = json.loads(raw.decode('utf-8'))
+    except (UnicodeDecodeError, ValueError):
+        return problems + [{'chunk': cid, 'reason': 'receipt_unparsable', 'path': str(path)}], None
+    bad = osf.validate_receipt(data)
+    if bad:
+        return problems + [{'chunk': cid, 'reason': 'receipt_inconsistent', 'problems': bad}], None
+    cap = data['source_fallback_cap']
+    rows = [{k: r.get(k) for k in ('page_index', 'paragraph_id', 'role', 'category')} for r in data['source_fallbacks']]
+    ppp = cap['paragraphs_per_page']
+    if sorted(ppp) != sorted(str(i) for i in range(pages)):
+        problems.append({'chunk': cid, 'reason': 'segment_counts_do_not_cover_chunk_pages'})
+    if cap.get('document_cap_scope') != osf.DOCUMENT_CAP_SCOPE_CHUNK_MERGE:
+        problems.append({'chunk': cid, 'reason': 'receipt_scope_not_chunk_merge', 'scope': cap.get('document_cap_scope')})
+    if data.get('failures'):
+        problems.append({'chunk': cid, 'reason': 'receipt_has_writeback_failures'})
+    pending = sum(int(p.get('count') or 0) for p in quality.get('pending') or []
+                  if isinstance(p, dict) and p.get('rule') == 'overflow_source_fallback')
+    if (summary.get('fallbacks') != rows or summary.get('paragraphs_per_page') != ppp
+            or summary.get('count') != len(rows) or int(check.get('count') or 0) != len(rows) or pending != len(rows)):
+        problems.append({'chunk': cid, 'reason': 'quality_summary_disagrees_with_receipt', 'records': len(rows),
+                         'summary_count': summary.get('count'), 'check_count': check.get('count'), 'pending_count': pending})
+    return problems, {'paragraphs_per_page': ppp, 'fallbacks': rows}
+
+
 def document_fallback_cap(chunks: list[dict[str, Any]]) -> dict[str, Any]:
     """整份文档范围的原文保留降级上限（分块合并时统一执行，不随块数/块大小/续跑变化）。
 
     分母是各块排版回执记录的原始每页段落数（页按整份文档页码），上限 = 同一公式的每页 max(3, 20%) 与
-    整份 max(4, ceil(10% × 整份段落数))；每块各自的最低额度不会放大整份上限。任何一块有降级时，
-    每一块都必须给出完整分母与逐条降级记录，缺失或不一致即 ``incomplete``（失败关闭）。"""
+    整份 max(4, ceil(10% × 整份段落数))；每块各自的最低额度不会放大整份上限。每一块都必须有恰好一份
+    可核对的排版回执（声明计数、逐条记录、状态、作用域、原始分母一致，且文件按 SHA-256 未变）；
+    任何一块缺失、损坏或矛盾即 ``incomplete``（失败关闭），即使没有任何块声明降级也一样——
+    无法核对的计数绝不当作 0。没有旧格式兼容规则。"""
     osf = _fallback_rules()
     claimed, problems, fallbacks, per_page, denominators = 0, [], [], {}, {}
     for row in chunks:
         chunk, quality = row['chunk'], row.get('quality') or {}
         cid, start = chunk['id'], int(chunk['start'])
         pages = int(chunk.get('pages') or (int(chunk['end']) - start + 1))
-        pending = sum(int(p.get('count') or 0) for p in quality.get('pending') or []
-                      if isinstance(p, dict) and p.get('rule') == 'overflow_source_fallback')
-        claimed += pending
-        check = quality.get('overflow_source_fallback_check')
-        receipts = (check or {}).get('receipts') if isinstance(check, dict) else None
-        if not isinstance(receipts, list) or len(receipts) != 1:
-            problems.append({'chunk': cid, 'reason': 'typesetting_receipt_missing' if not receipts else 'typesetting_receipt_not_unique'})
+        claimed += sum(int(p.get('count') or 0) for p in quality.get('pending') or []
+                       if isinstance(p, dict) and p.get('rule') == 'overflow_source_fallback')
+        if not row.get('quality'):
+            problems.append({'chunk': cid, 'reason': 'chunk_quality_missing'})
             continue
-        receipt = receipts[0]
-        ppp = receipt.get('paragraphs_per_page')
-        rows = receipt.get('fallbacks')
-        if (not isinstance(ppp, dict) or sorted(ppp) != sorted(str(i) for i in range(pages))
-                or not all(isinstance(v, int) and v >= 0 for v in ppp.values())):
-            problems.append({'chunk': cid, 'reason': 'segment_counts_missing'})
+        found, verified = _receipt_problems(osf, cid, pages, quality, quality.get('overflow_source_fallback_check'))
+        problems += found
+        if found or verified is None:
             continue
-        if (not isinstance(rows, list) or len(rows) != int(receipt.get('count') or 0) or len(rows) != pending
-                or int(check.get('count') or 0) != len(rows)):
-            problems.append({'chunk': cid, 'reason': 'fallback_records_incomplete', 'records': len(rows) if isinstance(rows, list) else None,
-                             'receipt_count': receipt.get('count'), 'pending_count': pending})
-            continue
-        bad = [r for r in rows if not isinstance(r, dict) or not isinstance(r.get('page_index'), int)
-               or not 0 <= r['page_index'] < pages or not r.get('paragraph_id')]
-        if bad:
-            problems.append({'chunk': cid, 'reason': 'fallback_record_invalid', 'records': bad[:5]})
-            continue
-        for key, value in ppp.items():
+        for key, value in verified['paragraphs_per_page'].items():
             per_page[start + int(key)] = value
-        denominators[cid] = {'pages': [start, start + pages - 1], 'segment_count': sum(ppp.values())}
-        fallbacks += [{'chunk': cid, 'document_page': start + r['page_index'], 'page_index': r['page_index'],
-                       **{k: r.get(k) for k in ('paragraph_id', 'role', 'category')}} for r in rows]
-    if not claimed and not fallbacks:
-        return {'status': 'none', 'count': 0, 'segment_count': sum(per_page.values()) if not problems else None,
-                'chunk_denominators': denominators}
+        denominators[cid] = {'pages': [start, start + pages - 1], 'segment_count': sum(verified['paragraphs_per_page'].values())}
+        fallbacks += [{'chunk': cid, 'document_page': start + r['page_index'], **r} for r in verified['fallbacks']]
     if problems:
-        return {'status': 'incomplete', 'code': osf.RECEIPT_INCOMPLETE_CODE, 'count': claimed, 'problems': problems,
-                'chunk_denominators': denominators}
+        return {'status': 'incomplete', 'code': osf.RECEIPT_INCOMPLETE_CODE, 'count': None, 'claimed_count': claimed,
+                'verified_count': len(fallbacks), 'problems': problems, 'chunk_denominators': denominators}
+    if not fallbacks:
+        return {'status': 'none', 'count': 0, 'segment_count': sum(per_page.values()), 'chunk_denominators': denominators}
     cap = osf.cap_violations([f['document_page'] for f in fallbacks], per_page)
     return {'status': 'exceeded' if cap['violations'] else 'within_cap', 'code': osf.CAP_CODE if cap['violations'] else None,
             'document_cap': cap['document_cap'], 'page_caps': cap['page_caps'], 'segment_count': cap['segment_count'],
@@ -564,7 +601,7 @@ def aggregate_quality(chunks: list[dict[str, Any]], merge_issues: list[dict[str,
                       'count': fallback_cap.get('count'), 'document_cap': fallback_cap.get('document_cap'),
                       'violations': fallback_cap.get('violations'), 'problems': fallback_cap.get('problems'),
                       'message': ('原文保留降级超过整份文档上限，整份失败关闭' if fallback_cap['status'] == 'exceeded'
-                                  else '有原文保留降级，但某块缺少原始段落数或逐条降级记录，无法核对整份上限，失败关闭')})
+                                  else '某块排版回执缺失、损坏或自相矛盾（声明计数/逐条记录/状态/作用域/原始分母），原文保留降级无法核对，失败关闭')})
     issues += extra
     status = worst
     if any(i.get('severity') in ('high', 'critical', 'blocker') for i in extra):
