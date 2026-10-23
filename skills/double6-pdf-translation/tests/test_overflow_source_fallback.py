@@ -256,12 +256,75 @@ def test_qa_pipeline_invalid_receipt_is_pending(tmp_path):
     assert audit['pending'] and audit['pending'][0]['rule'] == 'overflow_source_fallback_receipt_invalid'
 
 
-def test_chunk_aggregate_keeps_fallback_pending_and_counts():
+def test_chunk_aggregate_keeps_fallback_pending_and_counts(tmp_path):
     import chunked_translation as ct
-    chunk = {'id': 'c002', 'start': 5, 'end': 8}
-    quality = {'status': 'unverified', 'issues': [], 'pending': [{'id': 'overflow_source_fallback',
-               'rule': 'overflow_source_fallback', 'count': 2, 'pages': [1, 3]}]}
+    import qa_pipeline
+    chunk = {'id': 'c002', 'start': 5, 'end': 8, 'pages': 4}
+    # 合并按原始分母核对整份上限，块回执须完整（PR #23 review-1）：按后端格式写出完整回执再审计。
+    work = tmp_path / '_backend_working' / 'c002'
+    work.mkdir(parents=True)
+    rows = [{'code': 'overflow_source_fallback', 'page_index': p, 'paragraph_id': f'x{p}', 'role': 'table_cell',
+             'category': 'table_cell', 'source_text': 'A', 'translated_text': '甲'} for p in (0, 2)]
+    cap = osf.cap_violations([0, 2], {i: 10 for i in range(4)})
+    cap.update(status='applied', document_cap_scope='chunk_merge')
+    (work / 'typesetting_writeback_report.json').write_text(json.dumps({
+        'status': 'needs_review', 'failures': [], 'source_fallback_count': 2, 'source_fallbacks': rows,
+        'source_fallback_cap': cap}), encoding='utf-8')
+    audit = qa_pipeline.audit_overflow_source_fallbacks(tmp_path)
+    quality = {'status': 'unverified', 'issues': [], 'pending': audit['pending'],
+               'overflow_source_fallback_check': {'count': audit['count'], 'receipts': audit['receipts']}}
+    assert quality['pending'][0]['count'] == 2 and quality['pending'][0]['pages'] == [1, 3]
     result = ct.aggregate_quality([{'chunk': chunk, 'quality': quality}], [])
     assert result['status'] == 'unverified' and result['overflow_source_fallback_count'] == 2
     row = [p for p in result['pending'] if p.get('rule') == 'overflow_source_fallback'][0]
     assert row['document_pages'] == [5, 7] and row['chunk'] == 'c002'
+    assert result['overflow_source_fallback_document_cap']['status'] == 'within_cap'
+
+
+def test_chunk_aggregate_pending_without_receipt_fails_closed():
+    """块综合质量只有降级待复核、没有可核对的回执（原始分母/逐条记录）：整份失败关闭。"""
+    import chunked_translation as ct
+    chunk = {'id': 'c002', 'start': 5, 'end': 8, 'pages': 4}
+    quality = {'status': 'unverified', 'issues': [], 'pending': [{'id': 'overflow_source_fallback',
+               'rule': 'overflow_source_fallback', 'count': 2, 'pages': [1, 3]}]}
+    result = ct.aggregate_quality([{'chunk': chunk, 'quality': quality}], [])
+    assert result['status'] == 'fail'
+    assert any(i['id'] == 'overflow_source_fallback_receipt_incomplete' for i in result['issues'])
+
+
+# ---------------- 分块：块内只执行按页上限，整份上限推迟到合并 ----------------
+
+def _doc_only_violation(tmp_path):
+    ts = typesetter(tmp_path)
+    pages = []
+    for n in range(5):                          # 5 页 × 4 段，每页 1 条降级：按页不超（上限 3），整份 5 > 4
+        cell = overflowed(paragraph('table_cell', f'Cell {n}'), translated=f'单元格 {n}')
+        pg = page([cell] + [paragraph('plain text', f'Body {n}{i}') for i in range(3)], number=n)
+        assert ts._apply_overflow_source_fallback(cell, pg, {}) is True
+        pages.append(pg)
+    return ts, il.Document(page=pages, total_pages=5)
+
+
+def test_document_scope_revokes_document_only_violation(tmp_path, monkeypatch):
+    monkeypatch.delenv(osf.DOCUMENT_CAP_SCOPE_ENV, raising=False)
+    ts, doc = _doc_only_violation(tmp_path)
+    cap = ts._enforce_overflow_fallback_cap(doc)
+    assert cap['document_cap_scope'] == 'document' and cap['status'] == 'revoked_cap_exceeded'
+    assert cap['violations'] == [{'scope': 'document', 'count': 5, 'cap': 4}]
+    assert cap['segment_count'] == 20 and cap['paragraphs_per_page'] == {str(n): 4 for n in range(5)}
+
+
+def test_chunk_merge_scope_defers_only_document_cap(tmp_path, monkeypatch):
+    monkeypatch.setenv(osf.DOCUMENT_CAP_SCOPE_ENV, osf.DOCUMENT_CAP_SCOPE_CHUNK_MERGE)
+    ts, doc = _doc_only_violation(tmp_path)
+    cap = ts._enforce_overflow_fallback_cap(doc)
+    assert cap['document_cap_scope'] == 'chunk_merge' and cap['status'] == 'applied'
+    assert cap['deferred_violations'] == [{'scope': 'document', 'count': 5, 'cap': 4}]
+    assert cap['paragraphs_per_page'] == {str(n): 4 for n in range(5)}
+    # 按页上限在分块里照旧执行：同一页 4 条 > 3，整批撤销。
+    ts2 = typesetter(tmp_path)
+    cells = [overflowed(paragraph('table_cell', f'Cell {i}', y=420 + 20 * i), translated=f'单元格 {i}') for i in range(4)]
+    pg = page(cells)
+    assert all(ts2._apply_overflow_source_fallback(p, pg, {}) for p in cells)
+    cap2 = ts2._enforce_overflow_fallback_cap(il.Document(page=[pg], total_pages=1))
+    assert cap2['status'] == 'revoked_cap_exceeded' and cap2['violations'][0]['scope'] == 'page'

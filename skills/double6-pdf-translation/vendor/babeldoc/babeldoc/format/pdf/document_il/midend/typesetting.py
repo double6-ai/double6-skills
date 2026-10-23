@@ -1509,14 +1509,21 @@ class Typesetting:
         return False
 
     def _enforce_overflow_fallback_cap(self, document) -> dict:
-        """按页/文档上限检查降级；超限时整批撤销，恢复原失败状态（照旧 fail closed）。"""
+        """按页/文档上限检查降级；超限时整批撤销，恢复原失败状态（照旧 fail closed）。
+        回执记录原始分母（每页段落数、整份段落数）；分块时整份上限推迟到合并统一执行。"""
         from babeldoc.format.pdf.document_il.midend import overflow_source_fallback as osf
         fallbacks = getattr(self, "_overflow_fallbacks", None) or []
         per_page = {page.page_number: sum(1 for p in page.pdf_paragraph if (p.unicode or "").strip())
                     for page in document.page}
         cap = osf.cap_violations([f["page_index"] for f in fallbacks], per_page)
         cap["status"] = "none" if not fallbacks else "applied"
-        if fallbacks and cap["violations"]:
+        cap["document_cap_scope"] = osf.document_cap_scope()
+        enforced = cap["violations"]
+        if cap["document_cap_scope"] == osf.DOCUMENT_CAP_SCOPE_CHUNK_MERGE:
+            # 分块：本块只执行按页上限；整份上限在合并时按原始整份段落数统一执行（见 chunked_translation）。
+            enforced = [v for v in cap["violations"] if v.get("scope") == "page"]
+            cap["deferred_violations"] = [v for v in cap["violations"] if v.get("scope") != "page"]
+        if fallbacks and enforced:
             cap["status"] = "revoked_cap_exceeded"
             if getattr(self, "_overflow_fallback_rejections", None) is None:
                 self._overflow_fallback_rejections = {}
