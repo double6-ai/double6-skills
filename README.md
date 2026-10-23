@@ -1,15 +1,19 @@
 # Double6 Skills
 
-Double6 AI 维护的开源 agent skills。仓库目前包含四个可以独立安装的 skill：一个负责多来源深度研究，一个负责保留版式的 PDF 中文翻译，一个负责原生可编辑 PPTX 闭环，一个负责构建离线单文件的个人工作台。
+**想学会用 AI，从一件具体的事开始。**
+
+[Double6 · 普通人的 AI 入门网站](https://double6.cn) 提供中文 AI 入门知识、工具介绍和实际任务教程。刚开始接触 AI，可以从基础内容学起；已经有想做的事，可以按场景寻找方法。
+
+本仓库由 Double6 AI 维护，源于我们建设 Double6 网站时遇到的实际需求。在调研和实测中，我们发现现有开源 skills 在部分任务上仍有功能缺口或改进空间，于是围绕这些问题开发和完善了一系列解决方案。当前包括 PDF 翻译、深度研究、个人工作台和 PPT 制作等可独立安装的 skills。
 
 ## Skills
 
 | Skill | 适合做什么 | 运行要求 | 公开状态 |
 |---|---|---|---|
-| [`double6-deep-research`](skills/double6-deep-research/) | 研究开放性问题、比较多个对象、形成有证据的决策建议，并交付可核验的完整报告 | 宿主 agent 已提供并允许使用搜索、网页或材料读取能力；Python 3.10+ 仅用于可选的交付校验 | 可公开使用 |
 | [`double6-pdf-translation`](skills/double6-pdf-translation/) | 将英文 PDF/可信 LaTeX 或有限清晰单栏扫描译为简体中文，保留完整审校并生成单语与双语 PDF | macOS/Linux、Python 3.12、随包维护后端和显式配置的模型服务 | [2.0.0-rc.2](https://github.com/double6-ai/double6-skills/releases/tag/double6-pdf-translation-v2.0.0-rc.2)，111 开工合同 |
-| [`double6-ppt-cli`](skills/double6-ppt-cli/) | 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX，覆盖 Markdown/结构化材料创作、模板对象级填充，以及已有 PPTX 的质检与受限修复 | Python 3、OfficeCLI 1.x（bootstrap 固定安装 pin `1.0.157`，运行时接受 ≥ 1.0.144 的 1.x）；**portable 档不需要 macOS**；native 档需要 macOS + Microsoft PowerPoint + `osascript` | 可公开使用；完整 native 闭环建议本机 PowerPoint，portable 档交付为 `pass_with_warnings` |
+| [`double6-deep-research`](skills/double6-deep-research/) | 研究开放性问题、比较多个对象、形成有证据的决策建议，并交付可核验的完整报告 | 宿主 agent 已提供并允许使用搜索、网页或材料读取能力；Python 3.10+ 仅用于可选的交付校验 | 可公开使用 |
 | [`double6-workbench-builder`](skills/double6-workbench-builder/) | 把反复要做的真实事情（学习台、备考台、任务面板、内容/社媒运营台、阅读与研究追踪、记录与复盘等）构建为离线优先、严格单文件的本地个人工作台，个人数据只留在当前设备 | Python 3.10+（仅标准库）；浏览器验收可选 Playwright + Chromium | 可公开使用（实验性） |
+| [`double6-ppt-cli`](skills/double6-ppt-cli/) | 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX，覆盖 Markdown/结构化材料创作、模板对象级填充，以及已有 PPTX 的质检与受限修复 | Python 3、OfficeCLI 1.x（bootstrap 固定安装 pin `1.0.157`，运行时接受 ≥ 1.0.144 的 1.x）；**portable 档不需要 macOS**；native 档需要 macOS + Microsoft PowerPoint + `osascript` | 可公开使用；完整 native 闭环建议本机 PowerPoint，portable 档交付为 `pass_with_warnings` |
 
 这些 skill 都不会随仓库分发模型、API key、搜索服务、OfficeCLI 二进制或未声明的第三方组件。请根据任务选择安装，不必复制整个仓库。
 
@@ -26,26 +30,26 @@ cd double6-skills
 
 ```bash
 mkdir -p <agent-skills-dir>
-cp -R skills/double6-deep-research <agent-skills-dir>/
 cp -R skills/double6-pdf-translation <agent-skills-dir>/
-cp -R skills/double6-ppt-cli <agent-skills-dir>/
+cp -R skills/double6-deep-research <agent-skills-dir>/
 cp -R skills/double6-workbench-builder <agent-skills-dir>/
+cp -R skills/double6-ppt-cli <agent-skills-dir>/
 ```
 
 也可以从公开目录安装：
 
 ```bash
 # skills.sh（GitHub 源）
-npx skills add double6-ai/double6-skills --skill double6-deep-research
 npx skills add double6-ai/double6-skills --skill double6-pdf-translation
-npx skills add double6-ai/double6-skills --skill double6-ppt-cli
+npx skills add double6-ai/double6-skills --skill double6-deep-research
 npx skills add double6-ai/double6-skills --skill double6-workbench-builder
+npx skills add double6-ai/double6-skills --skill double6-ppt-cli
 
 # ClawHub
-clawhub install double6-deep-research
 clawhub install double6-pdf-translation
-clawhub install double6-ppt-cli
+clawhub install double6-deep-research
 clawhub install double6-workbench-builder
+clawhub install double6-ppt-cli
 ```
 
 `<agent-skills-dir>` 的具体位置由所使用的 agent 决定。只要宿主能够读取 `SKILL.md`，并具备对应 skill 所需的网页读取或本地 shell 能力，就可以按名称调用。
@@ -54,16 +58,6 @@ clawhub install double6-workbench-builder
 会话或重启宿主，再检查安装目录是否正确；这不是 skill 运行失败。
 
 ## 使用
-
-### 多来源深度研究
-
-```text
-请使用 $double6-deep-research 调研这个问题，明确给出证据、冲突、覆盖缺口、结论和限制。
-```
-
-这个 skill 提供研究方法、逐问题覆盖与饱和停止规范和交付校验器，不按固定来源数判定深度，也不自带搜索引擎或网页抓取服务。宿主没有获准的检索能力，或关键来源无法核验时，它会将结果标记为 `partial` 或 `blocked`，而不是把推断包装成事实。当前 validator 版本为 `2.3.0`，`research_record.json` 使用 schema v2。
-
-详细说明见 [`skills/double6-deep-research/SKILL.md`](skills/double6-deep-research/SKILL.md)。
 
 ### PDF 翻译
 
@@ -86,6 +80,32 @@ bash scripts/setup_venv.sh /absolute/new/venv
 
 入口及配置见 [SKILL.md](skills/double6-pdf-translation/SKILL.md)、[运行说明](skills/double6-pdf-translation/references/release-quickstart.md) 和 [运行依赖及许可](skills/double6-pdf-translation/references/runtime-dependencies.md)。
 
+### 多来源深度研究
+
+```text
+请使用 $double6-deep-research 调研这个问题，明确给出证据、冲突、覆盖缺口、结论和限制。
+```
+
+这个 skill 提供研究方法、逐问题覆盖与饱和停止规范和交付校验器，不按固定来源数判定深度，也不自带搜索引擎或网页抓取服务。宿主没有获准的检索能力，或关键来源无法核验时，它会将结果标记为 `partial` 或 `blocked`，而不是把推断包装成事实。当前 validator 版本为 `2.3.0`，`research_record.json` 使用 schema v2。
+
+详细说明见 [`skills/double6-deep-research/SKILL.md`](skills/double6-deep-research/SKILL.md)。
+
+### 个人工作台制作器
+
+```text
+请使用 $double6-workbench-builder 把我反复要做的这件事做成一个可离线使用的本地工作台。
+```
+
+这个 skill 用 `start` → `respond` → `propose` → `build` → `evaluate` 五个命令完成六步流程（选场景、澄清、理解稿确认、构建候选、候选确认、验收），把澄清后的需求构建成一个可离线打开的单个 `index.html`：内置可直接操作的起始内容、localStorage 本地保存、导入导出备份和移动端适配。联网、多人协作、账号、支付和公开发布不属于单文件交付范围，只标记为人工交接或暂不支持。
+
+适用边界：
+
+- 交付物只写入本产品唯一的 localStorage 命名空间；儿童、学生、财务、医疗等敏感场景默认使用合成或脱敏数据。
+- 构建器只依赖 Python 标准库；完整的浏览器验收需要自行安装 Playwright 与 Chromium，环境缺失时只会标记为 `evaluation_blocked`，不会假装通过。
+- 发布到云托管或本机部署由独立的宿主流程执行，本 skill 不自行上线任何页面。
+
+入口说明见 [`skills/double6-workbench-builder/SKILL.md`](skills/double6-workbench-builder/SKILL.md)，完整流程与验收边界见 [`runtime-contract.md`](skills/double6-workbench-builder/references/runtime-contract.md)。
+
 ### 可编辑 PPTX 闭环
 
 ```text
@@ -105,22 +125,6 @@ bash scripts/setup_venv.sh /absolute/new/venv
 
 入口说明见 [`skills/double6-ppt-cli/SKILL.md`](skills/double6-ppt-cli/SKILL.md)，交付门禁与上游许可证见 [`delivery-gates.md`](skills/double6-ppt-cli/references/delivery-gates.md) 与 [`licenses-and-upstreams.md`](skills/double6-ppt-cli/references/licenses-and-upstreams.md)；PowerPoint 可选双档与完整测试报告见 [`test-report-and-verification-tiers.md`](skills/double6-ppt-cli/references/test-report-and-verification-tiers.md)。
 
-### 个人工作台制作器
-
-```text
-请使用 $double6-workbench-builder 把我反复要做的这件事做成一个可离线使用的本地工作台。
-```
-
-这个 skill 用 `start` → `respond` → `propose` → `build` → `evaluate` 五个命令完成六步流程（选场景、澄清、理解稿确认、构建候选、候选确认、验收），把澄清后的需求构建成一个可离线打开的单个 `index.html`：内置可直接操作的起始内容、localStorage 本地保存、导入导出备份和移动端适配。联网、多人协作、账号、支付和公开发布不属于单文件交付范围，只标记为人工交接或暂不支持。
-
-适用边界：
-
-- 交付物只写入本产品唯一的 localStorage 命名空间；儿童、学生、财务、医疗等敏感场景默认使用合成或脱敏数据。
-- 构建器只依赖 Python 标准库；完整的浏览器验收需要自行安装 Playwright 与 Chromium，环境缺失时只会标记为 `evaluation_blocked`，不会假装通过。
-- 发布到云托管或本机部署由独立的宿主流程执行，本 skill 不自行上线任何页面。
-
-入口说明见 [`skills/double6-workbench-builder/SKILL.md`](skills/double6-workbench-builder/SKILL.md)，完整流程与验收边界见 [`runtime-contract.md`](skills/double6-workbench-builder/references/runtime-contract.md)。
-
 ## 安全与隐私
 
 - 不要把 API key、`.env`、私有文档、研究快照或运行产物提交到仓库。
@@ -132,12 +136,6 @@ bash scripts/setup_venv.sh /absolute/new/venv
 
 ```text
 skills/
-├── double6-deep-research/
-│   ├── SKILL.md
-│   ├── references/
-│   ├── scripts/
-│   ├── tests/
-│   └── CHANGELOG.md
 ├── double6-pdf-translation/
 │   ├── SKILL.md / README.md / LICENSE
 │   ├── configs/ / schemas/ / examples/ / prompts/
@@ -145,26 +143,32 @@ skills/
 │   ├── scripts/
 │   ├── vendor/             # PDFMathTranslate-next / BabelDOC维护源码
 │   └── requirements-*.lock
-├── double6-ppt-cli/
+├── double6-deep-research/
 │   ├── SKILL.md
-│   ├── assets/
 │   ├── references/
-│   ├── scripts/            # 含 scripts/tests/
-│   ├── vendor/             # ppt-master-core（MIT）
-│   ├── licenses/
-│   ├── LICENSE / NOTICE / THIRD_PARTY_NOTICES.md
-│   ├── MODIFICATIONS.md / UPSTREAM_LOCK.json
-│   ├── requirements-core.lock
+│   ├── scripts/
+│   ├── tests/
 │   └── CHANGELOG.md
-└── double6-workbench-builder/
+├── double6-workbench-builder/
+│   ├── SKILL.md
+│   ├── manifest.json
+│   ├── agents/
+│   ├── evals/
+│   ├── references/
+│   ├── scripts/
+│   ├── security/
+│   ├── tests/
+│   └── CHANGELOG.md
+└── double6-ppt-cli/
     ├── SKILL.md
-    ├── manifest.json
-    ├── agents/
-    ├── evals/
+    ├── assets/
     ├── references/
-    ├── scripts/
-    ├── security/
-    ├── tests/
+    ├── scripts/            # 含 scripts/tests/
+    ├── vendor/             # ppt-master-core（MIT）
+    ├── licenses/
+    ├── LICENSE / NOTICE / THIRD_PARTY_NOTICES.md
+    ├── MODIFICATIONS.md / UPSTREAM_LOCK.json
+    ├── requirements-core.lock
     └── CHANGELOG.md
 ```
 
