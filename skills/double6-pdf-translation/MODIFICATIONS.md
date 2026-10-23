@@ -197,3 +197,8 @@
   - `midend/typesetting.py`：`TypesettingUnit.line_metric_height`（带字号的字符单元取 max(高度, 字号)），`_layout_typesetting_units`
     的行高统计改用它。
   - 新增 `tests/test_layout_line_fragments.py`、`tests/fixtures/layout_fragments/`。
+  - PR #24 review-1（P1、P2）：`line_fragments.py` 的 `_prefer_outer_duplicates` 只在 `_is_duplicate_of` 成立时归外框
+    （内框宽 ≥ 外框 60%、外框内无并排正文框、有物理行连续跨过内框边缘）；`unify_line_layouts` 跳过碰到横向分离正文框、
+    或不同归属间有 ≥1.5 字号空白（`_continuous`）的行。`split_table_rows_at_column_gutters` 不拆落在 `table_cell` 类单元格框内的段落，
+    丢弃被单元格框横跨的空白，并要求 `_column_evidence`（他行已分段 / 竖直表格线 / 单元格分界）。新增
+    `tests/test_pr24_review1_layout_boundaries.py`（评审原测试，仅改路径）、`tests/test_layout_boundaries_adjacent.py`。
