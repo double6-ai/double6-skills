@@ -78,6 +78,18 @@ def test_list_of_tables_keeps_four_rows_with_separate_page_numbers():
     assert numbers == ['22', '26', '29', '32'], texts(page)
 
 
+def test_table_caption_outside_a_contents_page_keeps_caption_role_and_number():
+    # 反例：不在目录里的表题（无目录拆行证据）仍是表题，结尾数字不拆成页码。
+    chars, x = _word_chars('Table', 90, 400, 11.0, 5.5)
+    for word in ('2', 'Results', 'by', 'field', 'in', '2022'):
+        more, x = _word_chars(word, x + 3.0, 400, 11.0, 5.5)
+        chars += more
+    page = _process(_page(chars, [('table_caption', (88, 396, 300, 414))]))
+    captions = [p for p in page.pdf_paragraph if p.layout_label == 'table_caption']
+    assert [text(p) for p in captions] == ['Table 2 Results by field in 2022'], texts(page)
+    assert not [p for p in page.pdf_paragraph if p.layout_label == 'toc_page_number'], texts(page)
+
+
 # ---------------------------------------------------------------- #3 反例：其他角色不动
 
 def _char(u, x, y, w, size=9.0, font='F1'):
