@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+import warnings
 from pathlib import Path
 
 import psutil
@@ -89,7 +90,10 @@ def test_real_post_attempt_guard_reclaims_tree_after_clock_step(tmp_path):
         _receipt(tmp_path, proc, NONCE)
         report = cw.post_attempt_guard(tmp_path)
         assert report['live_after_attempt'] == [NONCE]
-        assert report['confirmed'] is True, report
+        if report['confirmed'] is not True:   # 环境性归属未知：严格 unconfirmed（见负例注释），回收本身仍须真实发生
+            assert set(report['reason_codes']) <= {'ownership_unknown', 'ownership_unverifiable'}, report['unverified']
+            assert report['unverified'] and proc.pid not in {r.get('pid') for r in report['unverified']}, report['unverified']
+            warnings.warn(f"strict unconfirmed (ambient ownership unknown): {report['unverified']}"[:2000])
         assert report['reclaim']['reclaimed'][0]['root_state'] == 'pid_reused'
         for _ in range(100):
             if _gone(proc):
@@ -107,7 +111,14 @@ def test_real_unrelated_process_with_shifted_identity_is_not_touched(tmp_path):
     try:
         _receipt(tmp_path, proc, NONCE)
         report = cw.post_attempt_guard(tmp_path)
-        assert report['live_after_attempt'] == [] and report['confirmed'] is True
+        assert report['live_after_attempt'] == []
+        if report['confirmed'] is not True:
+            # 机器上其它同用户进程属性读不到（例如 CI 上的 setuid 子进程）时，整树覆盖未知：接受严格的 unconfirmed，
+            # 但必须写明原因、只能是归属未知，且未知项不是本例的无关进程（PR #21 review-1）。
+            assert report['unverified'], report
+            assert set(report['reason_codes']) <= {'ownership_unknown', 'ownership_unverifiable'}, report['unverified']
+            assert proc.pid not in {r.get('pid') for r in report['unverified']}, report['unverified']
+            warnings.warn(f"strict unconfirmed (ambient ownership unknown): {report['unverified']}"[:2000])
         identity = json.loads(next(tmp_path.rglob('*.launch.json')).read_text())
         direct = be.reclaim_owned_tree(identity, {}, time.monotonic() + 5, discovery_failed=True, nonce=NONCE)
         assert 'identity_refreshed' not in direct
