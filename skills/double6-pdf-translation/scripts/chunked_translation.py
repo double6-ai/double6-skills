@@ -473,8 +473,20 @@ def aggregate_quality(chunks: list[dict[str, Any]], merge_issues: list[dict[str,
             issues.append({'id': 'chunk_quality_missing', 'severity': 'high', 'chunk': row['chunk']['id']})
         for item in quality.get('pending', []) or []:
             if isinstance(item, dict):
-                pending.append(dict(item, chunk=row['chunk']['id']))
+                entry = dict(item, chunk=row['chunk']['id'])
+                if item.get('rule') == 'overflow_source_fallback' and isinstance(item.get('pages'), list):
+                    entry['document_pages'] = [row['chunk']['start'] - 1 + int(p) for p in item['pages'] if isinstance(p, int)]
+                pending.append(entry)
     worst = max(statuses, key=QUALITY_ORDER.get) if statuses else 'fail'
+    reference_exclusion = {'excluded_entries': 0, 'excluded_words': 0, 'by_chunk': {}}
+    for row in chunks:
+        summary = ((((row.get('quality') or {}).get('render_residue_check') or {}).get('excluded') or {})
+                   .get('reference_exclusion_summary') or {}).get('target') or {}
+        if summary.get('excluded_entries'):
+            reference_exclusion['excluded_entries'] += int(summary['excluded_entries'])
+            reference_exclusion['excluded_words'] += int(summary.get('excluded_words') or 0)
+            reference_exclusion['by_chunk'][row['chunk']['id']] = {
+                k: summary.get(k) for k in ('excluded_entries', 'excluded_words', 'by_reason', 'excluded_words_by_page')}
     extra = list(merge_issues) + list(terminology_issues or [])
     issues += extra
     status = worst
@@ -486,6 +498,9 @@ def aggregate_quality(chunks: list[dict[str, Any]], merge_issues: list[dict[str,
     return {'schema_version': SCHEMA_VERSION, 'status': status, 'quality_pass': status == 'pass',
             'worst_chunk_status': worst, 'chunk_statuses': {row['chunk']['id']: s for row, s in zip(chunks, statuses)},
             'issues': issues, 'pending': pending, 'strict_delivery': False, 'human_acceptance': 'pending',
+            'overflow_source_fallback_count': sum(int(p.get('count') or 0) for p in pending
+                                                  if p.get('rule') == 'overflow_source_fallback'),
+            'reference_exclusion': reference_exclusion,
             'promotion_performed': False, 'aggregation': CHUNKING_CONTRACT['quality']}
 
 
