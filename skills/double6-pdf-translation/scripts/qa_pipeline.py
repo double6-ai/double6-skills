@@ -1,5 +1,6 @@
 """生产入口的综合质量门；缺少完整、独立、绑定身份的证据时保留未验证。"""
 from __future__ import annotations
+import hashlib
 import json
 from pathlib import Path
 import fitz
@@ -314,27 +315,48 @@ def audit_technical_receipt(manifest, *, source_ref, target_ref):
 OVERFLOW_SOURCE_FALLBACK='overflow_source_fallback'
 
 
+def _fallback_rules():
+    """按文件路径载入 vendored 的 overflow_source_fallback（纯函数模块），与后端、分块合并用同一套核对规则。"""
+    import importlib.util
+    path=Path(__file__).resolve().parents[1]/'vendor/babeldoc/babeldoc/format/pdf/document_il/midend/overflow_source_fallback.py'
+    spec=importlib.util.spec_from_file_location('double6_overflow_source_fallback_qa',path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    return module
+
+
 def audit_overflow_source_fallbacks(output_dir):
     """读取本次后端排版回执（_backend_working/*/typesetting_writeback_report.json）中的原文保留降级。
 
-    每条降级都是待复核项（pending，稳定代码 overflow_source_fallback），综合质量因此不可能为 pass；
-    回执存在但无法解析时同样记 pending，不当作没有降级。"""
-    receipts,pending,count=[],[],0
+    每条降级都是待复核项（pending，稳定代码 overflow_source_fallback），综合质量因此不可能为 pass。
+    回执无法解析、缺字段或自相矛盾（声明计数、上限计数、逐条数组、状态、作用域、原始分母不一致）时，
+    记入 ``invalid``（pending 规则 overflow_source_fallback_receipt_invalid），不计入 receipts，
+    也绝不把无法核对的计数折算成 0；上层据此以 overflow_source_fallback_receipt_incomplete 失败关闭。"""
+    osf=_fallback_rules()
+    receipts,pending,invalid,count=[],[],[],0
     for path in sorted(Path(output_dir).glob('_backend_working/*/typesetting_writeback_report.json')):
+        data=None
         try:
             data=json.loads(path.read_text(encoding='utf-8'))
-            rows=data.get('source_fallbacks') or []
-            if not isinstance(rows,list) or any(not isinstance(r,dict) for r in rows):
-                raise ValueError('source_fallbacks_not_list')
+            problems=osf.validate_receipt(data)
         except (OSError,ValueError,TypeError,json.JSONDecodeError):
-            pending.append({'id':OVERFLOW_SOURCE_FALLBACK,'rule':'overflow_source_fallback_receipt_invalid','evidence':str(path)})
+            problems=['receipt_unreadable_or_unparsable']
+        if problems:
+            declared=data.get('source_fallback_count') if isinstance(data,dict) else None
+            cap_count=(data.get('source_fallback_cap') or {}).get('count') if isinstance(data,dict) and isinstance(data.get('source_fallback_cap'),dict) else None
+            row={'receipt':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None,
+                 'problems':problems,'declared_count':declared,'cap_count':cap_count,'count_verifiable':False}
+            invalid.append(row)
+            pending.append({'id':OVERFLOW_SOURCE_FALLBACK,'rule':'overflow_source_fallback_receipt_invalid','evidence':str(path),
+                            'problems':problems,'declared_count':declared,'cap_count':cap_count})
             continue
+        rows=data['source_fallbacks']
         ref=file_ref(path)
-        cap=data.get('source_fallback_cap') if isinstance(data.get('source_fallback_cap'),dict) else {}
+        cap=data['source_fallback_cap']
         # 原始分母与逐条降级（页、段落 id）全部保留：分块合并据此在整份范围统一执行上限。
-        receipts.append({'receipt':ref,'count':len(rows),'cap':cap or None,
+        receipts.append({'receipt':ref,'count':len(rows),'cap':cap,'status':data.get('status'),
+                         'declared_count':data.get('source_fallback_count'),
                          'paragraphs_per_page':cap.get('paragraphs_per_page'),'segment_count':cap.get('segment_count'),
-                         'document_cap_scope':cap.get('document_cap_scope','document'),
+                         'document_cap_scope':cap.get('document_cap_scope'),
                          'fallbacks':[{k:r.get(k) for k in ('page_index','paragraph_id','role','category')} for r in rows]})
         if rows:
             count+=len(rows)
@@ -344,7 +366,7 @@ def audit_overflow_source_fallbacks(output_dir):
                                         for r in rows[:200]],
                             'message':'译文在可读字号下限仍放不下，该短结构片段保留了原文，需人工复核',
                             'evidence':ref})
-    return {'count':count,'receipts':receipts,'pending':pending}
+    return {'count':count,'receipts':receipts,'pending':pending,'invalid':invalid,'count_verifiable':not invalid}
 
 
 def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, target_language='zh',
@@ -359,7 +381,15 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, ta
         result['status']='fail' if result.get('status')=='fail' or result['issues'] else 'unverified'
     output_dir=Path(output_dir)
     overflow=audit_overflow_source_fallbacks(output_dir)
-    result['overflow_source_fallback_check']={'count':overflow['count'],'receipts':overflow['receipts']}
+    result['overflow_source_fallback_check']={'count':overflow['count'],'receipts':overflow['receipts'],
+                                              'invalid':overflow['invalid'],'count_verifiable':overflow['count_verifiable']}
+    if overflow['invalid']:
+        # 回执损坏、缺字段或自相矛盾：降级数量无法核对，整份失败关闭（不当作 0 条降级）。
+        result.setdefault('issues',[]).append({'id':'overflow_source_fallback_receipt_incomplete',
+            'rule':'overflow_source_fallback_receipt_incomplete','severity':'blocker',
+            'message':'排版回执损坏、缺字段或声明计数与逐条记录矛盾，原文保留降级无法核对，失败关闭',
+            'evidence':overflow['invalid']})
+        result['quality_pass']=False;result['status']='fail'
     # 整份上限推迟到分块合并的回执只能出现在分块翻译里；单份翻译出现即失败关闭（上限未在任何地方执行）。
     deferred=[r for r in overflow['receipts'] if r.get('document_cap_scope')=='chunk_merge']
     if deferred and not chunk_mode:

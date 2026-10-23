@@ -138,6 +138,25 @@ def _plan_for(tmp_path, pdf, bounds, route='digital_pdf'):
     return {'page_count': count, 'navigation': navigation, 'chunks': chunks, 'document_term_context_ref': ct.file_ref(context)}
 
 
+def zero_fallback_quality(out, chunk_id, pages, status='pass', issues=None):
+    """真实后端格式的“0 条原文保留降级”排版回执（分块作用域、原始分母齐全）+ 真实 qa 审计生成的综合质量字段。
+    PR #23 review-2：分块合并要求每块都有可核对的回执，缺失即失败关闭。"""
+    import qa_pipeline
+    work = Path(out) / '_backend_working' / chunk_id
+    work.mkdir(parents=True, exist_ok=True)
+    per_page = {str(i): 3 for i in range(pages)}
+    (work / 'typesetting_writeback_report.json').write_text(json.dumps({
+        'stage': 'post_typesetting', 'status': 'passed', 'page_count': pages, 'failures': [],
+        'source_fallbacks': [], 'source_fallback_count': 0,
+        'source_fallback_cap': {'document_cap': 4, 'page_caps': {}, 'count': 0, 'violations': [],
+                                'paragraphs_per_page': per_page, 'segment_count': 3 * pages, 'status': 'none',
+                                'document_cap_scope': 'chunk_merge', 'deferred_violations': []}}), encoding='utf-8')
+    audit = qa_pipeline.audit_overflow_source_fallbacks(out)
+    return {'status': status, 'issues': list(issues or []), 'pending': audit['pending'],
+            'overflow_source_fallback_check': {'count': audit['count'], 'receipts': audit['receipts'],
+                                               'invalid': audit['invalid'], 'count_verifiable': audit['count_verifiable']}}
+
+
 def _rows(tmp_path, plan, statuses=None, drop_page_in=None):
     rows = []
     for chunk in plan['chunks']:
@@ -149,7 +168,8 @@ def _rows(tmp_path, plan, statuses=None, drop_page_in=None):
                 doc.delete_page(len(doc) - 1)
             doc.save(str(mono))
         quality = out / 'comprehensive_quality.json'
-        quality.write_text(json.dumps({'status': (statuses or {}).get(chunk['id'], 'pass'), 'issues': []}))
+        quality.write_text(json.dumps(zero_fallback_quality(out, chunk['id'], chunk['pages'],
+                                                            (statuses or {}).get(chunk['id'], 'pass'))))
         rows.append({'chunk': chunk, 'outputs': {'translated_pdf': ct.file_ref(mono)},
                      'quality_ref': ct.file_ref(quality), 'quality_status': None})
     return rows
@@ -220,19 +240,22 @@ def test_merge_rejects_tampered_output_and_broken_coverage(tmp_path):
 
 
 # ------------------------------------------------------------------ 质量
-def test_merged_quality_is_never_better_than_the_worst_chunk():
+def test_merged_quality_is_never_better_than_the_worst_chunk(tmp_path):
     def chunk(i):
         return {'id': f'c{i}', 'start': i, 'end': i, 'pages': 1}
-    for combo in itertools.product(['pass', 'unverified', 'fail', None, 'bogus'], repeat=3):
-        rows = [{'chunk': chunk(i), 'quality': ({'status': s, 'issues': []} if s else None)} for i, s in enumerate(combo)]
+
+    def quality(i, s, tag):
+        return zero_fallback_quality(tmp_path / f'{tag}-{i}', f'c{i}', 1, s)
+    for n, combo in enumerate(itertools.product(['pass', 'unverified', 'fail', None, 'bogus'], repeat=3)):
+        rows = [{'chunk': chunk(i), 'quality': (quality(i, s, n) if s else None)} for i, s in enumerate(combo)]
         result = ct.aggregate_quality(rows, [])
         effective = ['fail' if s not in ct.QUALITY_ORDER else s for s in combo]
         worst = max(effective, key=ct.QUALITY_ORDER.get)
         assert result['status'] == worst and ct.QUALITY_ORDER[result['status']] >= ct.QUALITY_ORDER[worst]
-    rows = [{'chunk': chunk(1), 'quality': {'status': 'pass', 'issues': []}}]
+    rows = [{'chunk': chunk(1), 'quality': quality(1, 'pass', 'single')}]
     assert ct.aggregate_quality(rows, [])['status'] == 'pass'
     assert ct.aggregate_quality(rows, [{'id': 'x', 'severity': 'high'}])['status'] == 'fail'
-    pending = [{'chunk': chunk(1), 'quality': {'status': 'pass', 'issues': [], 'pending': [{'id': 'p'}]}}]
+    pending = [{'chunk': chunk(1), 'quality': dict(quality(1, 'pass', 'pending'), pending=[{'id': 'p'}])}]
     assert ct.aggregate_quality(pending, [])['status'] == 'unverified'
 
 
@@ -377,10 +400,10 @@ class FakeChunkRunner:
         mono = out / f"{chunk['id']}.no_watermark.zh.mono.pdf"
         shutil.copyfile(chunk['source_ref']['path'], mono)
         status = self.statuses.get(chunk['id'], 'pass')
-        (out / 'comprehensive_quality.json').write_text(json.dumps({'status': status, 'issues': []}))
+        (out / 'comprehensive_quality.json').write_text(json.dumps(zero_fallback_quality(out, chunk['id'], chunk['pages'], status)))
         (out / 'render_manifest.json').write_text(json.dumps({'outputs': {'translated_pdf': str(mono)}}))
         working = out / '_backend_working' / chunk['id']
-        working.mkdir(parents=True)
+        working.mkdir(parents=True, exist_ok=True)
         (working / 'temp_subset_output_mono.pdf').write_bytes(b'x' * 1000)
         result = {'status': 'succeeded', 'quality_status': status}
         (receipts / 'WORKFLOW_CANDIDATE.json').write_text(json.dumps(result))

@@ -240,7 +240,10 @@ def test_qa_pipeline_fallback_pending_never_pass(tmp_path):
         'source_fallbacks': [{'code': 'overflow_source_fallback', 'page_index': 0, 'paragraph_id': 'a', 'role': 'table_cell',
                               'category': 'table_cell', 'source_text': '物理科学', 'translated_text': 'Physical Sciences'},
                              {'code': 'overflow_source_fallback', 'page_index': 2, 'paragraph_id': 'b', 'role': 'toc_entry',
-                              'category': 'toc_entry', 'source_text': 'Page 3', 'translated_text': '第 3 页'}]}),
+                              'category': 'toc_entry', 'source_text': 'Page 3', 'translated_text': '第 3 页'}],
+        # 完整回执（PR #23 review-2）：上限计数、状态、作用域与原始分母须与逐条记录一致，否则不可核对。
+        'source_fallback_cap': {'count': 2, 'status': 'applied', 'document_cap_scope': 'document',
+                                'paragraphs_per_page': {'0': 10, '1': 10, '2': 10}, 'segment_count': 30}}),
         encoding='utf-8')
     audit = qa_pipeline.audit_overflow_source_fallbacks(tmp_path)
     assert audit['count'] == 2 and audit['pending'][0]['rule'] == 'overflow_source_fallback'
