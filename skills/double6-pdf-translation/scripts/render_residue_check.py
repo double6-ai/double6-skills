@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-# Double6 Skills，2026-10-17：2.0.0-rc.3 新增；变更见Skill根目录MODIFICATIONS.md。
+# Double6 Skills，2026-10-17：2.0.0-rc.3 新增；2026-10-23 参考文献区条目判定补充；变更见Skill根目录MODIFICATIONS.md。
 """基于实际渲染成品的源语言残留检查（最小版）：英译中查英文残留，中译英查中文残留。
 
 中译英（target_language='en'）：逐页比较源/译文可抽取的 CJK 汉字数，残留率 r = 译文汉字 / 源文汉字。
@@ -30,6 +30,13 @@
 - 没有标题时需要强结构证据（宁可误报不可漏判）：≥3 条编号/作者开头且含年份与出处的条目、左边距一致、
   位于文末或节末、全文剔除不超过源文英文词一半；译文侧只在源文已接受的页上剔除；候选段写入审计记录。
 - 译文侧的剔除量不得超过源文同页剔除量（×1.2 + 20 词），超出部分加回计数，防止译文用伪条目躲避检查。
+- 只在已确认的 References/参考文献 标题区内（无标题段不适用）另有三条补充，均要求条目开头的结构证据：
+  行数上限只数含文字的行（等宽 URL 碎行不算）；题名里的动词（"What … to train if you have …"）只触发
+  sentence_like 软否决时，若同时有作者/编号开头、年份、出处信号且无第一人称/句首连接词，按 strong 处理
+  （reason=strong_entry_title_verbs_waived；2026-10-23 PR #23 复审：先用 entry_fields 证明“纯作者列表 + 题名 +
+  含年份的出处字段”结构，题名之外不得有任何否决，作者开头的叙述正文照常计数）；只缺出处信号的 weak 条目，若作者开头 + 作者-年份日期位（纯作者列表 +
+  ". 2019." + ≤30 词题名）、虚词比例 ≤0.25、且紧邻 strong 条目，剔除（reason=author_year_sequence）。正文段、硬否决（指标、小数、多年份、
+  叙述式引用）以及只是出现 References 字样的普通页照旧计数。
 """
 from __future__ import annotations
 
@@ -123,6 +130,14 @@ HEADINGLESS_RUN_MEAN_STOPWORDS = 0.27
 HEADINGLESS_MIN_RUN = 3
 MAX_ENTRY_WORDS = 160
 TARGET_EXCLUSION_SLACK = (1.2, 20)
+# 参考文献标题区补充规则（2026-10-23）。
+AUTHOR_YEAR_SEQUENCE_MAX_STOPWORDS = 0.25
+# 作者-年份格式的日期位：作者列表 + ". 2019." + 题名（年份前是句点/逗号，后紧跟句点）。叙述式 "Lin (2024) ran …" 不匹配。
+AUTHOR_YEAR_SLOT = re.compile(r'^(?P<authors>[^()\[\]]{3,400}?)[.,]\s+(?:19|20)\d{2}[a-z]?\.\s+(?P<rest>\S.*)$', re.DOTALL)
+AUTHOR_YEAR_SLOT_MAX_TITLE_WORDS = 30
+AUTHOR_LIST_PARTICLES = frozenset({'and', 'et', 'al', 'van', 'von', 'de', 'der', 'den', 'le', 'la', 'da', 'di', 'du'})
+# 以出处缩写结尾的条目（"… In Proc."）尚未结束，下一栏栏首残段视为续接。
+VENUE_ABBREVIATION_END = re.compile(r'\b(?:In\s+)?(?:Proc|Conf|Int|Trans|Assoc|Comput|Ling|Adv|Inf|Process|Syst|Mach|Learn|Vol|pp)\.$')
 
 
 def _is_code_span(span: dict[str, Any]) -> bool:
@@ -237,6 +252,97 @@ def entry_lead(text: str) -> str | None:
     return None
 
 
+def _text_row_count(group: dict[str, Any]) -> int:
+    """含文字（拉丁词或汉字）的行数；只含等宽代码/URL 碎片或标点的行不计。"""
+    return sum(1 for r in group['rows'] if LATIN_WORD.search(r['text']) or CJK.search(r['text']))
+
+
+def author_year_slot(text: str) -> bool:
+    """作者-年份条目结构：开头是纯作者列表（大写开头的人名、缩写、and/et al. 等小品词），随后 ". 2019."
+    日期位，日期位之后是不超过 30 词的题名。叙述句（年份在括号里、作者段里有普通小写词）不匹配。"""
+    match = AUTHOR_YEAR_SLOT.match(' '.join(text.split()))
+    if not match:
+        return False
+    authors = re.findall(r"[^\W\d_][\w'’-]*", match.group('authors'))
+    if not authors or any(w[0].islower() and w.lower() not in AUTHOR_LIST_PARTICLES for w in authors):
+        return False
+    return len(LATIN_WORD.findall(match.group('rest'))) <= AUTHOR_YEAR_SLOT_MAX_TITLE_WORDS
+
+
+_FIELD_END = re.compile(r'[.?!](?=\s+\S)|[.?!]\s*$')
+
+
+def _field_boundary(text: str, start: int = 0) -> int | None:
+    """从 start 起第一个字段结束符（. ? !）的位置；作者缩写（"J."、"M."）与常见缩写不算字段结束。"""
+    for match in _FIELD_END.finditer(text, start):
+        if match.group(0)[0] == '.':
+            token = text[:match.start()].rsplit(None, 1)[-1] if text[:match.start()].strip() else ''
+            token = token.lstrip('([')
+            if re.fullmatch(r"[A-Z]|[A-Z][a-z]?|al|et|Jr|Sr|St|vs", token):
+                continue
+        return match.start()
+    return None
+
+
+def _pure_author_list(segment: str) -> bool:
+    """纯作者列表：只由人名词（首字母大写）、缩写与 and/et al. 等小品词组成，且至少两个人名词。"""
+    tokens = [t.strip(',;:') for t in segment.split()]
+    tokens = [t for t in tokens if t and t != '&']
+    return len(tokens) >= 2 and all(_is_name_token(t) for t in tokens)
+
+
+def entry_fields(text: str) -> dict[str, str] | None:
+    """条目结构证据：拆出 作者 / 题名 / 其余（出处、年份）三个字段；拆不出返回 None。
+
+    两种已确认的结构：
+    * 作者-年份：``[n] 纯作者列表. 2019. 题名. 出处…``（与 author_year_slot 同一日期位）；
+    * 作者-题名：``[n] 纯作者列表. 题名. 出处…, 2019.``（年份在题名之后的字段里）。
+    作者字段必须是纯作者列表；叙述句（作者后紧跟普通小写词）拆不出作者字段。"""
+    flat = re.sub(r'(\w)-\s+([a-z])', r'\1\2', ' '.join(text.split()))
+    body = LEADING_MARKER.sub('', flat, count=1).strip()
+    slot = AUTHOR_YEAR_SLOT.match(body)
+    if slot and _pure_author_list(slot.group('authors')):
+        rest = slot.group('rest')
+        end = _field_boundary(rest)
+        if end is None:
+            return None
+        year = YEAR.search(body[slot.end('authors'):slot.start('rest')])
+        return {'authors': slot.group('authors'), 'title': rest[:end + 1].strip(),
+                'rest': (year.group(0) if year else '') + ' ' + rest[end + 1:].strip(), 'style': 'author_year'}
+    end = _field_boundary(body)
+    if end is None or not _pure_author_list(body[:end]):
+        return None
+    after = body[end + 1:].strip()
+    title_end = _field_boundary(after)
+    if title_end is None:
+        return None
+    rest = after[title_end + 1:].strip()
+    if not YEAR.search(rest):
+        return None
+    return {'authors': body[:end], 'title': after[:title_end + 1].strip(), 'rest': rest, 'style': 'author_title'}
+
+
+def title_verb_waiver(text: str, veto: list[str], lead: str | None, features: dict[str, Any]) -> bool:
+    """参考文献标题区内：只有题名字段里的普通动词触发 sentence_like 软否决时放行。
+
+    先证明条目结构（entry_fields：纯作者列表 + 题名字段 + 含年份的其余字段），题名之外的作者/出处字段
+    必须没有任何否决（谓语动词、第一人称、句首连接词等都不允许出现在题名之外），且出处信号在题名之外；
+    指标、小数、多年份、叙述式引用等硬否决一律不放行。作者开头的叙述正文拆不出作者字段，照常计数。"""
+    if veto != ['sentence_like'] or lead is None or not features['year'] or not features['venue']:
+        return False
+    if PRONOUN.search(text) or SENTENCE_START.search(text):
+        return False
+    fields = entry_fields(text)
+    if fields is None or not LATIN_WORD.search(fields['title']):
+        return False
+    if len(LATIN_WORD.findall(fields['title'])) > AUTHOR_YEAR_SLOT_MAX_TITLE_WORDS:
+        return False
+    outside = fields['authors'] + '. ' + fields['rest']
+    if prose_veto(outside) or RESEARCH_VERB.search(outside) or BE_HAVE.search(outside):
+        return False
+    return bool(VENUE.search(fields['rest']) or re.match(r'\s*(?:(?:19|20)\d{2}[a-z]?\s+)?In\s+[A-Z0-9]', fields['rest']))
+
+
 def headingless_entry_class(group: dict[str, Any], *, region: bool = False) -> str:
     """逐块分类：strong（编号/作者开头 + 年份 + 出处信号）、weak（只缺年份或出处之一，或栏/页首的残段）、
     short（页码等极短组）、break（其它，包括被否决的正文）。weak 默认计数，见 _decide_entries。
@@ -247,10 +353,17 @@ def headingless_entry_class(group: dict[str, Any], *, region: bool = False) -> s
         return 'short'
     max_words, max_lines, max_stop = ((MAX_ENTRY_WORDS, MAX_ENTRY_LINES, REGION_ENTRY_STOPWORDS) if region else
                                       (HEADINGLESS_MAX_ENTRY_WORDS, HEADINGLESS_MAX_ENTRY_LINES, HEADINGLESS_ENTRY_STOPWORDS))
-    if (f['words'] > max_words or len(group['rows']) > max_lines or f['stopword_ratio'] > max_stop
-            or prose_veto(text)):
+    # 标题区内只数含文字的行：等宽 URL 被逐段切成的碎行不是条目正文行。无标题段保持原行数口径。
+    line_count = _text_row_count(group) if region else len(group['rows'])
+    if f['words'] > max_words or line_count > max_lines or f['stopword_ratio'] > max_stop:
         return 'break'
+    veto = prose_veto(text)
     lead = entry_lead(text)
+    if veto:
+        if region and title_verb_waiver(text, veto, lead, f):
+            group['_waiver'] = 'title_verbs'
+            return 'strong'
+        return 'break'
     if lead and f['year'] and f['venue']:
         return 'strong'
     if (lead or group.get('column_start')) and (f['year'] or f['venue']):
@@ -415,6 +528,8 @@ def _decide_entries(seq: list[dict[str, Any]], label: str) -> list[dict[str, Any
     - numbered_sequence：带 [n]/n. 编号、≤40 词（栏底被截断、虚词比例 ≤0.15 的条目头不限词数），紧邻的带编号条目与之连续（n-1 或 n+1），且不存在不连续的紧邻编号；
     - continuation：栏首/页首、无编号也无作者开头，紧接在一个已剔除且未以句号结束的条目之后，
       左边距不在该栏 strong 条目边距之外（悬挂缩进一致）。
+    - author_year_sequence（仅 References 标题区）：作者开头 + 作者-年份日期位（纯作者列表 + ". 2019." + ≤30 词题名）、
+      无否决、虚词比例 ≤0.25，且紧邻 strong 条目。
     break 与 short 计数（short 不进审计）。"""
     rows: list[dict[str, Any]] = []
     margins: dict[str, float] = {}
@@ -430,7 +545,7 @@ def _decide_entries(seq: list[dict[str, Any]], label: str) -> list[dict[str, Any
             continue
         if cls == 'strong':
             g['exclude'] = label
-            rows.append(_entry_row(g, 'excluded', 'strong_entry'))
+            rows.append(_entry_row(g, 'excluded', 'strong_entry_title_verbs_waived' if g.get('_waiver') else 'strong_entry'))
             continue
         prev = solid[index - 1] if index > 0 else None
         nxt = solid[index + 1] if index + 1 < len(solid) else None
@@ -445,9 +560,17 @@ def _decide_entries(seq: list[dict[str, Any]], label: str) -> list[dict[str, Any
             if numbered and all(k == expected[id(n)] for n, k in numbered):
                 reason = 'numbered_sequence'
         elif (entry_lead(g['text']) is None and g.get('column_start') and prev is not None and prev.get('exclude')
-              and not prev['text'].rstrip().endswith('.')
+              and (not prev['text'].rstrip().endswith('.')
+                   or (label == 'reference_section' and VENUE_ABBREVIATION_END.search(prev['text'].rstrip())))
               and g['x0'] >= margins.get(g['rows'][0]['col'], g['x0']) - HEADINGLESS_MARGIN_TOLERANCE):
             reason = 'continuation'
+        elif (label == 'reference_section' and entry_lead(g['text']) is not None
+              and author_year_slot(g['text']) and not prose_veto(g['text'])
+              and citation_features(g['text'])['stopword_ratio'] <= AUTHOR_YEAR_SEQUENCE_MAX_STOPWORDS
+              and any(n is not None and n['_class'] == 'strong' for n in (prev, nxt))):
+            # 标题区内只缺出处信号的条目（如 "Names. 2019. Title."）：作者开头 + 作者-年份日期位
+            # （纯作者列表 + ". 2019." + ≤30 词题名）+ 低虚词比例 + 无否决，并与 strong 条目相邻。
+            reason = 'author_year_sequence'
         if reason == 'weak_no_positive_evidence':
             rows.append(_entry_row(g, 'counted', reason))
         else:
@@ -920,6 +1043,25 @@ def check_chinese_residue(source_pdf, target_pdf) -> dict[str, Any]:
     return result
 
 
+def reference_exclusion_summary(audit: dict[str, Any]) -> dict[str, Any]:
+    """剔除的参考文献条目汇总（回执用）：条目数、词数、按理由计数、按页词数；计数的条目同样列出。"""
+    rows = list(audit.get('region_entries') or [])
+    for run in audit.get('headingless_runs') or []:
+        rows += [dict(r, headingless=True) for r in run.get('entries_detail') or []]
+    summary: dict[str, Any] = {'excluded_entries': 0, 'excluded_words': 0, 'counted_entries': 0, 'counted_words': 0,
+                               'by_reason': {}, 'excluded_words_by_page': {}}
+    for row in rows:
+        key = 'excluded' if row.get('decision') == 'excluded' else 'counted'
+        summary[key + '_entries'] += 1
+        summary[key + '_words'] += int(row.get('words') or 0)
+        reason = str(row.get('reason'))
+        summary['by_reason'][reason] = summary['by_reason'].get(reason, 0) + 1
+        if key == 'excluded':
+            page = str(row.get('page'))
+            summary['excluded_words_by_page'][page] = summary['excluded_words_by_page'].get(page, 0) + int(row.get('words') or 0)
+    return summary
+
+
 def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh',
                          region_open_at_start: bool = False) -> dict[str, Any]:
     import fitz
@@ -966,6 +1108,8 @@ def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh',
             'reference_section_pages': {'source': source_refs, 'target': target_refs},
             'headingless_runs': {'source': source_runs, 'target': target_runs},
             'reference_region_entries': {'source': source_audit['region_entries'], 'target': target_audit['region_entries']},
+            'reference_exclusion_summary': {'source': reference_exclusion_summary(source_audit),
+                                            'target': reference_exclusion_summary(target_audit)},
             'headingless_rules': {'max_document_fraction': HEADINGLESS_MAX_DOCUMENT_FRACTION,
                                   'min_strong_entries': HEADINGLESS_MIN_RUN,
                                   'max_entry_stopword_ratio': HEADINGLESS_ENTRY_STOPWORDS,

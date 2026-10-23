@@ -1,4 +1,4 @@
-# Double6 Skills 维护版本（2026-10-22）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
+# Double6 Skills 维护版本（2026-10-23）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 from __future__ import annotations
 
 import copy
@@ -1458,15 +1458,83 @@ class Typesetting:
         except (TypeError, ValueError, KeyError):
             return paragraph.box
 
-    @staticmethod
-    def _writeback_failures(document):
-        return [
-            {"page_index": page.page_number, "paragraph_id": paragraph.debug_id,
-             "role": paragraph.layout_label, "status": paragraph.writeback_status,
-             "reason": paragraph.writeback_reason}
-            for page in document.page for paragraph in page.pdf_paragraph
-            if str(getattr(paragraph, "writeback_status", "") or "").endswith(("_failed", "_rerender_required"))
-        ]
+    def _writeback_failures(self, document):
+        rejections = getattr(self, "_overflow_fallback_rejections", None) or {}
+        failures = []
+        for page in document.page:
+            for paragraph in page.pdf_paragraph:
+                if not str(getattr(paragraph, "writeback_status", "") or "").endswith(("_failed", "_rerender_required")):
+                    continue
+                row = {"page_index": page.page_number, "paragraph_id": paragraph.debug_id,
+                       "role": paragraph.layout_label, "status": paragraph.writeback_status,
+                       "reason": paragraph.writeback_reason}
+                if id(paragraph) in rejections:
+                    row["source_fallback_rejected"] = rejections[id(paragraph)]
+                failures.append(row)
+        return failures
+
+    def _apply_overflow_source_fallback(self, paragraph, page, fonts) -> bool:
+        """可读下限溢出的短结构片段（目录项/页码标签、表头单元格、图内标签）保留原文字形。
+
+        只在 overflow_source_fallback.admission 全部条件满足、且源字形可原样直通时生效；
+        原位置、原字号，不缩字、不裁切；否则保持原失败状态并记录拒绝理由。"""
+        from babeldoc.format.pdf.document_il.midend import overflow_source_fallback as osf
+        if getattr(self, "_overflow_fallback_rejections", None) is None:
+            self._overflow_fallback_rejections = {}
+        if getattr(self, "_overflow_fallbacks", None) is None:
+            self._overflow_fallbacks = []
+        backup = list(getattr(paragraph, "overflow_source_backup", None) or [])
+        source_text = osf.backup_text(backup)
+        translated = paragraph.unicode
+        ok, detail = osf.admission(paragraph, page, source_text, translated, backup)
+        if ok:
+            failure_status = paragraph.writeback_status
+            paragraph.pdf_paragraph_composition = backup
+            units = self.create_typesetting_units(paragraph, fonts)
+            if units and all(unit.can_passthrough for unit in units):
+                paragraph.pdf_paragraph_composition = self.create_passthrough_composition(units)
+                paragraph.scale = 1.0
+                paragraph.unicode = source_text
+                paragraph.writeback_status = osf.CODE
+                paragraph.writeback_reason = "hard_readable_floor_overflow"
+                self._overflow_fallbacks.append({
+                    "code": osf.CODE, "page_index": page.page_number, "paragraph_id": paragraph.debug_id,
+                    "role": paragraph.layout_label, "category": detail, "source_text": source_text,
+                    "translated_text": translated, "failure_status": failure_status, "_paragraph": paragraph,
+                    "_translated": translated})
+                return True
+            paragraph.pdf_paragraph_composition = []
+            detail = "source_not_passthrough"
+        self._overflow_fallback_rejections[id(paragraph)] = detail
+        return False
+
+    def _enforce_overflow_fallback_cap(self, document) -> dict:
+        """按页/文档上限检查降级；超限时整批撤销，恢复原失败状态（照旧 fail closed）。
+        回执记录原始分母（每页段落数、整份段落数）；分块时整份上限推迟到合并统一执行。"""
+        from babeldoc.format.pdf.document_il.midend import overflow_source_fallback as osf
+        fallbacks = getattr(self, "_overflow_fallbacks", None) or []
+        per_page = {page.page_number: sum(1 for p in page.pdf_paragraph if (p.unicode or "").strip())
+                    for page in document.page}
+        cap = osf.cap_violations([f["page_index"] for f in fallbacks], per_page)
+        cap["status"] = "none" if not fallbacks else "applied"
+        cap["document_cap_scope"] = osf.document_cap_scope()
+        enforced = cap["violations"]
+        if cap["document_cap_scope"] == osf.DOCUMENT_CAP_SCOPE_CHUNK_MERGE:
+            # 分块：本块只执行按页上限；整份上限在合并时按原始整份段落数统一执行（见 chunked_translation）。
+            enforced = [v for v in cap["violations"] if v.get("scope") == "page"]
+            cap["deferred_violations"] = [v for v in cap["violations"] if v.get("scope") != "page"]
+        if fallbacks and enforced:
+            cap["status"] = "revoked_cap_exceeded"
+            if getattr(self, "_overflow_fallback_rejections", None) is None:
+                self._overflow_fallback_rejections = {}
+            for record in fallbacks:
+                paragraph = record["_paragraph"]
+                paragraph.pdf_paragraph_composition = []
+                paragraph.unicode = record["_translated"]
+                paragraph.writeback_status = record["failure_status"]
+                paragraph.writeback_reason = "hard_readable_floor_overflow"
+                self._overflow_fallback_rejections[id(paragraph)] = osf.CAP_CODE
+        return cap
 
     def typesetting_document(self, document: il_version_1.Document):
         try:return self._typesetting_document(document)
@@ -1477,6 +1545,8 @@ class Typesetting:
             raise
 
     def _typesetting_document(self, document: il_version_1.Document):
+        self._overflow_fallbacks = []
+        self._overflow_fallback_rejections = {}
         # 原有的排版逻辑
         if self.translation_config.progress_monitor:
             with self.translation_config.progress_monitor.stage_start(
@@ -1495,9 +1565,16 @@ class Typesetting:
                 self.translation_config.raise_if_cancelled()
                 self.render_page(page)
 
+        cap = self._enforce_overflow_fallback_cap(document)
         failures = self._writeback_failures(document)
-        receipt = {"stage": "post_typesetting", "status": "blocked" if failures else "passed",
+        fallbacks = [] if cap["status"] != "applied" else [
+            {k: v for k, v in record.items() if not k.startswith("_")}
+            for record in getattr(self, "_overflow_fallbacks", None) or []]
+        receipt = {"stage": "post_typesetting",
+                   "status": "blocked" if failures else "needs_review" if fallbacks else "passed",
                    "page_count": len(document.page), "failures": failures,
+                   "source_fallbacks": fallbacks, "source_fallback_count": len(fallbacks),
+                   "source_fallback_cap": cap,
                    "scope": "explicit_native_writeback_failures_only"}
         path = self.translation_config.get_working_file_path("typesetting_writeback_report.json")
         path.write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -1697,6 +1774,10 @@ class Typesetting:
 
             if paragraph.layout_label == "diagram_node" and paragraph.pdf_paragraph_composition:
                 self._center_diagram_characters(paragraph)
+            # 可读下限仍放不下的短结构片段：按 overflow_source_fallback 准入条件保留原文字形。
+            if (not paragraph.pdf_paragraph_composition
+                    and str(getattr(paragraph, "writeback_reason", "") or "") == "hard_readable_floor_overflow"):
+                self._apply_overflow_source_fallback(paragraph, page, fonts)
             # 重排版后，重新设置段落各字符的 render order
             self._update_paragraph_render_order(paragraph)
 

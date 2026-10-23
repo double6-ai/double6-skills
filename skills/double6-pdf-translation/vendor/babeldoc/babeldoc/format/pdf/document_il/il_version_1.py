@@ -1,4 +1,4 @@
-# Double6 Skills 维护版本（2026-10-22）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
+# Double6 Skills 维护版本（2026-10-23）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 from dataclasses import dataclass
 from dataclasses import field
 
@@ -1221,6 +1221,12 @@ class PdfParagraph:
             "name": "pageHeight",
             "type": "Attribute",
         },
+    )
+    # 译文写入前的源组合备份（仅目录/表格/图内短标签角色）；只供排版阶段的 overflow_source_fallback
+    # 在可读下限仍放不下时原样保留原文，不序列化。
+    overflow_source_backup: list[PdfParagraphComposition] = field(
+        default_factory=list,
+        metadata={"type": "Ignore"},
     )
     # 单行源段落的原文基线（PDF 坐标）；排版时译文首行按它对齐，避免表格行整体下移。
     source_baseline: float | None = field(
