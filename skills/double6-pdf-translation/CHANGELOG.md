@@ -61,6 +61,11 @@
     `overflow_source_fallback_cap_exceeded`，回执缺失/不完整 → `overflow_source_fallback_receipt_incomplete`，均整份阻断
     （exit 2，不交付合并结果）；首次运行、续跑复用、不同块大小结论相同。单份翻译出现推迟作用域的回执 →
     `overflow_source_fallback_cap_scope_mismatch`，失败关闭。
+- PR #23 review-2 修复（2026-10-23）：排版回执一致性核对。声明计数 `source_fallback_count`、`source_fallback_cap.count`、
+  逐条数组 `source_fallbacks`、回执状态、上限状态、作用域与原始分母必须相互一致；损坏、无法解析、缺字段或自相矛盾的回执
+  不再被折算成 0 条降级，综合质量记 `overflow_source_fallback_receipt_incomplete`（blocker，失败关闭）。分块合并要求每块
+  恰好一份可核对回执，并按 SHA-256 重新读取核对（续跑复用时同样执行）；有任何问题时整份上限状态为 `incomplete`，
+  不会再返回 `none`，整份阻断（exit 2，不交付）。没有旧格式兼容规则。
 
 ## 2.0.0-rc.8 本地发布候选 · 2026-10-22
 
