@@ -380,6 +380,13 @@ def quality_verdict(output_dir, manifest=None):
     reference_exclusion = quality.get('reference_exclusion') or manifest.get('reference_exclusion')
     if reference_exclusion:
         verdict['reference_exclusion'] = reference_exclusion
+    # 公式上/下标层级门与可读版数学保真结论（拒绝时带稳定 reason_code）。
+    structure = quality.get('formula_structure_check')
+    if isinstance(structure, dict) and structure.get('status'):
+        verdict['formula_structure'] = {k: structure.get(k) for k in ('status', 'severity', 'lost', 'flagged_pages')}
+    readable = quality.get('readable_output')
+    if isinstance(readable, dict) and readable.get('status'):
+        verdict['readable_output'] = {k: readable.get(k) for k in ('status', 'reason_code', 'vector_pages')}
     if status == 'fail':
         verdict.update(quality_gate_failure(output_dir, manifest))
     return verdict
