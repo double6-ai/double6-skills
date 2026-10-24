@@ -3,7 +3,7 @@ import io
 import math
 from collections import Counter
 
-from PIL import Image, ImageChops, ImageStat
+from PIL import ImageChops
 import engine
 
 
@@ -209,21 +209,6 @@ def _to_pixel_box(page_rect, page, image):
     return (int(x0), int(y0), int(x1), int(y1))
 
 
-def _luma(image, box):
-    crop = image.crop(box).convert('L')
-    low, high = crop.getextrema()
-    return high - low, ImageStat.Stat(crop).mean[0]
-
-
-def _aa_interior(box):
-    """判断盖子本身是不是平色时，丢掉最外 2 像素抗锯齿。去盖后的页面仍按外沿整块取样。"""
-    x0, y0, x1, y1 = box
-    pad = 2 if x1 - x0 >= 8 and y1 - y0 >= 8 else 0
-    if pad == 0:
-        return box
-    return (x0 + pad, y0 + pad, x1 - pad, y1 - pad)
-
-
 def _counts_as_hidden(rect, area, selected):
     """落在批注里、且没有被框选盖住的对象，才算揭开后仍会留下的内容。"""
     if not rect.intersects(area):
@@ -256,46 +241,32 @@ def _objects_under(page, area, selected):
     return False
 
 
-def _markup_types():
-    """这些类型的自身墨迹可以消失，但只在渲染没有揭开原来看不见的内容时。名字本身不是放行理由。"""
-    fitz = backend()
-    return {
-        fitz.PDF_ANNOT_TEXT,
-        fitz.PDF_ANNOT_POPUP,
-        fitz.PDF_ANNOT_LINK,
-        fitz.PDF_ANNOT_HIGHLIGHT,
-        fitz.PDF_ANNOT_UNDERLINE,
-        fitz.PDF_ANNOT_SQUIGGLY,
-        fitz.PDF_ANNOT_STRIKE_OUT,
-    }
+_ANNOT_LABELS = {
+    'Text': '便签',
+    'Link': '链接',
+    'FreeText': '自由文本',
+    'Line': '直线',
+    'Square': '方形',
+    'Circle': '圆形',
+    'Polygon': '多边形',
+    'PolyLine': '折线',
+    'Highlight': '高亮',
+    'Underline': '下划线',
+    'Squiggly': '波浪线',
+    'StrikeOut': '删除线',
+    'Stamp': '图章',
+    'Ink': '墨迹',
+    'Popup': '弹出框',
+    'FileAttachment': '附件',
+}
 
 
-_MARKUP_NAMES = {'/Text', '/Popup', '/Link', '/Highlight', '/Underline', '/Squiggly', '/StrikeOut'}
-
-
-def _appearance_hides(orig_span, orig_mean, base_span, base_mean):
-    """这块外观去掉之后，有没有露出原来看不见的页面结构。
-
-    底下本来是空白，或原来已经能读到字，都不算揭开。
-    """
-    if base_span < 8:
-        return False
-    if orig_span < 8:
-        return True
-    if abs(orig_mean - base_mean) >= 80 and min(orig_mean, base_mean) <= 40:
-        return True
-    return False
-
-
-def _selection_covers(area, selected):
-    """选区是否把这块批注整块框住。允许 1pt 的取整误差。"""
-    target = backend().Rect(area)
-    if target.is_empty or target.is_infinite:
-        return False
-    for sel in selected:
-        if sel.x0 <= target.x0 + 1 and sel.y0 <= target.y0 + 1 and sel.x1 >= target.x1 - 1 and sel.y1 >= target.y1 - 1:
-            return True
-    return False
+def _annot_label(name):
+    """报错里用来指认是哪一块。类型名不参与放行。"""
+    if not name:
+        return '批注'
+    key = name[1:] if name.startswith('/') else name
+    return _ANNOT_LABELS.get(key, '批注')
 
 
 def _pdf_rect_values(value):
@@ -308,100 +279,173 @@ def _pdf_rect_values(value):
         return None
 
 
+def _positive_number(text, key):
+    parts = text.split(key, 1)
+    if len(parts) != 2:
+        return 0.0
+    number = ''
+    started = False
+    for char in parts[1].lstrip():
+        if char.isdigit() or char == '.':
+            number += char
+            started = True
+            continue
+        if started or char not in ' \n\r\t':
+            break
+    if not number or number == '.':
+        return 0.0
+    return abs(float(number))
+
+
+def _xref_pad(doc, xref):
+    """边框宽度和 /RD。单位与批注矩形相同，用来把描边收进外接矩形。"""
+    pad = 0.0
+    kind, value = doc.xref_get_key(xref, 'RD')
+    if kind == 'array':
+        numbers = _pdf_rect_values(value)
+        if numbers:
+            pad = max(pad, max(abs(number) for number in numbers))
+    kind, value = doc.xref_get_key(xref, 'BS')
+    if kind == 'dict':
+        pad = max(pad, _positive_number(value, '/W'))
+    kind, value = doc.xref_get_key(xref, 'Border')
+    if kind == 'array':
+        tokens = value.replace('[', ' ').replace(']', ' ').split()
+        if len(tokens) >= 3:
+            try:
+                pad = max(pad, abs(float(tokens[2])))
+            except ValueError:
+                pass
+    return pad
+
+
+def _grow_area(area, pad):
+    if area is None or pad <= 0:
+        return area
+    fitz = backend()
+    return fitz.Rect(area.x0 - pad, area.y0 - pad, area.x1 + pad, area.y1 + pad)
+
+
+def _grow_pixel_box(box, image, pad=2):
+    """多取 2 个预览像素，把描边的抗锯齿收进比较范围。这不是忽略差异的容差。"""
+    if box is None:
+        return None
+    x0, y0, x1, y1 = box
+    grown = (max(0, x0 - pad), max(0, y0 - pad), min(image.width, x1 + pad), min(image.height, y1 + pad))
+    if grown[2] <= grown[0] or grown[3] <= grown[1]:
+        return None
+    return grown
+
+
+def _visual_bound(annot):
+    """批注矩形，并在外观框与它同一坐标系且相交时并进外观框。"""
+    fitz = backend()
+    visual = fitz.Rect(annot.rect)
+    appearance = annot.apn_bbox
+    if appearance is not None:
+        appearance = fitz.Rect(appearance)
+        if not appearance.is_empty and not appearance.is_infinite and appearance.intersects(visual):
+            visual.include_rect(appearance)
+    return visual
+
+
 def _areas_to_judge(page):
-    """每条会被删掉的批注，连同 PyMuPDF 不列出的 /Annots。返回 (文字坐标矩形或 None, 是否为标记类)。"""
+    """每条会被删掉的批注，含 PyMuPDF 不列出的 /Annots。返回 (文字坐标矩形或 None, 报错用的称呼)。"""
     seen = set()
     areas = []
-    markup_types = _markup_types()
     for annot in page.annots() or []:
         seen.add(annot.xref)
-        areas.append((_annot_area(annot, page), annot.type[0] in markup_types))
+        border = annot.border or {}
+        pad = max(float(border.get('width') or 0), _xref_pad(page.parent, annot.xref))
+        delta = annot.rect_delta
+        if delta:
+            pad = max(pad, max(abs(float(value)) for value in delta))
+        area = _grow_area(_annot_area_from_bound(_visual_bound(annot), page), pad)
+        areas.append((area, _annot_label(annot.type[1])))
     raw = _annots_array(page)
     if not raw:
         return areas
     refs = _xref_numbers(raw)
     if not refs:
-        areas.append((None, False))
+        areas.append((None, '批注'))
         return areas
     doc = page.parent
     for xref in refs:
         if xref in seen:
             continue
         kind, subtype = doc.xref_get_key(xref, 'Subtype')
-        markup = kind == 'name' and subtype in _MARKUP_NAMES
+        label = _annot_label(subtype if kind == 'name' else '')
         rect_kind, rect_value = doc.xref_get_key(xref, 'Rect')
         pdf_rect = _pdf_rect_values(rect_value) if rect_kind == 'array' else None
         if pdf_rect is None:
-            areas.append((None, markup))
+            areas.append((None, label))
             continue
         bound = _bound_from_pdf_rect(page, pdf_rect)
-        areas.append((_annot_area_from_bound(bound, page), markup))
+        areas.append((_grow_area(_annot_area_from_bound(bound, page), _xref_pad(doc, xref)), label))
     return areas
 
 
-def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, baseline_image, darkening=None):
-    """每条被删批注都做同一套去盖比较，不按类型整段跳过。
+def _box_changed(diff, box):
+    if box is None:
+        return True
+    return diff.crop(box).getbbox() is not None
 
-    返回 revealed、annot 或空字符串。比较两张渲染在批注外沿内的像素，并看去掉批注后的文字、矢量、图片是否落在矩形里。
-    平色盖在平色空白上可以去掉。盖子底下只要去盖后多出任何深浅差别，或有对象落在矩形里，就拒绝。
-    高亮、下划线、删除线、波浪线、便签、弹出框和链接的自身墨迹，只有在去掉后没有揭开原来看不见的内容时才可以消失。
-    图章这类自身有可见内容的批注，选区把整块矩形框住、且矩形里没有未选中的对象时，可以去掉。
-    选区先抹掉，避免把已经框住的正文算成露出。已经放行的批注矩形从变深图里抹掉，避免下划线本身的颜色被当成揭开的正文。
+
+def _annot_problem(page_number, label, box, changed, under):
+    where = ''
+    if box is not None:
+        where = f'预览范围大约是 {box[0]},{box[1]} 到 {box[2]},{box[3]}。'
+    name = label or '批注'
+    if changed and under:
+        return f'第{page_number}页有一处{name}。{where}去掉之后，这个范围里的画面变了，底下还有没框选的文字、线条或图片。请先去掉这块批注。'
+    if changed:
+        return f'第{page_number}页有一处{name}。{where}去掉之后，这个范围里的画面变了。请先去掉这块批注。'
+    if under:
+        return f'第{page_number}页有一处{name}。{where}它盖住了还没框选的文字、线条或图片。请先去掉这块批注。'
+    return ''
+
+
+def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, baseline_image, page_number=1):
+    """删除前后逐像素比较。外接矩形里任何变化都拒绝，没有颜色或亮度门槛。
+
+    比较的两张图都由同一渲染器、同一比例画出。链接和隐藏便签这类不改像素的批注，整页差分为空，
+    所以没被批注碰到的正文不会产生抗锯齿噪声。因此这里不设容差：差一个像素也拒绝。
+    外接矩形含边框、与矩形相交的外观框，并外扩 2 个预览像素，只为把描边边缘收进来。
+    矩形里若有未框选的文字、矢量或图片，同样拒绝。类型名、颜色和线宽都不作为放行条件。
     """
     areas = _areas_to_judge(page)
     if not areas:
         return ''
+    if original_image.size != baseline_image.size:
+        return f'第{page_number}页去掉批注后无法与原渲染对齐。请先去掉这块批注。'
     selected = [_to_page_rect(box, page, original_image.size) for box in pixel_boxes]
-    outside = baseline_image.copy()
-    for box in pixel_boxes:
-        x0, y0, x1, y1 = (int(v) for v in box)
-        span = (max(0, x0 - 2), max(0, y0 - 2), min(outside.width, x1 + 2), min(outside.height, y1 + 2))
-        outside.paste((255, 255, 255), span)
-    reason = ''
-    cleared = []
-    for area, markup in areas:
+    diff = ImageChops.difference(original_image, baseline_image)
+    problems = []
+    claimed = []
+    for area, label in areas:
         box = None
-        if area is None or area.is_empty or area.is_infinite:
-            found = 'revealed'
-        else:
-            under = _objects_under(baseline_page, area, selected)
-            box = _to_pixel_box(area, page, original_image)
-            if box is None:
-                found = 'revealed'
-            else:
-                _base_span, base_mean = _luma(baseline_image, box)
-                outside_span, _outside_mean = _luma(outside, box)
-                interior = _aa_interior(box)
-                orig_span, orig_mean = _luma(original_image, interior)
-                full_span, _full_mean = _luma(original_image, box)
-                flat_cover = orig_span < 8
-                if flat_cover and not under and outside_span == 0:
-                    # 外圈不平和、内圈却与页面同色：描边或细线。实心色块内圈和页面颜色不同，可以去掉。
-                    found = 'annot' if full_span >= 8 and abs(orig_mean - base_mean) < 8 else ''
-                elif flat_cover and (under or outside_span >= 1):
-                    found = 'revealed'
-                elif not flat_cover:
-                    found = 'annot'
-                else:
-                    found = ''
-                if found == 'annot' and _selection_covers(area, selected) and not under:
-                    found = ''
-                elif found == 'annot' and markup:
-                    base_inner_span, base_inner_mean = _luma(baseline_image, interior)
-                    if _appearance_hides(orig_span, orig_mean, base_inner_span, base_inner_mean):
-                        found = 'revealed'
-                    else:
-                        found = ''
-        if found == '' and box is not None:
-            cleared.append(box)
-        if found == 'revealed':
-            reason = 'revealed'
-        elif found == 'annot' and reason != 'revealed':
-            reason = 'annot'
-    if darkening is not None and reason != 'revealed':
-        for box in cleared:
-            darkening.paste(0, box)
-    return reason
+        if area is not None and not area.is_empty and not area.is_infinite:
+            box = _grow_pixel_box(_to_pixel_box(area, page, original_image), original_image)
+        changed = _box_changed(diff, box)
+        under = False if area is None else _objects_under(baseline_page, area, selected)
+        problem = _annot_problem(page_number, label, box, changed, under)
+        if problem:
+            problems.append(problem)
+        if box is not None:
+            claimed.append(box)
+    remain = diff.copy()
+    for box in claimed:
+        remain.paste((0, 0, 0), box)
+    if remain.getbbox() is not None:
+        bounds = remain.getbbox()
+        problems.append(
+            f'第{page_number}页去掉批注后，还有画面和原来不一样。预览范围大约是 {bounds[0]},{bounds[1]} 到 {bounds[2]},{bounds[3]}。请先去掉这块批注。'
+        )
+    if not problems:
+        return ''
+    if len(problems) == 1:
+        return problems[0]
+    return problems[0] + '同一页还有别处批注同样要先去掉。'
 
 
 def word_rows(page, boxes):
@@ -509,12 +553,12 @@ def verify(data, plan, source):
                         checks['pdf_hidden_objects_absent'] = False
                     if page.first_annot or page.first_widget or page.get_links():
                         checks['pdf_hidden_objects_absent'] = False
-                    # 有批注/链接时，基准是“只去掉这些对象、还没涂黑”的页面。图标消失因此不计入框外破坏；涂黑波及框外字形时，仍和这份基准不一致。
+                    # 有批注时，基准仍是去掉批注、尚未涂黑的页面，用来看涂黑有没有切到框外字形。
                     old = formats.pdf_image(pixel_source, index)
                     new = formats.pdf_image(data, index)
                     delta = ImageChops.difference(old, new)
                     for box in pixel_boxes:
-                        # 仅容许边缘的两像素抗锯齿差异；切到字形时框外变化会明确失败。
+                        # 仅容许涂黑边缘的两像素抗锯齿差异；切到字形时框外变化会明确失败。批注自身不走这份额外容差。
                         x0,y0,x1,y1=box
                         delta.paste((0,0,0),(max(0,x0-2),max(0,y0-2),min(new.width,x1+2),min(new.height,y1+2)))
                         inner=(x0+2,y0+2,x1-2,y1-2)
@@ -522,21 +566,14 @@ def verify(data, plan, source):
                             checks['selected_regions_solid'] = False
                     if delta.getbbox() is not None:
                         checks['outside_page_pixels_preserved'] = False
-                    # 与带批注的原页面再比一次。去掉浅色盖子后，框外若多出深色像素，就是被揭开的内容。
                     source_image = formats.pdf_image(source, index)
-                    revealed = ImageChops.subtract(source_image.convert('L'), new.convert('L'))
-                    for box in pixel_boxes:
-                        x0, y0, x1, y1 = box
-                        revealed.paste(0, (max(0, x0 - 2), max(0, y0 - 2), min(new.width, x1 + 2), min(new.height, y1 + 2)))
                     baseline_page = stripped[index] if stripped is not None else None
-                    found = annotation_change_reason(original, baseline_page, pixel_boxes, source_image, old, darkening=revealed)
-                    if revealed.getextrema()[1] > 0 and found != 'annot':
-                        found = 'revealed'
-                    if found:
+                    detail = annotation_change_reason(original, baseline_page, pixel_boxes, source_image, old, page_number=index + 1)
+                    if detail:
                         checks['outside_page_pixels_preserved'] = False
                         checks['covered_text_not_revealed'] = False
-                        if found == 'revealed' or cover_reason != 'revealed':
-                            cover_reason = found
+                        if not cover_reason:
+                            cover_reason = detail
                 keep = engine.keep_checked(plan.get('keep', []))
                 if keep:
                     all_text = '\n'.join(p.get_text() for p in after)
@@ -545,15 +582,9 @@ def verify(data, plan, source):
                     failed = {name for name, ok in checks.items() if not ok}
                     if failed == {'keep_phrases_preserved'}:
                         raise engine.Rejected('保留项没有对上：原文里没有这项，或副本里没有留下。未交付副本。')
-                    if cover_reason == 'annot':
-                        detail = '批注本身有可见内容。请先去掉这块方块或批注，或把被盖住的内容一起框进选区。'
-                    elif cover_reason == 'revealed':
-                        detail = '去掉批注后，原本看不见的内容变得可见。请先去掉这块方块或批注，或把被盖住的内容一起框进选区。'
-                    elif cover_reason == '':
-                        detail = ''
-                    else:
-                        raise engine.Rejected('PDF原生复检未通过：可能切到字形、影响框外内容或存在隐藏对象；请扩大框选或检查格式，不自动图像化。')
-                    raise engine.Rejected('PDF原生复检未通过：可能切到字形、影响框外内容或存在隐藏对象；' + detail + '请扩大框选或检查格式，不自动图像化。')
+                    if cover_reason:
+                        raise engine.Rejected('PDF原生复检未通过：' + cover_reason)
+                    raise engine.Rejected('PDF原生复检未通过：可能切到字形、影响框外内容或存在隐藏对象；请扩大框选或检查格式，不自动图像化。')
                 return {'checks': checks, 'not_checked': [] if keep else ['keep_phrases_preserved'],
                         'effective_pages':plan.get('pages',[]),'output_sha256': engine.digest(data), 'scope': 'PDF原生删改；保留框外可搜索文字、位置和页面。仅核对已选区域及支持的隐藏载体。'}
         finally:
