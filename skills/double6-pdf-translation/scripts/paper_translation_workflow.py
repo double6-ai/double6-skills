@@ -19,7 +19,7 @@ import urllib.request
 from bounded_execution import run_bounded, snapshot
 import failure_root_cause
 from cutover.scoped import check_scoped_preflight, sha
-from pdf_input_preflight import DIGITAL_MAX_PAGES, PreflightError, blocked_result, finding, inspect_pdf
+from pdf_input_preflight import DIGITAL_MAX_PAGES, SUPPORTED_TARGETS, PreflightError, blocked_result, finding, inspect_pdf
 from resource_limits import (ResourceLimitError, backend_timeouts, limits_from_frozen_contract, recommended_contract,
                              resolve_limits, validate_resource_contract)
 
@@ -1105,15 +1105,22 @@ GUIDANCE_SCHEMA = 'input_preflight_guidance_v1'
 WORKFLOW_CLI = 'python scripts/paper_translation_workflow.py'
 
 
-def input_preflight_guidance(report, action, route):
+def input_preflight_guidance(report, action, route, target_language='zh'):
     """输入预检拒绝后的只读下一步提示（中文）：只依据稳定错误码与预检已核实的页数/页型。
 
     只指向现有入口，不自动切换路线、不分块、不执行任何入口、不改变拒绝码与退出码。
     以下情形返回 None（不给任何路线建议）：非 candidate 动作、损坏/加密/未知错误、
-    除本错误外另有 error 级发现、页数或页型未核实。
+    除本错误外另有 error 级发现、页数或页型未核实、目标语言未知或与预检实际使用的目标语言冲突（不猜方向）。
+    ``target_language`` 是本次 candidate 已请求并经 argparse 校验的 ``--target-language``（默认与 CLI 一致为 zh）；
+    提示里接受该参数的执行入口命令（chunked-candidate、candidate --route scanned_ocr）原样带上它，
+    不接受该参数的入口（inspect-input、prepare-scan）不加；inspect-input 固定按目标 zh 判定源语言，
+    所以中译英的长文档提示不再把它列为可运行的核对命令，扫描提示则注明这一限制。
     """
     if action != 'candidate' or report.get('status') != 'blocked':
         return None
+    if target_language not in SUPPORTED_TARGETS or report.get('target_language', target_language) != target_language:
+        return None
+    lang_flag = f'--target-language {target_language}'
     errors = [f for f in report.get('findings') or [] if f.get('severity') == 'error']
     if len(errors) != 1:
         return None
@@ -1122,7 +1129,7 @@ def input_preflight_guidance(report, action, route):
     if not isinstance(page_count, int) or isinstance(page_count, bool) or page_count < 1:
         return None
     base = {'schema': GUIDANCE_SCHEMA, 'error_code': code, 'route': route, 'page_count': page_count,
-            'auto_switch': False, 'executed': False}
+            'target_language': target_language, 'auto_switch': False, 'executed': False}
     if code == 'page_limit_exceeded':
         max_pages = details.get('max_pages')
         if route not in PDF_BACKEND_ROUTES or max_pages != DIGITAL_MAX_PAGES or page_count <= max_pages:
@@ -1134,7 +1141,12 @@ def input_preflight_guidance(report, action, route):
             return dict(base, eligibility='over_chunked_document_limit', route_hint=None, next_steps=[],
                         message=(f'PDF 共 {page_count} 页，超过现有长文档分块路线的整份上限 {limit} 页；'
                                  '现有路线均不适用，本提示不推荐换路线，也不提高页数上限或自动拆分。'))
-        if page_count <= INSPECT_INPUT_MAX_PAGES:
+        if target_language != 'zh':
+            inspect = ('先核对页型与源语言：只读入口 inspect-input 不接受 --target-language，固定按英译中（目标 zh）判定源语言，'
+                       '中文源会被它以 source_language_matches_target 拒绝，不能用于本次中译英核对；逐页页型与源语言尚未核实，'
+                       f'所列 chunked-candidate（带 {lang_flag}）会在冻结校验与任何模型调用之前对整份输入做有界预检'
+                       f'（最多 {limit} 页），digital_pdf 路线遇非原生页仍以退出码 2 拒绝。')
+        elif page_count <= INSPECT_INPUT_MAX_PAGES:
             inspect = (f'先只读核对输入事实（不调用模型、不改 PDF）：{WORKFLOW_CLI} inspect-input --input <PDF> '
                        f'--output <新报告.json> --receipts <新目录> --max-pages {page_count}。')
         else:
@@ -1151,7 +1163,7 @@ def input_preflight_guidance(report, action, route):
                          'scope_evidence 覆盖完整语义范围、chunking_contract 逐字等于 chunked_translation.CHUNKING_CONTRACT、'
                          'routing_contract 与所选路线一致（见 references/chunked-translation.md）；不能沿用当前 FREEZE。'),
                         (f'冻结完成后才可显式运行：{WORKFLOW_CLI} chunked-candidate --input <PDF> --freeze <新 FREEZE.json> '
-                         f'--route {route} --model <model> --base-url <endpoint> --output <新目录> --receipts <新目录>；'
+                         f'--route {route} {lang_flag} --model <model> --base-url <endpoint> --output <新目录> --receipts <新目录>；'
                          '每块仍走原路线的全部门，任何一块失败即整份失败关闭。')])
     if code == 'non_digital_pages':
         if route != 'digital_pdf':
@@ -1175,9 +1187,12 @@ def input_preflight_guidance(report, action, route):
                     next_steps=[
                         (f'先只读核对输入事实（不调用模型、不改 PDF）：{WORKFLOW_CLI} inspect-input --input <PDF> '
                          f'--output <新报告.json> --receipts <新目录>{max_flag}；源图是否为完整作品、打印或手写不会被自动判定，'
-                         '须人工审阅源图（准备新扫描时加 --fresh --source-review <绑定源图的审阅文件> --model <实际模型>）。'),
+                         '须人工审阅源图（准备新扫描时加 --fresh --source-review <绑定源图的审阅文件> --model <实际模型>）。'
+                         + ('' if target_language == 'zh' else
+                            'inspect-input 不接受 --target-language、固定按目标 zh 判定源语言；若含中文原生文字页会以 '
+                            'source_language_matches_target 拒绝，这不是本次中译英的结论。')),
                         ('常规 OCR 路线：重新冻结 FREEZE（route=scanned_ocr、routing_contract 等于 OCR_ROUTING、完整语义作用域证据），'
-                         f'再显式运行 {WORKFLOW_CLI} candidate --route scanned_ocr …；仍受 1–5 页上限、Tesseract 引擎'
+                         f'再显式运行 {WORKFLOW_CLI} candidate --route scanned_ocr {lang_flag} …；仍受 1–5 页上限、Tesseract 引擎'
                          '（chi_sim/eng/osd）与版式/公式准入门约束（如 ocr_formula_unsupported、ocr_table_unsupported、'
                          'ocr_low_confidence，见 references/ocr-route.md）；OCR 文字不作质量验收，须人工复核。'),
                         (f'具名源组/角色的审后扫描准备沿既有入口：{WORKFLOW_CLI} prepare-scan --input <PDF> --output <新目录> '
@@ -1195,7 +1210,7 @@ def candidate_input_preflight(args):
     report = bounded_input_preflight(args.input, receipts, require_digital=args.route == 'digital_pdf',
                                      target_language=getattr(args, 'target_language', 'zh'))
     if report['status'] == 'blocked':
-        guidance = input_preflight_guidance(report, args.action, args.route)
+        guidance = input_preflight_guidance(report, args.action, args.route, getattr(args, 'target_language', None))
         if guidance is not None:
             report['guidance'] = guidance
     if not path.exists():
