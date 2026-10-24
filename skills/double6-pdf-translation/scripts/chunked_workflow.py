@@ -345,6 +345,21 @@ def child_envelope(result: dict[str, Any]) -> dict[str, Any] | None:
     return value
 
 
+def with_document_pages(cause: dict[str, Any], entry: dict[str, Any]) -> dict[str, Any]:
+    """根因细节里的页号是块内页号（1 起）；另记整份文档页号（块起始页 + 块内页 − 1）。"""
+    details = cause.get('details')
+    if not isinstance(details, dict):
+        return cause
+    offset = int(entry['start']) - 1
+    details = dict(details)
+    if isinstance(details.get('pages'), list) and all(isinstance(p, int) for p in details['pages']):
+        details['document_pages'] = [p + offset for p in details['pages']]
+    if isinstance(details.get('violations'), list):
+        details['violations'] = [dict(v, document_page=v['page'] + offset) if isinstance(v, dict) and isinstance(v.get('page'), int)
+                                 else v for v in details['violations']]
+    return dict(cause, details=details, chunk_page_offset=offset)
+
+
 def failure_root_cause(result: dict[str, Any], attempt: Path | None = None) -> dict[str, Any] | None:
     """本次尝试失败的根因（只用本尝试的结构化回执）。``retry``：deterministic / resource / unknown。"""
     from failure_root_cause import UNKNOWN, unavailable
@@ -641,9 +656,9 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
                           measurements=_measure(result), error_code=result.get('error_code'))
             if kind != 'completed':
                 from failure_root_cause import unavailable
-                record['root_cause'] = cause or unavailable('no_structured_cause_in_result',
-                                                            status=result.get('status'), error_code=result.get('error_code'),
-                                                            failure_code=(result.get('command') or {}).get('failure_code'))
+                record['root_cause'] = with_document_pages(cause, entry) if cause else unavailable(
+                    'no_structured_cause_in_result', status=result.get('status'), error_code=result.get('error_code'),
+                    failure_code=(result.get('command') or {}).get('failure_code'))
             if effective_stop_reason(result, attempt_dir) == 'backend_timeout':
                 record['stop_reason'] = 'backend_timeout'
             wf.write_new(attempt_dir / 'CHUNK_RESULT.json', result)
