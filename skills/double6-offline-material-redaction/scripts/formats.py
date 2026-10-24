@@ -33,8 +33,8 @@ MAX_PDF_PIXELS = 40_000_000
 NOTICES = {
  'text':'完整原文按所选词替换，输出UTF-8文本；不执行文本内容。',
  'markdown':'预览展示Markdown源码，含链接、代码、注释与front matter；按完整源码替换，输出UTF-8，不自动清除未选中的文字。',
- 'csv':'保留行列和文字值，输出UTF-8 CSV；可能被表格软件执行的文本会加单引号。请核对原分隔符。',
- 'tsv':'保留行列和文字值，输出UTF-8 TSV；可能被表格软件执行的文本会加单引号。',
+ 'csv':'保留行列和文字值，输出UTF-8 CSV。普通负数保持原样；等号、加号、at，或减号后面不是普通数字的文本会加单引号。保留项按完整单元格核对。',
+ 'tsv':'保留行列和文字值，输出UTF-8 TSV。普通负数保持原样；等号、加号、at，或减号后面不是普通数字的文本会加单引号。保留项按完整单元格核对。',
  'excel':'仅重建可见工作表、可见行列中的值；移除隐藏表/行/列、公式、图表、图片、批注、链接、宏和原属性，工作表改名。公式仅采用文件缓存值，不重新计算；缺少缓存即停止。',
  'slides':'仅重建显示幻灯片的文字与表格，按阅读顺序重排；图片、图表、动画、备注、批注、隐藏页、母版和原属性不带入，不能保留原设计。',
  'pdf':'默认原生删改PDF，保留框外文字和页面。原属性、附件、链接与批注清理；复杂隐藏层/表单会停止。只有明确选择图像化才重建扫描式PDF。无OCR，需逐页核对。',
@@ -323,9 +323,40 @@ def export(data,category,plan):
     return output
 
 
+_PLAIN_NUMBER = re.compile(r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)%?')
+
+
 def safe_cell(text):
-    # 即便CSV用引号包围，Excel仍可能执行公式；不把可执行表达式带入。
-    return "'"+text if text.lstrip().startswith(('=','+','-','@'))or text.startswith(('\t','\r','\n'))else text
+    # 普通负数不是公式。只给表格软件可能执行的文本加单引号，避免把 -120 改成文本。
+    if text == '':
+        return text
+    core = text.strip(' \t')
+    if '\r' not in text and '\n' not in text and _PLAIN_NUMBER.fullmatch(core):
+        return text
+    head = text.lstrip(' \t')
+    if text[:1] in '\t\r\n' or head[:1] in '=+-@':
+        return "'" + text
+    return text
+
+
+def cells_preserve_keep(source_rows, output_rows, keep):
+    """保留项按完整单元格比对。子串命中加了引号的格子不算保留。"""
+    if source_rows is not None and (len(source_rows) != len(output_rows) or any(len(a) != len(b) for a, b in zip(source_rows, output_rows))):
+        raise Rejected('保留项核对时行列结构变了。')
+    for item in keep:
+        exact = []
+        if source_rows is not None:
+            exact = [(r, c) for r, row in enumerate(source_rows) for c, value in enumerate(row) if value == item]
+        if exact:
+            if any(output_rows[r][c] != item for r, c in exact):
+                raise Rejected('保留项“' + item + '”按完整单元格核对已变化。防公式处理只给真正的公式文本加引号；普通负数保持原样。')
+            continue
+        hits = [cell for row in output_rows for cell in row if item in cell]
+        if not hits:
+            raise Rejected('保留项“' + item + '”没有留下。')
+        if all(cell == "'" + item for cell in hits):
+            raise Rejected('保留项“' + item + '”只出现在加了引号的单元格里，完整值已经变了。')
+    return True
 
 
 def verify(data,category,plan,source=None):
@@ -338,7 +369,14 @@ def verify(data,category,plan,source=None):
     info=inspect(data,category,plan.get('_verify_encoding',plan.get('input_encoding')));preview=info['preview'];terms=engine.terms_checked(plan.get('terms',[]))
     checks['selected_strings_absent']=not any(x in preview for x in terms)
     keep=engine.keep_checked(plan.get('keep',[]))
-    if keep:checks['keep_phrases_preserved']=all(x in preview for x in keep)
+    if keep and category in ('csv','tsv'):
+        output_encoding=plan.get('_verify_encoding',plan.get('input_encoding'))
+        if data.startswith(b'\xef\xbb\xbf') and output_encoding in (None,'utf-8'):output_encoding=None
+        output_rows=csv_rows(data,category,output_encoding)
+        source_rows=csv_rows(source,category,plan.get('input_encoding')) if source is not None else None
+        checks['keep_phrases_preserved']=cells_preserve_keep(source_rows,output_rows,keep)
+    elif keep:
+        checks['keep_phrases_preserved']=all(x in preview for x in keep)
     if category in ('text','markdown','csv','tsv'):
         checks['text_encoding_readable']=True
         if category in ('csv','tsv'):checks['formula_text_neutralized']=all(safe_cell(s)==s for row in csv_rows(data,category,plan.get('_verify_encoding',plan.get('input_encoding')))for s in row)
