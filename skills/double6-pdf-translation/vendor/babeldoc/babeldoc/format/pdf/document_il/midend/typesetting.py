@@ -1286,13 +1286,16 @@ class Typesetting:
 
         只在证据可靠时返回：上、下横线都存在且横跨当前框；行带内没有其它段落、未入段字符、
         图片、Form、其它矢量路径；与行带相交的版面区域都包含本段中心且不是图/公式区域；
-        段落不是图内角色。任一条件不满足（含未知）返回 None，沿用原拒绝。
+        段落不是图内角色、没有源基线锚点。任一条件不满足（含未知）返回 None，沿用原拒绝。
         横向范围沿用当前框（已被右侧阻挡物约束）；纵向为本行两条横线之间各留 1pt 的空白，
         当前框已更低时保持当前框下边。字形墨迹另由 _ink_inside_box 逐字核对。
         """
         try:
             label = (getattr(paragraph, "layout_label", None) or "").lower()
             if self.is_cjk or label in self._RULED_BAND_FIGURE_LABELS or getattr(paragraph, "vertical", False):
+                return None
+            # 带源基线锚点的段落按既有基线/上限（source_baseline/source_ceiling）排版，不借此扩框。
+            if getattr(paragraph, "source_baseline", None) is not None:
                 return None
             if not self._is_single_source_line(source_box, typesetting_units):
                 return None
