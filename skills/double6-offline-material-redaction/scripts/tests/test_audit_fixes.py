@@ -1019,5 +1019,222 @@ class RenderGeometryTests(unittest.TestCase):
             self.assertIn(KEEP, opened[0].get_text())
 
 
+def _crop_luma(image, box):
+    x0, y0, x1, y1 = (int(v) for v in box)
+    crop = image.crop((x0, y0, x1, y1)).convert("L")
+    low, high = crop.getextrema()
+    raw = crop.tobytes()
+    return high - low, sum(raw) / len(raw)
+
+
+def _page_plan(box, keep=True):
+    plan = _pdf_plan(box)
+    if not keep:
+        plan["keep"] = []
+    return plan
+
+
+class MarkupAppearanceTests(unittest.TestCase):
+    """标记类批注按渲染外观判断。不透明黑外观不能因为类型名放行。"""
+
+    def _covered(self, border=None):
+        fitz = pdf.backend()
+        doc = fitz.open()
+        page = doc.new_page(width=400, height=300)
+        page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+        page.insert_text((20, 90), "DELETEME", fontname="helv", fontsize=14)
+        page.insert_text((20, 180), COVERED, fontname="helv", fontsize=14)
+        phone = page.search_for(COVERED)[0]
+        other = page.search_for("DELETEME")[0]
+        rect = fitz.Rect(phone.x0 - 2, phone.y0 - 2, phone.x1 + 2, phone.y1 + 2)
+        annot = page.add_rect_annot(rect)
+        annot.set_colors(stroke=(0, 0, 0), fill=(0, 0, 0))
+        annot.set_opacity(1)
+        if border is not None:
+            annot.set_border(width=border)
+        annot.update()
+        raw = doc.tobytes()
+        doc.close()
+        return raw, other, phone, rect
+
+    def _rename(self, raw, subtype):
+        fitz = pdf.backend()
+        doc = fitz.open(stream=raw, filetype="pdf")
+        page = doc[0]
+        value = doc.xref_get_key(page.xref, "Annots")[1]
+        tokens = value.replace("[", " ").replace("]", " ").split()
+        refs = [int(tokens[i]) for i in range(0, len(tokens), 3) if tokens[i + 2] == "R"]
+        self.assertEqual(len(refs), 1, value)
+        doc.xref_set_key(refs[0], "Subtype", subtype)
+        renamed = doc.tobytes()
+        doc.close()
+        check = fitz.open(stream=renamed, filetype="pdf")
+        page = check[0]
+        value = check.xref_get_key(page.xref, "Annots")[1]
+        tokens = value.replace("[", " ").replace("]", " ").split()
+        xref = int(tokens[0])
+        self.assertEqual(check.xref_get_key(xref, "Subtype")[1], subtype)
+        check.close()
+        return renamed
+
+    def _phone_pixels(self, phone):
+        return [phone.x0 * 2 + 2, phone.y0 * 2 + 2, phone.x1 * 2 - 2, phone.y1 * 2 - 2]
+
+    def test_pdf_user_rect_lands_on_the_annot_rect(self):
+        fitz = pdf.backend()
+        doc = fitz.open()
+        page = doc.new_page(width=400, height=300)
+        rect = fitz.Rect(20, 160, 120, 190)
+        annot = page.add_rect_annot(rect)
+        annot.set_colors(fill=(0, 0, 0), stroke=(0, 0, 0))
+        annot.update()
+        kind, value = doc.xref_get_key(annot.xref, "Rect")
+        self.assertEqual(kind, "array")
+        pdf_rect = tuple(float(token) for token in value.replace("[", " ").replace("]", " ").split())
+        bound = pdf._bound_from_pdf_rect(page, pdf_rect)
+        self.assertLess(abs(bound.x0 - annot.rect.x0), 0.2)
+        self.assertLess(abs(bound.y0 - annot.rect.y0), 0.2)
+        self.assertLess(abs(bound.x1 - annot.rect.x1), 0.2)
+        self.assertLess(abs(bound.y1 - annot.rect.y1), 0.2)
+        doc.close()
+
+    def test_black_markup_appearance_is_refused(self):
+        raw, other, phone, _rect = self._covered()
+        plan = _page_plan(_pixel_box(other))
+        phone_box = self._phone_pixels(phone)
+        for subtype in ("/Highlight", "/Underline", "/StrikeOut", "/Squiggly", "/Text", "/Link"):
+            renamed = self._rename(raw, subtype)
+            image = formats.pdf_image(renamed, 0)
+            span, mean = _crop_luma(image, phone_box)
+            self.assertLess(span, 8, subtype)
+            self.assertLess(mean, 40, subtype)
+            leaked = pdf.export(renamed, plan, _verify=False)
+            with pdf.backend().open(stream=leaked, filetype="pdf") as doc:
+                self.assertIn(COVERED, doc[0].get_text(), subtype)
+            with self.assertRaises(engine.Rejected, msg=subtype) as caught:
+                policy.export(renamed, ".pdf", plan)
+            message = str(caught.exception)
+            self.assertIn("看不见", message, subtype)
+            self.assertNotIn(COVERED, message, subtype)
+            self.assertNotIn("DELETEME", message, subtype)
+
+    def test_black_popup_follows_the_rendered_appearance(self):
+        raw, other, phone, _rect = self._covered()
+        renamed = self._rename(raw, "/Popup")
+        image = formats.pdf_image(renamed, 0)
+        span, mean = _crop_luma(image, self._phone_pixels(phone))
+        plan = _page_plan(_pixel_box(other))
+        leaked = pdf.export(renamed, plan, _verify=False)
+        with pdf.backend().open(stream=leaked, filetype="pdf") as doc:
+            self.assertIn(COVERED, doc[0].get_text())
+        if span < 8 and mean < 40:
+            with self.assertRaises(engine.Rejected) as caught:
+                policy.export(renamed, ".pdf", plan)
+            message = str(caught.exception)
+            self.assertIn("看不见", message)
+            self.assertNotIn(COVERED, message)
+            return
+        self.assertGreater(mean, 160)
+        out, report, _ext = policy.export(renamed, ".pdf", plan)
+        self.assertTrue(report["checks"]["covered_text_not_revealed"])
+        with pdf.backend().open(stream=out, filetype="pdf") as doc:
+            text = doc[0].get_text()
+            self.assertIn(COVERED, text)
+            self.assertIn(KEEP, text)
+            self.assertNotIn("DELETEME", text)
+
+    def test_ordinary_highlight_underline_and_note_still_deliver(self):
+        fitz = pdf.backend()
+
+        def highlight(page):
+            page.add_highlight_annot(page.search_for(KEEP)[0]).update()
+
+        def underline(page):
+            page.add_underline_annot(page.search_for(KEEP)[0]).update()
+
+        def note(page):
+            page.add_text_annot(fitz.Point(320, 50), "便签甲乙丙").update()
+
+        for draw in (highlight, underline, note):
+            doc = fitz.open()
+            page = doc.new_page(width=400, height=300)
+            page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+            page.insert_text((20, 90), "DELETEME", fontname="helv", fontsize=14)
+            page.insert_text((20, 180), COVERED, fontname="helv", fontsize=14)
+            draw(page)
+            other = page.search_for("DELETEME")[0]
+            raw = doc.tobytes()
+            doc.close()
+            out, report, _ext = policy.export(raw, ".pdf", _page_plan(_pixel_box(other)))
+            self.assertTrue(report["checks"]["covered_text_not_revealed"])
+            self.assertTrue(report["checks"]["keep_phrases_preserved"])
+            with pdf.backend().open(stream=out, filetype="pdf") as opened:
+                text = opened[0].get_text()
+                self.assertIn(KEEP, text)
+                self.assertIn(COVERED, text)
+                self.assertNotIn("DELETEME", text)
+                self.assertIsNone(opened[0].first_annot)
+
+    def test_zero_width_black_square_delivers_when_fully_boxed(self):
+        raw, other, _phone, rect = self._covered(border=0)
+        with self.assertRaises(engine.Rejected) as caught:
+            policy.export(raw, ".pdf", _page_plan(_pixel_box(other)))
+        message = str(caught.exception)
+        self.assertIn("可见内容", message)
+        self.assertIn("去掉", message)
+        self.assertNotIn("看不见", message)
+        self.assertNotIn(COVERED, message)
+
+        out, report, _ext = policy.export(raw, ".pdf", _page_plan(_pixel_box(rect)))
+        self.assertTrue(report["checks"]["covered_text_not_revealed"])
+        self.assertTrue(report["checks"]["selected_text_removed"])
+        with pdf.backend().open(stream=out, filetype="pdf") as doc:
+            text = doc[0].get_text()
+            self.assertNotIn(COVERED, text)
+            self.assertIn(KEEP, text)
+            self.assertIn("DELETEME", text)
+
+        width, height = formats.pdf_info(raw)[0]
+        out, report, _ext = policy.export(raw, ".pdf", _page_plan([0, 0, width, height], keep=False))
+        self.assertTrue(report["checks"]["covered_text_not_revealed"])
+        with pdf.backend().open(stream=out, filetype="pdf") as doc:
+            self.assertNotIn(COVERED, doc[0].get_text())
+
+    def test_fully_boxed_stamp_delivers_and_partial_still_refuses(self):
+        fitz = pdf.backend()
+        doc = fitz.open()
+        page = doc.new_page(width=400, height=300)
+        page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+        page.insert_text((20, 90), "DELETEME", fontname="helv", fontsize=14)
+        page.insert_text((20, 180), COVERED, fontname="helv", fontsize=14)
+        stamp = fitz.Rect(250, 200, 360, 270)
+        page.add_stamp_annot(stamp).update()
+        other = page.search_for("DELETEME")[0]
+        raw = doc.tobytes()
+        doc.close()
+        with self.assertRaises(engine.Rejected) as caught:
+            policy.export(raw, ".pdf", _page_plan(_pixel_box(other)))
+        message = str(caught.exception)
+        self.assertIn("可见内容", message)
+        self.assertIn("去掉", message)
+        self.assertNotIn("看不见", message)
+
+        out, report, _ext = policy.export(raw, ".pdf", _page_plan(_pixel_box(stamp)))
+        self.assertTrue(report["checks"]["covered_text_not_revealed"])
+        self.assertTrue(report["checks"]["keep_phrases_preserved"])
+        with pdf.backend().open(stream=out, filetype="pdf") as opened:
+            text = opened[0].get_text()
+            self.assertIn(KEEP, text)
+            self.assertIn(COVERED, text)
+            self.assertIn("DELETEME", text)
+            self.assertIsNone(opened[0].first_annot)
+
+        width, height = formats.pdf_info(raw)[0]
+        out, _report, _ext = policy.export(raw, ".pdf", _page_plan([0, 0, width, height], keep=False))
+        with pdf.backend().open(stream=out, filetype="pdf") as opened:
+            self.assertNotIn(COVERED, opened[0].get_text())
+            self.assertIsNone(opened[0].first_annot)
+
+
 if __name__ == "__main__":
     unittest.main()

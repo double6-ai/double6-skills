@@ -62,10 +62,33 @@ def areas(plan, sizes):
     return formats.pdf_boxes(plan, sizes)
 
 
+def _annots_array(page):
+    """页面 /Annots 的原文。PyMuPDF 不列出的链接和弹出框也在这里。"""
+    kind, value = page.parent.xref_get_key(page.xref, 'Annots')
+    if kind == 'null' or value in ('null', '[]', ''):
+        return ''
+    return value
+
+
+def _xref_numbers(value):
+    numbers = []
+    tokens = value.replace('[', ' ').replace(']', ' ').split()
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token.isdigit() and index + 2 < len(tokens) and tokens[index + 1].isdigit() and tokens[index + 2] == 'R':
+            numbers.append(int(token))
+            index += 3
+            continue
+        index += 1
+    return numbers
+
+
 def without_annotation_appearance(data):
     """删掉批注和链接后再按与正式导出相同的新容器重绘。
 
-    只在原件确有批注或链接时返回字节。框外复检拿它当基准，这样批注图标消失不算正文被改；没有批注时仍直接对比原页面，避免放宽其它框外差异。
+    只在原件确有批注、链接或 /Annots 数组时返回字节。框外复检拿它当基准，这样批注图标消失不算正文被改；没有批注时仍直接对比原页面，避免放宽其它框外差异。
+    PyMuPDF 枚举不到的链接和弹出框也从数组里去掉，否则基准仍带着外观，正式导出却把外观删了。
     """
     fitz = backend()
     with open_pdf(data) as doc:
@@ -75,12 +98,14 @@ def without_annotation_appearance(data):
             if any(a.type[0] == fitz.PDF_ANNOT_REDACT for a in annotations):
                 raise engine.Rejected('PDF已有未应用的涂黑标记，请先在原软件完成或移除后再检查。')
             links = list(page.get_links())
-            if annotations or links:
+            if annotations or links or _annots_array(page):
                 changed = True
             for annot in annotations:
                 page.delete_annot(annot)
             for link in links:
                 page.delete_link(link)
+            if _annots_array(page):
+                page.parent.xref_set_key(page.xref, 'Annots', 'null')
         if not changed:
             return None
         fresh = fitz.open()
@@ -138,15 +163,25 @@ def _content_bounds(page):
     return fitz.Rect(page.rect) * _text_matrix(page)
 
 
-def _annot_area(annot, page):
-    """批注矩形回到和文字、涂黑相同的未旋转坐标。
+def _annot_area_from_bound(bound, page):
+    """和 annot.rect 同一坐标系的矩形，回到文字、涂黑使用的未旋转坐标。
 
     有 UserUnit 时，PyMuPDF 先用未缩放的反向旋转处理批注，得到的 rect 会偏到页面外。
     先乘回它的旋转，得到预览上的位置，再用含 UserUnit 的逆矩阵回到文字坐标。
     """
     fitz = backend()
-    display = fitz.Rect(annot.rect) * page.rotation_matrix
+    display = fitz.Rect(bound) * page.rotation_matrix
     return display * _text_matrix(page)
+
+
+def _annot_area(annot, page):
+    return _annot_area_from_bound(annot.rect, page)
+
+
+def _bound_from_pdf_rect(page, pdf_rect):
+    """PDF 用户空间的 /Rect 转到和 annot.rect 相同的坐标。"""
+    fitz = backend()
+    return fitz.Rect(pdf_rect) * page.transformation_matrix * page.derotation_matrix
 
 
 def _to_page_rect(pixel_box, page, pixel_size):
@@ -221,15 +256,10 @@ def _objects_under(page, area, selected):
     return False
 
 
-def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, baseline_image):
-    """非豁免批注在框外有没有揭开内容，或批注自己带不带可见内容。
-
-    返回 revealed、annot 或空字符串。比较两张渲染在批注外沿内的像素，并看去掉批注后的文字、矢量、图片是否落在矩形里。
-    平色盖在平色空白上可以去掉。盖子底下只要去盖后多出任何深浅差别，或有对象落在矩形里，就拒绝。
-    便签、链接、高亮、下划线和删除线确定不遮挡，跳过。选区先抹掉，避免把已经框住的正文算成露出。
-    """
+def _markup_types():
+    """这些类型的自身墨迹可以消失，但只在渲染没有揭开原来看不见的内容时。名字本身不是放行理由。"""
     fitz = backend()
-    exempt = {
+    return {
         fitz.PDF_ANNOT_TEXT,
         fitz.PDF_ANNOT_POPUP,
         fitz.PDF_ANNOT_LINK,
@@ -238,8 +268,88 @@ def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, b
         fitz.PDF_ANNOT_SQUIGGLY,
         fitz.PDF_ANNOT_STRIKE_OUT,
     }
-    annotations = [annot for annot in (page.annots() or []) if annot.type[0] not in exempt]
-    if not annotations:
+
+
+_MARKUP_NAMES = {'/Text', '/Popup', '/Link', '/Highlight', '/Underline', '/Squiggly', '/StrikeOut'}
+
+
+def _appearance_hides(orig_span, orig_mean, base_span, base_mean):
+    """这块外观去掉之后，有没有露出原来看不见的页面结构。
+
+    底下本来是空白，或原来已经能读到字，都不算揭开。
+    """
+    if base_span < 8:
+        return False
+    if orig_span < 8:
+        return True
+    if abs(orig_mean - base_mean) >= 80 and min(orig_mean, base_mean) <= 40:
+        return True
+    return False
+
+
+def _selection_covers(area, selected):
+    """选区是否把这块批注整块框住。允许 1pt 的取整误差。"""
+    target = backend().Rect(area)
+    if target.is_empty or target.is_infinite:
+        return False
+    for sel in selected:
+        if sel.x0 <= target.x0 + 1 and sel.y0 <= target.y0 + 1 and sel.x1 >= target.x1 - 1 and sel.y1 >= target.y1 - 1:
+            return True
+    return False
+
+
+def _pdf_rect_values(value):
+    tokens = value.replace('[', ' ').replace(']', ' ').split()
+    if len(tokens) != 4:
+        return None
+    try:
+        return tuple(float(token) for token in tokens)
+    except ValueError:
+        return None
+
+
+def _areas_to_judge(page):
+    """每条会被删掉的批注，连同 PyMuPDF 不列出的 /Annots。返回 (文字坐标矩形或 None, 是否为标记类)。"""
+    seen = set()
+    areas = []
+    markup_types = _markup_types()
+    for annot in page.annots() or []:
+        seen.add(annot.xref)
+        areas.append((_annot_area(annot, page), annot.type[0] in markup_types))
+    raw = _annots_array(page)
+    if not raw:
+        return areas
+    refs = _xref_numbers(raw)
+    if not refs:
+        areas.append((None, False))
+        return areas
+    doc = page.parent
+    for xref in refs:
+        if xref in seen:
+            continue
+        kind, subtype = doc.xref_get_key(xref, 'Subtype')
+        markup = kind == 'name' and subtype in _MARKUP_NAMES
+        rect_kind, rect_value = doc.xref_get_key(xref, 'Rect')
+        pdf_rect = _pdf_rect_values(rect_value) if rect_kind == 'array' else None
+        if pdf_rect is None:
+            areas.append((None, markup))
+            continue
+        bound = _bound_from_pdf_rect(page, pdf_rect)
+        areas.append((_annot_area_from_bound(bound, page), markup))
+    return areas
+
+
+def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, baseline_image, darkening=None):
+    """每条被删批注都做同一套去盖比较，不按类型整段跳过。
+
+    返回 revealed、annot 或空字符串。比较两张渲染在批注外沿内的像素，并看去掉批注后的文字、矢量、图片是否落在矩形里。
+    平色盖在平色空白上可以去掉。盖子底下只要去盖后多出任何深浅差别，或有对象落在矩形里，就拒绝。
+    高亮、下划线、删除线、波浪线、便签、弹出框和链接的自身墨迹，只有在去掉后没有揭开原来看不见的内容时才可以消失。
+    图章这类自身有可见内容的批注，选区把整块矩形框住、且矩形里没有未选中的对象时，可以去掉。
+    选区先抹掉，避免把已经框住的正文算成露出。已经放行的批注矩形从变深图里抹掉，避免下划线本身的颜色被当成揭开的正文。
+    """
+    areas = _areas_to_judge(page)
+    if not areas:
         return ''
     selected = [_to_page_rect(box, page, original_image.size) for box in pixel_boxes]
     outside = baseline_image.copy()
@@ -248,31 +358,49 @@ def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, b
         span = (max(0, x0 - 2), max(0, y0 - 2), min(outside.width, x1 + 2), min(outside.height, y1 + 2))
         outside.paste((255, 255, 255), span)
     reason = ''
-    for annot in annotations:
-        area = _annot_area(annot, page)
-        under = _objects_under(baseline_page, area, selected)
-        box = _to_pixel_box(area, page, original_image)
-        if box is None:
+    cleared = []
+    for area, markup in areas:
+        box = None
+        if area is None or area.is_empty or area.is_infinite:
             found = 'revealed'
         else:
-            base_span, base_mean = _luma(baseline_image, box)
-            outside_span, _outside_mean = _luma(outside, box)
-            orig_span, orig_mean = _luma(original_image, _aa_interior(box))
-            full_span, _full_mean = _luma(original_image, box)
-            flat_cover = orig_span < 8
-            if flat_cover and not under and outside_span == 0:
-                # 外圈不平和、内圈却与页面同色：描边或细线。实心色块内圈和页面颜色不同，可以去掉。
-                found = 'annot' if full_span >= 8 and abs(orig_mean - base_mean) < 8 else ''
-            elif flat_cover and (under or outside_span >= 1):
+            under = _objects_under(baseline_page, area, selected)
+            box = _to_pixel_box(area, page, original_image)
+            if box is None:
                 found = 'revealed'
-            elif not flat_cover:
-                found = 'annot'
             else:
-                found = ''
+                _base_span, base_mean = _luma(baseline_image, box)
+                outside_span, _outside_mean = _luma(outside, box)
+                interior = _aa_interior(box)
+                orig_span, orig_mean = _luma(original_image, interior)
+                full_span, _full_mean = _luma(original_image, box)
+                flat_cover = orig_span < 8
+                if flat_cover and not under and outside_span == 0:
+                    # 外圈不平和、内圈却与页面同色：描边或细线。实心色块内圈和页面颜色不同，可以去掉。
+                    found = 'annot' if full_span >= 8 and abs(orig_mean - base_mean) < 8 else ''
+                elif flat_cover and (under or outside_span >= 1):
+                    found = 'revealed'
+                elif not flat_cover:
+                    found = 'annot'
+                else:
+                    found = ''
+                if found == 'annot' and _selection_covers(area, selected) and not under:
+                    found = ''
+                elif found == 'annot' and markup:
+                    base_inner_span, base_inner_mean = _luma(baseline_image, interior)
+                    if _appearance_hides(orig_span, orig_mean, base_inner_span, base_inner_mean):
+                        found = 'revealed'
+                    else:
+                        found = ''
+        if found == '' and box is not None:
+            cleared.append(box)
         if found == 'revealed':
             reason = 'revealed'
         elif found == 'annot' and reason != 'revealed':
             reason = 'annot'
+    if darkening is not None and reason != 'revealed':
+        for box in cleared:
+            darkening.paste(0, box)
     return reason
 
 
@@ -401,7 +529,7 @@ def verify(data, plan, source):
                         x0, y0, x1, y1 = box
                         revealed.paste(0, (max(0, x0 - 2), max(0, y0 - 2), min(new.width, x1 + 2), min(new.height, y1 + 2)))
                     baseline_page = stripped[index] if stripped is not None else None
-                    found = annotation_change_reason(original, baseline_page, pixel_boxes, source_image, old)
+                    found = annotation_change_reason(original, baseline_page, pixel_boxes, source_image, old, darkening=revealed)
                     if revealed.getextrema()[1] > 0 and found != 'annot':
                         found = 'revealed'
                     if found:
