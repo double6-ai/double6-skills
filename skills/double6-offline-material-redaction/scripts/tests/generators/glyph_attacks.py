@@ -457,6 +457,72 @@ def strikeout_cut_through_glyph():
     return raw, box
 
 
+def _stem_on_three(page, pairs, gray=0, rgb=None):
+    parts = []
+    for char, rect in pairs:
+        if char != "3":
+            continue
+        ink = _ink_box(page, rect, threshold=40)
+        if ink is None:
+            continue
+        bar = fitz.Rect(
+            ink.x0 - 0.02 * ink.width,
+            ink.y0 + 0.08 * ink.height,
+            ink.x0 + 0.28 * ink.width,
+            ink.y1 - 0.08 * ink.height,
+        )
+        if rgb:
+            box = _to_pdf(page, bar)
+            parts.append(
+                "q %.3f %.3f %.3f rg %.2f %.2f %.2f %.2f re f Q"
+                % (rgb[0], rgb[1], rgb[2], box.x0, box.y0, box.width, box.height)
+            )
+        else:
+            parts.append(_black_rect_cmd(page, bar, gray))
+    return parts
+
+
+def contrast_page(bg=None, gray=0, rgb=None, opacity=None, paint="stem", fill_after_text=False):
+    """整页底色、中灰或彩色竖条、半透明，以及铺色画在字前还是字后。选区只框 DELETEME。"""
+    doc, page = _fresh(640, 340)
+    if bg is not None and not fill_after_text:
+        level = bg / 255.0
+        page.draw_rect(page.rect, color=None, fill=(level, level, level))
+    pairs = _page_chrome(page, 250, 36)
+    if fill_after_text:
+        level = (bg if bg is not None else 40) / 255.0
+        page.draw_rect(page.rect, color=None, fill=(level, level, level))
+        # 页边便签让复检真的去看这条铺色。铺色本身不是批注。
+        page.add_text_annot(fitz.Point(600, 28), "核对").update()
+    parts = []
+    if paint == "stem":
+        parts = _stem_on_three(page, pairs, gray, rgb)
+    elif paint == "appearance-fill":
+        level = (bg if bg is not None else 40) / 255.0
+        box = _to_pdf(page, page.rect)
+        parts.append("q %.3f g %.2f %.2f %.2f %.2f re f Q" % (level, box.x0, box.y0, box.width, box.height))
+    elif paint == "highlight":
+        page.add_highlight_annot(page.search_for(KEEP)[0]).update()
+    union = _wide_union(page, pairs, 640)
+    if parts:
+        annot = page.add_rect_annot(union)
+        annot.set_border(width=0)
+        annot.set_colors(stroke=None, fill=None)
+        annot.update()
+        if opacity is not None:
+            annot.set_opacity(opacity)
+            annot.update()
+        _write_square_ap(doc, page, annot, parts, union)
+        if opacity is not None:
+            doc.xref_set_key(annot.xref, "CA", str(opacity))
+            doc.xref_set_key(annot.xref, "ca", str(opacity))
+    side = page.search_for(SIDE)[0]
+    box = preview_box(page, side)
+    raw = doc.tobytes()
+    doc.close()
+    return raw, box
+
+
 def attack_cases():
     """复审第二轮的额外样例，再加上一条 0.35 磅细线封口。"""
     rows = []
@@ -549,4 +615,25 @@ def attack_cases():
     rows.append(_row("旧-不可见文字层", "old", raw, box, {"render_mode": 3}, "invisible"))
     raw, box = _light_page(white_square=True)
     rows.append(_row("旧-白方块盖号码", "old", raw, box, {"fill": "white"}, "cover"))
+    for bg in (150, 160, 175, 200):
+        raw, box = contrast_page(bg=bg, gray=0)
+        rows.append(_row("灰底%d黑封口" % bg, "contrast", raw, box, {"bg": bg, "ink": "black"}, "tamper"))
+        raw, box = contrast_page(bg=bg, gray=110 / 255)
+        rows.append(_row("灰底%d中灰封口" % bg, "contrast", raw, box, {"bg": bg, "ink": 110}, "tamper"))
+    for level in (97, 110, 120, 140):
+        raw, box = contrast_page(gray=level / 255)
+        rows.append(_row("白纸墨色%d" % level, "contrast", raw, box, {"ink": level}, "tamper"))
+    raw, box = contrast_page(rgb=(220 / 255, 50 / 255, 40 / 255))
+    rows.append(_row("白纸暗红封口", "contrast", raw, box, {"rgb": [220, 50, 40]}, "tamper"))
+    raw, box = contrast_page(rgb=(200 / 255, 90 / 255, 40 / 255))
+    rows.append(_row("白纸橙色封口", "contrast", raw, box, {"rgb": [200, 90, 40]}, "tamper"))
+    for opacity in (0.40, 0.55, 0.75):
+        raw, box = contrast_page(gray=0, opacity=opacity)
+        rows.append(_row("半透明%.2f黑封口" % opacity, "contrast", raw, box, {"opacity": opacity}, "tamper"))
+    raw, box = contrast_page(bg=160, paint="highlight")
+    rows.append(_row("灰底160上的高亮", "contrast", raw, box, {"bg": 160, "paint": "highlight"}, "light"))
+    raw, box = contrast_page(bg=40, fill_after_text=True, paint="none")
+    rows.append(_row("铺色画在文字之后", "contrast", raw, box, {"order": "after-text"}, "later-fill"))
+    raw, box = contrast_page(bg=40, paint="appearance-fill")
+    rows.append(_row("外观铺满并压过中点", "contrast", raw, box, {"paint": "appearance"}, "refuse"))
     return rows

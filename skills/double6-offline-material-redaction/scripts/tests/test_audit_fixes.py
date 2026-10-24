@@ -1221,7 +1221,7 @@ class MarkupAppearanceTests(unittest.TestCase):
         def note(page):
             page.add_text_annot(fitz.Point(320, 50), "便签甲乙丙").update()
 
-        for draw in (highlight, underline, squiggly, note):
+        for draw in (highlight, note):
             doc = fitz.open()
             page = doc.new_page(width=400, height=300)
             page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
@@ -1239,6 +1239,21 @@ class MarkupAppearanceTests(unittest.TestCase):
                 self.assertIn(COVERED, text)
                 self.assertNotIn("DELETEME", text)
                 self.assertIsNone(doc[0].first_annot)
+        for draw in (underline, squiggly, strikeout):
+            doc = fitz.open()
+            page = doc.new_page(width=400, height=300)
+            page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+            page.insert_text((20, 90), "DELETEME", fontname="helv", fontsize=14)
+            page.insert_text((20, 180), COVERED, fontname="helv", fontsize=14)
+            draw(page)
+            other = page.search_for("DELETEME")[0]
+            raw = doc.tobytes()
+            doc.close()
+            with self.assertRaises(engine.Rejected) as caught:
+                policy.export(raw, ".pdf", _page_plan(_pixel_box(other)))
+            message = str(caught.exception)
+            self.assertIn("接近字迹的深色", message)
+            self.assertNotIn(COVERED, message)
         doc = fitz.open()
         page = doc.new_page(width=400, height=300)
         page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)

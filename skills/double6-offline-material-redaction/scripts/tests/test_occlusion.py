@@ -56,12 +56,18 @@ PER_GLYPH_COVER = {
     ("attack", "正常-图章压住号码"),
     ("attack", "攻击-黑方块透明度0.25"),
 }
-# 删除线画在保留句上、选区却是旁边的词，红圈穿过选区外的字。这些字形不在选区内，加墨仍要拒绝。
-# 画在被选词上、字形框整个落在选区里的删除线会随涂黑去掉，不再单为加墨拒绝。
+# 选区外的字前景被改掉就拒绝。画在被选词上、整框落在选区里的删除线会随涂黑去掉。
+# 下划线和波浪线的笔画落在保留句的字形框里，并且跨过这个字的局部中点，同样拒绝。
 ADDED_INK_STROKE = {
     ("office", "正常-红圈圈注"),
+    ("office", "正常-下划线"),
+    ("office", "正常-波浪线"),
     ("round7:expect-reject-visible", "普通删除线"),
+    ("round7:expect-reject-visible", "普通下划线"),
+    ("round7:expect-reject-visible", "普通波浪线"),
     ("author", "普通删除线"),
+    ("author", "普通下划线"),
+    ("author", "普通波浪线"),
 }
 
 
@@ -306,8 +312,8 @@ class OcclusionOracleTests(unittest.TestCase):
         self.assertEqual(leaks, 0, office_note)
         self.assertEqual(
             office_deliver,
-            9,
-            "正常办公 12 份里应有 9 份交付。用户黑框、压住数字的图章、压到选区外字上的红圈，都拒绝。画在被选词上的删除线可以去掉。\n" + office_note,
+            7,
+            "正常办公 12 份里应有 7 份交付。用户黑框、压住数字的图章、压到选区外字上的红圈、下划线和波浪线都拒绝。高亮和画在被选词上的删除线可以去掉。\n" + office_note,
         )
         self.assertEqual(len(office_names), 12)
         self.assertFalse(problems, office_note)
@@ -502,6 +508,38 @@ def _source_digits_visible(raw):
     return any(_region_visible(image, box) for box in _digit_boxes(raw))
 
 
+class ExitCleanupTests(unittest.TestCase):
+    def test_sys_exit_runs_earlier_hooks_and_flushes_small_files(self):
+        directory = tempfile.mkdtemp(prefix="redaction-exit-")
+        early = os.path.join(directory, "early.txt")
+        pending = os.path.join(directory, "pending.bin")
+        script = (
+            "import atexit, sys\n"
+            "def early():\n"
+            "    open(%r, 'w', encoding='utf-8').write('early')\n"
+            "atexit.register(early)\n"
+            "import pdf_preserve\n"
+            "pdf_preserve.backend()\n"
+            "handle = open(%r, 'wb')\n"
+            "handle.write(b'HELLO-NOT-FLUSHED')\n"
+            "sys.exit(7)\n"
+        ) % (early, pending)
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(Path(__file__).parents[1]) + os.pathsep + env.get("PYTHONPATH", "")
+        proc = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True)
+        self.assertEqual(proc.returncode, 7, proc.stderr.decode("utf-8", "replace")[-400:])
+        self.assertEqual(Path(early).read_text(encoding="utf-8"), "early")
+        self.assertEqual(Path(pending).read_bytes(), b"HELLO-NOT-FLUSHED")
+
+    def test_uncaught_error_is_not_reported_as_success(self):
+        script = "import pdf_preserve\npdf_preserve.backend()\nraise RuntimeError('boom')\n"
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(Path(__file__).parents[1]) + os.pathsep + env.get("PYTHONPATH", "")
+        proc = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True)
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn(b"RuntimeError", proc.stderr)
+
+
 class AddedInkAttackTests(unittest.TestCase):
     def test_only_a_glyph_fully_inside_one_selection_skips_added_ink(self):
         self.assertTrue(pdf._glyph_inside_selection((10, 20, 30, 40), [(10, 20, 30, 40)]))
@@ -538,12 +576,15 @@ class AddedInkAttackTests(unittest.TestCase):
                     self.assertIn("删除线", message)
 
     def test_added_ink_thresholds_stay_written_down(self):
-        # 白纸约 255。涂到不超过 96 且至少暗 80，才接近字迹。高亮仍远亮于这条线。
-        self.assertEqual(pdf._ADDED_INK_BRIGHT, 176)
-        self.assertEqual(pdf._ADDED_INK_DARK, 96)
-        self.assertEqual(pdf._ADDED_INK_DROP, 80)
-        self.assertEqual(pdf._ADDED_INK_MIN, 6)
+        # 中点由每个字自己的底色和字迹色决定，不再用 176/96 这种固定亮度。
+        self.assertEqual(pdf._CONTRAST_BG_PERCENT, 75)
+        self.assertEqual(pdf._CONTRAST_INK_PERCENT, 10)
+        self.assertEqual(pdf._CONTRAST_MIN, 40)
+        self.assertEqual(pdf._CONTRAST_MOVE_NUM, 1)
+        self.assertEqual(pdf._CONTRAST_MOVE_DEN, 5)
+        self.assertEqual(pdf._MASK_DIFF_MIN, 6)
         self.assertEqual(pdf._GLYPH_INK_MARGIN, 2)
+        self.assertFalse(hasattr(pdf, "_ADDED_INK_BRIGHT"))
 
     def test_review_stroke_samples_and_the_hairline_are_refused(self):
         rows = attack_cases()
@@ -580,6 +621,9 @@ class AddedInkAttackTests(unittest.TestCase):
                 self.assertIn("接近字迹的深色", message)
             elif expect == "cover":
                 self.assertIn("盖住了", message)
+            elif expect == "later-fill":
+                # 画在字后面的整页铺色，要么在打开时就因后绘制挡住文字而停止，要么在批注复检里算线条或图片。
+                self.assertTrue("线条或图片" in message or "后绘制" in message, message)
             elif expect == "refuse":
                 # 只要拒绝。Windows 上错位黑块会说两种渲染看不一致，仍然不算放行。
                 self.assertTrue(

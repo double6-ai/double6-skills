@@ -17,35 +17,81 @@ _exit_status = None
 _original_exit = sys.exit
 
 
-def _tracking_exit(status=0):
-    global _exit_status
+def _normalize_exit_status(status):
     if isinstance(status, bool):
-        _exit_status = int(status)
-    elif isinstance(status, int):
-        _exit_status = status
-    elif status is None:
-        _exit_status = 0
-    else:
-        _exit_status = 1
-    _original_exit(status)
+        return int(status)
+    if isinstance(status, int):
+        return status
+    if status is None:
+        return 0
+    return 1
 
 
-def _shutdown_renderers():
-    """解释器还活着的时候丢掉 MuPDF 缓存。测试套件用 sys.exit 收尾时，不再走进会崩溃的最终回收。"""
-    if _mupdf_used:
-        try:
-            backend().TOOLS.store_shrink(100)
-        except Exception:
-            pass
-        gc.collect()
-    if not _mupdf_used or _exit_status is None:
-        return
+def _flush_open_streams():
+    """os._exit 不会刷缓冲区。先把标准流和还开着的文件都写出去。"""
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.flush()
         except Exception:
             pass
-    os._exit(_exit_status)
+    try:
+        objects = gc.get_objects()
+    except Exception:
+        return
+    for obj in objects:
+        if not isinstance(obj, io.IOBase) or getattr(obj, 'closed', True):
+            continue
+        try:
+            obj.flush()
+        except Exception:
+            pass
+
+
+def _release_mupdf():
+    try:
+        backend().TOOLS.store_shrink(100)
+    except Exception:
+        pass
+    gc.collect()
+
+
+_finishing = False
+
+
+def _finish_after_mupdf(code):
+    """先跑已经登记的退出回调，再清空 MuPDF 并刷盘，最后按原退出码结束。
+
+    Python 3.10/3.11 会在最终回收 SWIG 对象时崩溃。直接 os._exit 能避开这一步，
+    但会跳过更早登记的 atexit，也会丢掉还在缓冲区里的小文件。这里在硬退出之前把这两件事做完。
+    命令行用 raise SystemExit 收尾，不走这条路径，仍由解释器自己回收。
+    """
+    global _finishing
+    if _finishing:
+        return
+    _finishing = True
+    atexit.unregister(_shutdown_renderers)
+    try:
+        atexit._run_exitfuncs()
+    except BaseException:
+        pass
+    _release_mupdf()
+    _flush_open_streams()
+    os._exit(code)
+
+
+def _tracking_exit(status=0):
+    global _exit_status
+    _exit_status = _normalize_exit_status(status)
+    if _mupdf_used:
+        _finish_after_mupdf(_exit_status)
+    _original_exit(status)
+
+
+def _shutdown_renderers():
+    """没有走 sys.exit 时，仍在解释器还活着的时候丢掉 MuPDF 缓存。"""
+    if _finishing or not _mupdf_used:
+        return
+    _release_mupdf()
 
 
 atexit.register(_shutdown_renderers)
@@ -285,8 +331,38 @@ def _glyphs_under(page, area):
     return ''.join(text for text, _rect in _each_glyph(page, area))
 
 
+def _page_sized(bounds, page_box):
+    if bounds.contains(page_box):
+        return True
+    return bounds.width > page_box.width * 0.9 and bounds.height > page_box.height * 0.9
+
+
+def _latest_text_seqno(page, area):
+    """和这块批注相交的文字里，最晚画出来的序号。没有序号就返回 None。"""
+    latest = None
+    fitz = backend()
+    for span in page.get_texttrace():
+        seq = span.get('seqno')
+        if not isinstance(seq, int):
+            continue
+        for char in span['chars']:
+            if not chr(char[0]).strip():
+                continue
+            rect = fitz.Rect(char[3])
+            if rect.is_empty or rect.is_infinite or not rect.intersects(area):
+                continue
+            if latest is None or seq > latest:
+                latest = seq
+    return latest
+
+
 def _graphics_under(page, area, selected):
-    """批注下面还有没有未框选的矢量或图片。文字改由边缘判断，这里不再把文字当遮盖。"""
+    """批注下面还有没有未框选的矢量或图片。文字改由边缘判断，这里不再把文字当遮盖。
+
+    铺满页面、并且画在这些字之前的矩形是底色，不是批注揭开后才会露出来的东西。
+    同一块铺色若画在字之后，或者序号对不上，就按线条或图片拒绝。
+    画在批注外观里的铺色不在这里：外观只出现在「带批注」的渲染里，由字形的前景掩码判断。
+    """
     if page is None or area is None or area.is_empty or area.is_infinite:
         return False
     fitz = backend()
@@ -296,12 +372,15 @@ def _graphics_under(page, area, selected):
     for image in page.get_image_info():
         if _counts_as_hidden(fitz.Rect(image['bbox']), area, selected):
             return True
+    text_seq = _latest_text_seqno(page, area)
     for drawing in page.get_drawings():
         bounds = fitz.Rect(drawing['rect'])
-        if bounds.contains(page_box):
-            continue
-        if bounds.width > page_box.width * 0.9 and bounds.height > page_box.height * 0.9:
-            continue
+        if _page_sized(bounds, page_box):
+            seq = drawing.get('seqno')
+            if text_seq is None:
+                continue
+            if isinstance(seq, int) and seq < text_seq:
+                continue
         if _counts_as_hidden(bounds, area, selected):
             return True
     return False
@@ -510,19 +589,74 @@ def _garbled_text(text):
     return False
 
 
-# 白纸大约是 255。接近字迹指涂完不超过 96，并且比原来至少暗 80。
-# 黄色高亮只把白纸略降暗，仍远高于 96，不计。不看批注的类型和颜色。
-_ADDED_INK_BRIGHT = 176
-_ADDED_INK_DARK = 96
-_ADDED_INK_DROP = 80
+# 底色取字形框外环的高分位，字迹取框内最暗那一档。中点以下算前景。
+# 不使用固定的 176/96。彩色只看亮度。对比度不够就判不了。
+_CONTRAST_RING = 3
+_CONTRAST_BG_PERCENT = 75
+_CONTRAST_INK_PERCENT = 10
+_CONTRAST_MIN = 40
+# 跨过中点、并且明暗变化至少达到这段对比度的两成，才计入掩码差异。贴着中点的抗锯齿不算。
+_CONTRAST_MOVE_NUM = 1
+_CONTRAST_MOVE_DEN = 5
 # 细线也能凑满 6 个预览像素。一两粒抗锯齿不算改字。
-_ADDED_INK_MIN = 6
+_MASK_DIFF_MIN = 6
 _GLYPH_INK_MARGIN = 2
 
 
-def _added_ink_count(base_img, covered_img, box):
-    """字形框加小边距里，原来的亮像素被涂到接近字迹的有多少。数不清就返回 None。"""
-    if box is None or base_img.size != covered_img.size:
+def _byte_percentile(values, percent):
+    if not values:
+        return None
+    bins = [0] * 256
+    for value in values:
+        bins[value] += 1
+    target = int(round((len(values) - 1) * percent / 100.0))
+    seen = 0
+    for luma, count in enumerate(bins):
+        seen += count
+        if seen > target:
+            return luma
+    return 255
+
+
+def _local_threshold(base_img, tight):
+    """去掉批注的画面上，这个字的底色和字迹色。估不出就返回 None。"""
+    if tight is None or base_img is None:
+        return None
+    outer = _grow_pixel_box(tight, base_img, _CONTRAST_RING)
+    if outer is None:
+        return None
+    crop = base_img.crop(outer)
+    data = crop.tobytes()
+    width, height = crop.size
+    if width < 1 or height < 1 or len(data) != width * height:
+        return None
+    left = tight[0] - outer[0]
+    top = tight[1] - outer[1]
+    right = tight[2] - outer[0]
+    bottom = tight[3] - outer[1]
+    interior = []
+    ring = []
+    for y in range(height):
+        row = y * width
+        inside_y = top <= y < bottom
+        for x in range(width):
+            value = data[row + x]
+            if inside_y and left <= x < right:
+                interior.append(value)
+            else:
+                ring.append(value)
+    if len(interior) < 4 or len(ring) < 8:
+        return None
+    background = _byte_percentile(ring, _CONTRAST_BG_PERCENT)
+    ink = _byte_percentile(interior, _CONTRAST_INK_PERCENT)
+    if background is None or ink is None or background - ink < _CONTRAST_MIN:
+        return None
+    return background, ink
+
+
+def _mask_change_count(base_img, covered_img, box, background, ink):
+    """外扩框里，前景掩码多出或少掉的像素。两张图对不齐就返回 None。"""
+    if box is None or background is None or ink is None or base_img.size != covered_img.size:
         return None
     x0, y0, x1, y1 = box
     if x1 <= x0 or y1 <= y0 or x0 < 0 or y0 < 0 or x1 > base_img.width or y1 > base_img.height:
@@ -531,10 +665,17 @@ def _added_ink_count(base_img, covered_img, box):
     after = covered_img.crop(box).tobytes()
     if len(before) != len(after) or not before:
         return None
+    span = background - ink
+    if span < _CONTRAST_MIN:
+        return None
+    midpoint = background + ink
     count = 0
     for origin, painted in zip(before, after):
-        if origin >= _ADDED_INK_BRIGHT and painted <= _ADDED_INK_DARK and origin - painted >= _ADDED_INK_DROP:
-            count += 1
+        if (origin * 2 <= midpoint) == (painted * 2 <= midpoint):
+            continue
+        if abs(origin - painted) * _CONTRAST_MOVE_DEN < span * _CONTRAST_MOVE_NUM:
+            continue
+        count += 1
     return count
 
 
@@ -564,12 +705,13 @@ def _glyph_inside_selection(box, selections):
 
 
 def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mupdf_covered, selections=()):
-    """逐个字形看存活率、明暗差，以及空白处有没有被涂成字迹。
+    """逐个字形看存活率、明暗差，以及前景掩码有没有被改掉。
 
     取样只取这个字形自己的矩形，再向外加 2 个预览像素，不和整块矩形做平均或面积加权。
-    边缘存活率只统计原来就黑的文字边，白底被涂黑不会拉低它，所以另外数新涂上的深色。
-    整个字形框都落在某一个选区里时，这些新墨会随这次涂黑一起去掉，不再单为加墨拒绝。
-    骑在选区边界上的字按选区外计算。任何一个选区外的字不达标，或者任一渲染器在这种字上看到足够的新墨，整条批注就不放行。对不齐也拒绝。
+    掩码用去掉批注后的局部底色和字迹色的中点。多出或少掉的前景达到小数量就拒绝。
+    整个字形框都落在某一个选区里时，这些改动会随这次涂黑一起去掉，不再单为掩码拒绝。
+    对比度太低、底色或字迹色估不出，也拒绝。骑在边界上的字按选区外计算。
+    任何一个选区外的字不达标，或者任一渲染器看到足够的掩码差异，整条批注就不放行。
     """
     for _text, rect in _each_glyph(baseline_page, area):
         box = _to_pixel_box(rect, page, covered)
@@ -581,14 +723,18 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
         )
         if reason:
             return reason, box
+        left_level = _local_threshold(base, box)
+        right_level = _local_threshold(mupdf_base, box)
+        if left_level is None or right_level is None:
+            return 'invalid', box
         if _glyph_inside_selection(box, selections):
             continue
         grown = _grow_pixel_box(box, covered, _GLYPH_INK_MARGIN)
-        left = _added_ink_count(base, covered, grown)
-        right = _added_ink_count(mupdf_base, mupdf_covered, grown)
+        left = _mask_change_count(base, covered, grown, left_level[0], left_level[1])
+        right = _mask_change_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1])
         if left is None or right is None:
             return 'invalid', grown or box
-        if left >= _ADDED_INK_MIN or right >= _ADDED_INK_MIN:
+        if left >= _MASK_DIFF_MIN or right >= _MASK_DIFF_MIN:
             return 'tamper', grown
     return '', None
 
@@ -737,8 +883,8 @@ def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, b
 
     每条批注都用 pdfium 和 MuPDF 各渲染有批注、无批注两张图。覆盖区里只认去掉批注之后还在的文字边缘。
     整块矩形的存活率只说明这一块大体还读不读得清。矩形里再逐个字形看：任何一个字的存活率或明暗差不达标，
-    或者选区没有完整罩住的字形被涂上接近字迹的深色，整条批注就拒绝。不把可读正文平均进去。字形对不齐也拒绝。
-    整个字形框都在某一个选区里时，加在空白上的深色会随涂黑去掉，不再单为这一条拒绝。骑在边界上的字仍要查。
+    或者选区没有完整罩住的字形前景掩码被改掉，整条批注就拒绝。不把可读正文平均进去。字形对不齐、局部对比度不够也拒绝。
+    掩码用这个字自己的底色和字迹色的中点，不看固定亮度。整个字形框都在某一个选区里时，掩码变化会随涂黑去掉。骑在边界上的字仍要查。
     便签、图章、签名自己的图标，底下是空白时不算遮盖。两个渲染器只要有一个判盖住或判不了，就拒绝。
     文字层有字、画面上却没有这些字的边缘，也拒绝。批注下面的矢量或图片无法用文字边缘判断，继续拒绝。
     类型名、颜色和线宽都不是放行条件。矩形外多画出来的差异另判；判不了同样拒绝。
