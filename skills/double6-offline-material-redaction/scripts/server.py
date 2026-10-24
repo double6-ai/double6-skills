@@ -8,6 +8,8 @@ import time
 import urllib.parse
 import formats
 import compat
+import output_policy
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -50,7 +52,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'")
         if attachment:
-            self.send_header("Content-Disposition", 'attachment; filename="' + attachment + '"')
+            self.send_header("Content-Disposition", 'attachment; filename="material-redacted' + Path(attachment).suffix + '"; filename*=UTF-8\'\'' + urllib.parse.quote(attachment, safe=''))
         self.end_headers()
         self.wfile.write(payload)
 
@@ -90,8 +92,7 @@ class Handler(BaseHTTPRequestHandler):
                 if parts[2] == "preview" and job["kind"] == "image":
                     return self.send(200, job["preview"], "image/png")
                 if parts[2] == "output" and job.get("output"):
-                    mime = "image/png" if job["kind"] == "image" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if job["kind"]=="word" else formats.MIME[job["kind"]]
-                    return self.send(200, job["output"], mime, "material-redacted"+formats.OUTPUT[job["kind"]])
+                    return self.send(200, job['output'], output_policy.mime(job['output_ext']), job['output_name'])
             if len(parts)==4 and parts[0]=="file" and parts[2]=="page":
                 job=self.job(parts[1])
                 if job["kind"]=="pdf" and parts[3].isdigit():
@@ -115,7 +116,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "api/import":
                 kind = self.headers.get("X-File-Kind")
                 original_sha = digest(data)
-                ext=self.headers.get("X-File-Extension", "")
+                original_data=data
+                ext=self.headers.get("X-File-Extension", "").lower()
+                if output_policy.category(ext)!=kind:raise Rejected('文件类型与扩展名不符。')
+                if ext in output_policy.LEGACY and self.headers.get('X-Convert-To')!=output_policy.LEGACY[ext]:raise Rejected('旧格式预览需要先明确选择转换；未调用兼容引擎。')
                 if ext in compat.KINDS and kind != compat.KINDS[ext]:raise Rejected("文件类型与扩展名不符。")
                 data,compatibility=compat.normalize(data,ext)
                 if kind == "image":
@@ -135,9 +139,9 @@ class Handler(BaseHTTPRequestHandler):
                     # 超过容量时明确要求清空，不静默移除另一个下载会话。
                     if len(self.server.jobs) >= 4:
                         raise Rejected("本会话已载入四份材料，请先清空。")
-                    self.server.jobs[ident] = {"kind": kind, "data": data, "preview": preview, "created": time.monotonic(), "source_sha256": original_sha,"encoding":self.headers.get("X-Text-Encoding")or None}
+                    self.server.jobs[ident] = {"kind": kind, "data": data, "original":original_data,"extension":ext,"original_name":urllib.parse.unquote(self.headers.get("X-File-Name","material")), "preview": preview, "created": time.monotonic(), "source_sha256": original_sha,"encoding":self.headers.get("X-Text-Encoding")or None}
                 if compatibility:plan["notice"]=compatibility["notice"]+plan.get("notice", "");plan["compatibility"]=compatibility
-                return self.send(200, {"id": ident, "kind": kind, **plan})
+                return self.send(200, {"id": ident, "kind": kind,"input_extension":ext,"output_options":output_policy.options(ext),"original_format_supported":ext not in output_policy.LEGACY, **plan})
             values = json.loads(data)
             if not isinstance(values, dict):
                 raise Rejected("请求格式无效。")
@@ -150,17 +154,26 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(200, {"stopped": True})
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return
+            if path == "api/snap-pdf":
+                job=self.job(values.get('id'))
+                if job['kind']!='pdf':raise Rejected('整字对齐只适用于PDF。')
+                import pdf_preserve
+                region=pdf_preserve.snap_region(job['data'],values.get('page'),values.get('rectangle'))
+                return self.send(200,{'rectangle':region})
+            if path == "api/invalidate":
+                self.job(values.get("id")).pop("output",None)
+                return self.send(200,{"invalidated":True})
             if path == "api/export":
                 job = self.job(values.get("id"))
                 job.pop('output',None)
                 if values.get("reviewed") is not True:
                     raise Rejected("请先核对预览和补选范围。")
-                if job["kind"] == "image":
-                    output, report = export_image(job["data"], values.get("rectangles"))
-                elif job["kind"]=="word":
-                    output, report = export_docx(job["data"], values.get("terms"), values.get("acknowledge_loss"), values.get("clean_only", False), values.get('keep',[]))
-                else:
-                    values["input_encoding"]=job["encoding"];output=formats.export(job["data"],job["kind"],values);report=formats.verify(output,job["kind"],values,job["data"])
+                values['input_encoding']=job['encoding']
+                output,report,ext=output_policy.export(job['original'],job['extension'],values,values.get('output_format'))
+                # 下载名不沿用原名，避免正文已处理而姓名/号码仍随文件名上传。
+                job['output_name']='redacted-'+datetime.now().strftime('%Y%m%d-%H%M%S')+'-'+secrets.token_hex(6)+ext
+                report['checks']['neutral_output_filename']=True
+                job['output_ext']=ext
                 job["output"] = output
                 return self.send(200, {"download": "file/" + values["id"] + "/output", "report": report})
             self.send(404, {"error": "接口不存在。"})

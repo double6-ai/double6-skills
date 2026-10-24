@@ -14,6 +14,7 @@ from PIL import Image, ImageChops
 import engine
 import formats
 import compat
+import output_policy
 
 
 class Failure(Exception):
@@ -45,8 +46,8 @@ def kind(path):
 def load_plan(path, expected):
     try: plan = json.loads(load_file(path, 256 * 1024).decode('utf-8-sig'))
     except (ValueError, UnicodeError, RecursionError): raise Failure('计划文件不是有效UTF-8 JSON。')
-    common = {'version', 'kind', 'reviewed', 'keep'}
-    allowed = common | ({'terms', 'acknowledge_loss', 'clean_only'} if expected == 'word' else {'rectangles'} if expected == 'image' else {'pages','reviewed_pages','acknowledge_loss'} if expected == 'pdf' else {'terms','acknowledge_loss','clean_only','input_encoding'})
+    common = {'version', 'kind', 'reviewed', 'keep', 'output_format', 'pdf_mode'}
+    allowed = common | ({'terms', 'acknowledge_loss', 'clean_only'} if expected == 'word' else {'rectangles'} if expected == 'image' else {'pages','reviewed_pages','acknowledge_loss','snap_to_text'} if expected == 'pdf' else {'terms','acknowledge_loss','clean_only','input_encoding'})
     if not isinstance(plan, dict) or set(plan) - allowed or type(plan.get('version')) is not int or plan.get('version') != 1 or plan.get('kind') != expected or plan.get('reviewed') is not True:
         raise Failure('计划需声明version=1、对应kind与reviewed=true，且不能有未知字段。')
     plan['keep'] = engine.keep_checked(plan.get('keep', []))
@@ -79,7 +80,7 @@ def write_new(path, data):
 
 def doctor():
     assets = Path(__file__).parent / 'web'
-    checks = {'python_runtime': sys.version_info[:2] == (3, 12), 'web_assets': all((assets / n).is_file() for n in ['index.html', 'app.js', 'style.css']), 'supported_platform': sys.platform in {'darwin', 'win32'}}
+    checks = {'python_runtime': (3,10) <= sys.version_info[:2] <= (3,14), 'web_assets': all((assets / n).is_file() for n in ['index.html', 'app.js', 'style.css']), 'supported_platform': sys.platform in {'darwin', 'win32'}}
     if not all(checks.values()): raise Failure('运行环境不完整或平台未纳入支持，请重新安装对应版本。', 4)
     return {'version': engine.VERSION, 'platform': platform.system(), 'machine': platform.machine(), 'python': platform.python_version(), 'self_contained': False, 'checks': checks, 'package': {'mode':'open_source','dependency_integrity':'use hash-locked bootstrap'}, 'processing_network': 'not_required', 'ocr': False, 'formats': ['PNG/JPEG/WebP','DOCX',*formats.EXTENSIONS], 'pdf_dpi':144, 'compatibility':compat.status(), 'compatibility_formats':list(compat.KINDS)}
 
@@ -124,18 +125,8 @@ def check_output(data, category, plan, source=None):
         keep=engine.keep_checked(plan.get('keep', []))
         if keep:checks['keep_phrases_preserved'] = all(k in text for k in keep)
     else:
-        if source is None: raise Failure('图片复检需要--source原图，才能核对框外像素。')
-        original = engine.image_source(source)
-        boxes = engine.rectangles(plan.get('rectangles'), original.size)
-        with Image.open(io.BytesIO(data)) as target:
-            target.load()
-            checks = {'png': target.format == 'PNG', 'single_frame': getattr(target, 'n_frames', 1) == 1, 'metadata_absent': not target.info and not target.getexif(), 'dimensions': target.size == original.size}
-            if not checks['dimensions']: raise Failure('输出图片尺寸不符。', 3)
-            target = target.convert('RGB')
-            checks['masks_solid'] = all(target.crop(b).getbbox() is None for b in boxes)
-            delta = ImageChops.difference(original, target)
-            for b in boxes: delta.paste((0, 0, 0), b)
-            checks['outside_preserved'] = delta.getbbox() is None
+        if source is None:raise Failure('图片复检需要原图。')
+        return output_policy.image_native.verify(data,plan.get('rectangles'),source)
     if not all(checks.values()): raise Failure('导出复检未通过，未交付为可用副本。', 3)
     return {'checks': checks, 'not_checked':['keep_phrases_preserved']if category=='word'and not keep else [], 'output_sha256': engine.digest(data), 'scope': '仅核对计划指定内容和已支持载体；未自动确认补选完整性'}
 
@@ -149,8 +140,8 @@ def main():
     p.add_argument('--version', action='version', version=engine.VERSION)
     sub = p.add_subparsers(dest='command', required=True)
     sub.add_parser('doctor');sub.add_parser('selftest')
-    inspect_p = sub.add_parser('inspect');inspect_p.add_argument('--input', required=True);inspect_p.add_argument('--show-preview', action='store_true');inspect_p.add_argument('--encoding',choices=['utf-8','utf-16','gb18030'])
-    redact_p = sub.add_parser('redact');redact_p.add_argument('--input', required=True);redact_p.add_argument('--plan', required=True);redact_p.add_argument('--output', required=True)
+    inspect_p = sub.add_parser('inspect');inspect_p.add_argument('--input', required=True);inspect_p.add_argument('--show-preview', action='store_true');inspect_p.add_argument('--encoding',choices=['utf-8','utf-16','gb18030']);inspect_p.add_argument('--allow-conversion',action='store_true')
+    redact_p = sub.add_parser('redact');redact_p.add_argument('--input', required=True);redact_p.add_argument('--plan', required=True);redact_p.add_argument('--output', required=True);redact_p.add_argument('--output-format',help='仅显式指定才转换，例如.png/.docx');redact_p.add_argument('--pdf-mode',choices=['preserve','rasterize'])
     verify_p = sub.add_parser('verify');verify_p.add_argument('--input', required=True);verify_p.add_argument('--plan', required=True);verify_p.add_argument('--source')
     gui_p = sub.add_parser('gui');gui_p.add_argument('--no-browser', action='store_true');gui_p.add_argument('--session-file')
     args = p.parse_args()
@@ -163,7 +154,9 @@ def main():
             sys.argv = [sys.argv[0]] + (['--no-browser'] if args.no_browser else []) + (['--session-file', args.session_file] if args.session_file else [])
             desktop_launch.main();return 0
         elif args.command == 'inspect':
-            category = kind(args.input);data = load_file(args.input);data, compatibility = compat.normalize(data,Path(args.input).suffix.lower())
+            category = kind(args.input);data = load_file(args.input)
+            if Path(args.input).suffix.lower() in output_policy.LEGACY and not args.allow_conversion:raise Failure('旧格式预览需显式--allow-conversion，未调用兼容引擎。')
+            data, compatibility = compat.normalize(data,Path(args.input).suffix.lower())
             if category == 'word':
                 info = engine.inspect_docx(data)
                 result = {'kind': category, 'characters': len(info['preview']), 'suggestion_count': len(info['suggestions']), 'removed': info['removed'], 'notice': info['notice']}
@@ -175,20 +168,21 @@ def main():
             else:
                 im = engine.image_source(data);result = {'kind': category, 'display_width': im.width, 'display_height': im.height, 'manual_rectangles_required': True}
         elif args.command == 'redact':
-            category = kind(args.input);data = load_file(args.input);data, compatibility = compat.normalize(data,Path(args.input).suffix.lower());plan = load_plan(args.plan, category)
-            if Path(args.output).resolve() in {Path(args.input).resolve(), Path(args.plan).resolve()}: raise Failure('输出不能覆盖输入或计划文件。')
-            if Path(args.output).suffix.lower() != formats.OUTPUT[category]: raise Failure('输出扩展名需为'+formats.OUTPUT[category]+'。')
-            if category == 'word': out, _ = engine.export_docx(data, plan['terms'], True, plan.get('clean_only', False))
-            elif category == 'image': out, _ = engine.export_image(data, plan.get('rectangles'))
-            else: out=formats.export(data,category,plan)
-            result = check_output(out, category, plan, data)
-            write_new(args.output, out);result['created'] = True
+            category = kind(args.input);raw = load_file(args.input);plan = load_plan(args.plan, category)
+            if args.pdf_mode:plan['pdf_mode']=args.pdf_mode
+            if Path(args.output).resolve() in {Path(args.input).resolve(), Path(args.plan).resolve()}:raise Failure('输出不能覆盖输入或计划文件。')
+            ext=Path(args.input).suffix.lower();requested=args.output_format or plan.get('output_format')
+            expected=output_policy.target(ext,requested)
+            if Path(args.output).suffix.lower()!=expected:raise Failure('默认保持原格式；如需转换，请明确使用--output-format。')
+            out,result,_=output_policy.export(raw,ext,plan,requested)
+            compatibility=result.get('compatibility');write_new(args.output,out);result['created']=True
         else:
-            if Path(args.input).suffix.lower() in compat.KINDS:
-                raise Failure('verify只检查实际导出的现代格式副本；请先redact导出，不转换原件后判通过。')
-            category = kind(args.input);data = load_file(args.input);plan = load_plan(args.plan, category)
-            source = compat.normalize(load_file(args.source),Path(args.source).suffix.lower())[0] if args.source else None
-            result = check_output(data, category, plan, source)
+            ext=Path(args.input).suffix.lower()
+            if ext in output_policy.LEGACY:raise Failure('verify：该旧格式尚不提供原格式副本；请检查明确转换后的实际文件。')
+            category=kind(args.input);data=load_file(args.input);plan=load_plan(args.plan,category)
+            source=load_file(args.source) if args.source else None
+            if source is not None and Path(args.source).suffix.lower() in compat.KINDS:source=compat.normalize(source,Path(args.source).suffix.lower())[0]
+            result=output_policy.verify(data,ext,plan,source)
         if args.command in {'inspect','redact'} and compatibility: result['compatibility']=compatibility
         print(json.dumps({'ok': True, **result}, ensure_ascii=False));return 0
     except (Failure, engine.Rejected) as exc:
