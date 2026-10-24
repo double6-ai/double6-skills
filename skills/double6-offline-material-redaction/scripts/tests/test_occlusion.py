@@ -256,11 +256,12 @@ class OcclusionOracleTests(unittest.TestCase):
                 office_names.append(row["name"])
                 if decision == "deliver":
                     office_deliver += 1
+        office_note = "\n".join(problems[:40]) or "没有记录到被拒的办公样例"
         self.assertEqual(reveal, 152, "会露出内容的样例应当是 152 份")
-        self.assertEqual(leaks, 0, "\n".join(problems))
-        self.assertEqual(office_deliver, 11, "正常办公 12 份里应有 11 份交付，用户黑框拒绝")
+        self.assertEqual(leaks, 0, office_note)
+        self.assertEqual(office_deliver, 11, "正常办公 12 份里应有 11 份交付，用户黑框拒绝\n" + office_note)
         self.assertEqual(len(office_names), 12)
-        self.assertFalse(problems, "\n".join(problems[:40]))
+        self.assertFalse(problems, office_note)
 
     def test_round7_text_variants_do_not_leave_the_number(self):
         self.assertGreaterEqual(len(self.text_rows), 4)
