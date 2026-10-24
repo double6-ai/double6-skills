@@ -22,8 +22,11 @@ from PIL import Image
 import output_policy as policy
 import pdf_preserve as pdf
 import pymupdf as fitz
+from generators.author_cases import KEEP as AUTHOR_KEEP
+from generators.author_cases import base_page
 from generators.glyph_attacks import attack_cases
 from generators.glyph_attacks import contrast_page
+from generators.glyph_attacks import small_seal_cases
 from generators.glyph_attacks import strikeout_cut_through_glyph
 from generators.glyph_attacks import strikeout_extends_outside
 from generators.glyph_attacks import strikeout_on_selected_word
@@ -601,7 +604,7 @@ class AddedInkAttackTests(unittest.TestCase):
         self.assertFalse(hasattr(pdf, "_ADDED_INK_BRIGHT"))
 
     def _paper_darken_count(self, drop, ink):
-        """细笔画：8 个黑像素，10 分位仍是浅色。纸面变暗 drop，看贴边忽略之后还剩多少。"""
+        """细笔画：8 个黑像素，10 分位仍是浅色。纸面变暗 drop。不到两成的仍是 0。"""
         side = 20
         base = Image.new("L", (side, side), 255)
         covered = Image.new("L", (side, side), 255 - drop)
@@ -609,6 +612,32 @@ class AddedInkAttackTests(unittest.TestCase):
             base.putpixel((0, index), 0)
             covered.putpixel((0, index), 0)
         return pdf._background_darken_count(base, covered, (0, 0, side, side), 255, ink)
+
+    def test_light_darkening_beside_the_stroke_is_ignored_and_ink_depth_is_counted(self):
+        """贴边忽略只放过高亮那种轻度变暗。贴着笔画的深色细条即使整段都在 2 像素里也要计入。"""
+        side = 20
+        base = Image.new("L", (side, side), 255)
+        for y in range(side):
+            base.putpixel((2, y), 0)
+        deep = base.copy()
+        light = base.copy()
+        for y in range(4, 15):
+            deep.putpixel((3, y), 0)
+            light.putpixel((3, y), 255 - 29)
+        self.assertGreaterEqual(pdf._background_darken_count(base, deep, (0, 0, side, side), 255, 200), 6)
+        self.assertEqual(pdf._background_darken_count(base, light, (0, 0, side, side), 255, 200), 0)
+        # 前景掩码仍忽略贴着旧字迹一两像素的挪动，离得更远的新墨要计。
+        stroke = Image.new("L", (side, side), 255)
+        for y in range(6, 14):
+            stroke.putpixel((4, y), 0)
+        shifted = Image.new("L", (side, side), 255)
+        for y in range(6, 14):
+            shifted.putpixel((5, y), 0)
+        farther = stroke.copy()
+        for y in range(6, 14):
+            farther.putpixel((8, y), 0)
+        self.assertEqual(pdf._mask_change_count(stroke, shifted, (0, 0, side, side), 255, 0), 0)
+        self.assertGreaterEqual(pdf._mask_change_count(stroke, farther, (0, 0, side, side), 255, 0), 6)
 
     def _darken_on(self, raw, glyph=None):
         """带上 2 像素贴边忽略之后，每个字形的变暗计数和掩码计数。"""
@@ -674,11 +703,46 @@ class AddedInkAttackTests(unittest.TestCase):
             self.assertIn(sample["keep"], _page_text(out))
         self.assertEqual(self._paper_darken_count(drop=29, ink=120), 0)
         self.assertGreaterEqual(self._paper_darken_count(drop=63, ink=120), 6)
+        doc, page, _phone, other = base_page()
+        page.add_highlight_annot(page.search_for(AUTHOR_KEEP)[0]).update()
+        highlight = doc.tobytes()
+        highlight_box = [(other.x0 - 1) * 2, (other.y0 - 1) * 2, (other.x1 + 1) * 2, (other.y1 + 1) * 2]
+        doc.close()
+        digits = {
+            text: (left, right)
+            for text, left, right, _left_mask, _right_mask in self._darken_on(highlight)
+            if text in ("1", "2")
+        }
+        self.assertEqual(set(digits), {"1", "2"})
+        for text, (left, right) in digits.items():
+            self.assertLess(left, 6, (text, left, right))
+            self.assertLess(right, 6, (text, left, right))
+        out, _report, _ext = policy.export(highlight, ".pdf", _pdf_plan(highlight_box, [AUTHOR_KEEP]))
+        self.assertIn(AUTHOR_KEEP, _page_text(out))
         strike_raw, strike_box = strikeout_on_selected_word()
         out, _report, _ext = policy.export(strike_raw, ".pdf", _pdf_plan(strike_box, [REVIEW_KEEP]))
         text = _page_text(out)
         self.assertIn(REVIEW_KEEP, text)
         self.assertNotIn("DELETEME", text)
+
+    def test_small_opening_seals_count_even_beside_the_stroke(self):
+        """6/8/9 pt 复审封口，以及 5–12 pt 细线和多段短线。贴边的深色也要数到 6。"""
+        rows = small_seal_cases()
+        names = [row["name"] for row in rows]
+        self.assertEqual(len(names), len(set(names)))
+        for required in ("小字6pt封口", "小字9pt封口", "小字9pt略宽", "细线小字过2px-0.80"):
+            self.assertIn(required, names)
+        self.assertTrue(any("5pt不透明" in name for name in names))
+        self.assertTrue(any("12pt半透明" in name for name in names))
+        self.assertTrue(any("段" in name for name in names))
+        for row in rows:
+            with self.subTest(name=row["name"]):
+                counted = [item for item in self._darken_on(row["raw"], glyph="3")]
+                self.assertTrue(counted, row["name"])
+                for text, left, right, left_mask, right_mask in counted:
+                    self.assertGreaterEqual(left, 6, (row["name"], text, left, right, left_mask, right_mask))
+                    self.assertGreaterEqual(right, 6, (row["name"], text, left, right, left_mask, right_mask))
+                self._check(row)
 
     def test_review_stroke_samples_and_the_hairline_are_refused(self):
         rows = attack_cases()

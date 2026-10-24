@@ -632,7 +632,8 @@ _DARKEN_DEN = 5
 # 细线也能凑满 6 个预览像素。一两粒抗锯齿不算改字。
 _MASK_DIFF_MIN = 6
 _GLYPH_INK_MARGIN = 2
-# 原字迹只挪了一两像素时，新前景贴着旧前景。开口里离字迹更远的墨不会被这圈盖住。
+# 前景掩码只忽略贴着旧字迹或新字迹的一两像素挪动。那是同一笔字在两个渲染里错位，
+# 也是高亮压到细字边上时跨过中点的毛边。变暗检查不用这圈：接近字迹深度的变暗贴边也要计入。
 _MASK_SHIFT_RADIUS = 2
 
 
@@ -759,8 +760,9 @@ def _background_darken_count(base_img, covered_img, box, background, ink):
 
     只看亮度高于中点的底色。中点仍用框内 10 分位。变暗比例则用这块里最暗的像素和底色来比，
     达到这段对比度的两成才计入。细笔画的 10 分位常常落在纸面上，对比度会被估小，黄色高亮就过线。
-    贴着原来字迹 2 个预览像素以内的变暗不计。两张图对不齐就返回 None。
-    半透明竖条常常整段停在中点以上，前景掩码差是 0，这一条仍要数。
+    不到两成的轻度变暗不计，贴着字迹也一样。那是高亮压到细字边上的毛边。
+    接近字迹深度的变暗即使贴着原来的笔画也计入。小字开口里的细线整段落在两像素里，不能被跳过。
+    两张图对不齐就返回 None。半透明竖条常常整段停在中点以上，前景掩码差是 0，这一条仍要数。
     """
     if box is None or background is None or ink is None or base_img.size != covered_img.size:
         return None
@@ -781,14 +783,9 @@ def _background_darken_count(base_img, covered_img, box, background, ink):
     height = y1 - y0
     if len(before) != width * height:
         return None
-    base_mask = bytearray(width * height)
-    for index, origin in enumerate(before):
-        if origin * 2 <= midpoint:
-            base_mask[index] = 1
-    near_base = _dilate_mask(base_mask, width, height, _MASK_SHIFT_RADIUS)
     count = 0
     for index, (origin, painted) in enumerate(zip(before, after)):
-        if origin * 2 <= midpoint or near_base[index] or origin <= painted:
+        if origin * 2 <= midpoint or origin <= painted:
             continue
         if (origin - painted) * _DARKEN_DEN < span * _DARKEN_NUM:
             continue
@@ -827,7 +824,8 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
     取样只取这个字形自己的矩形，再向外加 2 个预览像素，不和整块矩形做平均或面积加权。
     掩码用去掉批注后的局部底色和字迹色的中点。多出或少掉的前景达到小数量就拒绝。
     高于中点的底色如果变暗达到这段对比度的两成，累计到同样的小数量也拒绝。
-    贴着原字迹一两像素的挪动和变暗不计，离字迹更远的新墨或半透明墨要计。
+    前景掩码仍忽略贴着旧字迹或新字迹一两像素的挪动。变暗只忽略不到两成的轻度变化；
+    接近字迹深度的变暗贴着笔画也计入。离字迹更远的新墨或半透明墨同样要计。
     整个字形框都落在某一个选区里时，这些改动会随这次涂黑一起去掉，不再单为掩码拒绝。
     对比度太低、底色或字迹色估不出，也拒绝。骑在边界上的字按选区外计算。
     任何一个选区外的字不达标，或者任一渲染器看到足够的差异，整条批注就不放行。

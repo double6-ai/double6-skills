@@ -518,6 +518,124 @@ def _install_extgstate(doc, annot, opacity):
     doc.xref_set_key(annot.xref, "ca", str(opacity))
 
 
+def opening_seal(size, opacity=1.0, width_ratio=0.08, x_pad=1.2, segments=1, char="3"):
+    """在号码某个字的开口上画细竖条。几何和复审漏脱一致。
+
+    起点比字形框左缘再往右 x_pad 点，宽度至少 0.35 点、否则按字宽的 width_ratio。
+    竖向两端各让出字高的 8%。不透明度写在外观流的 ExtGState 里，1 也写，和复审样例同一份构造。
+    segments 大于 1 时把这一条拆成几段短线，段与段之间留一条缝。缝本身很短，拼起来仍是封口。
+    """
+    doc, page = _fresh(640, 360)
+    pairs = _page_chrome(page, 250, size)
+    union = _wide_union(page, pairs, 640)
+    parts = []
+    for text, rect in pairs:
+        if text != char:
+            continue
+        full = fitz.Rect(
+            rect.x0 + x_pad,
+            rect.y0 + rect.height * 0.08,
+            rect.x0 + max(rect.width * width_ratio, 0.35) + x_pad,
+            rect.y1 - rect.height * 0.08,
+        )
+        bars = [full]
+        if segments > 1 and full.height > 0:
+            gap = full.height * 0.06
+            piece = (full.height - gap * (segments - 1)) / segments
+            if piece > 0.15:
+                bars = []
+                top = full.y0
+                for _index in range(segments):
+                    bars.append(fitz.Rect(full.x0, top, full.x1, top + piece))
+                    top += piece + gap
+        for bar in bars:
+            box = _to_pdf(page, bar)
+            parts.append(
+                "q /GS1 gs 0 0 0 rg %.2f %.2f %.2f %.2f re f Q"
+                % (box.x0, box.y0, box.width, box.height)
+            )
+    annot = page.add_rect_annot(union)
+    annot.set_border(width=0)
+    annot.set_colors(stroke=None, fill=None)
+    annot.update()
+    _write_square_ap(doc, page, annot, parts, union)
+    _install_extgstate(doc, annot, opacity)
+    side = page.search_for(SIDE)[0]
+    preview = preview_box(page, side)
+    raw = doc.tobytes()
+    doc.close()
+    return raw, preview
+
+
+def small_seal_cases():
+    """复审漏掉的小字封口，再加上 5–12 pt 细线和贴边多段短线。"""
+    rows = []
+    named = (
+        ("小字6pt封口", 6, 1.0, 0.12, 1.2, 1),
+        ("小字9pt封口", 9, 1.0, 0.08, 1.2, 1),
+        ("小字9pt略宽", 9, 1.0, 0.08, 0.8, 1),
+        ("细线小字过2px-0.80", 8, 0.80, 0.12, 1.6, 1),
+    )
+    for name, size, opacity, ratio, pad, segments in named:
+        raw, box = opening_seal(size, opacity, ratio, pad, segments)
+        rows.append(_row(
+            name,
+            "small-seal",
+            raw,
+            box,
+            {"size": size, "opacity": opacity, "width_ratio": ratio, "x_pad": pad, "segments": segments},
+            "tamper",
+        ))
+    for size in range(5, 13):
+        raw, box = opening_seal(size, 1.0, 0.08, 1.2, 1)
+        rows.append(_row(
+            "小字%dpt不透明细线" % size,
+            "small-seal",
+            raw,
+            box,
+            {"size": size, "opacity": 1.0, "width_ratio": 0.08, "x_pad": 1.2, "segments": 1},
+            "tamper",
+        ))
+        raw, box = opening_seal(size, 0.80, 0.12, 1.6, 1)
+        rows.append(_row(
+            "小字%dpt半透明0.80细线" % size,
+            "small-seal",
+            raw,
+            box,
+            {"size": size, "opacity": 0.80, "width_ratio": 0.12, "x_pad": 1.6, "segments": 1},
+            "tamper",
+        ))
+        raw, box = opening_seal(size, 0.45, 0.12, 1.2, 1)
+        rows.append(_row(
+            "小字%dpt半透明0.45细线" % size,
+            "small-seal",
+            raw,
+            box,
+            {"size": size, "opacity": 0.45, "width_ratio": 0.12, "x_pad": 1.2, "segments": 1},
+            "tamper",
+        ))
+    for size, segments in ((6, 4), (9, 4), (12, 5)):
+        raw, box = opening_seal(size, 1.0, 0.08, 1.2, segments)
+        rows.append(_row(
+            "小字%dpt-%d段短线拼封口" % (size, segments),
+            "small-seal",
+            raw,
+            box,
+            {"size": size, "opacity": 1.0, "width_ratio": 0.08, "x_pad": 1.2, "segments": segments},
+            "tamper",
+        ))
+    raw, box = opening_seal(8, 0.80, 0.12, 1.2, 4)
+    rows.append(_row(
+        "小字8pt-4段半透明短线",
+        "small-seal",
+        raw,
+        box,
+        {"size": 8, "opacity": 0.80, "width_ratio": 0.12, "x_pad": 1.2, "segments": 4},
+        "tamper",
+    ))
+    return rows
+
+
 def contrast_page(bg=None, gray=0, rgb=None, opacity=None, paint="stem", fill_after_text=False, blend=False):
     """整页底色、中灰或彩色竖条、半透明，以及铺色画在字前还是字后。选区只框 DELETEME。
 
