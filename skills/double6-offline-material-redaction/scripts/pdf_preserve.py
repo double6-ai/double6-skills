@@ -3,7 +3,7 @@ import io
 import math
 from collections import Counter
 
-from PIL import Image, ImageChops
+from PIL import Image, ImageChops, ImageStat
 import engine
 
 
@@ -91,34 +91,56 @@ def without_annotation_appearance(data):
         return output
 
 
-def annotation_reveals_outside_text(page, boxes):
-    """盖子底下、框选范围外还有字形，删掉批注后正文就会露出来。
+def _render_has_structure(image, rect):
+    """批注矩形里是不是一块平色。缩进避开纯色方块的抗锯齿边。"""
+    inset = 4
+    x0 = int(rect.x0 * 2) + inset
+    y0 = int(rect.y0 * 2) + inset
+    x1 = int(rect.x1 * 2) - inset
+    y1 = int(rect.y1 * 2) - inset
+    if x1 - x0 < 6 or y1 - y0 < 6:
+        x0, y0 = int(rect.x0 * 2), int(rect.y0 * 2)
+        x1, y1 = int(rect.x1 * 2), int(rect.y1 * 2)
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(image.width, x1), min(image.height, y1)
+    if x1 - x0 < 2 or y1 - y0 < 2:
+        return False
+    crop = image.crop((x0, y0, x1, y1)).convert('L')
+    low, high = crop.getextrema()
+    return high - low >= 8 or ImageStat.Stat(crop).stddev[0] >= 3
 
-    只认会挡住正文的批注。高亮、下划线、删除线、链接和便签图标不算；空白处的色块没有字形，也不算。
-    字形中心已经落在框里时，这段文字会被涂掉，不当成框外露出。
+
+def annotation_changes_visible_content(page, pixel_boxes, original_image, baseline_image):
+    """非豁免批注在框外要么盖住了页面内容，要么自身带有可见内容。
+
+    和带批注的原渲染、以及去掉批注后的渲染比较，不看批注类型名单，也不只看文字层。
+    便签、链接、高亮、下划线和删除线确定不会把底下内容藏没，跳过。
+    纯色块盖在纯色空白上两边都没有结构，可以去掉。直线、折线、矢量笔画、图片和带字的批注会留下结构。
+    选区里的内容会涂掉，先从两张渲染里抹掉，避免把已经框住的正文算成露出。
     """
     fitz = backend()
-    covers = {
-        fitz.PDF_ANNOT_FREE_TEXT,
-        fitz.PDF_ANNOT_SQUARE,
-        fitz.PDF_ANNOT_CIRCLE,
-        fitz.PDF_ANNOT_POLYGON,
-        fitz.PDF_ANNOT_INK,
-        fitz.PDF_ANNOT_STAMP,
+    exempt = {
+        fitz.PDF_ANNOT_TEXT,
+        fitz.PDF_ANNOT_POPUP,
+        fitz.PDF_ANNOT_LINK,
+        fitz.PDF_ANNOT_HIGHLIGHT,
+        fitz.PDF_ANNOT_UNDERLINE,
+        fitz.PDF_ANNOT_SQUIGGLY,
+        fitz.PDF_ANNOT_STRIKE_OUT,
     }
-    annotations = [annot for annot in (page.annots() or []) if annot.type[0] in covers]
+    annotations = [annot for annot in (page.annots() or []) if annot.type[0] not in exempt]
     if not annotations:
         return False
-    for span in page.get_texttrace():
-        for char in span['chars']:
-            if not chr(char[0]).strip():
-                continue
-            rect = fitz.Rect(char[3])
-            center = fitz.Point((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2)
-            if any(box.contains(center) for box in boxes):
-                continue
-            if any(annot.rect.intersects(rect) for annot in annotations):
-                return True
+    original = original_image.copy()
+    baseline = baseline_image.copy()
+    for box in pixel_boxes:
+        x0, y0, x1, y1 = (int(v) for v in box)
+        span = (max(0, x0 - 2), max(0, y0 - 2), min(original.width, x1 + 2), min(original.height, y1 + 2))
+        original.paste((255, 255, 255), span)
+        baseline.paste((255, 255, 255), span)
+    for annot in annotations:
+        if _render_has_structure(baseline, annot.rect) or _render_has_structure(original, annot.rect):
+            return True
     return False
 
 
@@ -237,16 +259,18 @@ def verify(data, plan, source):
                         checks['selected_regions_solid'] = False
                 if delta.getbbox() is not None:
                     checks['outside_page_pixels_preserved'] = False
-                # 与带批注的原页面再比一次。去掉浅色盖子后，框外若多出深色像素，就是被揭开的正文。
-                revealed = ImageChops.subtract(formats.pdf_image(source, index).convert('L'), new.convert('L'))
+                # 与带批注的原页面再比一次。去掉浅色盖子后，框外若多出深色像素，就是被揭开的内容。
+                source_image = formats.pdf_image(source, index)
+                revealed = ImageChops.subtract(source_image.convert('L'), new.convert('L'))
                 for box in pixel_boxes:
                     x0, y0, x1, y1 = box
                     revealed.paste(0, (max(0, x0 - 2), max(0, y0 - 2), min(new.width, x1 + 2), min(new.height, y1 + 2)))
                 if revealed.getextrema()[1] > 0:
                     checks['outside_page_pixels_preserved'] = False
                     checks['covered_text_not_revealed'] = False
-                # 黑盖子比底下的字更深时，揭开会变浅，上面的深色差发现不了。直接看盖子底下有没有框外字形。
-                if annotation_reveals_outside_text(original, boxes):
+                # 变深比较看不见“盖子比内容更深、揭开后变浅”。直线、折线和矢量笔画也不在文字层里。
+                # 改看渲染：框外若出现原件里没有的结构，或批注自己带了可见内容，就拒绝。
+                if annotation_changes_visible_content(original, pixel_boxes, source_image, old):
                     checks['outside_page_pixels_preserved'] = False
                     checks['covered_text_not_revealed'] = False
             keep = engine.keep_checked(plan.get('keep', []))
@@ -259,7 +283,7 @@ def verify(data, plan, source):
                 raise engine.Rejected('保留项没有对上：原文里没有这项，或副本里没有留下。未交付副本。')
             revealed = ''
             if checks.get('covered_text_not_revealed') is False:
-                revealed = '去掉批注后，原本看不见的正文变得可见。'
+                revealed = '去掉批注后，原本看不见的内容变得可见。请先去掉这块方块或批注，或把被盖住的内容一起框进选区。'
             raise engine.Rejected('PDF原生复检未通过：可能切到字形、影响框外内容或存在隐藏对象；' + revealed + '请扩大框选或检查格式，不自动图像化。')
         return {'checks': checks, 'not_checked': [] if keep else ['keep_phrases_preserved'],
                 'effective_pages':plan.get('pages',[]),'output_sha256': engine.digest(data), 'scope': 'PDF原生删改；保留框外可搜索文字、位置和页面。仅核对已选区域及支持的隐藏载体。'}
