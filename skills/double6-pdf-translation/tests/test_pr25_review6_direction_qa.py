@@ -226,3 +226,31 @@ def test_route_contract_callers_declare_en_to_zh():
         text = (SKILL / rel).read_text(encoding='utf-8')
         assert "route_contract_scanned_raster_en_to_zh" in text, rel
     assert build_bilingual_pdf.bilingual_direction('en', 'zh', basis='route_contract_scanned_raster_en_to_zh')['layout'] == 'en_left_zh_right'
+
+
+# ---------- 质量报告标注与独立 QA 入口 ----------
+
+def test_quality_report_labels_follow_target():
+    from check_translation_reports import build_quality_report, render_quality_report
+    zh_report = build_quality_report(EN, ZH, [], manifest={'target_language': 'zh', 'pages': []})
+    en_report = build_quality_report(ZH, EN_WITH_ZH_RESIDUE, [], manifest={'target_language': 'en', 'pages': []})
+    assert '- 疑似大段英文未翻译\n' in zh_report and '文字 QA 目标语言：`zh`' in zh_report
+    assert '疑似大段英文未翻译' not in en_report and '- 疑似大段中文未翻译（英文译文中的中文残留）' in en_report
+    assert '`chinese_residue_count`：1' in en_report and '文字 QA 目标语言：`en`' in en_report
+    legacy = render_quality_report([])
+    assert '- 疑似大段英文未翻译\n' in legacy and '文字 QA 目标语言' not in legacy and 'chinese_residue_count' not in legacy
+
+
+def test_check_translation_cli_selects_target(tmp_path):
+    (tmp_path / 'source.md').write_text(ZH, encoding='utf-8')
+    (tmp_path / 'translation.md').write_text(EN, encoding='utf-8')
+    (tmp_path / 'source_manifest.json').write_text(json.dumps({'pages': []}), encoding='utf-8')
+    proc = subprocess.run([sys.executable, str(SKILL / 'scripts' / 'check_translation.py'), '--source', str(tmp_path / 'source.md'),
+                           '--translation', str(tmp_path / 'translation.md'), '--target-language', 'en'],
+                          capture_output=True, text=True, cwd=SKILL)
+    report = (tmp_path / 'quality_report.md').read_text(encoding='utf-8')
+    assert '文字 QA 目标语言：`en`' in report and '疑似大段英文未翻译' not in report, (proc.stderr[-2000:], report)
+    qa = json.loads((tmp_path / 'qa_checks.json').read_text(encoding='utf-8'))
+    assert not [c for c in qa.get('checks', []) if '英文' in json.dumps(c, ensure_ascii=False) and '未翻译' in json.dumps(c, ensure_ascii=False)]
+    policy = json.loads((tmp_path / 'term_policy.json').read_text(encoding='utf-8'))
+    assert policy.get('target_language') == 'en'

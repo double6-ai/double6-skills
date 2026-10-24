@@ -227,6 +227,6 @@
 
 ## 方向 QA 与双语标注维护改动（2026-10-24）
 
-- 第一方：`check_translation_gates.py` 新增 `resolve_qa_target_language`、`direction_issues`、`policies_for_target`，`collect_issues` 增加 `target_language` 参数并按目标语言选择残留检查与术语策略；`check_render_manifest` 增加 `target_language`。`check_translation_residue.py` 新增 `check_untranslated_chinese`、`strip_zh_reference_lines`（`check_translation.py` 兼容导出）。`pdf_translation_artifacts.run_quality_check` 按 `render_manifest.target_language` 调用 QA，中译英不做英→中残留替换并按目标过滤写出的术语/实体策略。
+- 第一方：`check_translation_gates.py` 新增 `resolve_qa_target_language`、`direction_issues`、`policies_for_target`，`collect_issues` 增加 `target_language` 参数并按目标语言选择残留检查与术语策略；`check_render_manifest` 增加 `target_language`。`check_translation_residue.py` 新增 `check_untranslated_chinese`、`strip_zh_reference_lines`（`check_translation.py` 兼容导出）。`pdf_translation_artifacts.run_quality_check` 按 `render_manifest.target_language` 调用 QA，中译英不做英→中残留替换并按目标过滤写出的术语/实体策略。`check_translation_reports.render_quality_report` 增加 `target_language`（只影响检查项与指标标注，未给出时与历史输出一致）；`check_translation_repairs` CLI 增加可选 `--target-language` 并按目标过滤术语/实体策略。
 - 第一方：`build_bilingual_pdf.py` 新增 `bilingual_direction`、`direction_fields`、`name_infix_for` 与 CLI `--source-language/--target-language`；历史函数名 `build_en_left_zh_right_pdf*` 保留，清单 `layout` 等改由方向参数给出（未传为中性）。`build_standard_bilingual_output` 新增 `source_language/target_language/direction_basis`；`pdf_translation_render.py` 传入本次声明方向并在 `render_manifest.json` 记录；扫描栅格路线三处调用显式声明英译中。双语视觉与交付门提示改为“译文侧（右）/原文侧（左）”。Round38 候选单语页按目标语言命名。
 
