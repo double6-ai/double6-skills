@@ -280,6 +280,8 @@
           </xs:restriction>
         </xs:simpleType>
       </xs:attribute>
+      <xs:attribute name="lineWidth" type="xs:float"/>
+      <xs:attribute name="lineWidthSource" type="xs:string"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="pdfOriginalPath">

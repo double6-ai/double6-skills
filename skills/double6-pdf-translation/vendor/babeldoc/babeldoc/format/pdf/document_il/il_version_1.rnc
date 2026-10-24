@@ -176,7 +176,9 @@ PDFCurve =
       list {
         xsd:float, xsd:float, xsd:float, xsd:float, xsd:float, xsd:float
       }
-    }?
+    }?,
+    attribute lineWidth { xsd:float }?,
+    attribute lineWidthSource { xsd:string }?
   }
 PDFOriginalPath = element pdfOriginalPath { PDFPath }
 PDFPath =

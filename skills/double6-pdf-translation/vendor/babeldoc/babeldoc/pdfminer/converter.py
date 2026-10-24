@@ -183,6 +183,7 @@ class PDFLayoutAnalyzer(PDFTextDevice):
                     dashing_style=gstate.dash,
                 )
                 line.passthrough_instruction = passthrough_instruction
+                line.linewidth_source = getattr(gstate, "linewidth_source", None)
                 line.xobj_id = xobj_id
                 line.render_order = self.il_creater.get_render_order_and_increase()
                 line.ctm = self.ctm
@@ -210,6 +211,7 @@ class PDFLayoutAnalyzer(PDFTextDevice):
                         gstate.dash,
                     )
                     rect.passthrough_instruction = passthrough_instruction
+                    rect.linewidth_source = getattr(gstate, "linewidth_source", None)
                     rect.xobj_id = xobj_id
                     rect.render_order = self.il_creater.get_render_order_and_increase()
                     rect.ctm = self.ctm
@@ -229,6 +231,7 @@ class PDFLayoutAnalyzer(PDFTextDevice):
                         gstate.dash,
                     )
                     curve.passthrough_instruction = passthrough_instruction
+                    curve.linewidth_source = getattr(gstate, "linewidth_source", None)
                     curve.xobj_id = xobj_id
                     curve.render_order = self.il_creater.get_render_order_and_increase()
                     curve.ctm = self.ctm
@@ -248,6 +251,7 @@ class PDFLayoutAnalyzer(PDFTextDevice):
                     gstate.dash,
                 )
                 curve.passthrough_instruction = passthrough_instruction
+                curve.linewidth_source = getattr(gstate, "linewidth_source", None)
                 curve.xobj_id = xobj_id
                 curve.render_order = self.il_creater.get_render_order_and_increase()
                 curve.ctm = self.ctm

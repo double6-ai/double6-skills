@@ -88,6 +88,16 @@ class PDFContentParserEx(PDFContentParser):
             self.push((pos, token))
 
 
+def _finite_nonnegative(value: object) -> float | None:
+    """PDF 数值（int/float，非 bool）且有限、非负时返回 float，否则 None。"""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    value = float(value)
+    if value != value or value in (float("inf"), float("-inf")) or value < 0:
+        return None
+    return value
+
+
 class PDFPageInterpreterEx(PDFPageInterpreter):
     """Processor for the content of a PDF page
 
@@ -424,6 +434,44 @@ class PDFPageInterpreterEx(PDFPageInterpreter):
             self.set_current_state(self.gstack.pop())
         self.il_creater.pop_passthrough_per_char_instruction()
         return
+
+    def do_w(self, linewidth: PDFStackT) -> None:
+        """Set line width，并记录线宽来源（供 IL 携带可靠线宽/未知来源）。"""
+        value = _finite_nonnegative(linewidth)
+        if value is None:
+            # 非法值：解释器保留旧宽度，但该宽度已不能代表实际绘制。
+            self.graphicstate.linewidth_source = "unknown:invalid_w"
+            return
+        self.graphicstate.linewidth = value
+        self.graphicstate.linewidth_source = "w"
+
+    def do_gs(self, name: PDFStackT) -> None:
+        """Set parameters from graphics state parameter dictionary（只解析 /LW）。
+
+        vendor pdfminer 的 do_gs 是 no-op。这里按当前资源作用域（页面或 Form 自身
+        Resources）解析 ExtGState：有合法 /LW 则设线宽；没有 /LW 不改线宽；名字解析
+        不到、字典非法或 /LW 非法时标为未知。其它参数沿用原行为（不处理）。
+        """
+        try:
+            key = literal_name(name)
+            table = resolve1((self.resources or {}).get("ExtGState"))
+            spec = resolve1(table.get(key)) if isinstance(table, dict) else None
+        except Exception:
+            spec = None
+        if not isinstance(spec, dict):
+            self.graphicstate.linewidth_source = "unknown:extgstate_unresolved"
+            return
+        if "LW" not in spec:
+            return
+        try:
+            value = _finite_nonnegative(resolve1(spec["LW"]))
+        except Exception:
+            value = None
+        if value is None:
+            self.graphicstate.linewidth_source = "unknown:invalid_extgstate_lw"
+            return
+        self.graphicstate.linewidth = value
+        self.graphicstate.linewidth_source = "ExtGState"
 
     def do_TJ(self, seq: PDFStackT) -> None:
         """Show text, allowing individual glyph positioning"""

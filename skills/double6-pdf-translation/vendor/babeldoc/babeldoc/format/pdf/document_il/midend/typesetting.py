@@ -1390,6 +1390,9 @@ class Typesetting:
           按路径框本身处理（frontend 生成的真实 IL 总带 graphic_state，不走这里）。
         - 描边路径：路径框四周外扩 描边宽 × CTM 线性部分谱范数 / 2（任意旋转/缩放/错切下的
           可靠上界）；描边宽或 CTM 不能确定即未知。
+        - 描边宽：frontend 写入 line_width_source 时以解释器已解析的结果为准（"w"/"ExtGState"
+          才可靠，其余来源即未知）；passthrough 指令能独立确定宽度且与之不一致视为矛盾、未知。
+          没有 line_width_source（非 frontend 生成的 IL）时只按 passthrough 指令判断。
         - 只填充不描边：填充范围就是路径框。
         - 带绘制状态但描边/填充标记缺失：未知。
         """
@@ -1403,7 +1406,19 @@ class Typesetting:
             return None
         if not stroke:
             return b
-        width = cls._ruled_band_stroke_width(getattr(gs, "passthrough_per_char_instruction", None))
+        parsed = cls._ruled_band_stroke_width(getattr(gs, "passthrough_per_char_instruction", None))
+        source = getattr(curve, "line_width_source", None)
+        if source is None:
+            width = parsed
+        elif source in ("w", "ExtGState"):
+            width = getattr(curve, "line_width", None)
+            if isinstance(width, bool) or not isinstance(width, int | float) or not math.isfinite(width) or width <= 0:
+                return None
+            width = float(width)
+            if parsed is not None and abs(parsed - width) > 1e-5:
+                return None
+        else:
+            return None
         ctm = getattr(curve, "ctm", None)
         if width is None or ctm is None or len(ctm) != 6:
             return None

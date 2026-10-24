@@ -137,6 +137,9 @@ Color = Union[
 class PDFGraphicState:
     def __init__(self) -> None:
         self.linewidth: float = 0
+        # 线宽来源：None=未设置（含 Form 内未继承父状态），"w"=本状态内 w 指令，
+        # "ExtGState"=gs 资源中解析到的 /LW，"unknown:*"=无法可靠确定。
+        self.linewidth_source: str | None = None
         self.linecap: object | None = None
         self.linejoin: object | None = None
         self.miterlimit: object | None = None
@@ -153,6 +156,7 @@ class PDFGraphicState:
     def copy(self) -> "PDFGraphicState":
         obj = PDFGraphicState()
         obj.linewidth = self.linewidth
+        obj.linewidth_source = self.linewidth_source
         obj.linecap = self.linecap
         obj.linejoin = self.linejoin
         obj.miterlimit = self.miterlimit
