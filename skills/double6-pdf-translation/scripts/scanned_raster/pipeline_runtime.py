@@ -314,10 +314,12 @@ def _run_scanned_translation(
     bilingual_check: dict[str, Any] | None = None
     bilingual_requested = bool(getattr(args, 'dual', True)) and getattr(args, 'bilingual_layout', 'en-left-zh-right') != 'off'
     if translated_pdf and bilingual_requested:
-        from build_bilingual_pdf import build_manifest
+        from build_bilingual_pdf import bilingual_direction, build_manifest
         from assess_delivery import check_bilingual_sides
         bilingual_target = output_dir / 'bilingual_scanned.pdf'
-        bilingual_manifest = build_manifest(input_pdf, translated_pdf, bilingual_target)
+        # scanned_raster 路线只接受英译中（中译英在入口即拒绝），方向由路线合同确定。
+        bilingual_manifest = build_manifest(input_pdf, translated_pdf, bilingual_target,
+                                            direction=bilingual_direction('en', 'zh', basis='route_contract_scanned_raster_en_to_zh'))
         if bilingual_manifest['status'] == 'ok':
             bilingual_check = check_bilingual_sides(input_pdf, translated_pdf, bilingual_target, max_pages=20)
             bilingual_manifest['side_verification'] = bilingual_check

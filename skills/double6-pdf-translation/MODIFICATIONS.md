@@ -224,3 +224,9 @@
 ## 失败根因上浮维护改动（2026-10-24）
 
 - 第一方：新增 `scripts/failure_root_cause.py`（本尝试结构化产物 → 稳定原因码与细节；根因回执 `BACKEND_FAILURE_ROOT_CAUSE.json` 写出与父任务核对）。`paper_translation_workflow.py`：新增 `BackendFailure`、`attach_root_cause`、`child_marker`；`execute_digital` 记本尝试开始时间与 FREEZE 路径；`finish_digital_result` 在后端未产出候选时写根因回执并抛 `BackendFailure`（改路线仍是原 ValueError）；`main`/`structured_failure` 为它输出精简结构化行与 `root_cause`；`run_job` 上浮核对后的根因（状态不变）。`chunked_workflow.py`：新增 `child_envelope`、`failure_root_cause`、`quality_reasons`、`failure_identity`、`DETERMINISM_IMPLEMENTATION`；`classify` 对已核实的确定性根因返回 `blocked`、资源类返回 `resource_stop`；`run` 记录每次尝试根因、块失败根因/首个根因/身份，续跑跳过身份一致的确定性失败，整份回执上浮 `root_cause`/`root_causes`/`deterministic_failures_not_reexecuted`。`CHUNKING_CONTRACT` 未改。新增 `tests/test_pr25_review5_failure_root_cause.py`。
+
+## 方向 QA 与双语标注维护改动（2026-10-24）
+
+- 第一方：`check_translation_gates.py` 新增 `resolve_qa_target_language`、`direction_issues`、`policies_for_target`，`collect_issues` 增加 `target_language` 参数并按目标语言选择残留检查与术语策略；`check_render_manifest` 增加 `target_language`。`check_translation_residue.py` 新增 `check_untranslated_chinese`、`strip_zh_reference_lines`（`check_translation.py` 兼容导出）。`pdf_translation_artifacts.run_quality_check` 按 `render_manifest.target_language` 调用 QA，中译英不做英→中残留替换并按目标过滤写出的术语/实体策略。
+- 第一方：`build_bilingual_pdf.py` 新增 `bilingual_direction`、`direction_fields`、`name_infix_for` 与 CLI `--source-language/--target-language`；历史函数名 `build_en_left_zh_right_pdf*` 保留，清单 `layout` 等改由方向参数给出（未传为中性）。`build_standard_bilingual_output` 新增 `source_language/target_language/direction_basis`；`pdf_translation_render.py` 传入本次声明方向并在 `render_manifest.json` 记录；扫描栅格路线三处调用显式声明英译中。双语视觉与交付门提示改为“译文侧（右）/原文侧（左）”。Round38 候选单语页按目标语言命名。
+

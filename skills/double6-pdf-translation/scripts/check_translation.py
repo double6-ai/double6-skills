@@ -43,6 +43,8 @@ from check_translation_residue import (
     is_likely_allowed_english_phrase,
     strip_role_passthrough_lines,
     check_untranslated_english,
+    check_untranslated_chinese,
+    strip_zh_reference_lines,
     check_translation_metadata_leak,
     check_sections,
 )
