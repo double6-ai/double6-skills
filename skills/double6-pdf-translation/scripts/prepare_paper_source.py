@@ -263,6 +263,8 @@ def normalize_pdf_extracted_text(text: str) -> tuple[str, dict[str, Any]]:
     changes = {
         "ligature_replacements": 0,
         "hyphenated_line_break_repairs": 0,
+        "hyphenated_compound_preservations": 0,
+        "hyphenated_line_break_review_needed": 0,
         "drop_cap_line_break_repairs": 0,
     }
     normalized = text
@@ -272,11 +274,31 @@ def normalize_pdf_extracted_text(text: str) -> tuple[str, dict[str, Any]]:
             normalized = normalized.replace(source, target)
             changes["ligature_replacements"] += count
 
+    # 同一份源文本自身提供的词形证据（不跨换行）：行内带连字符复合词的相邻两段，以及普通单词。
+    attested_hyphen_pairs: set[tuple[str, str]] = set()
+    for compound in re.findall(r"(?<![A-Za-z-])[A-Za-z]+(?:-[A-Za-z]+)+(?![A-Za-z])", normalized):
+        parts = compound.lower().split("-")
+        attested_hyphen_pairs.update(zip(parts, parts[1:]))
+    attested_words = {word.lower() for word in re.findall(r"[A-Za-z]+", normalized)}
+
     def repair_hyphenated_break(match: re.Match[str]) -> str:
         before = match.group(1)
         after = match.group(2)
         if after[:1].isupper() or before in {"AI", "NMT", "LLM", "SMT"}:
             return f"{before}-{after}"
+        # 只在源文本有证据时保留真复合词连字符：别处行内出现同一带连字符词形，
+        # 或续行片段本身仍以连字符接下一段（如 mixture-|of-experts）。
+        hyphen_attested = (before.lower(), after.lower()) in attested_hyphen_pairs
+        continues_compound = re.match(r"-[A-Za-z]", match.string[match.end():match.end() + 2]) is not None
+        joined_attested = (before + after).lower() in attested_words
+        if hyphen_attested or continues_compound:
+            if joined_attested:
+                # 同文档也出现拼接词形：证据矛盾，不猜，保留原连字符并计入待审。
+                changes["hyphenated_line_break_review_needed"] += 1
+            else:
+                changes["hyphenated_compound_preservations"] += 1
+            return f"{before}-{after}"
+        # 无复合词证据：保持原有普通断词修复（如 re-|current → recurrent）。
         return before + after
 
     normalized, hyphen_count = re.subn(r"\b([A-Za-z]+)-\n([A-Za-z]+)\b", repair_hyphenated_break, normalized)
