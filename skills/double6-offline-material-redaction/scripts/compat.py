@@ -325,7 +325,7 @@ def normalize(data,ext):
     if original_ext=='.ppt':
         import formats
         formats.pdf_info(data)
-        return data,{'input_extension':original_ext,'normalized_kind':'pdf','notice':'旧PPT保留页面外观转为PDF，再逐页人工框选；导出纯图像PDF，文字不可编辑/搜索。隐藏页、备注和原容器不进入最终副本。','conversion_used':True}
+        return data,{'input_extension':original_ext,'normalized_kind':'pdf','notice':'旧PPT保留页面外观转为PDF，再逐页人工框选；默认原生删改PDF并保留框外文字；图像化须另行明确选择。隐藏页、备注和原容器不进入最终副本。','conversion_used':True}
     roots,root=_roots(data,ext);view=Visible(roots);body=root.find(O+'body')
     inner=body.find(O+{'.odt':'text','.ods':'spreadsheet','.odp':'presentation'}[ext])if body is not None else None
     if inner is None:raise Rejected('ODF正文类型不符。')

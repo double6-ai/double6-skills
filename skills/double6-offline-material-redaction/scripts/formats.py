@@ -37,7 +37,7 @@ NOTICES = {
  'tsv':'保留行列和文字值，输出UTF-8 TSV；可能被表格软件执行的文本会加单引号。',
  'excel':'仅重建可见工作表、可见行列中的值；移除隐藏表/行/列、公式、图表、图片、批注、链接、宏和原属性，工作表改名。公式仅采用文件缓存值，不重新计算；缺少缓存即停止。',
  'slides':'仅重建显示幻灯片的文字与表格，按阅读顺序重排；图片、图表、动画、备注、批注、隐藏页、母版和原属性不带入，不能保留原设计。',
- 'pdf':'逐页渲染后在像素上遮盖，再重建纯图像PDF。移除原文字层、附件、批注对象、表单、脚本、链接及原属性；不能继续复制搜索文字或保留签名。扫描PDF同样可人工框选，无OCR。需逐页核对。',
+ 'pdf':'默认原生删改PDF，保留框外文字和页面。原属性、附件、链接与批注清理；复杂隐藏层/表单会停止。只有明确选择图像化才重建扫描式PDF。无OCR，需逐页核对。',
 }
 
 
@@ -179,7 +179,9 @@ def pdf_info(data):
         if pixels>MAX_PDF_PIXELS:raise Rejected('PDF总渲染像素超过4000万，请先拆分。')
         return sizes
     except Rejected:raise
-    except Exception as exc:raise Rejected('PDF无法安全解析。')from exc
+    except Exception as exc:
+        if b'/Encrypt' in data:raise Rejected('加密PDF暂不支持。')from exc
+        raise Rejected('PDF无法安全解析。')from exc
 
 
 def pdf_image(data,index):
@@ -196,7 +198,8 @@ def pdf_image(data,index):
 
 
 def pdf_boxes(plan,sizes):
-    if plan.get('acknowledge_loss')is not True:raise Rejected('PDF需接受纯图像重建，原文字层、签名及交互将移除。')
+    if plan.get('pdf_mode','preserve') not in {'preserve','rasterize'}:raise Rejected('PDF模式无效。')
+    if plan.get('pdf_mode','preserve')=='rasterize' and plan.get('acknowledge_loss')is not True:raise Rejected('图像化PDF须明确选择并接受文字层、签名及交互移除。')
     reviewed=plan.get('reviewed_pages')
     if not isinstance(reviewed,list)or any(type(x)is not int for x in reviewed)or sorted(reviewed)!=list(range(1,len(sizes)+1)):raise Rejected('请逐页核对PDF，reviewed_pages需完整列出每一页。')
     rows=plan.get('pages',[])
@@ -206,7 +209,7 @@ def pdf_boxes(plan,sizes):
         if not isinstance(row,dict)or set(row)!={'page','rectangles'}or type(row['page'])is not int or not 1<=row['page']<=len(sizes)or row['page']in result:raise Rejected('PDF框选页码重复或无效。')
         boxes=engine.rectangles(row['rectangles'],sizes[row['page']-1]);result[row['page']]=boxes;count+=len(boxes)
     if not count:raise Rejected('PDF至少需框选一处；未补选不导出。')
-    if plan.get('keep'):raise Rejected('纯图像PDF不能用文字keep判定保留，请核对框外像素与实际页面。')
+    if plan.get('pdf_mode','preserve')=='rasterize' and plan.get('keep'):raise Rejected('纯图像PDF不能用文字keep判定保留，请核对框外像素与实际页面。')
     return result
 
 
@@ -234,6 +237,9 @@ def inspect(data,category,encoding=None):
 
 
 def export(data,category,plan):
+    if category=='pdf' and plan.get('pdf_mode','preserve')=='preserve':
+        import pdf_preserve
+        return pdf_preserve.export(data,plan)
     if category=='pdf':
         sizes=pdf_info(data);boxes=pdf_boxes(plan,sizes);images=[]
         for k in range(len(sizes)):
@@ -247,7 +253,7 @@ def export(data,category,plan):
         else:
             if plan.get('acknowledge_loss')is not True:raise Rejected('请先接受该格式的清理和内容重建方式。')
             if category in ('csv','tsv'):
-                rows=csv_rows(data,category,plan.get('input_encoding'));dest=io.StringIO(newline='');writer=csv.writer(dest,delimiter=','if category=='csv'else'\t',lineterminator='\n')
+                rows=csv_rows(data,category,plan.get('input_encoding'));dest=io.StringIO(newline='');writer=csv.writer(dest,delimiter=','if category=='csv'else'\t',lineterminator=plan.get('_line_ending','\n'))
                 writer.writerows([[safe_cell(clean(s))for s in row]for row in rows]);output=dest.getvalue().encode('utf-8-sig')
             elif category=='excel':
                 from openpyxl import Workbook
@@ -313,7 +319,7 @@ def export(data,category,plan):
                 dest=io.BytesIO();prs.save(dest);output=dest.getvalue()
             else:raise Rejected('不支持的格式。')
     if len(output)>engine.MAX_BYTES:raise Rejected('导出超过20MB，请缩小业务范围后重试。')
-    verify(output,category,plan,data)
+    verify(output,category,{**plan,'_verify_encoding':'utf-8'} if category in {'text','markdown','csv','tsv'} else plan,data)
     return output
 
 
@@ -323,15 +329,19 @@ def safe_cell(text):
 
 
 def verify(data,category,plan,source=None):
-    if category=='pdf':return verify_pdf(data,plan,source)
+    if category=='pdf':
+        if plan.get('pdf_mode','preserve')=='preserve':
+            import pdf_preserve
+            return pdf_preserve.verify(data,plan,source)
+        return verify_pdf(data,plan,source)
     checks={}
-    info=inspect(data,category);preview=info['preview'];terms=engine.terms_checked(plan.get('terms',[]))
+    info=inspect(data,category,plan.get('_verify_encoding',plan.get('input_encoding')));preview=info['preview'];terms=engine.terms_checked(plan.get('terms',[]))
     checks['selected_strings_absent']=not any(x in preview for x in terms)
     keep=engine.keep_checked(plan.get('keep',[]))
     if keep:checks['keep_phrases_preserved']=all(x in preview for x in keep)
     if category in ('text','markdown','csv','tsv'):
-        checks['utf8_readable']=True
-        if category in ('csv','tsv'):checks['formula_text_neutralized']=all(safe_cell(s)==s for row in csv_rows(data,category)for s in row)
+        checks['text_encoding_readable']=True
+        if category in ('csv','tsv'):checks['formula_text_neutralized']=all(safe_cell(s)==s for row in csv_rows(data,category,plan.get('_verify_encoding',plan.get('input_encoding')))for s in row)
     else:
         parts=package(data);strings=[]
         for n,b in parts.items():
