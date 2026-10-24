@@ -94,5 +94,50 @@ class TableKeepTests(unittest.TestCase):
         self.assertIn("=1+1", str(caught.exception))
 
 
+class WrappedTermTests(unittest.TestCase):
+    TEXT = "1380000\n0000\n编号0000\n整理120条活动反馈\n"
+
+    def test_split_short_terms_are_rejected(self):
+        plan = {"version": 1, "kind": "text", "reviewed": True, "acknowledge_loss": True, "terms": ["1380000", "0000"], "keep": ["整理120条活动反馈"]}
+        with self.assertRaises(engine.Rejected) as caught:
+            formats.export(self.TEXT.encode(), "text", plan)
+        self.assertIn("编号0000", str(caught.exception))
+        self.assertIn("不要按换行拆开", str(caught.exception))
+
+    def test_newline_inside_one_term_does_not_change_other_numbers(self):
+        plan = {"version": 1, "kind": "text", "reviewed": True, "acknowledge_loss": True, "terms": ["1380000\n0000"], "keep": ["整理120条活动反馈", "编号0000"]}
+        out = formats.export(self.TEXT.encode(), "text", plan).decode()
+        self.assertIn("编号0000", out)
+        self.assertIn("整理120条活动反馈", out)
+        self.assertNotIn("1380000\n0000", out)
+
+    def test_web_client_keeps_a_wrapped_selection_as_one_term(self):
+        script = Path(__file__).parents[1].joinpath("web", "app.js").read_text(encoding="utf-8")
+        self.assertIn("function decodeTerms", script)
+        self.assertIn("terms:decodeTerms($('terms').value)", script)
+        self.assertNotIn("terms:$('terms').value.split('\\n')", script)
+        # 与网页 encode/decode 同一规则：跨行选区写成一行里的 \\n，读回仍是一项。
+        shown = "1380000\\n0000\n整理120条活动反馈"
+        items = []
+        for line in shown.split("\n"):
+            out = []
+            chars = list(line)
+            i = 0
+            while i < len(chars):
+                if chars[i] == "\\" and i + 1 < len(chars) and chars[i + 1] == "n":
+                    out.append("\n")
+                    i += 2
+                elif chars[i] == "\\" and i + 1 < len(chars) and chars[i + 1] == "\\":
+                    out.append("\\")
+                    i += 2
+                else:
+                    out.append(chars[i])
+                    i += 1
+            text = "".join(out).strip()
+            if text:
+                items.append(text)
+        self.assertEqual(items, ["1380000\n0000", "整理120条活动反馈"])
+
+
 if __name__ == "__main__":
     unittest.main()
