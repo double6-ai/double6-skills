@@ -4,7 +4,7 @@
 
 [Double6 · 普通人的 AI 入门网站](https://double6.cn) 提供中文 AI 入门知识、工具介绍和实际任务教程。刚开始接触 AI，可以从基础内容学起；已经有想做的事，可以按场景寻找方法。
 
-本仓库由 Double6 AI 维护，源于我们建设 Double6 网站时遇到的实际需求。在调研和实测中，我们发现现有开源 skills 在部分任务上仍有功能缺口或改进空间，于是围绕这些问题开发和完善了一系列解决方案。当前包括 PDF 翻译、深度研究、个人工作台和 PPT 制作等可独立安装的 skills。
+本仓库由 Double6 AI 维护，源于我们建设 Double6 网站时遇到的实际需求。在调研和实测中，我们发现现有开源 skills 在部分任务上仍有功能缺口或改进空间，于是围绕这些问题开发和完善了一系列解决方案。当前包括 PDF 翻译、深度研究、个人工作台、PPT 制作和离线材料脱敏等可独立安装的 skills。
 
 ## Skills
 
@@ -14,6 +14,7 @@
 | [`double6-deep-research`](skills/double6-deep-research/) | 研究开放性问题、比较多个对象、形成有证据的决策建议，并交付可核验的完整报告 | 宿主 agent 已提供并允许使用搜索、网页或材料读取能力；Python 3.10+ 仅用于可选的交付校验 | 可公开使用 |
 | [`double6-workbench-builder`](skills/double6-workbench-builder/) | 把反复要做的真实事情（学习台、备考台、任务面板、内容/社媒运营台、阅读与研究追踪、记录与复盘等）构建为离线优先、严格单文件的本地个人工作台，个人数据只留在当前设备 | Python 3.10+（仅标准库）；浏览器验收可选 Playwright + Chromium | 可公开使用（实验性） |
 | [`double6-ppt-cli`](skills/double6-ppt-cli/) | 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX，覆盖 Markdown/结构化材料创作、模板对象级填充，以及已有 PPTX 的质检与受限修复 | Python 3、OfficeCLI 1.x（bootstrap 固定安装 pin `1.0.157`，运行时接受 ≥ 1.0.144 的 1.x）；**portable 档不需要 macOS**；native 档需要 macOS + Microsoft PowerPoint + `osascript` | 可公开使用；完整 native 闭环建议本机 PowerPoint，portable 档交付为 `pass_with_warnings` |
+| [`double6-offline-material-redaction`](skills/double6-offline-material-redaction/) | 上传 AI 前，在本机补选敏感内容、清理支持的隐藏内容并生成脱敏副本，保留业务文字与数字 | Windows 11 x64 或 Apple 芯片 macOS、Python 3.12；旧 DOC/XLS/PPT/RTF 另需 LibreOffice | 免费开源源码；安装和验证范围见该Skill说明 |
 
 这些 skill 都不会随仓库分发模型、API key、搜索服务、OfficeCLI 二进制或未声明的第三方组件。请根据任务选择安装，不必复制整个仓库。
 
@@ -34,6 +35,7 @@ cp -R skills/double6-pdf-translation <agent-skills-dir>/
 cp -R skills/double6-deep-research <agent-skills-dir>/
 cp -R skills/double6-workbench-builder <agent-skills-dir>/
 cp -R skills/double6-ppt-cli <agent-skills-dir>/
+cp -R skills/double6-offline-material-redaction <agent-skills-dir>/
 ```
 
 也可以从公开目录安装：
@@ -44,6 +46,7 @@ npx skills add double6-ai/double6-skills --skill double6-pdf-translation
 npx skills add double6-ai/double6-skills --skill double6-deep-research
 npx skills add double6-ai/double6-skills --skill double6-workbench-builder
 npx skills add double6-ai/double6-skills --skill double6-ppt-cli
+npx skills add double6-ai/double6-skills --skill double6-offline-material-redaction
 
 # ClawHub
 clawhub install double6-pdf-translation
@@ -125,6 +128,16 @@ bash scripts/setup_venv.sh /absolute/new/venv
 
 入口说明见 [`skills/double6-ppt-cli/SKILL.md`](skills/double6-ppt-cli/SKILL.md)，交付门禁与上游许可证见 [`delivery-gates.md`](skills/double6-ppt-cli/references/delivery-gates.md) 与 [`licenses-and-upstreams.md`](skills/double6-ppt-cli/references/licenses-and-upstreams.md)；PowerPoint 可选双档与完整测试报告见 [`test-report-and-verification-tiers.md`](skills/double6-ppt-cli/references/test-report-and-verification-tiers.md)。
 
+### 本地材料脱敏
+
+```text
+请使用 $double6-offline-material-redaction 准备本机脱敏工具，检查安装和自检结果，然后打开界面让我补选。不要把真实材料发到聊天。
+```
+
+适用Windows11 x64和Apple芯片macOS、Python3.12。首次安装按哈希清单下载依赖，处理图片、Word、文本、PDF、表格和PPT时不调用在线服务。图片/PDF需要人工选全区域；Word/PPTX重建不保留全部图片和版式，复杂表格显示可能被拒绝。请声明业务保留项，打开实际副本核对，自动检查不能保证找全敏感信息。
+
+本Skill只通过GitHub源码与Skills CLI提供，尚未另行上架ClawHub。公开包不包含EXE/App、Python或Office；旧DOC/XLS/PPT/RTF另需用户安装LibreOffice。入口与安装见[SKILL.md](skills/double6-offline-material-redaction/SKILL.md)、[README](skills/double6-offline-material-redaction/README.md)，依赖许可见[说明](skills/double6-offline-material-redaction/references/runtime-dependencies.md)。
+
 ## 安全与隐私
 
 - 不要把 API key、`.env`、私有文档、研究快照或运行产物提交到仓库。
@@ -159,16 +172,22 @@ skills/
 │   ├── security/
 │   ├── tests/
 │   └── CHANGELOG.md
-└── double6-ppt-cli/
-    ├── SKILL.md
-    ├── assets/
+├── double6-ppt-cli/
+│   ├── SKILL.md
+│   ├── assets/
+│   ├── references/
+│   ├── scripts/            # 含 scripts/tests/
+│   ├── vendor/             # ppt-master-core（MIT）
+│   ├── licenses/
+│   ├── LICENSE / NOTICE / THIRD_PARTY_NOTICES.md
+│   ├── MODIFICATIONS.md / UPSTREAM_LOCK.json
+│   ├── requirements-core.lock
+│   └── CHANGELOG.md
+└── double6-offline-material-redaction/
+    ├── SKILL.md / README.md / LICENSE
+    ├── scripts/            # 本地处理、界面、安装与测试源码
     ├── references/
-    ├── scripts/            # 含 scripts/tests/
-    ├── vendor/             # ppt-master-core（MIT）
-    ├── licenses/
-    ├── LICENSE / NOTICE / THIRD_PARTY_NOTICES.md
-    ├── MODIFICATIONS.md / UPSTREAM_LOCK.json
-    ├── requirements-core.lock
+    ├── requirements-runtime.lock
     └── CHANGELOG.md
 ```
 
