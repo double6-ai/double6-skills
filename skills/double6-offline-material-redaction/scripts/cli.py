@@ -123,7 +123,7 @@ def check_output(data, category, plan, source=None):
         checks = engine.verify_docx(data, plan['terms'])
         text = engine.inspect_docx(data)['preview']
         keep=engine.keep_checked(plan.get('keep', []))
-        if keep:checks['keep_phrases_preserved'] = all(k in text for k in keep)
+        if keep:checks['keep_phrases_preserved'] = engine.phrases_kept(None, text, keep)
     else:
         if source is None:raise Failure('图片复检需要原图。')
         return output_policy.image_native.verify(data,plan.get('rectangles'),source)

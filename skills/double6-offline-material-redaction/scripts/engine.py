@@ -6,6 +6,7 @@ import io
 import math
 import posixpath
 import re
+import unicodedata
 import urllib.parse
 import zipfile
 from datetime import datetime
@@ -239,8 +240,8 @@ def inspect_docx(data):
     return {"blocks": blocks, "preview": plain, "suggestions": suggestions, "removed": counts, "notice": "导出为可编辑的文字和表格副本；页眉页脚移到正文，图片、批注、删除修订、隐藏文字、超链接地址及原属性移除。字体、分页和合并单元格样式不保留。"}
 
 
-def markers_for(terms):
-    """优先使用【已隐去N】。该标记若会把补选词带回来，改用不含这些词的〔已处理A〕；两者都不行就说明原因。"""
+def markers_for(terms, preview):
+    """优先使用【已隐去N】。补选词或正文里已有的同样字样会冲突时，改用〔已处理A〕；两套都不安全就停止。"""
     def letters(n):
         text = ""
         while n:
@@ -250,10 +251,13 @@ def markers_for(terms):
     styles = (lambda n: "【已隐去" + str(n) + "】", lambda n: "〔已处理" + letters(n) + "〕")
     for factory in styles:
         marks = [factory(i + 1) for i in range(len(terms))]
-        if all(term not in mark for term in terms for mark in marks):
-            return marks
+        if any(term in mark for term in terms for mark in marks):
+            continue
+        if any(mark in preview for mark in marks):
+            continue
+        return marks
     shown = "、".join(terms[:3])
-    raise Rejected("补选词“" + shown + "”会重新出现在替换标记里，无法既隐去又通过复检。默认标记是【已隐去N】，备选是〔已处理A〕。请改选不包含这些字样的原文。")
+    raise Rejected("补选词“" + shown + "”和替换标记冲突，或正文里已经有同样的标记。默认标记是【已隐去N】，备选是〔已处理A〕。两种都不安全时已停止，未交付副本。")
 
 
 _MARKER_PRESENT = re.compile(r"【已隐去\d+】|〔已处理[A-Z]+〕")
@@ -275,37 +279,85 @@ def _bounded(text, index, term):
     return not (term[-1:].isdigit() and end < len(text) and text[end].isdigit())
 
 
+def _is_attach_gap(ch):
+    """编号和短数字之间的空白或不可见字符。不把单元格坐标和正文粘成一串。"""
+    return ch.isspace() or unicodedata.category(ch) == "Cf"
+
+
+def _digit_runs(text):
+    """连续数字。只跳过夹在数字中间的不可见字符，避免把表格坐标和正文粘在一起。"""
+    folded = text.translate(_FOLD)
+    runs = []
+    buf = []
+    index = 0
+    size = len(folded)
+    while index < size:
+        ch = folded[index]
+        if ch.isdigit():
+            buf.append(ch)
+            index += 1
+            continue
+        if buf and unicodedata.category(ch) == "Cf":
+            nxt = index + 1
+            while nxt < size and unicodedata.category(folded[nxt]) == "Cf":
+                nxt += 1
+            if nxt < size and folded[nxt].isdigit():
+                index = nxt
+                continue
+        if buf:
+            runs.append("".join(buf))
+            buf = []
+        index += 1
+    if buf:
+        runs.append("".join(buf))
+    return runs
+
+
+def _fold_marks(text):
+    return "".join(ch for ch in text.translate(_FOLD) if unicodedata.category(ch) != "Cf")
+
+
 def term_remains(text, term):
-    """数字词嵌在更长数字里不算仍留着待替换的原文。"""
-    return _has_bounded(text, term)
+    """补选词只要还在，包括嵌在更长数字里、或被不可见字符隔开，都不能当成已经不在。"""
+    if term in text:
+        return True
+    folded = _fold_marks(term)
+    if folded and folded in _fold_marks(text):
+        return True
+    digits = "".join(ch for ch in folded if ch.isdigit())
+    if folded and digits == folded:
+        return any(folded in run for run in _digit_runs(text))
+    return False
 
 
-def _has_bounded(text, term):
-    start = 0
-    while True:
-        at = text.find(term, start)
-        if at < 0:
+def _digit_term_embedded(text, term):
+    if not term.isdigit():
+        return False
+    return any(term in run and run != term for run in _digit_runs(text))
+
+
+def strip_new_markers(source_text, output_text):
+    """去掉这次新写上的替换标记。原文里本来就有的同形文字留下，供保留项核对。"""
+    cleaned = output_text
+    seen = []
+    for match in _MARKER_PRESENT.finditer(output_text):
+        token = match.group()
+        if token in seen:
+            continue
+        seen.append(token)
+        if source_text is None or token not in source_text:
+            cleaned = cleaned.replace(token, "")
+    return cleaned
+
+
+def phrases_kept(source_text, output_text, keep):
+    cleaned = strip_new_markers(source_text, output_text)
+    for item in keep:
+        if source_text is not None and item not in source_text:
             return False
-        if _bounded(text, at, term):
-            return True
-        start = at + 1
-
-
-def _longer_digit_run(text, term):
-    start = 0
-    while True:
-        at = text.find(term, start)
-        if at < 0:
-            return term
-        if not _bounded(text, at, term):
-            left = at
-            while left and text[left - 1].isdigit():
-                left -= 1
-            right = at + len(term)
-            while right < len(text) and text[right].isdigit():
-                right += 1
-            return text[left:right]
-        start = at + 1
+        if item not in cleaned:
+            return False
+    return True
 
 
 def rewrite(text, terms, mapping):
@@ -327,23 +379,19 @@ def rewrite(text, terms, mapping):
 
 
 def prepare_replacement(preview, terms, missing_message=None):
-    """按最长词优先替换。数字两边仍是数字时不切。补选词都已不在、且已有本工具标记时原样返回。"""
+    """按最长词优先替换。补选词对不上就停止，正文里的标记不能当成已经处理过。"""
     message = missing_message or "有补选原文未在预览中找到，请核对准确原文。"
     if not terms:
         return lambda text: text
-    absent = [term for term in terms if term not in preview]
-    if len(absent) == len(terms) and _MARKER_PRESENT.search(preview):
-        return lambda text: text
-    if absent:
+    if any(term not in preview for term in terms):
         raise Rejected(message)
-    if all(not _has_bounded(preview, term) for term in terms) and _MARKER_PRESENT.search(preview):
-        return lambda text: text
+    if any(_digit_term_embedded(preview, term) for term in terms):
+        raise Rejected("补选的数字还出现在更长的一串数字里。不会从中切下一段，也不能交付仍含这段数字的副本。请改为补选完整的那一串。")
     reject_partial_business_numbers(preview, terms)
-    for term in terms:
-        if not _has_bounded(preview, term):
-            longer = _longer_digit_run(preview, term)
-            raise Rejected("补选词“" + term + "”只出现在更长的数字“" + longer + "”中，不会从中切下一段。请补选完整数字。")
-    mapping = {term: mark for term, mark in zip(terms, markers_for(terms))}
+    mapping = {term: mark for term, mark in zip(terms, markers_for(terms, preview))}
+    rewritten = rewrite(preview, terms, mapping)
+    if any(term_remains(rewritten, term) for term in terms):
+        raise Rejected("替换后补选内容仍留在正文里，已停止，未交付副本。")
     return lambda text: rewrite(text, terms, mapping)
 
 
@@ -409,30 +457,21 @@ def terms_checked(values):
 
 
 def reject_partial_business_numbers(preview, terms):
-    """短数字若只是「编号0000」这类标记后的一段，就停止，避免拆行后的短词改掉别的业务编号。"""
+    """短数字若贴着或隔着空白/不可见字符贴着别的编号，就停止，避免改掉业务编号。不把原文编号写进错误。"""
     for term in terms:
         if not term.isdigit() or len(term) > 7:
             continue
-        tokens = []
         start = 0
         while True:
             at = preview.find(term, start)
             if at < 0:
                 break
-            if at and preview[at - 1].isalnum():
-                left = at
-                while left and preview[left - 1].isalnum():
-                    left -= 1
-                right = at + len(term)
-                while right < len(preview) and preview[right].isdigit():
-                    right += 1
-                token = preview[left:right]
-                if token != term and token not in tokens:
-                    tokens.append(token)
+            left = at
+            while left and _is_attach_gap(preview[left - 1]):
+                left -= 1
+            if left and preview[left - 1].isalnum() and not preview[left - 1].isdigit():
+                raise Rejected("补选的短数字会改掉前后连着的业务编号。换行、空格或不可见字符隔开也算连在一起。请补选完整原文，不要只选其中一段。")
             start = at + len(term)
-        if tokens:
-            shown = "、".join(tokens[:3])
-            raise Rejected('补选词“' + term + '”会改掉“' + shown + '”。它只是其中一段。请补选完整原文；跨行内容要作为一项，不要按换行拆开。')
 
 
 def keep_checked(values):
@@ -474,7 +513,7 @@ def export_docx(data, terms, acknowledge_loss=False, clean_only=False, keep=None
     output = strip_template_extras(out.getvalue())
     checks = verify_docx(output, selected)
     required=keep_checked(keep if keep is not None else [])
-    if required:checks['keep_phrases_preserved']=all(v in inspect_docx(output)['preview']for v in required)
+    if required:checks['keep_phrases_preserved']=phrases_kept(plan['preview'], inspect_docx(output)['preview'], required)
     if not all(checks.values()):
         raise Rejected("Word 导出复检未通过，未提供下载。请检查补选是否与替换标记冲突。")
     return output, {"version": VERSION, "format": "docx", "checks": checks, "not_checked":[]if required else ['keep_phrases_preserved'], "selected_terms": len(selected), "matched_terms": sum(v in plan["preview"] for v in selected), "removed": plan["removed"], "sha256": digest(output), "scope": "复检覆盖所选原文、已声明保留项、干净副本结构及列出的隐藏载体；姓名等未补选内容仍需本人核对。"}
