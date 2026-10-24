@@ -202,6 +202,29 @@ def page_math_evidence(page) -> dict[str, Any]:
             "script_relations": relations, "has_math": bool(math_font or math_chars or private_use or relations)}
 
 
+def explicit_input_unavailable(path: Path | str | None) -> str | None:
+    """显式提供的输入文件能否读取：None 表示未提供或可读；否则返回不可用原因（不存在、不是普通文件、
+    无读取权限、stat/打开抛 OSError 等）。调用方据此拒绝，不把“读不到”当作“没有数学”。"""
+    import os
+    import stat
+
+    if path is None:
+        return None
+    try:
+        info = os.stat(path)
+        if not stat.S_ISREG(info.st_mode):
+            return "not_a_regular_file"
+        with open(path, "rb") as handle:
+            handle.read(1)
+    except FileNotFoundError:
+        return "missing"
+    except PermissionError as exc:
+        return f"permission_denied: {exc}"
+    except (OSError, ValueError) as exc:  # ValueError：路径含 NUL 等
+        return f"{type(exc).__name__}: {exc}"
+    return None
+
+
 def _norm(text: str) -> str:
     return re.sub(r"\s+", "", text)
 
@@ -251,8 +274,26 @@ def render_pdf(markdown_path: Path, output_path: Path, title: str = "", *, math_
 
     pages, split_method = split_markdown_pages(text)
     fidelity["markdown_page_split"] = split_method
-    mono = fitz.open(math_source_pdf) if math_source_pdf and Path(math_source_pdf).is_file() else None
+    mono = None
     try:
+        # 显式提供的原件 / 主版式成品不可用时不能悄悄按“无数学”处理（review-4）：原件不可用直接拒绝；
+        # 主版式成品不可用按“没有可复制的主版式”处理（原文含数学 → readable_math_source_missing），
+        # 且没有原件可核对时拒绝。source_pdf / math_source_pdf 为 None 才是独立的普通 Markdown 入口。
+        source_unavailable = explicit_input_unavailable(source_pdf)
+        if source_unavailable is not None:
+            return refuse("readable_math_structure_unverifiable", stage="source_pdf_unavailable",
+                          source_pdf=str(source_pdf), error=source_unavailable)
+        math_source_unavailable = explicit_input_unavailable(math_source_pdf)
+        if math_source_unavailable is None and math_source_pdf is not None:
+            try:
+                mono = fitz.open(math_source_pdf)
+            except Exception as exc:
+                math_source_unavailable = f"{type(exc).__name__}: {exc}"
+        if math_source_unavailable is not None:
+            fidelity["math_source_unavailable"] = math_source_unavailable
+            if source_pdf is None:
+                return refuse("readable_math_structure_unverifiable", stage="math_source_pdf_unavailable",
+                              math_source_pdf=str(math_source_pdf), error=math_source_unavailable)
         evidence: dict[int, dict[str, Any]] = {}
         evidence_error = None
         if mono is not None:
@@ -266,7 +307,7 @@ def render_pdf(markdown_path: Path, output_path: Path, title: str = "", *, math_
         # （主版式已经丢掉数学特征时，按“无数学页”重排就会放过损坏）。
         source_math: list[int] = []
         source_pages = None
-        if source_pdf and Path(source_pdf).is_file():
+        if source_pdf is not None:
             try:
                 with fitz.open(source_pdf) as original:
                     source_pages = len(original)
@@ -330,7 +371,12 @@ def render_pdf(markdown_path: Path, output_path: Path, title: str = "", *, math_
                     evidence[number]["reflow_codepoint_loss"] = lost
         math_pages = sorted(vector)
         appendix = ""
-        if math_pages and original_markdown_path and Path(original_markdown_path).is_file():
+        if math_pages and original_markdown_path is not None:
+            markdown_unavailable = explicit_input_unavailable(original_markdown_path)
+            if markdown_unavailable is not None:
+                # 无法核对 QA 修复是否改动了矢量页：不按“未改动”放行。
+                return refuse("readable_math_structure_unverifiable", stage="original_markdown_unavailable",
+                              original_markdown=str(original_markdown_path), error=markdown_unavailable)
             # QA 修复对矢量页文字的改动无法在矢量页上体现：逐页与修复前译文核对，末页之后的追加内容作为附录重排。
             original, _ = split_markdown_pages(load_text(Path(original_markdown_path)))
             if original is None or set(original) != set(pages):
