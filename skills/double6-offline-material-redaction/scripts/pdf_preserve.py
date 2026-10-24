@@ -1,17 +1,65 @@
 """PDF原生删改：保留未选区域的文字和页面；使用外部AGPL-3.0 PyMuPDF引擎。"""
+import atexit
+import gc
 import io
 import math
+import os
+import sys
 from collections import Counter
 
 from PIL import Image, ImageChops
 import engine
 
+# 用过 MuPDF 之后，Python 3.10/3.11 会在最终回收 SWIG 对象时崩溃（none_dealloc）。
+# 那一步发生在测试已经跑完之后。这里记下 sys.exit 的退出码，退出前先清空缓存，再按该码直接结束。
+_mupdf_used = False
+_exit_status = None
+_original_exit = sys.exit
+
+
+def _tracking_exit(status=0):
+    global _exit_status
+    if isinstance(status, bool):
+        _exit_status = int(status)
+    elif isinstance(status, int):
+        _exit_status = status
+    elif status is None:
+        _exit_status = 0
+    else:
+        _exit_status = 1
+    _original_exit(status)
+
+
+def _shutdown_renderers():
+    """解释器还活着的时候丢掉 MuPDF 缓存。测试套件用 sys.exit 收尾时，不再走进会崩溃的最终回收。"""
+    if _mupdf_used:
+        try:
+            backend().TOOLS.store_shrink(100)
+        except Exception:
+            pass
+        gc.collect()
+    if not _mupdf_used or _exit_status is None:
+        return
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except Exception:
+            pass
+    os._exit(_exit_status)
+
+
+atexit.register(_shutdown_renderers)
+
 
 def backend():
+    global _mupdf_used
     try:
         import pymupdf as fitz
     except ImportError as exc:
         raise engine.Rejected('缺少PDF原生处理依赖，请重新执行安装和验收。') from exc
+    if not _mupdf_used:
+        sys.exit = _tracking_exit
+        _mupdf_used = True
     fitz.TOOLS.set_small_glyph_heights(True)
     fitz.TOOLS.mupdf_display_errors(False)
     fitz.TOOLS.mupdf_display_warnings(False)
@@ -490,12 +538,38 @@ def _added_ink_count(base_img, covered_img, box):
     return count
 
 
-def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mupdf_covered):
+def _pixel_box_inside(inner, outer):
+    """inner 的四边都落在 outer 里面，含贴边。跨出任何一边就不是。"""
+    if inner is None or not outer or len(outer) != 4:
+        return False
+    try:
+        x0, y0, x1, y1 = (float(value) for value in outer)
+    except (TypeError, ValueError):
+        return False
+    if x1 < x0 or y1 < y0:
+        return False
+    ix0, iy0, ix1, iy1 = inner
+    return ix0 >= x0 and iy0 >= y0 and ix1 <= x1 and iy1 <= y1
+
+
+def _glyph_inside_selection(box, selections):
+    """整个字形框都在某一个选区矩形里，才算会被这次涂黑去掉。
+
+    只和选区相交、或者骑在边界上，都算选区外。对不齐选区矩形也不算在内。
+    两个选区并在一起能罩住、但没有任何一个单独罩住时，同样不算。
+    """
+    if box is None or not selections:
+        return False
+    return any(_pixel_box_inside(box, selection) for selection in selections)
+
+
+def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mupdf_covered, selections=()):
     """逐个字形看存活率、明暗差，以及空白处有没有被涂成字迹。
 
     取样只取这个字形自己的矩形，再向外加 2 个预览像素，不和整块矩形做平均或面积加权。
     边缘存活率只统计原来就黑的文字边，白底被涂黑不会拉低它，所以另外数新涂上的深色。
-    任何一个字不达标，或者任一渲染器看到足够的新墨，整条批注就不放行。对不齐也拒绝。
+    整个字形框都落在某一个选区里时，这些新墨会随这次涂黑一起去掉，不再单为加墨拒绝。
+    骑在选区边界上的字按选区外计算。任何一个选区外的字不达标，或者任一渲染器在这种字上看到足够的新墨，整条批注就不放行。对不齐也拒绝。
     """
     for _text, rect in _each_glyph(baseline_page, area):
         box = _to_pixel_box(rect, page, covered)
@@ -507,6 +581,8 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
         )
         if reason:
             return reason, box
+        if _glyph_inside_selection(box, selections):
+            continue
         grown = _grow_pixel_box(box, covered, _GLYPH_INK_MARGIN)
         left = _added_ink_count(base, covered, grown)
         right = _added_ink_count(mupdf_base, mupdf_covered, grown)
@@ -661,7 +737,8 @@ def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, b
 
     每条批注都用 pdfium 和 MuPDF 各渲染有批注、无批注两张图。覆盖区里只认去掉批注之后还在的文字边缘。
     整块矩形的存活率只说明这一块大体还读不读得清。矩形里再逐个字形看：任何一个字的存活率或明暗差不达标，
-    或者字形框外扩 2 个预览像素里有原来的亮像素被涂到接近字迹，整条批注就拒绝。不把可读正文平均进去。字形对不齐也拒绝。
+    或者选区没有完整罩住的字形被涂上接近字迹的深色，整条批注就拒绝。不把可读正文平均进去。字形对不齐也拒绝。
+    整个字形框都在某一个选区里时，加在空白上的深色会随涂黑去掉，不再单为这一条拒绝。骑在边界上的字仍要查。
     便签、图章、签名自己的图标，底下是空白时不算遮盖。两个渲染器只要有一个判盖住或判不了，就拒绝。
     文字层有字、画面上却没有这些字的边缘，也拒绝。批注下面的矢量或图片无法用文字边缘判断，继续拒绝。
     类型名、颜色和线宽都不是放行条件。矩形外多画出来的差异另判；判不了同样拒绝。
@@ -696,7 +773,7 @@ def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, b
             )
             if not reason:
                 glyph_reason, glyph_box = _glyph_cover_reason(
-                    baseline_page, page, area, base, covered, mupdf_base, mupdf_covered,
+                    baseline_page, page, area, base, covered, mupdf_base, mupdf_covered, pixel_boxes,
                 )
                 if glyph_reason:
                     reason = glyph_reason

@@ -372,6 +372,91 @@ def _light_page(level=None, render_mode=0, white_square=False):
     return raw, box
 
 
+def _selection_of(page, rect):
+    return preview_box(page, rect)
+
+
+def strikeout_on_selected_word():
+    """删除线只画在被选词上。这些字形会随涂黑去掉。"""
+    doc, page = _fresh(420, 280)
+    page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+    page.insert_text((20, 100), SIDE, fontname="helv", fontsize=16)
+    page.insert_text((20, 180), SECRET, fontname="helv", fontsize=16)
+    side = page.search_for(SIDE)[0]
+    page.add_strikeout_annot(side).update()
+    box = _selection_of(page, side)
+    raw = doc.tobytes()
+    doc.close()
+    return raw, box
+
+
+def strikeout_extends_outside():
+    """删除线从被选词延伸到同一行选区外的词上。"""
+    doc, page = _fresh(520, 280)
+    page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+    page.insert_text((20, 120), SIDE, fontname="helv", fontsize=16)
+    side = page.search_for(SIDE)[0]
+    page.insert_text((side.x1 + 4, 120), NEIGHBOR, fontname="helv", fontsize=16)
+    page.insert_text((20, 200), SECRET, fontname="helv", fontsize=16)
+    neighbor = page.search_for(NEIGHBOR)[0]
+    union = fitz.Rect(side.x0, min(side.y0, neighbor.y0), neighbor.x1, max(side.y1, neighbor.y1))
+    page.add_strikeout_annot(union).update()
+    box = _selection_of(page, side)
+    raw = doc.tobytes()
+    doc.close()
+    return raw, box
+
+
+def strikeout_rewrites_outside_digit():
+    """删除线的外观在选区外的 3 左侧加一竖，把字形改掉。"""
+    doc, page = _fresh(640, 320)
+    pairs = _page_chrome(page, 230, 36)
+    parts = []
+    for char, rect in pairs:
+        ink = _ink_box(page, rect)
+        if ink is None or char != "3":
+            continue
+        parts.append(_black_rect_cmd(page, fitz.Rect(
+            ink.x0 - 0.02 * ink.width,
+            ink.y0 + 0.08 * ink.height,
+            ink.x0 + 0.22 * ink.width,
+            ink.y1 - 0.08 * ink.height,
+        )))
+    union = _wide_union(page, pairs, 640)
+    annot = page.add_strikeout_annot(union)
+    annot.update()
+    _write_square_ap(doc, page, annot, parts, union)
+    side = page.search_for(SIDE)[0]
+    box = _selection_of(page, side)
+    raw = doc.tobytes()
+    doc.close()
+    return raw, box
+
+
+def strikeout_cut_through_glyph():
+    """选区右边界切在被删除线穿过的字形中间。"""
+    doc, page = _fresh(520, 280)
+    page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+    page.insert_text((20, 90), SIDE, fontname="helv", fontsize=14)
+    page.insert_text((20, 180), SECRET, fontname="helv", fontsize=28)
+    phone = page.search_for(SECRET)[0]
+    page.add_strikeout_annot(phone).update()
+    first = None
+    for span in page.get_texttrace():
+        for char in span["chars"]:
+            if chr(char[0]).isdigit():
+                first = fitz.Rect(char[3])
+                break
+        if first is not None:
+            break
+    full = _selection_of(page, first)
+    mid = (full[0] + full[2]) / 2
+    box = [full[0], full[1], mid, full[3]]
+    raw = doc.tobytes()
+    doc.close()
+    return raw, box
+
+
 def attack_cases():
     """复审第二轮的额外样例，再加上一条 0.35 磅细线封口。"""
     rows = []
@@ -451,10 +536,11 @@ def attack_cases():
     rows.append(_row("字形框-Ts上升8", "desync", raw, box, {"ts": 8}, "visible"))
     raw, box = tz_case(1, 0, 6)
     rows.append(_row("字形框-字距6", "desync", raw, box, {"tc": 6}, "visible"))
+    # Windows 上这两处仍拒绝，但说法可能是两种渲染看不一致，不要求必须写成盖住了或加了深色。
     raw, box = shifted_draw(0, -6)
-    rows.append(_row("字形框-黑块上移6pt", "desync", raw, box, {"dy": -6}, "cover"))
+    rows.append(_row("字形框-黑块上移6pt", "desync", raw, box, {"dy": -6}, "refuse"))
     raw, box = shifted_draw(4, 0)
-    rows.append(_row("字形框-黑块右移4pt", "desync", raw, box, {"dx": 4}, "tamper"))
+    rows.append(_row("字形框-黑块右移4pt", "desync", raw, box, {"dx": 4}, "refuse"))
     raw, box = _light_page(level=0.985)
     rows.append(_row("旧-浅色字-0.985", "old", raw, box, {"level": 0.985}, "light"))
     raw, box = _light_page(level=0.99)

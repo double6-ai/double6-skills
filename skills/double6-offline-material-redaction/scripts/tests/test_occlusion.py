@@ -22,6 +22,10 @@ import output_policy as policy
 import pdf_preserve as pdf
 import pymupdf as fitz
 from generators.glyph_attacks import attack_cases
+from generators.glyph_attacks import strikeout_cut_through_glyph
+from generators.glyph_attacks import strikeout_extends_outside
+from generators.glyph_attacks import strikeout_on_selected_word
+from generators.glyph_attacks import strikeout_rewrites_outside_digit
 from generators.review_cases import DILUTION_SPECS
 from generators.review_cases import KEEP as REVIEW_KEEP
 from generators.review_cases import NEIGHBOR
@@ -52,10 +56,9 @@ PER_GLYPH_COVER = {
     ("attack", "正常-图章压住号码"),
     ("attack", "攻击-黑方块透明度0.25"),
 }
-# 删除线和红圈把原来的空白涂到接近字迹。边缘存活率仍可能达标，加墨这一关要拒绝。
-# 不按类型放行。高亮、下划线和波浪线只是略变暗，仍交付。
+# 删除线画在保留句上、选区却是旁边的词，红圈穿过选区外的字。这些字形不在选区内，加墨仍要拒绝。
+# 画在被选词上、字形框整个落在选区里的删除线会随涂黑去掉，不再单为加墨拒绝。
 ADDED_INK_STROKE = {
-    ("office", "正常-删除线在被选词上"),
     ("office", "正常-红圈圈注"),
     ("round7:expect-reject-visible", "普通删除线"),
     ("author", "普通删除线"),
@@ -271,9 +274,12 @@ class OcclusionOracleTests(unittest.TestCase):
             if row["name"] == "正常-图章压住号码":
                 if "图章" not in message or ("盖住了" not in message and "接近字迹的深色" not in message):
                     problems.append(f"压住号码的图章应说明字被盖住或被改掉：{message}")
-            if row["name"] in ("正常-删除线在被选词上", "正常-红圈圈注"):
+            if row["name"] == "正常-红圈圈注":
                 if "接近字迹的深色" not in message:
                     problems.append(f"{row['name']} 应说明空白被涂成接近字迹：{message}")
+            if row["name"] == "正常-删除线在被选词上":
+                if decision != "deliver":
+                    problems.append(f"画在被选词上的删除线应随涂黑去掉：{message}")
             if row["name"] == "攻击-黑方块透明度0.25":
                 if "看不一致" not in message:
                     problems.append(f"25% 黑方块应说明两种渲染看不一致：{message}")
@@ -300,8 +306,8 @@ class OcclusionOracleTests(unittest.TestCase):
         self.assertEqual(leaks, 0, office_note)
         self.assertEqual(
             office_deliver,
-            8,
-            "正常办公 12 份里应有 8 份交付。用户黑框、压住数字的图章、穿过字的删除线、压到字上的红圈，都拒绝。\n" + office_note,
+            9,
+            "正常办公 12 份里应有 9 份交付。用户黑框、压住数字的图章、压到选区外字上的红圈，都拒绝。画在被选词上的删除线可以去掉。\n" + office_note,
         )
         self.assertEqual(len(office_names), 12)
         self.assertFalse(problems, office_note)
@@ -497,6 +503,40 @@ def _source_digits_visible(raw):
 
 
 class AddedInkAttackTests(unittest.TestCase):
+    def test_only_a_glyph_fully_inside_one_selection_skips_added_ink(self):
+        self.assertTrue(pdf._glyph_inside_selection((10, 20, 30, 40), [(10, 20, 30, 40)]))
+        self.assertTrue(pdf._glyph_inside_selection((12, 22, 28, 38), [(0, 0, 40, 50), (100, 100, 120, 130)]))
+        self.assertFalse(pdf._glyph_inside_selection((8, 22, 28, 38), [(10, 20, 30, 40)]))
+        self.assertFalse(pdf._glyph_inside_selection((10, 20, 36, 40), [(10, 20, 30, 40)]))
+        # 两个选区拼起来能罩住，但没有一个单独罩住。
+        self.assertFalse(pdf._glyph_inside_selection((0, 0, 40, 10), [(0, 0, 20, 10), (20, 0, 40, 10)]))
+        self.assertFalse(pdf._glyph_inside_selection(None, [(0, 0, 10, 10)]))
+        self.assertFalse(pdf._glyph_inside_selection((0, 0, 4, 4), []))
+        self.assertFalse(pdf._pixel_box_inside((0, 0, 4, 4), None))
+
+    def test_strikeout_inside_the_selection_can_be_removed_and_outside_glyphs_cannot(self):
+        raw, box = strikeout_on_selected_word()
+        out, _report, _ext = policy.export(raw, ".pdf", _pdf_plan(box, [REVIEW_KEEP]))
+        text = _page_text(out)
+        self.assertIn(REVIEW_KEEP, text)
+        self.assertNotIn("DELETEME", text)
+        self.assertIn(REVIEW_SECRET, text)
+        for builder in (strikeout_extends_outside, strikeout_rewrites_outside_digit, strikeout_cut_through_glyph):
+            with self.subTest(builder=builder.__name__):
+                raw, box = builder()
+                with self.assertRaises(engine.Rejected) as caught:
+                    policy.export(raw, ".pdf", _pdf_plan(box, [REVIEW_KEEP]))
+                message = str(caught.exception)
+                self.assertNotIn(REVIEW_SECRET, message)
+                self.assertNotIn(REVIEW_SECRET, _joined_digits(message))
+                self.assertTrue(
+                    "接近字迹的深色" in message or "盖住了" in message or "没法对齐" in message,
+                    message,
+                )
+                if builder is strikeout_rewrites_outside_digit:
+                    self.assertIn("接近字迹的深色", message)
+                    self.assertIn("删除线", message)
+
     def test_added_ink_thresholds_stay_written_down(self):
         # 白纸约 255。涂到不超过 96 且至少暗 80，才接近字迹。高亮仍远亮于这条线。
         self.assertEqual(pdf._ADDED_INK_BRIGHT, 176)
@@ -540,6 +580,15 @@ class AddedInkAttackTests(unittest.TestCase):
                 self.assertIn("接近字迹的深色", message)
             elif expect == "cover":
                 self.assertIn("盖住了", message)
+            elif expect == "refuse":
+                # 只要拒绝。Windows 上错位黑块会说两种渲染看不一致，仍然不算放行。
+                self.assertTrue(
+                    any(
+                        part in message
+                        for part in ("盖住了", "接近字迹的深色", "看不一致", "没法对齐", "线条或图片")
+                    ),
+                    message,
+                )
             elif expect == "invalid":
                 self.assertIn("没法对齐", message)
             elif expect == "crop-rotation":
