@@ -26,9 +26,9 @@ class CliTests(unittest.TestCase):
         self.values = {'version':1,'kind':'word','reviewed':True,'terms':['测试姓名'],'acknowledge_loss':True,'keep':['业务数字120仍需保留']}
         self.save_plan()
     def tearDown(self): self.tmp.cleanup()
-    def save_plan(self): self.plan.write_text(json.dumps(self.values,ensure_ascii=False))
+    def save_plan(self): self.plan.write_text(json.dumps(self.values,ensure_ascii=False),encoding="utf-8")
     def run_cli(self,*args):
-        p = subprocess.run([sys.executable, str(Path(cli.__file__)), *map(str,args)],capture_output=True,text=True)
+        p = subprocess.run([sys.executable, str(Path(cli.__file__)), *map(str,args)],capture_output=True,text=True,encoding="utf-8")
         return p.returncode,json.loads(p.stdout)
     def test_roundtrip_without_sensitive_stdout(self):
         out=self.root/'干净 副本.docx'
