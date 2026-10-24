@@ -57,6 +57,10 @@ class OpenAITranslator(BaseTranslator):
 
         self.model = settings.translate_engine_settings.openai_model
         self.add_cache_impact_parameters("model", self.model)
+        # Double6 Skills 维护，2026-10-24：缓存身份加入服务端点，不同服务的译文不互相复用；凭据不入缓存身份。
+        self.add_cache_impact_parameters(
+            "base_url", settings.translate_engine_settings.openai_base_url
+        )
         self.add_cache_impact_parameters("prompt", self.prompt(""))
         self.token_count = AtomicInteger()
         self.prompt_token_count = AtomicInteger()

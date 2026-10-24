@@ -5,15 +5,30 @@ from __future__ import annotations
 from run_pdf_translation_context import *
 
 def _command_api_key(args):
-    """本地兼容后端需要非空SDK字段；占位值不是上游凭据。"""
-    if args.api_key:
-        return args.api_key
-    from urllib.parse import urlsplit
-    if urlsplit(args.base_url).hostname in {'localhost', '127.0.0.1', '::1'}:
-        return 'local-no-auth'
-    raise ValueError('remote_backend_requires_explicit_api_key')
+    """本地兼容后端需要非空SDK字段；占位值不是上游凭据。远端缺凭据在启动任何子进程前稳定报错。
+
+    返回值只能经 backend_credential_env 进入子进程环境，绝不写入 argv。"""
+    from credential_env import resolve_credential
+    return resolve_credential(args.api_key, args.base_url)
+
+
+def backend_credential_env(args: argparse.Namespace, *, via_loopback_proxy: bool = False) -> dict[str, str]:
+    """PDF 后端子进程的凭据环境（后端原生通道，不经 argv）。
+
+    - openai 路线：PDFMathTranslate-next 原生 ``PDF2ZH_OPENAI_API_KEY``（vendor pdf2zh_next/config/main.py parse_env_vars）。
+    - qwen-cli 路线：CLITranslator 以继承环境启动本项目适配器，适配器读 ``LOCAL_TRANSLATION_API_KEY``。
+    - 本进程内回环代理已持有上游凭据时（via_loopback_proxy），子进程只拿占位值。"""
+    from credential_env import CREDENTIAL_ENV, LOCAL_NO_AUTH_PLACEHOLDER, PDF_BACKEND_CREDENTIAL_ENV
+    from pdf_translation_paths import should_use_qwen_cli_adapter
+    value = _command_api_key(args)  # 远端缺凭据：即使走代理也先失败关闭
+    if via_loopback_proxy:
+        value = LOCAL_NO_AUTH_PLACEHOLDER
+    return {CREDENTIAL_ENV if should_use_qwen_cli_adapter(args) else PDF_BACKEND_CREDENTIAL_ENV: value}
 
 def build_qwen_cli_command(args: argparse.Namespace, context_file: Path | None = None) -> str:
+    """适配器命令串不含凭据：它会被 CLITranslator 写入翻译缓存参数、DEBUG 日志、CalledProcessError 与重试日志。
+    凭据经继承环境 LOCAL_TRANSLATION_API_KEY 传给适配器；端点/模型/提示词/目标语言仍在命令串里，保持缓存身份隔离。"""
+    _command_api_key(args)  # 远端缺凭据：构建命令前失败关闭
     script = Path(__file__).resolve().with_name("qwen_pdf2zh_cli_translator.py")
     cli_timeout = min(int(args.openai_timeout), 300)
     command = [
@@ -23,8 +38,6 @@ def build_qwen_cli_command(args: argparse.Namespace, context_file: Path | None =
         args.base_url,
         "--model",
         args.model,
-        "--api-key",
-        _command_api_key(args),
         "--reasoning-effort",
         args.openai_reasoning_effort,
         "--temperature",
@@ -155,6 +168,7 @@ def build_backend_system_prompt(base_prompt: str, output_dir: Path, target_langu
 
 def build_pdf2zh_command(args: argparse.Namespace, output_dir: Path, context_file: Path | None = None) -> list[str]:
     from pdf_translation_paths import pdf2zh_command_prefix, should_use_qwen_cli_adapter
+    _command_api_key(args)  # 远端缺凭据：任何子进程启动前失败关闭；值经 backend_credential_env 进入环境
     command = [
         *pdf2zh_command_prefix(args),
         str(args.input_pdf),
@@ -189,8 +203,6 @@ def build_pdf2zh_command(args: argparse.Namespace, output_dir: Path, context_fil
                 args.model,
                 "--openai-base-url",
                 args.base_url,
-                "--openai-api-key",
-                _command_api_key(args),
                 "--openai-timeout",
                 str(args.openai_timeout),
                 "--openai-temperature",
@@ -249,8 +261,15 @@ def build_pdf2zh_command(args: argparse.Namespace, output_dir: Path, context_fil
     return command
 
 
-def redacted_command(command: list[str], api_key: str) -> list[str]:
-    return [item.replace(api_key, "<API_KEY>") if api_key else item for item in command]
+def redacted_command(command: list[str], api_key: str | None, *more: str | None) -> list[str]:
+    """纵深防御：命令本身已不含凭据；仍按值替换，防止日后误传。"""
+    values = [value for value in (api_key, *more) if value]
+    redacted = []
+    for item in command:
+        for value in values:
+            item = item.replace(value, "<API_KEY>")
+        redacted.append(item)
+    return redacted
 
 def build_latex_direct_requirement(output_dir: Path) -> str:
     def compact_term_policy(payload: dict[str, Any]) -> dict[str, Any]:
@@ -345,7 +364,17 @@ def build_latex_direct_command(
     input_pdf: Path,
     source_tex: Path,
     output_dir: Path,
+    translation_api_key: str | None = None,
 ) -> list[str]:
+    """``pdf2zh_skill.cli``（本仓库未随包分发，无法核实其非 argv 凭据通道）只接受 ``--translation-api-key``。
+
+    这里只放非凭据值：回环无认证占位 ``local-no-auth``，或本进程回环转发器的一次性访问令牌
+    （见 pdf_translation_latex_render.run_latex_direct_render）。真实上游凭据从不进入此 argv。"""
+    from credential_env import LOCAL_NO_AUTH_PLACEHOLDER
+    if translation_api_key is None:
+        if _command_api_key(args) != LOCAL_NO_AUTH_PLACEHOLDER:
+            raise ValueError("latex_direct_credential_requires_loopback_forwarder")
+        translation_api_key = LOCAL_NO_AUTH_PLACEHOLDER
     command = [
         sys.executable,
         "-c",
@@ -358,7 +387,7 @@ def build_latex_direct_command(
         "--output-dir",
         str(output_dir),
         "--translation-api-key",
-        _command_api_key(args),
+        translation_api_key,
         "--translation-base-url",
         args.base_url,
         "--translation-model",

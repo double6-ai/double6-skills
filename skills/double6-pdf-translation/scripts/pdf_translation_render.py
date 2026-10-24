@@ -25,7 +25,8 @@ def load_document_term_context(args: argparse.Namespace) -> dict[str, Any] | Non
 def _run_render(args: argparse.Namespace) -> dict[str, Any]:
     from pdf_translation_artifacts import build_standard_bilingual_output, collect_pdfs, enrich_quality_artifacts, extract_pdf_text, maybe_build_visual_repair_output, mirror_latex_direct_bilingual_output, relocate_backend_dual_intermediate, render_qa_repaired_pdf, run_quality_check, select_pdf_outputs, write_glossary, write_layout_map, write_translation_artifacts
     from pdf_translation_backend_quality import annotate_backend_quality_origin, copy_backend_tracking_artifact, enrich_translation_cache_stats, fallback_to_text_path, maybe_run_cloud_layout, parse_backend_quality, parse_translation_cache_stats, refine_backend_quality_with_retry_failures, resolve_backend_quality_with_pdf_direct_repairs
-    from pdf_translation_commands import build_backend_system_prompt, build_pdf2zh_command, redacted_command
+    from pdf_translation_commands import backend_credential_env, build_backend_system_prompt, build_pdf2zh_command, redacted_command
+    from credential_env import scrub_backend_env
     from pdf_translation_delivery import build_delivery_gates, build_fast_full_translation_draft_gates
     from pdf_translation_latex_render import discover_latex_source, prepare_source, run_latex_direct_render
     from pdf_translation_overrides import add_rerender_candidate, append_visual_rerender_candidates, append_visual_rerender_plan, build_rerender_candidates
@@ -174,6 +175,10 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("target_language_backend_unsupported: --target-language en does not support the HY-MT compat proxy "
                          "or lmstudio_native_chat_v1 transport; use an OpenAI-compatible model or the Qwen CLI adapter")
     if should_enable_hymt_compat_proxy(args) and not skip_pdf_backend:
+        if not getattr(args, 'source_cache_mode', None):
+            # 代理会以真实上游地址发起生成请求：远端缺凭据同样在启动代理/子进程前稳定报错（仅缓存回放/收集模式无生成请求）。
+            from credential_env import resolve_credential
+            resolve_credential(args.api_key, original_base_url)
         proxy_config = ProxyConfig(
             model=args.model,
             upstream_base_url=original_base_url.rstrip("/"),
@@ -213,6 +218,9 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
             proxy_info['source_cache_render_id']=args.source_cache_render_id
         del cache
     command = build_pdf2zh_command(args, output_dir, context_file=context_file)
+    # 凭据只经后端原生环境变量传递（不进 argv）；外部继承的同名变量与 PDF2ZH_DEBUG 一律先清除。
+    scrub_backend_env(env)
+    env.update(backend_credential_env(args, via_loopback_proxy=proxy_server is not None))
     cloud_layout = maybe_run_cloud_layout(args, output_dir)
 
     errors: list[dict[str, Any]] = []

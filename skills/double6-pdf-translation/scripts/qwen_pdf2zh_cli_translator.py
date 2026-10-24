@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -17,6 +18,9 @@ import policy_utils
 DEFAULT_BASE_URL = None
 DEFAULT_MODEL = None
 DEFAULT_API_KEY = "local-dummy"
+# 凭据原生通道：继承环境变量（父进程经 pdf_translation_commands.backend_credential_env 设置）。
+# --api-key 仅为兼容保留；它会出现在本进程 argv 与上游 CLITranslator 的命令串/缓存参数中，不应使用。
+CREDENTIAL_ENV = "LOCAL_TRANSLATION_API_KEY"
 DEFAULT_REASONING_EFFORT = "none"
 DEFAULT_SYSTEM_PROMPT = (
     "/no_think You are a professional, authentic machine translation engine. "
@@ -117,6 +121,14 @@ def apply_source_aware_replacements(source_text: str, translated_text: str, targ
     return policy_utils.apply_source_aware_replacements(source_text, translated_text, target_language)
 
 
+def effective_api_key(args: argparse.Namespace) -> str:
+    """显式 --api-key（兼容）优先；否则继承环境 LOCAL_TRANSLATION_API_KEY；都没有时为本地占位。值不打印、不写文件。"""
+    explicit = getattr(args, "api_key", None)
+    if explicit is not None:
+        return explicit
+    return os.environ.get(CREDENTIAL_ENV) or DEFAULT_API_KEY
+
+
 def request_translation(user_text: str, system_prompt: str, args: argparse.Namespace) -> str:
     context_prompt = load_context_prompt(args.context_file, resolve_target_language(args))
     if context_prompt:
@@ -137,11 +149,12 @@ def request_translation(user_text: str, system_prompt: str, args: argparse.Names
             payload[name] = value
     if args.reasoning_effort and "qwen" in str(args.model).lower():
         payload["reasoning_effort"] = args.reasoning_effort
+    api_key = effective_api_key(args)
     request = urllib.request.Request(
         chat_completions_url(args.base_url),
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
         headers={
-            **({"Authorization": f"Bearer {args.api_key}"} if args.api_key else {}),
+            **({"Authorization": f"Bearer {api_key}"} if api_key else {}),
             "Content-Type": "application/json",
         },
         method="POST",
@@ -185,7 +198,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="stdin/stdout Qwen translator adapter for pdf2zh-next CLITranslator.")
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--model", required=True)
-    parser.add_argument("--api-key", default=DEFAULT_API_KEY)
+    parser.add_argument("--api-key", default=None,
+                        help=f"兼容保留，不推荐（会进入 argv）。未给时读取环境变量 {CREDENTIAL_ENV}，再退回本地占位。")
     parser.add_argument("--reasoning-effort", default=DEFAULT_REASONING_EFFORT)
     parser.add_argument("--temperature", type=float, default=0.1)
     parser.add_argument("--max-tokens", type=int, default=4096)

@@ -52,8 +52,14 @@ def _output_summary(value: str, *, limit: int = SUMMARY_LIMIT) -> dict[str, Any]
     }
 
 
+# 纵深防御（不是凭据修复本身）：形如 ``--api-key VALUE`` / ``--openai-api-key VALUE`` 的下一项值也替换。
+_SECRET_FLAG = re.compile(r"(?i)^--?[a-z0-9-]*(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret)$")
+
+
 def _redacted_argv(argv: Sequence[str], indices: frozenset[int]) -> list[str]:
-    return ["<redacted>" if index in indices else _redact_text(value) for index, value in enumerate(argv)]
+    flagged = {index + 1 for index, value in enumerate(argv) if _SECRET_FLAG.match(value)}
+    return ["<redacted>" if index in indices or index in flagged else _redact_text(value)
+            for index, value in enumerate(argv)]
 
 
 def _sanitize_metadata(value: Any) -> Any:
