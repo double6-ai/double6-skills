@@ -21,6 +21,13 @@ import formats
 import output_policy as policy
 import pdf_preserve as pdf
 import pymupdf as fitz
+from generators.review_cases import DILUTION_SPECS
+from generators.review_cases import KEEP as REVIEW_KEEP
+from generators.review_cases import NEIGHBOR
+from generators.review_cases import OUTSIDE_SPECS
+from generators.review_cases import SECRET as REVIEW_SECRET
+from generators.review_cases import dilution
+from generators.review_cases import plain_phone
 
 
 SECRETS = ("13800006661", "13800007771", "13800001111", "FICTIONAL13800009991")
@@ -37,6 +44,12 @@ VISIBLE_DESPITE_FLAG = {
     ("round7:flags", "标志Hidden+Print-灰底白边"),
     ("round7:flags", "标志NoView+Print-灰底白边"),
     ("round7:flags", "标志NoView+ToggleNoView-灰底白边"),
+}
+# 整块矩形仍可读，但单个字形已经不达标。逐字形不能把它们平均掉。
+# 图章压住两个数字，两边都看成没看清。透明度 0.25 的方块有一个数字，pdfium 看成没看清、MuPDF 看成还在。
+PER_GLYPH_COVER = {
+    ("attack", "正常-图章压住号码"),
+    ("attack", "攻击-黑方块透明度0.25"),
 }
 
 
@@ -165,7 +178,7 @@ def _raw_of(row):
 def _expected(key, oracle):
     if key in VISIBLE_DESPITE_FLAG:
         return "deliver"
-    if key in STRICTER or oracle["d1"] == "reject" or oracle["cohort"] == "reveal":
+    if key in PER_GLYPH_COVER or key in STRICTER or oracle["d1"] == "reject" or oracle["cohort"] == "reveal":
         return "reject"
     return "deliver"
 
@@ -246,6 +259,12 @@ class OcclusionOracleTests(unittest.TestCase):
             if row["name"] == "正常-用户黑框盖住号码":
                 if "盖住了" not in message or "方形" not in message:
                     problems.append(f"用户黑框的说明不对：{message}")
+            if row["name"] == "正常-图章压住号码":
+                if "盖住了" not in message or "图章" not in message:
+                    problems.append(f"压住号码的图章应说明字形被盖住：{message}")
+            if row["name"] == "攻击-黑方块透明度0.25":
+                if "看不一致" not in message:
+                    problems.append(f"25% 黑方块应说明两种渲染看不一致：{message}")
             if row["name"] == "线宽0黑方块整块框住":
                 if "盖住了" not in message or "画面变了" in message:
                     problems.append(f"线宽 0 的说明不对：{message}")
@@ -267,7 +286,11 @@ class OcclusionOracleTests(unittest.TestCase):
         office_note = "\n".join(problems[:40]) or "没有记录到被拒的办公样例"
         self.assertEqual(reveal, 152, "会露出内容的样例应当是 152 份")
         self.assertEqual(leaks, 0, office_note)
-        self.assertEqual(office_deliver, 11, "正常办公 12 份里应有 11 份交付，用户黑框拒绝\n" + office_note)
+        self.assertEqual(
+            office_deliver,
+            10,
+            "正常办公 12 份里应有 10 份交付。用户黑框，以及压住两个数字的图章，都拒绝。\n" + office_note,
+        )
         self.assertEqual(len(office_names), 12)
         self.assertFalse(problems, office_note)
 
@@ -292,6 +315,168 @@ class OcclusionOracleTests(unittest.TestCase):
                 self.assertNotIn("联系人甲", text)
                 for secret in SECRETS:
                     self.assertNotIn(secret, text)
+
+
+def _joined_digits(text):
+    return "".join(char for char in text if char.isdigit())
+
+
+def _page_text(data):
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        return "\n".join(page.get_text() for page in doc)
+
+
+def _region_visible(image, box):
+    clamped = pdf._clamp_pixel_box(box, image)
+    if clamped is None:
+        return False
+    crop = image.convert("L").crop(clamped)
+    low, high = crop.getextrema()
+    data = crop.tobytes()
+    mean = sum(data) / len(data)
+    span = int(high - low)
+    black = sum(value < 40 for value in data) / len(data)
+    if span >= 40 and black < 0.85:
+        return True
+    return span >= 20 and 30 <= mean <= 230
+
+
+def _digit_boxes(raw):
+    size = formats.pdf_info(raw)[0]
+    boxes = []
+    with fitz.open(stream=raw, filetype="pdf") as doc:
+        page = doc[0]
+        for span in page.get_texttrace():
+            for char in span["chars"]:
+                if not chr(char[0]).isdigit():
+                    continue
+                box = pdf._to_pixel_box(fitz.Rect(char[3]), page, _ImageSize(size))
+                if box:
+                    boxes.append(box)
+    return boxes
+
+
+class DilutionOcclusionTests(unittest.TestCase):
+    def test_disconnected_tiles_inside_a_readable_rect_are_refused(self):
+        for name, kwargs in DILUTION_SPECS:
+            with self.subTest(name=name):
+                raw, box = dilution(**kwargs)
+                with self.assertRaises(engine.Rejected) as caught:
+                    policy.export(raw, ".pdf", _pdf_plan(box, [REVIEW_KEEP]))
+                message = str(caught.exception)
+                self.assertNotIn(REVIEW_SECRET, message)
+                self.assertNotIn(REVIEW_SECRET, _joined_digits(message))
+                self.assertTrue(
+                    any(token in message for token in ("盖住了", "没法对齐", "看不一致", "看不到这些字的边缘")),
+                    message,
+                )
+                if kwargs["size"] >= 3 and kwargs["mode"] != "tight":
+                    self.assertIn("盖住了", message)
+                    self.assertIn("方形", message)
+
+    def test_whole_rect_still_looks_readable_when_one_digit_is_covered(self):
+        """整块矩形的存活率会被旁边的正文拉高。拒绝必须来自被盖住的那一个字形。"""
+        for name, kwargs in (
+            ("六行", dict(size=4, lines=6, mode="wide")),
+            ("只盖一位", dict(size=4, lines=6, mode="one")),
+        ):
+            with self.subTest(name=name):
+                raw, box = dilution(**kwargs)
+                baseline = pdf.without_annotation_appearance(raw)
+                source = formats.pdf_image(raw, 0).convert("L")
+                base = formats.pdf_image(baseline, 0).convert("L")
+                with fitz.open(stream=raw, filetype="pdf") as doc, fitz.open(stream=baseline, filetype="pdf") as stripped:
+                    page = doc[0]
+                    baseline_page = stripped[0]
+                    mupdf_covered = pdf._mupdf_gray(page, source.size)
+                    mupdf_base = pdf._mupdf_gray(baseline_page, source.size)
+                    area = pdf._areas_to_judge(page)[0][0]
+                    whole = pdf._sample_box(area, page, source)
+                    self.assertEqual(pdf._judge_crop(base, source, whole), "readable")
+                    self.assertEqual(pdf._judge_crop(mupdf_base, mupdf_covered, whole), "readable")
+                    reason, _glyph_box = pdf._glyph_cover_reason(
+                        baseline_page, page, area, base, source, mupdf_base, mupdf_covered,
+                    )
+                self.assertEqual(reason, "opaque")
+                with self.assertRaises(engine.Rejected) as caught:
+                    policy.export(raw, ".pdf", _pdf_plan(box, [REVIEW_KEEP]))
+                self.assertIn("盖住了", str(caught.exception))
+
+    def test_tiles_outside_the_annotation_box_are_not_an_independent_leak(self):
+        """外观画在批注矩形外面时，本轮的 12 像素跳过没有单独把藏住的号码交出去。
+
+        这些小黑块落在外观框外，画面上的数字并没有被涂没。选区没框住号码时，文字层里还可以留下这串数字。
+        """
+        for name, kwargs in OUTSIDE_SPECS:
+            with self.subTest(name=name):
+                raw, box = dilution(**kwargs)
+                source = formats.pdf_image(raw, 0)
+                hidden = any(
+                    not _region_visible(source, digit_box)
+                    and pdf._clamp_pixel_box(digit_box, source) is not None
+                    for digit_box in _digit_boxes(raw)
+                )
+                try:
+                    out, _report, _ext = policy.export(raw, ".pdf", _pdf_plan(box, [REVIEW_KEEP]))
+                except engine.Rejected as exc:
+                    self.assertNotIn(REVIEW_SECRET, str(exc))
+                    continue
+                self.assertFalse(hidden, f"{name} 画面上已经看不见数字，却交付了")
+                self.assertIn(REVIEW_KEEP, _page_text(out))
+
+
+class FloatUserUnitTests(unittest.TestCase):
+    def test_float_xref_above_one_is_stored_and_below_one_is_not(self):
+        for unit, kept in ((1.25, True), (1.5, True), (2.5, True), (2, True), (0.5, False)):
+            with self.subTest(unit=unit):
+                doc = fitz.open()
+                page = doc.new_page()
+                doc.xref_set_key(page.xref, "UserUnit", str(unit))
+                kind, _value = doc.xref_get_key(page.xref, "UserUnit")
+                saved = pdf._stored_user_unit(page)
+                doc.close()
+                if unit != int(unit):
+                    self.assertEqual(kind, "float")
+                if kept:
+                    self.assertIsNotNone(saved)
+                    self.assertAlmostEqual(float(saved), unit)
+                else:
+                    self.assertIsNone(saved)
+
+    def test_fractional_user_unit_redacts_the_number_and_keeps_the_neighbor(self):
+        for unit in (1.25, 1.5, 2.5):
+            with self.subTest(unit=unit):
+                raw, box = plain_phone(userunit=unit, cover=False)
+                out, report, _ext = policy.export(raw, ".pdf", _pdf_plan(box, [REVIEW_KEEP, NEIGHBOR]))
+                self.assertTrue(report["checks"]["selected_text_removed"])
+                self.assertTrue(report["checks"]["outside_page_pixels_preserved"])
+                text = _page_text(out)
+                self.assertNotIn(REVIEW_SECRET, text)
+                self.assertNotIn(REVIEW_SECRET, _joined_digits(text))
+                self.assertIn(REVIEW_KEEP, text)
+                self.assertIn(NEIGHBOR, text)
+                source_size = formats.pdf_info(raw)[0]
+                with fitz.open(stream=raw, filetype="pdf") as source_doc:
+                    phone = source_doc[0].search_for(REVIEW_SECRET)[0]
+                    phone_box = pdf._to_pixel_box(phone, source_doc[0], _ImageSize(source_size))
+                output_image = formats.pdf_image(out, 0)
+                self.assertFalse(_region_visible(output_image, phone_box))
+                with fitz.open(stream=out, filetype="pdf") as opened:
+                    page = opened[0]
+                    kind, value = opened.xref_get_key(page.xref, "UserUnit")
+                    self.assertIn(kind, ("float", "real", "int"))
+                    self.assertAlmostEqual(float(value), unit)
+                    neighbor = page.search_for(NEIGHBOR)[0]
+                    neighbor_box = pdf._to_pixel_box(neighbor, page, _ImageSize(output_image.size))
+                self.assertTrue(_region_visible(output_image, neighbor_box))
+
+    def test_user_unit_below_one_still_refuses(self):
+        raw, box = plain_phone(userunit=0.5, cover=False)
+        with self.assertRaises(engine.Rejected) as caught:
+            policy.export(raw, ".pdf", _pdf_plan(box, [REVIEW_KEEP, NEIGHBOR]))
+        message = str(caught.exception)
+        self.assertNotIn(REVIEW_SECRET, message)
+        self.assertNotIn("盖住了", message)
 
 
 if __name__ == "__main__":

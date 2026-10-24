@@ -216,18 +216,25 @@ def _counts_as_hidden(rect, area, selected):
     return not any(rect.intersects(sel) for sel in selected)
 
 
-def _glyphs_under(page, area):
-    """去掉批注后，落在这个矩形里的文字层字符。不把这些字符写进报错。"""
+def _each_glyph(page, area):
+    """与批注相交的每个非空白字形。调用方逐个判断，不把整块矩形平均在一起。"""
     if page is None or area is None or area.is_empty or area.is_infinite:
-        return ''
+        return
     fitz = backend()
-    chars = []
     for span in page.get_texttrace():
         for char in span['chars']:
             text = chr(char[0])
-            if text.strip() and fitz.Rect(char[3]).intersects(area):
-                chars.append(text)
-    return ''.join(chars)
+            if not text.strip():
+                continue
+            rect = fitz.Rect(char[3])
+            if rect.is_empty or rect.is_infinite or not rect.intersects(area):
+                continue
+            yield text, rect
+
+
+def _glyphs_under(page, area):
+    """去掉批注后，落在这个矩形里的文字层字符。不把这些字符写进报错。"""
+    return ''.join(text for text, _rect in _each_glyph(page, area))
 
 
 def _graphics_under(page, area, selected):
@@ -455,6 +462,25 @@ def _garbled_text(text):
     return False
 
 
+def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mupdf_covered):
+    """逐个字形看存活率和明暗差。任何一个不达标，整条批注就不放行。
+
+    取样只取这个字形自己的矩形，不向外扩到旁边仍可读的字，也不和整块矩形做平均或面积加权。
+    字形小到对不齐，同样拒绝。两个渲染器只要有一个判盖住或判不了，就拒绝。
+    """
+    for _text, rect in _each_glyph(baseline_page, area):
+        box = _to_pixel_box(rect, page, covered)
+        reason = _occlusion_reason(
+            _judge_crop(base, covered, box),
+            _judge_crop(mupdf_base, mupdf_covered, box),
+            '.',
+            False,
+        )
+        if reason:
+            return reason, box
+    return '', None
+
+
 def _occlusion_reason(left, right, glyphs, graphics, outside=False):
     """pdfium 与 MuPDF 只要有一个判盖住或判不了，就不放行。空白上的图标不是遮盖。
 
@@ -595,6 +621,8 @@ def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, b
     """看每条被删批注有没有把底下的字盖住，不看像素变没变。
 
     每条批注都用 pdfium 和 MuPDF 各渲染有批注、无批注两张图。覆盖区里只认去掉批注之后还在的文字边缘。
+    整块矩形的存活率只说明这一块大体还读不读得清。矩形里再逐个字形看：任何一个字的存活率或明暗差不达标，
+    整条批注就拒绝，不用可读正文把被盖住的字平均掉。字形对不齐也拒绝。
     便签、图章、签名自己的图标，底下是空白时不算遮盖。两个渲染器只要有一个判盖住或判不了，就拒绝。
     文字层有字、画面上却没有这些字的边缘，也拒绝。批注下面的矢量或图片无法用文字边缘判断，继续拒绝。
     类型名、颜色和线宽都不是放行条件。矩形外多画出来的差异另判；判不了同样拒绝。
@@ -617,6 +645,7 @@ def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, b
         box = _sample_box(area, page, covered)
         glyphs = _glyphs_under(baseline_page, area)
         graphics = _graphics_under(baseline_page, area, selected)
+        reported = box
         if box is None:
             reason = 'invalid'
         else:
@@ -626,9 +655,16 @@ def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, b
                 glyphs,
                 graphics,
             )
+            if not reason:
+                glyph_reason, glyph_box = _glyph_cover_reason(
+                    baseline_page, page, area, base, covered, mupdf_base, mupdf_covered,
+                )
+                if glyph_reason:
+                    reason = glyph_reason
+                    reported = glyph_box or box
             claimed.append(box)
         if reason:
-            problems.append(_occlusion_message(page_number, label, box, reason))
+            problems.append(_occlusion_message(page_number, label, reported, reason))
     for source_covered, source_base in ((covered, base), (mupdf_covered, mupdf_base)):
         for box in _changed_components(source_covered, source_base, claimed):
             if _outside_change_is_noise(box):
@@ -657,11 +693,12 @@ def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, b
 def _stored_user_unit(page):
     """页面上不是 1 的 UserUnit 原文。没有或就是 1 时不改这一页。"""
     kind, value = page.parent.xref_get_key(page.xref, 'UserUnit')
-    if kind not in ('real', 'int'):
+    # PyMuPDF 把 2.5、1.5、1.25 报成 float，整数才是 real 或 int。漏掉 float 时非整数大于 1 仍会误拒。
+    if kind not in ('real', 'int', 'float'):
         return None
     try:
         number = float(value)
-    except ValueError:
+    except (TypeError, ValueError):
         return None
     # 只处理大于 1 的 UserUnit。等于 1 不用改。小于 1 时同一写法会把黑块缩小，尚未证明不会留住字形，所以保持拒绝。
     if number <= 1.0:
