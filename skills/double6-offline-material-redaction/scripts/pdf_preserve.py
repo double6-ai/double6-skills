@@ -616,11 +616,16 @@ def _garbled_text(text):
     return False
 
 
-# 底色取字形框外环的高分位，字迹取框内最暗那一档。中点以下算前景。
+# 底色取字形框外环的高分位。字迹取已经明显暗于这圈底色的像素里偏亮的一档，
+# 不用整框最暗的一粒，也不用过低分位。同框里一小块更深的墨不能把灰笔画拉出字迹。
+# 这类像素太少时才退回整框 10 分位。中点以下算前景。
+# 去掉批注时，比底色环暗过对比度下限的像素也算字迹。带批注的画面仍只按中点，
+# 免得高亮把浅边压暗后被当成新写的字。
 # 不使用固定的 176/96。彩色只看亮度。对比度不够就判不了。
 _CONTRAST_RING = 3
 _CONTRAST_BG_PERCENT = 75
 _CONTRAST_INK_PERCENT = 10
+_CONTRAST_BODY_PERCENT = 75
 _CONTRAST_MIN = 40
 # 跨过中点、并且明暗变化至少达到这段对比度的两成，才计入掩码差异。贴着中点的抗锯齿不算。
 _CONTRAST_MOVE_NUM = 1
@@ -683,10 +688,35 @@ def _local_threshold(base_img, tight):
     if len(interior) < 4 or len(ring) < 8:
         return None
     background = _byte_percentile(ring, _CONTRAST_BG_PERCENT)
-    ink = _byte_percentile(interior, _CONTRAST_INK_PERCENT)
+    ink = _body_ink(interior, background)
     if background is None or ink is None or background - ink < _CONTRAST_MIN:
         return None
     return background, ink
+
+
+def _body_ink(interior, background):
+    """正文墨色：已经比底色环暗的像素里偏亮的那一档。
+
+    整框 10 分位或单个最暗像素会被一小块更深的锚点拉下去，灰笔画就高于中点，涂白不再计入。
+    这里只统计比底色至少暗一段对比度的像素，再取它们的高分位，让正文笔画自己的亮度留下来。
+    这样的像素不足 4 个时，退回整框 10 分位。
+    """
+    if background is None:
+        return None
+    darker = [value for value in interior if background - value >= _CONTRAST_MIN]
+    if len(darker) < 4:
+        return _byte_percentile(interior, _CONTRAST_INK_PERCENT)
+    return _byte_percentile(darker, _CONTRAST_BODY_PERCENT)
+
+
+def _is_body_pixel(luma, background, ink):
+    """去掉批注的画面上，这个像素算不算字迹。
+
+    低于正文墨色和底色的中点，或者已经比底色环暗过对比度下限，都算。
+    后一条不看锚点把中点拉到哪里：灰笔画只要明显暗于纸面，就仍然是笔画。
+    只用于去掉批注的那张图。带批注的画面若也用这条，高亮压暗的浅边会被当成新字。
+    """
+    return luma * 2 <= background + ink or background - luma >= _CONTRAST_MIN
 
 
 def _dilate_mask(mask, width, height, radius):
@@ -716,7 +746,9 @@ def _mask_change_count(base_img, covered_img, box, background, ink):
     新出现的前景贴着原来的字迹一两像素，或者消失的前景贴着新出现的字迹一两像素，
     都当成同一笔字挪了一下，不计。消失的笔画如果只是贴着本来就在的字迹，
     只有变亮不到这段对比度两成才跳过。涂白把笔画抹掉时，变亮接近整段对比度，贴边也计入。
-    这段深浅用底色和这块最暗的像素来比，和变亮计数同一档。中点跨度仍用 10 分位。
+    这段深浅用底色和这块最暗的像素来比，和变亮计数同一档。中点跨度用正文墨色。
+    去掉批注的画面上，比底色环暗过对比度下限的像素也算原字迹，免得更深的锚点把灰笔画漏掉。
+    带批注的画面仍只按中点分前景。
     """
     if box is None or background is None or ink is None or base_img.size != covered_img.size:
         return None
@@ -740,7 +772,7 @@ def _mask_change_count(base_img, covered_img, box, background, ink):
     painted_mask = bytearray(width * height)
     new_ink = bytearray(width * height)
     for index, (origin, painted) in enumerate(zip(before, after)):
-        if origin * 2 <= midpoint:
+        if _is_body_pixel(origin, background, ink):
             base_mask[index] = 1
         if painted * 2 <= midpoint:
             painted_mask[index] = 1
@@ -769,7 +801,7 @@ def _mask_change_count(base_img, covered_img, box, background, ink):
 def _background_darken_count(base_img, covered_img, box, background, ink):
     """外扩框里，去掉批注后属于局部背景、带批注后明显变暗的像素。
 
-    只看亮度高于中点的底色。中点仍用框内 10 分位。变暗比例则用这块里最暗的像素和底色来比，
+    只看亮度高于中点的底色。中点用正文墨色，不用整框最暗一档。变暗比例则用这块里最暗的像素和底色来比，
     达到这段对比度的两成才计入。细笔画的 10 分位常常落在纸面上，对比度会被估小，黄色高亮就过线。
     不到两成的轻度变暗不计，贴着字迹也一样。那是高亮压到细字边上的毛边。
     接近字迹深度的变暗即使贴着原来的笔画也计入。小字开口里的细线整段落在两像素里，不能被跳过。
@@ -784,8 +816,8 @@ def _background_darken_count(base_img, covered_img, box, background, ink):
     after = covered_img.crop(box).tobytes()
     if len(before) != len(after) or not before:
         return None
-    # 细字内部大多是纸。10 分位会停在浅灰上，黄色高亮大约暗 29 也会被算成两成。
-    # 比例改跟这块最暗的像素比。中点仍用调用方传来的 10 分位。
+    # 细字内部大多是纸。过低分位会停在浅灰上，黄色高亮大约暗 29 也会被算成两成。
+    # 比例跟这块最暗的像素比。中点用调用方传来的正文墨色。
     span = background - min(before)
     if span < _CONTRAST_MIN:
         return None
@@ -807,7 +839,8 @@ def _background_darken_count(base_img, covered_img, box, background, ink):
 def _ink_brighten_count(base_img, covered_img, box, background, ink):
     """外扩框里，去掉批注后属于字迹、带批注后明显变亮的像素。
 
-    字迹是低于中点，或接近这块最暗像素（再往亮处不超过这段对比度的两成）。
+    字迹是低于中点、接近这块最暗像素（再往亮处不超过这段对比度的两成），
+    或已经比底色环暗过对比度下限。最后一条让灰笔画在同框有更深锚点时仍算字迹。
     变亮达到底色和最暗像素之差的两成才计入。没有贴边忽略：小号字的左竖笔
     会整段落在剩下那一弯的两像素里，涂白必须计入。不到两成的轻度变亮不计，
     那是高亮一类的毛边。两张图对不齐就返回 None。半透明白常常仍停在中点以下，
@@ -826,7 +859,6 @@ def _ink_brighten_count(base_img, covered_img, box, background, ink):
     span = background - darkest
     if span < _CONTRAST_MIN:
         return None
-    midpoint = background + ink
     near_dark = darkest + (span * _DARKEN_NUM) // _DARKEN_DEN
     width = x1 - x0
     height = y1 - y0
@@ -836,7 +868,7 @@ def _ink_brighten_count(base_img, covered_img, box, background, ink):
     for origin, painted in zip(before, after):
         if painted <= origin:
             continue
-        if origin * 2 > midpoint and origin > near_dark:
+        if not _is_body_pixel(origin, background, ink) and origin > near_dark:
             continue
         if (painted - origin) * _DARKEN_DEN < span * _DARKEN_NUM:
             continue
@@ -875,7 +907,7 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
     取样只取这个字形自己的矩形，再向外加 2 个预览像素，不和整块矩形做平均或面积加权。
     掩码用去掉批注后的局部底色和字迹色的中点。多出或少掉的前景达到小数量就拒绝。
     高于中点的底色如果变暗达到这段对比度的两成，累计到同样的小数量也拒绝。
-    低于中点或接近最暗像素的字迹如果变亮达到同样的两成，累计到同样的小数量也拒绝。
+    低于中点、接近最暗像素、或比底色环暗过对比度下限的字迹如果变亮达到同样的两成，累计到同样的小数量也拒绝。
     新前景贴着旧字迹、或消失的笔画贴着新出现的字迹，一两像素的挪动不计。
     消失的笔画贴着本来就在的字迹时，只有轻度变亮不计；涂白擦笔要计入。
     变暗、变亮都不按贴边跳过达到两成的变化。整个字形框都落在某一个选区里时，

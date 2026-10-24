@@ -937,3 +937,131 @@ def attack_cases():
     raw, box = contrast_page(bg=40, paint="appearance-fill")
     rows.append(_row("外观铺满并压过中点", "contrast", raw, box, {"paint": "appearance"}, "refuse"))
     return rows
+
+
+def _gray_digits(page, size, gray):
+    """虚构号码，每个数字单独着色。位置和复审的灰字 8 一致。"""
+    pairs = []
+    x, y = 18, 250
+    color = (gray, gray, gray)
+    for glyph in SECRET:
+        page.insert_text((x, y), glyph, fontname="helv", fontsize=size, color=color)
+        rect = fitz.Rect(page.get_texttrace()[-1]["chars"][-1][3])
+        pairs.append((glyph, rect))
+        x += max(size * 0.62, rect.width + size * 0.08)
+    return pairs
+
+
+def _anchor_point(rect, anchor_x, anchor_y):
+    return (rect.x0 + rect.width * anchor_x, rect.y1 - rect.height * anchor_y)
+
+
+def _place_anchor(page, target, kind, anchor, anchor_rgb, anchor_ratio, anchor_x, anchor_y, fill_opacity, size):
+    """在目标字上放更深的锚。文字锚不是矢量，图片和矩形才会走线条或图片。"""
+    if kind == "none" or not anchor:
+        return
+    if kind == "text":
+        page.insert_text(
+            _anchor_point(target, anchor_x, anchor_y),
+            anchor,
+            fontname="helv",
+            fontsize=size * anchor_ratio,
+            color=anchor_rgb,
+            fill_opacity=fill_opacity,
+        )
+        return
+    mark = fitz.Rect(
+        target.x0 + target.width * 0.40,
+        target.y0 + target.height * 0.28,
+        target.x0 + target.width * 0.82,
+        target.y0 + target.height * 0.82,
+    )
+    if kind == "vector":
+        page.draw_rect(mark, color=None, fill=anchor_rgb)
+        return
+    if kind == "image":
+        pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 12, 16), 0)
+        pix.clear_with(0)
+        page.insert_image(mark, pixmap=pix)
+        return
+    raise ValueError(kind)
+
+
+def anchor_whiteout(
+    size=28,
+    gray=0.72,
+    anchor="W",
+    anchor_rgb=(0, 0, 0),
+    anchor_ratio=0.8,
+    anchor_x=0.45,
+    anchor_y=0.12,
+    white_x=0.40,
+    when="after",
+    fill_opacity=1.0,
+    kind="text",
+):
+    """灰色数字上叠更深的锚，再把左竖笔涂白。几何和复审漏脱一致。
+
+    when 为 before 时锚画在数字下面，数字的孔里仍能看见这块更深的墨。
+    """
+    header = (
+        ((16, 28), KEEP, "china-s", 13),
+        ((16, 50), SIDE, "helv", 12),
+    )
+
+    def blank():
+        doc, page = _fresh(640, 360)
+        for point, text, font, fontsize in header:
+            page.insert_text(point, text, fontname=font, fontsize=fontsize)
+        return doc, page
+
+    doc, page = blank()
+    pairs = _gray_digits(page, size, gray)
+    target = pairs[2][1]
+    if when == "before" and kind != "none":
+        doc.close()
+        doc, page = blank()
+        _place_anchor(page, target, kind, anchor, anchor_rgb, anchor_ratio, anchor_x, anchor_y, fill_opacity, size)
+        pairs = _gray_digits(page, size, gray)
+        target = pairs[2][1]
+    elif kind != "none":
+        _place_anchor(page, target, kind, anchor, anchor_rgb, anchor_ratio, anchor_x, anchor_y, fill_opacity, size)
+    bar = fitz.Rect(
+        target.x0 - 0.15,
+        target.y0 + target.height * 0.04,
+        target.x0 + target.width * white_x,
+        target.y1 - target.height * 0.04,
+    )
+    raw, box = _annot_bars(doc, page, pairs, [bar], (1, 1, 1), 1, False)
+    doc.close()
+    return raw, box
+
+
+def anchor_cases():
+    """灰字加更深锚点后再涂白。文字锚必须靠字迹估计拒绝，矢量或图片可以报线条或图片。"""
+    rows = []
+
+    def add(name, expect="tamper", **kwargs):
+        raw, box = anchor_whiteout(**kwargs)
+        params = {"size": kwargs.get("size", 28), "gray": kwargs.get("gray", 0.72)}
+        params.update({key: value for key, value in kwargs.items() if key != "anchor_rgb"})
+        if "anchor_rgb" in kwargs:
+            params["anchor_rgb"] = [round(value, 3) for value in kwargs["anchor_rgb"]]
+        rows.append(_row(name, "anchor", raw, box, params, expect))
+
+    add("灰8黑W涂白左-28pt")
+    add("灰8无锚涂白左-28pt", anchor=None, kind="none")
+    add("灰0.55黑W涂白左-28pt", gray=0.55)
+    # 0.82 的白块会先被文字边缘判成盖住。变亮或掩码仍要达到 6，字迹估计不能放行。
+    add("灰0.82黑W涂白左-28pt", gray=0.82, expect="refuse")
+    add("灰8黑W涂白左-12pt", size=12)
+    add("灰8深红W涂白左-28pt", anchor_rgb=(0.35, 0.05, 0.05))
+    add("灰8深灰锚涂白左-28pt", anchor_rgb=(0.25, 0.25, 0.25))
+    add("灰8黑W在左侧-28pt", anchor_x=-0.05, anchor_y=0.85)
+    add("灰8黑W在字前-28pt", when="before")
+    # 页面上的半透明文字会先被可见性检查拒绝，到不了字迹估计。
+    add("灰8半透明黑W0.45-28pt", fill_opacity=0.45, expect="transparent")
+    add("灰8大号黑M涂白左-28pt", anchor="M", anchor_ratio=3.0, anchor_x=0.0, anchor_y=-0.15)
+    add("灰8矢量黑块在字下-28pt", kind="vector", when="before", expect="later-fill")
+    add("灰8图片黑块在字上-28pt", kind="image", when="after", expect="later-fill")
+    return rows

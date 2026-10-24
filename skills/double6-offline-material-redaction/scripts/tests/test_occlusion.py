@@ -24,6 +24,7 @@ import pdf_preserve as pdf
 import pymupdf as fitz
 from generators.author_cases import KEEP as AUTHOR_KEEP
 from generators.author_cases import base_page
+from generators.glyph_attacks import anchor_cases
 from generators.glyph_attacks import attack_cases
 from generators.glyph_attacks import contrast_page
 from generators.glyph_attacks import small_seal_cases
@@ -594,6 +595,7 @@ class AddedInkAttackTests(unittest.TestCase):
         # 中点由每个字自己的底色和字迹色决定，不再用 176/96 这种固定亮度。
         self.assertEqual(pdf._CONTRAST_BG_PERCENT, 75)
         self.assertEqual(pdf._CONTRAST_INK_PERCENT, 10)
+        self.assertEqual(pdf._CONTRAST_BODY_PERCENT, 75)
         self.assertEqual(pdf._CONTRAST_MIN, 40)
         self.assertEqual(pdf._CONTRAST_MOVE_NUM, 1)
         self.assertEqual(pdf._CONTRAST_MOVE_DEN, 5)
@@ -658,6 +660,16 @@ class AddedInkAttackTests(unittest.TestCase):
         # 半透明白停在中点以下，掩码差是 0，变亮计数仍要达到 6。
         self.assertEqual(pdf._mask_change_count(paired, still_dark, (0, 0, side, side), 255, 0), 0)
         self.assertGreaterEqual(pdf._ink_brighten_count(paired, still_dark, (0, 0, side, side), 255, 0), 6)
+        # 字迹参数仍被锚点压成 0 时，比纸面暗的灰列涂白也要计入。中点单独看会漏掉它。
+        gray_stroke = Image.new("L", (side, side), 255)
+        for y in range(side):
+            gray_stroke.putpixel((2, y), 0)
+            gray_stroke.putpixel((3, y), 184)
+        whitened = gray_stroke.copy()
+        for y in range(4, 15):
+            whitened.putpixel((3, y), 255)
+        self.assertGreaterEqual(pdf._mask_change_count(gray_stroke, whitened, (0, 0, side, side), 255, 0), 6)
+        self.assertGreaterEqual(pdf._ink_brighten_count(gray_stroke, whitened, (0, 0, side, side), 255, 0), 6)
 
     def _darken_on(self, raw, glyph=None):
         """带上 2 像素贴边忽略之后，每个字形的变暗计数和掩码计数。"""
@@ -812,6 +824,67 @@ class AddedInkAttackTests(unittest.TestCase):
                     )
                 self._check(row)
 
+    def test_gray_stroke_is_ink_when_a_darker_anchor_shares_the_box(self):
+        """灰字上的更深文字锚不能把正文墨色拉走。涂白灰笔画要计入变亮或掩码。"""
+        rows = anchor_cases()
+        names = [row["name"] for row in rows]
+        self.assertEqual(len(names), len(set(names)))
+        for required in (
+            "灰8黑W涂白左-28pt",
+            "灰8无锚涂白左-28pt",
+            "灰0.55黑W涂白左-28pt",
+            "灰0.82黑W涂白左-28pt",
+            "灰8黑W涂白左-12pt",
+            "灰8深红W涂白左-28pt",
+            "灰8深灰锚涂白左-28pt",
+            "灰8黑W在左侧-28pt",
+            "灰8黑W在字前-28pt",
+            "灰8半透明黑W0.45-28pt",
+            "灰8大号黑M涂白左-28pt",
+            "灰8矢量黑块在字下-28pt",
+            "灰8图片黑块在字上-28pt",
+        ):
+            self.assertIn(required, names)
+        for row in rows:
+            with self.subTest(name=row["name"]):
+                kind = row["params"].get("kind", "text")
+                if kind not in ("vector", "image") and row["expect"] != "transparent":
+                    counted = [item for item in self._darken_on(row["raw"], glyph="8")]
+                    self.assertTrue(counted, row["name"])
+                    for text, _left, _right, left_mask, right_mask, left_bright, right_bright in counted:
+                        self.assertTrue(
+                            left_mask >= 6 or left_bright >= 6,
+                            (row["name"], text, left_mask, left_bright),
+                        )
+                        self.assertTrue(
+                            right_mask >= 6 or right_bright >= 6,
+                            (row["name"], text, right_mask, right_bright),
+                        )
+                    if row["name"] == "灰8黑W涂白左-28pt":
+                        self._assert_body_ink_not_the_anchor(row["raw"])
+                self._check(row)
+
+    def _assert_body_ink_not_the_anchor(self, raw):
+        """复审这例的字迹色要落在灰笔画上，不能落在黑色 W 上。"""
+        baseline_raw = pdf.without_annotation_appearance(raw)
+        base = formats.pdf_image(baseline_raw, 0).convert("L")
+        with fitz.open(stream=raw, filetype="pdf") as doc, fitz.open(stream=baseline_raw, filetype="pdf") as stripped:
+            page = doc[0]
+            baseline_page = stripped[0]
+            mupdf_base = pdf._mupdf_gray(baseline_page, base.size)
+            area = pdf._areas_to_judge(page)[0][0]
+            seen = False
+            for text, rect in pdf._each_glyph(baseline_page, area):
+                if text != "8":
+                    continue
+                box = pdf._to_pixel_box(rect, page, base)
+                for image in (base, mupdf_base):
+                    level = pdf._local_threshold(image, box)
+                    self.assertIsNotNone(level)
+                    self.assertGreaterEqual(level[1], 160, level)
+                seen = True
+        self.assertTrue(seen)
+
     def test_review_stroke_samples_and_the_hairline_are_refused(self):
         rows = attack_cases()
         names = [row["name"] for row in rows]
@@ -877,6 +950,8 @@ class AddedInkAttackTests(unittest.TestCase):
                 self.assertNotIn("盖住了", message)
             elif expect == "invisible":
                 self.assertIn("不可见", message)
+            elif expect == "transparent":
+                self.assertIn("透明", message)
             else:
                 self.fail(f"应交付，实际拒绝：{message[:180]}")
             return
