@@ -143,7 +143,7 @@ def verify(data, ext, plan, source=None):
         info=engine.inspect_docx(normalized) if kind=='word' else formats.inspect(normalized,kind)
         preview=info['preview'];terms=engine.terms_checked(plan.get('terms',[]));keep=engine.keep_checked(plan.get('keep',[]))
         raw_text=' '.join(formats.package(data)[n].decode('utf-8') for n in ('content.xml','styles.xml'))
-        checks={'selected_strings_absent':not any(x in raw_text for x in terms),'odf_clean_container':not detail.get('hidden_nodes_removed'),'odf_reopened':True}
+        checks={'selected_strings_absent':not any(engine.term_remains(raw_text, x) for x in terms),'odf_clean_container':not detail.get('hidden_nodes_removed'),'odf_reopened':True}
         if keep:checks['keep_phrases_preserved']=all(x in preview for x in keep)
         if not all(checks.values()):raise engine.Rejected('ODF实际副本隐藏内容或保留项复检失败。')
         return {'checks':checks,'not_checked':[] if keep else ['keep_phrases_preserved'],'output_sha256':engine.digest(data),'scope':'最小ODF原格式副本，实际容器及可见内容已重新读取。'}
