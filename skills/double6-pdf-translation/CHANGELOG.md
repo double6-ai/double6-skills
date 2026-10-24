@@ -2,6 +2,7 @@
 
 ## 2.0.0-rc.9 本地发布候选 · 2026-10-23
 
+- 文档（2026-10-24，未改版本号）：README 第 5 行的当前候选版本说明由 `2.0.0-rc.2` 更正为 `2.0.0-rc.9`，与 `SKILL.md` `metadata.version` 和 `configs/default-routes.json` `candidate_version` 一致；只改说明文字，不改版本、发布状态、路线或代码。
 - 凭据不进入子进程命令行（2026-10-24，未改版本号）：翻译服务凭据的唯一入口为环境变量 `LOCAL_TRANSLATION_API_KEY`（`scripts/credential_env.py`）。此前远端凭据以 `--openai-api-key` / 适配器 `--api-key` 放进电子 PDF 后端与 `qwen-cli` 适配器的命令行，进而进入同机进程列表、后端 DEBUG 日志、`CalledProcessError` 与 tenacity 重试日志，以及 `qwen-cli` 路线的翻译缓存库（命令串是缓存身份的一部分）。现在：
   - 电子 PDF 后端改由其原生配置环境变量 `PDF2ZH_OPENAI_API_KEY` 接收（PDFMathTranslate-next 2.8.2 `config/main.py` 的 `PDF2ZH_` 前缀与嵌套字段展开）；`qwen-cli` 适配器改为从继承的 `LOCAL_TRANSLATION_API_KEY` 读取，`--api-key` 仅为兼容保留。后端命令与适配器命令串不再含凭据，因此上述日志、异常与缓存库里也没有凭据。
   - 启动后端前清除继承的 `PDF2ZH_OPENAI_API_KEY`、`LOCAL_TRANSLATION_API_KEY`、`OPENAI_API_KEY`、`PDF2ZH_DEBUG`，再只放入该后端需要的一个变量（`PDF2ZH_DEBUG` 会让后端把含凭据的完整配置写进日志）。
