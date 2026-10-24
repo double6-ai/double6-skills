@@ -70,7 +70,7 @@ class FormatTests(unittest.TestCase):
   with self.assertRaises(engine.Rejected):formats.export(KEEP.encode(),'markdown',plan('markdown'))
  def test_cli_new_formats_source_and_output_protection(self):
   with tempfile.TemporaryDirectory()as tmp:
-   d=Path(tmp);source=d/'原件.md';source.write_text(SECRET+' '+KEEP);p=d/'计划.json';p.write_text(json.dumps(plan('markdown'),ensure_ascii=False));out=d/'副本.md'
+   d=Path(tmp);source=d/'原件.md';source.write_text(SECRET+' '+KEEP,encoding='utf-8');p=d/'计划.json';p.write_text(json.dumps(plan('markdown'),ensure_ascii=False),encoding='utf-8');out=d/'副本.md'
    args=[sys.executable,str(Path(cli.__file__)),'redact','--input',str(source),'--plan',str(p),'--output',str(out)]
    r=subprocess.run(args,capture_output=True);self.assertEqual(r.returncode,0,r.stdout);self.assertNotIn(SECRET.encode(),r.stdout);before=out.read_bytes();r=subprocess.run(args,capture_output=True);self.assertEqual(r.returncode,2);self.assertEqual(out.read_bytes(),before)
 
