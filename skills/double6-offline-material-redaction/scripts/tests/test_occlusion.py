@@ -27,6 +27,7 @@ from generators.author_cases import base_page
 from generators.glyph_attacks import attack_cases
 from generators.glyph_attacks import contrast_page
 from generators.glyph_attacks import small_seal_cases
+from generators.glyph_attacks import whiteout_cases
 from generators.glyph_attacks import strikeout_cut_through_glyph
 from generators.glyph_attacks import strikeout_extends_outside
 from generators.glyph_attacks import strikeout_on_selected_word
@@ -284,11 +285,11 @@ class OcclusionOracleTests(unittest.TestCase):
                 if "盖住了" not in message or "方形" not in message:
                     problems.append(f"用户黑框的说明不对：{message}")
             if row["name"] == "正常-图章压住号码":
-                if "图章" not in message or ("盖住了" not in message and "接近字迹的深色" not in message):
+                if "图章" not in message or ("盖住了" not in message and "改了字的笔画" not in message):
                     problems.append(f"压住号码的图章应说明字被盖住或被改掉：{message}")
             if row["name"] == "正常-红圈圈注":
-                if "接近字迹的深色" not in message:
-                    problems.append(f"{row['name']} 应说明空白被涂成接近字迹：{message}")
+                if "改了字的笔画" not in message:
+                    problems.append(f"{row['name']} 应说明改了字的笔画：{message}")
             if row["name"] == "正常-删除线在被选词上":
                 if decision != "deliver":
                     problems.append(f"画在被选词上的删除线应随涂黑去掉：{message}")
@@ -582,11 +583,11 @@ class AddedInkAttackTests(unittest.TestCase):
                 self.assertNotIn(REVIEW_SECRET, message)
                 self.assertNotIn(REVIEW_SECRET, _joined_digits(message))
                 self.assertTrue(
-                    "接近字迹的深色" in message or "盖住了" in message or "没法对齐" in message,
+                    "改了字的笔画" in message or "盖住了" in message or "没法对齐" in message,
                     message,
                 )
                 if builder is strikeout_rewrites_outside_digit:
-                    self.assertIn("接近字迹的深色", message)
+                    self.assertIn("改了字的笔画", message)
                     self.assertIn("删除线", message)
 
     def test_added_ink_thresholds_stay_written_down(self):
@@ -638,6 +639,25 @@ class AddedInkAttackTests(unittest.TestCase):
             farther.putpixel((8, y), 0)
         self.assertEqual(pdf._mask_change_count(stroke, shifted, (0, 0, side, side), 255, 0), 0)
         self.assertGreaterEqual(pdf._mask_change_count(stroke, farther, (0, 0, side, side), 255, 0), 6)
+        # 两列字迹，抹掉靠右那一列。贴着剩下的笔画也不再放过涂白。只亮到 29 的仍不计。
+        paired = Image.new("L", (side, side), 255)
+        for y in range(side):
+            paired.putpixel((2, y), 0)
+            paired.putpixel((3, y), 0)
+        erased = paired.copy()
+        lifted = paired.copy()
+        still_dark = paired.copy()
+        for y in range(4, 15):
+            erased.putpixel((3, y), 255)
+            lifted.putpixel((3, y), 29)
+            still_dark.putpixel((3, y), 80)
+        self.assertGreaterEqual(pdf._mask_change_count(paired, erased, (0, 0, side, side), 255, 0), 6)
+        self.assertGreaterEqual(pdf._ink_brighten_count(paired, erased, (0, 0, side, side), 255, 0), 6)
+        self.assertEqual(pdf._mask_change_count(paired, lifted, (0, 0, side, side), 255, 0), 0)
+        self.assertEqual(pdf._ink_brighten_count(paired, lifted, (0, 0, side, side), 255, 0), 0)
+        # 半透明白停在中点以下，掩码差是 0，变亮计数仍要达到 6。
+        self.assertEqual(pdf._mask_change_count(paired, still_dark, (0, 0, side, side), 255, 0), 0)
+        self.assertGreaterEqual(pdf._ink_brighten_count(paired, still_dark, (0, 0, side, side), 255, 0), 6)
 
     def _darken_on(self, raw, glyph=None):
         """带上 2 像素贴边忽略之后，每个字形的变暗计数和掩码计数。"""
@@ -666,6 +686,8 @@ class AddedInkAttackTests(unittest.TestCase):
                     pdf._background_darken_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1]),
                     pdf._mask_change_count(base, source, grown, left_level[0], left_level[1]),
                     pdf._mask_change_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1]),
+                    pdf._ink_brighten_count(base, source, grown, left_level[0], left_level[1]),
+                    pdf._ink_brighten_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1]),
                 ))
         return rows
 
@@ -675,7 +697,7 @@ class AddedInkAttackTests(unittest.TestCase):
             raw, box = contrast_page(gray=0, opacity=opacity, blend=True)
             counted = [row for row in self._darken_on(raw, glyph="3")]
             self.assertTrue(counted, opacity)
-            for text, left, right, left_mask, right_mask in counted:
+            for text, left, right, left_mask, right_mask, _left_bright, _right_bright in counted:
                 self.assertGreaterEqual(
                     left,
                     6,
@@ -689,16 +711,18 @@ class AddedInkAttackTests(unittest.TestCase):
             with self.assertRaises(engine.Rejected) as caught:
                 policy.export(raw, ".pdf", _pdf_plan(box, [REVIEW_KEEP]))
             message = str(caught.exception)
-            self.assertIn("接近字迹的深色", message)
+            self.assertIn("改了字的笔画", message)
             self.assertNotIn(REVIEW_SECRET, message)
 
     def test_office_highlight_darkening_stays_under_the_fraction(self):
         samples = {item["name"]: item for item in office_samples()}
         for name in ("正常-黄色高亮在保留句", "正常-黄色高亮压在号码上"):
             sample = samples[name]
-            for text, left, right, left_mask, right_mask in self._darken_on(sample["raw"]):
-                self.assertLess(left, 6, (name, text, left, right, left_mask, right_mask))
-                self.assertLess(right, 6, (name, text, left, right, left_mask, right_mask))
+            for text, left, right, left_mask, right_mask, left_bright, right_bright in self._darken_on(sample["raw"]):
+                self.assertLess(left, 6, (name, text, left, right, left_mask, right_mask, left_bright, right_bright))
+                self.assertLess(right, 6, (name, text, left, right, left_mask, right_mask, left_bright, right_bright))
+                self.assertLess(left_bright, 6, (name, text, left, right, left_bright, right_bright))
+                self.assertLess(right_bright, 6, (name, text, left, right, left_bright, right_bright))
             out, _report, _ext = policy.export(sample["raw"], ".pdf", _pdf_plan(sample["box"], [sample["keep"]]))
             self.assertIn(sample["keep"], _page_text(out))
         self.assertEqual(self._paper_darken_count(drop=29, ink=120), 0)
@@ -709,14 +733,16 @@ class AddedInkAttackTests(unittest.TestCase):
         highlight_box = [(other.x0 - 1) * 2, (other.y0 - 1) * 2, (other.x1 + 1) * 2, (other.y1 + 1) * 2]
         doc.close()
         digits = {
-            text: (left, right)
-            for text, left, right, _left_mask, _right_mask in self._darken_on(highlight)
+            text: (left, right, left_bright, right_bright)
+            for text, left, right, _left_mask, _right_mask, left_bright, right_bright in self._darken_on(highlight)
             if text in ("1", "2")
         }
         self.assertEqual(set(digits), {"1", "2"})
-        for text, (left, right) in digits.items():
-            self.assertLess(left, 6, (text, left, right))
-            self.assertLess(right, 6, (text, left, right))
+        for text, (left, right, left_bright, right_bright) in digits.items():
+            self.assertLess(left, 6, (text, left, right, left_bright, right_bright))
+            self.assertLess(right, 6, (text, left, right, left_bright, right_bright))
+            self.assertLess(left_bright, 6, (text, left, right, left_bright, right_bright))
+            self.assertLess(right_bright, 6, (text, left, right, left_bright, right_bright))
         out, _report, _ext = policy.export(highlight, ".pdf", _pdf_plan(highlight_box, [AUTHOR_KEEP]))
         self.assertIn(AUTHOR_KEEP, _page_text(out))
         strike_raw, strike_box = strikeout_on_selected_word()
@@ -739,9 +765,51 @@ class AddedInkAttackTests(unittest.TestCase):
             with self.subTest(name=row["name"]):
                 counted = [item for item in self._darken_on(row["raw"], glyph="3")]
                 self.assertTrue(counted, row["name"])
-                for text, left, right, left_mask, right_mask in counted:
+                for text, left, right, left_mask, right_mask, _left_bright, _right_bright in counted:
                     self.assertGreaterEqual(left, 6, (row["name"], text, left, right, left_mask, right_mask))
                     self.assertGreaterEqual(right, 6, (row["name"], text, left, right, left_mask, right_mask))
+                self._check(row)
+
+    def test_whiteout_of_a_small_stem_is_counted_even_beside_the_bowl(self):
+        """宽批注把小号 8 的左竖笔涂白。变亮达到 6，贴着剩下那一弯也不再放过。"""
+        rows = whiteout_cases()
+        names = [row["name"] for row in rows]
+        self.assertEqual(len(names), len(set(names)))
+        for required in (
+            "擦左8-7pt",
+            "擦左8-9pt",
+            "擦左8-10pt",
+            "擦左8-9pt-紧框",
+            "擦右8-9pt",
+            "擦顶8-9pt",
+            "擦中8-9pt",
+            "涂白B左竖改成3-9pt",
+            "涂白B左竖改成3-9pt-紧框",
+            "涂白B中横改成8-9pt",
+            "涂白B中横改成8-9pt-紧框",
+            "半透明白0.45擦左8-9pt",
+            "半透明白0.70擦左8-9pt",
+            "浅灰180擦左8-9pt",
+            "浅灰210擦左8-9pt",
+            "浅灰180擦左8-9pt-紧框",
+        ):
+            self.assertIn(required, names)
+        for row in rows:
+            with self.subTest(name=row["name"]):
+                glyph = row["params"]["char"]
+                counted = [item for item in self._darken_on(row["raw"], glyph=glyph)]
+                self.assertTrue(counted, row["name"])
+                for text, _left, _right, left_mask, right_mask, left_bright, right_bright in counted:
+                    self.assertGreaterEqual(
+                        left_bright,
+                        6,
+                        (row["name"], text, left_bright, right_bright, left_mask, right_mask),
+                    )
+                    self.assertGreaterEqual(
+                        right_bright,
+                        6,
+                        (row["name"], text, left_bright, right_bright, left_mask, right_mask),
+                    )
                 self._check(row)
 
     def test_review_stroke_samples_and_the_hairline_are_refused(self):
@@ -785,7 +853,7 @@ class AddedInkAttackTests(unittest.TestCase):
             self.assertNotIn(REVIEW_SECRET, _joined_digits(message))
             expect = row["expect"]
             if expect == "tamper":
-                self.assertIn("接近字迹的深色", message)
+                self.assertIn("改了字的笔画", message)
             elif expect == "cover":
                 self.assertIn("盖住了", message)
             elif expect == "later-fill":
@@ -796,7 +864,7 @@ class AddedInkAttackTests(unittest.TestCase):
                 self.assertTrue(
                     any(
                         part in message
-                        for part in ("盖住了", "接近字迹的深色", "看不一致", "没法对齐", "线条或图片")
+                        for part in ("盖住了", "改了字的笔画", "看不一致", "没法对齐", "线条或图片")
                     ),
                     message,
                 )

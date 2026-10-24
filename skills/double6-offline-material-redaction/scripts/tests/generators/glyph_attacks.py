@@ -636,6 +636,125 @@ def small_seal_cases():
     return rows
 
 
+def _annot_bars(doc, page, pairs, bars, rgb, opacity, tight):
+    """把若干矩形写进一条批注的外观。tight 时批注框就是这些矩形，否则用盖住号码行的宽框。"""
+    union = fitz.Rect(bars[0])
+    for bar in bars[1:]:
+        union.include_rect(bar)
+    if not tight:
+        union = _wide_union(page, pairs, max(page.rect.width, union.x1 + 8))
+    annot = page.add_rect_annot(union)
+    annot.set_border(width=0)
+    annot.set_colors(stroke=None, fill=None)
+    annot.update()
+    parts = []
+    for bar in bars:
+        box = _to_pdf(page, bar)
+        parts.append(
+            "q /GS1 gs %.4f %.4f %.4f rg %.2f %.2f %.2f %.2f re f Q"
+            % (rgb[0], rgb[1], rgb[2], box.x0, box.y0, box.width, box.height)
+        )
+    _write_square_ap(doc, page, annot, parts, union)
+    _install_extgstate(doc, annot, opacity)
+    side = page.search_for(SIDE)[0]
+    return doc.tobytes(), preview_box(page, side)
+
+
+def _erase_rect(rect, part):
+    """字框上要抹掉的一块。左竖笔和复审漏脱用同一份 42% 宽的白矩形。"""
+    if part == "left":
+        return fitz.Rect(
+            rect.x0 - 0.2,
+            rect.y0 + rect.height * 0.05,
+            rect.x0 + rect.width * 0.42,
+            rect.y1 - rect.height * 0.05,
+        )
+    if part == "right":
+        return fitz.Rect(
+            rect.x0 + rect.width * 0.55,
+            rect.y0 + rect.height * 0.05,
+            rect.x1 + 0.2,
+            rect.y1 - rect.height * 0.05,
+        )
+    if part == "top":
+        return fitz.Rect(
+            rect.x0 - 0.1,
+            rect.y0 - 0.1,
+            rect.x1 + 0.1,
+            rect.y0 + rect.height * 0.32,
+        )
+    if part == "middle":
+        return fitz.Rect(
+            rect.x0 + rect.width * 0.05,
+            rect.y0 + rect.height * 0.40,
+            rect.x1 - rect.width * 0.05,
+            rect.y0 + rect.height * 0.62,
+        )
+    raise ValueError(part)
+
+
+def whiteout_page(size, char, part, rgb=(1, 1, 1), opacity=1.0, tight=False):
+    """在号码或旁边的字母上涂一块，用来抹掉笔画。宽批注盖住整行，紧批注只盖这块。"""
+    doc, page = _fresh(640, 360)
+    pairs = _page_chrome(page, 250, size)
+    target = None
+    for text, rect in pairs:
+        if text == char:
+            target = rect
+            break
+    if target is None:
+        page.insert_text((220, 250), char, fontname="helv", fontsize=size)
+        target = fitz.Rect(page.get_texttrace()[-1]["chars"][-1][3])
+        pairs = list(pairs) + [(char, target)]
+    bar = _erase_rect(target, part)
+    raw, box = _annot_bars(doc, page, pairs, [bar], rgb, opacity, tight)
+    doc.close()
+    return raw, box
+
+
+def whiteout_cases():
+    """复审漏掉的小号涂白，再加上 8 的其它部位、B 改成 3 或 8、半透明白和浅灰。"""
+    rows = []
+
+    def add(name, size, char, part, rgb=(1, 1, 1), opacity=1.0, tight=False, expect="tamper"):
+        raw, box = whiteout_page(size, char, part, rgb, opacity, tight)
+        rows.append(_row(
+            name,
+            "whiteout",
+            raw,
+            box,
+            {
+                "size": size,
+                "char": char,
+                "part": part,
+                "rgb": [round(value, 3) for value in rgb],
+                "opacity": opacity,
+                "tight": tight,
+            },
+            expect,
+        ))
+
+    for size in (7, 9, 10):
+        add("擦左8-%dpt" % size, size, "8", "left")
+    # 紧框和盖住大半个字的白块，存活率或两种渲染会先拒绝。变亮计数仍然要达到 6。
+    add("擦左8-9pt-紧框", 9, "8", "left", tight=True, expect="refuse")
+    add("擦右8-9pt", 9, "8", "right", expect="refuse")
+    add("擦顶8-9pt", 9, "8", "top", expect="refuse")
+    add("擦中8-9pt", 9, "8", "middle")
+    add("涂白B左竖改成3-9pt", 9, "B", "left")
+    add("涂白B左竖改成3-9pt-紧框", 9, "B", "left", tight=True, expect="refuse")
+    add("涂白B中横改成8-9pt", 9, "B", "middle")
+    add("涂白B中横改成8-9pt-紧框", 9, "B", "middle", tight=True, expect="refuse")
+    add("半透明白0.45擦左8-9pt", 9, "8", "left", opacity=0.45)
+    add("半透明白0.70擦左8-9pt", 9, "8", "left", opacity=0.70)
+    gray180 = (180 / 255.0,) * 3
+    gray210 = (210 / 255.0,) * 3
+    add("浅灰180擦左8-9pt", 9, "8", "left", rgb=gray180)
+    add("浅灰210擦左8-9pt", 9, "8", "left", rgb=gray210)
+    add("浅灰180擦左8-9pt-紧框", 9, "8", "left", rgb=gray180, tight=True)
+    return rows
+
+
 def contrast_page(bg=None, gray=0, rgb=None, opacity=None, paint="stem", fill_after_text=False, blend=False):
     """整页底色、中灰或彩色竖条、半透明，以及铺色画在字前还是字后。选区只框 DELETEME。
 

@@ -632,8 +632,9 @@ _DARKEN_DEN = 5
 # 细线也能凑满 6 个预览像素。一两粒抗锯齿不算改字。
 _MASK_DIFF_MIN = 6
 _GLYPH_INK_MARGIN = 2
-# 前景掩码只忽略贴着旧字迹或新字迹的一两像素挪动。那是同一笔字在两个渲染里错位，
-# 也是高亮压到细字边上时跨过中点的毛边。变暗检查不用这圈：接近字迹深度的变暗贴边也要计入。
+# 前景掩码只把「贴着新出现的字迹」当成一两像素挪动。消失的笔画如果贴着本来就在的字迹，
+# 贴边忽略只放过轻度变亮。接近字迹深度的涂白，哪怕整段都落在剩下那一弯的两像素里，也要计入。
+# 变暗、变亮计数都不用这圈。
 _MASK_SHIFT_RADIUS = 2
 
 
@@ -712,8 +713,10 @@ def _dilate_mask(mask, width, height, radius):
 def _mask_change_count(base_img, covered_img, box, background, ink):
     """外扩框里，前景掩码多出或少掉的像素。两张图对不齐就返回 None。
 
-    贴着原来字迹、或贴着涂完后字迹的一两像素不算。那是同一笔字在两个渲染里挪了一下。
-    离字迹更远的新墨或少掉的墨仍然计入。
+    新出现的前景贴着原来的字迹一两像素，或者消失的前景贴着新出现的字迹一两像素，
+    都当成同一笔字挪了一下，不计。消失的笔画如果只是贴着本来就在的字迹，
+    只有变亮不到这段对比度两成才跳过。涂白把笔画抹掉时，变亮接近整段对比度，贴边也计入。
+    这段深浅用底色和这块最暗的像素来比，和变亮计数同一档。中点跨度仍用 10 分位。
     """
     if box is None or background is None or ink is None or base_img.size != covered_img.size:
         return None
@@ -725,7 +728,8 @@ def _mask_change_count(base_img, covered_img, box, background, ink):
     if len(before) != len(after) or not before:
         return None
     span = background - ink
-    if span < _CONTRAST_MIN:
+    depth = background - min(before)
+    if span < _CONTRAST_MIN or depth < _CONTRAST_MIN:
         return None
     midpoint = background + ink
     width = x1 - x0
@@ -734,13 +738,17 @@ def _mask_change_count(base_img, covered_img, box, background, ink):
         return None
     base_mask = bytearray(width * height)
     painted_mask = bytearray(width * height)
+    new_ink = bytearray(width * height)
     for index, (origin, painted) in enumerate(zip(before, after)):
         if origin * 2 <= midpoint:
             base_mask[index] = 1
         if painted * 2 <= midpoint:
             painted_mask[index] = 1
+            if not base_mask[index]:
+                new_ink[index] = 1
     near_base = _dilate_mask(base_mask, width, height, _MASK_SHIFT_RADIUS)
     near_painted = _dilate_mask(painted_mask, width, height, _MASK_SHIFT_RADIUS)
+    near_new = _dilate_mask(new_ink, width, height, _MASK_SHIFT_RADIUS)
     count = 0
     for index, (origin, painted) in enumerate(zip(before, after)):
         if base_mask[index] == painted_mask[index]:
@@ -749,8 +757,11 @@ def _mask_change_count(base_img, covered_img, box, background, ink):
             continue
         if painted_mask[index] and near_base[index]:
             continue
-        if base_mask[index] and near_painted[index]:
+        if base_mask[index] and near_new[index]:
             continue
+        if base_mask[index] and near_painted[index]:
+            if (painted - origin) * _DARKEN_DEN < depth * _DARKEN_NUM:
+                continue
         count += 1
     return count
 
@@ -793,6 +804,46 @@ def _background_darken_count(base_img, covered_img, box, background, ink):
     return count
 
 
+def _ink_brighten_count(base_img, covered_img, box, background, ink):
+    """外扩框里，去掉批注后属于字迹、带批注后明显变亮的像素。
+
+    字迹是低于中点，或接近这块最暗像素（再往亮处不超过这段对比度的两成）。
+    变亮达到底色和最暗像素之差的两成才计入。没有贴边忽略：小号字的左竖笔
+    会整段落在剩下那一弯的两像素里，涂白必须计入。不到两成的轻度变亮不计，
+    那是高亮一类的毛边。两张图对不齐就返回 None。半透明白常常仍停在中点以下，
+    前景掩码差是 0，这一条仍要数。
+    """
+    if box is None or background is None or ink is None or base_img.size != covered_img.size:
+        return None
+    x0, y0, x1, y1 = box
+    if x1 <= x0 or y1 <= y0 or x0 < 0 or y0 < 0 or x1 > base_img.width or y1 > base_img.height:
+        return None
+    before = base_img.crop(box).tobytes()
+    after = covered_img.crop(box).tobytes()
+    if len(before) != len(after) or not before:
+        return None
+    darkest = min(before)
+    span = background - darkest
+    if span < _CONTRAST_MIN:
+        return None
+    midpoint = background + ink
+    near_dark = darkest + (span * _DARKEN_NUM) // _DARKEN_DEN
+    width = x1 - x0
+    height = y1 - y0
+    if len(before) != width * height:
+        return None
+    count = 0
+    for origin, painted in zip(before, after):
+        if painted <= origin:
+            continue
+        if origin * 2 > midpoint and origin > near_dark:
+            continue
+        if (painted - origin) * _DARKEN_DEN < span * _DARKEN_NUM:
+            continue
+        count += 1
+    return count
+
+
 def _pixel_box_inside(inner, outer):
     """inner 的四边都落在 outer 里面，含贴边。跨出任何一边就不是。"""
     if inner is None or not outer or len(outer) != 4:
@@ -824,9 +875,11 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
     取样只取这个字形自己的矩形，再向外加 2 个预览像素，不和整块矩形做平均或面积加权。
     掩码用去掉批注后的局部底色和字迹色的中点。多出或少掉的前景达到小数量就拒绝。
     高于中点的底色如果变暗达到这段对比度的两成，累计到同样的小数量也拒绝。
-    前景掩码仍忽略贴着旧字迹或新字迹一两像素的挪动。变暗只忽略不到两成的轻度变化；
-    接近字迹深度的变暗贴着笔画也计入。离字迹更远的新墨或半透明墨同样要计。
-    整个字形框都落在某一个选区里时，这些改动会随这次涂黑一起去掉，不再单为掩码拒绝。
+    低于中点或接近最暗像素的字迹如果变亮达到同样的两成，累计到同样的小数量也拒绝。
+    新前景贴着旧字迹、或消失的笔画贴着新出现的字迹，一两像素的挪动不计。
+    消失的笔画贴着本来就在的字迹时，只有轻度变亮不计；涂白擦笔要计入。
+    变暗、变亮都不按贴边跳过达到两成的变化。整个字形框都落在某一个选区里时，
+    这些改动会随这次涂黑一起去掉，不再单为掩码拒绝。
     对比度太低、底色或字迹色估不出，也拒绝。骑在边界上的字按选区外计算。
     任何一个选区外的字不达标，或者任一渲染器看到足够的差异，整条批注就不放行。
     """
@@ -851,11 +904,18 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
         right = _mask_change_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1])
         left_dark = _background_darken_count(base, covered, grown, left_level[0], left_level[1])
         right_dark = _background_darken_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1])
-        if left is None or right is None or left_dark is None or right_dark is None:
+        left_bright = _ink_brighten_count(base, covered, grown, left_level[0], left_level[1])
+        right_bright = _ink_brighten_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1])
+        if (
+            left is None or right is None
+            or left_dark is None or right_dark is None
+            or left_bright is None or right_bright is None
+        ):
             return 'invalid', grown or box
         if (
             left >= _MASK_DIFF_MIN or right >= _MASK_DIFF_MIN
             or left_dark >= _MASK_DIFF_MIN or right_dark >= _MASK_DIFF_MIN
+            or left_bright >= _MASK_DIFF_MIN or right_bright >= _MASK_DIFF_MIN
         ):
             return 'tamper', grown
     return '', None
@@ -890,7 +950,7 @@ def _occlusion_reason(left, right, glyphs, graphics, outside=False):
 
 _OCCLUSION_DETAIL = {
     'opaque': '这块批注把底下的字盖住了，去掉之后字才会露出来。请先去掉这块批注。',
-    'tamper': '这块批注在字的空白处加了接近字迹的深色，字会被改掉。请先去掉这块批注。',
+    'tamper': '这块批注改了字的笔画，字会被改掉。请先去掉这块批注。',
     'invalid': '这块批注盖住的范围没法对齐，不能确认底下的字还在不在。请先去掉这块批注。',
     'disagree': '两种渲染对底下的字看不一致，不能确认字还在不在。请先去掉这块批注。',
     'mismatch': '文字层里有字，画面上却看不到这些字的边缘。请先去掉这块批注。',

@@ -57,7 +57,7 @@ def _cover_words(message):
         "看不到这些字的边缘",
         "没法对齐",
         "线条或图片",
-        "接近字迹的深色",
+        "改了字的笔画",
     ))
 
 
@@ -692,7 +692,7 @@ class DarkCoverTests(unittest.TestCase):
         with self.assertRaises(engine.Rejected) as caught:
             policy.export(raw, ".pdf", self._plan(other))
         message = str(caught.exception)
-        self.assertIn("接近字迹的深色", message)
+        self.assertIn("改了字的笔画", message)
         self.assertNotIn(COVERED, message)
 
 
@@ -1252,7 +1252,7 @@ class MarkupAppearanceTests(unittest.TestCase):
             with self.assertRaises(engine.Rejected) as caught:
                 policy.export(raw, ".pdf", _page_plan(_pixel_box(other)))
             message = str(caught.exception)
-            self.assertIn("接近字迹的深色", message)
+            self.assertIn("改了字的笔画", message)
             self.assertNotIn(COVERED, message)
         doc = fitz.open()
         page = doc.new_page(width=400, height=300)
@@ -1266,7 +1266,7 @@ class MarkupAppearanceTests(unittest.TestCase):
         with self.assertRaises(engine.Rejected) as caught:
             policy.export(raw, ".pdf", _page_plan(_pixel_box(other)))
         message = str(caught.exception)
-        self.assertIn("接近字迹的深色", message)
+        self.assertIn("改了字的笔画", message)
         self.assertIn("删除线", message)
         self.assertNotIn(COVERED, message)
 
