@@ -125,6 +125,7 @@ REFUSAL_CODES = (
     "readable_codepoint_loss",             # 成品可读版文字层丢失了 Markdown 中的字符（字体不覆盖等）
     "readable_vector_copy_mismatch",       # 整页矢量复制后的文字层与主版式页不一致
     "readable_math_source_missing",        # 原文含数学结构，但没有可矢量复制的主版式译文 PDF（如后端失败）
+    "readable_math_structure_unverifiable", # 原文含数学结构，但原文/主版式的数学证据或结构核对无法完成
 )
 
 
@@ -253,20 +254,70 @@ def render_pdf(markdown_path: Path, output_path: Path, title: str = "", *, math_
     mono = fitz.open(math_source_pdf) if math_source_pdf and Path(math_source_pdf).is_file() else None
     try:
         evidence: dict[int, dict[str, Any]] = {}
+        evidence_error = None
         if mono is not None:
-            for index in range(len(mono)):
-                evidence[index + 1] = page_math_evidence(mono[index])
+            try:
+                for index in range(len(mono)):
+                    evidence[index + 1] = page_math_evidence(mono[index])
+            except Exception as exc:  # 字形数超限等：主版式页无法判定是否含数学
+                evidence_error = f"{type(exc).__name__}: {exc}"
         fidelity["page_evidence"] = {str(k): v for k, v in evidence.items()}
+        # 原文侧：数学页与结构核对按原文/主版式结构报告判定，不只看主版式页本身
+        # （主版式已经丢掉数学特征时，按“无数学页”重排就会放过损坏）。
+        source_math: list[int] = []
+        source_pages = None
+        if source_pdf and Path(source_pdf).is_file():
+            try:
+                with fitz.open(source_pdf) as original:
+                    source_pages = len(original)
+                    source_evidence = {index + 1: page_math_evidence(original[index]) for index in range(len(original))}
+            except Exception as exc:
+                return refuse("readable_math_structure_unverifiable", stage="source_page_evidence",
+                              error=f"{type(exc).__name__}: {exc}")
+            source_math = [n for n, v in source_evidence.items() if v["has_math"]]
+            fidelity["source_page_evidence"] = {str(k): v for k, v in source_evidence.items()}
+        if evidence_error is not None:
+            if source_math or source_pdf is None:
+                return refuse("readable_math_structure_unverifiable", stage="main_layout_page_evidence",
+                              error=evidence_error)
+            evidence = {}
         mapped = bool(mono is not None and pages is not None and not set(pages) - set(evidence)
                       and (split_method != "single_segment" or len(mono) == 1))
         fidelity["page_mapping"] = "known" if mapped else "unknown"
         vector = {k for k, v in evidence.items() if v["has_math"]}
-        if mono is None and source_pdf and Path(source_pdf).is_file():
+        if mono is None and source_math:
             # 没有主版式成品可复制时，原文含数学结构的页只能重排，会压平上下标/矩阵：写出前拒绝。
-            with fitz.open(source_pdf) as original:
-                source_math = [index + 1 for index in range(len(original)) if page_math_evidence(original[index])["has_math"]]
-            if source_math:
-                return refuse("readable_math_source_missing", source_math_pages=source_math)
+            return refuse("readable_math_source_missing", source_math_pages=source_math)
+        if mono is not None and source_math:
+            import formula_structure_check as structure
+
+            try:
+                check = structure.check_formula_structure(source_pdf, math_source_pdf)
+            except Exception as exc:
+                return refuse("readable_math_structure_unverifiable", stage="structure_check",
+                              error=f"{type(exc).__name__}: {exc}")
+            fidelity["source_structure_check"] = {k: check.get(k) for k in ("status", "severity", "flagged_pages",
+                                                                             "source_relations", "target_relations", "lost")}
+            if check.get("status") != "evaluated":
+                return refuse("readable_math_structure_unverifiable", stage="structure_check",
+                              status=check.get("status"), reason=check.get("reason"))
+            flagged = sorted(check.get("flagged_pages") or [])
+            if flagged:
+                # 主版式的上/下标层级已丢失：无论主版式页是否还剩数学特征，可读版都不能交付（矢量复制会复制损坏，重排会压平）。
+                return refuse("readable_math_source_structure_lost", pages=flagged, evidence="script_relations_lost",
+                              samples=[s for p in check["pages"] if p["page"] in flagged for s in p["samples"]][:12])
+            if source_pages == len(mono):
+                vanished = [n for n in source_math if not evidence[n]["has_math"]]
+                fidelity["source_page_mapping"] = "same_page_count"
+            else:
+                # 重新分页（如 LaTeX 直出）：逐页对应未知，只能按整份判断；主版式整份不剩任何数学特征即视为丢失。
+                vanished = source_math if not any(v["has_math"] for v in evidence.values()) else []
+                fidelity["source_page_mapping"] = "document_level"
+            if vanished:
+                return refuse("readable_math_source_structure_lost", pages=vanished,
+                              evidence="main_layout_math_evidence_missing",
+                              source_evidence={str(n): fidelity["source_page_evidence"][str(n)] for n in vanished},
+                              main_layout_evidence={str(n): evidence.get(n) for n in vanished})
         if vector and not mapped:
             return refuse("readable_page_mapping_unknown", markdown_page_split=split_method,
                           markdown_pages=sorted(pages) if pages else None, pdf_pages=len(mono))
@@ -292,16 +343,6 @@ def render_pdf(markdown_path: Path, output_path: Path, title: str = "", *, math_
                     continue
                 if _norm(before) != _norm(after):
                     return refuse("readable_math_page_repair_conflict", page=number)
-        if math_pages and source_pdf and Path(source_pdf).is_file():
-            import formula_structure_check as structure
-
-            check = structure.check_formula_structure(source_pdf, math_source_pdf)
-            fidelity["source_structure_check"] = {k: check.get(k) for k in ("status", "severity", "flagged_pages",
-                                                                             "source_relations", "lost")}
-            damaged = sorted(set(check.get("flagged_pages") or []) & set(math_pages))
-            if damaged:
-                return refuse("readable_math_source_structure_lost", pages=damaged,
-                              samples=[s for p in check["pages"] if p["page"] in damaged for s in p["samples"]][:12])
         if pages is None:
             pages = {1: text}
         plan: list[tuple[str, Any]] = []
