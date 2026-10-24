@@ -85,7 +85,7 @@ $('file').onchange=async()=>{
       $('word-counts').textContent=kind==='word'?`检测到图片 ${job.removed.images} 个、批注部件 ${job.removed.comment_parts} 个、删除/移出修订 ${job.removed.deleted_or_moved_fragments} 处。`:Object.entries(job.removed||{}).map(([k,v])=>`${({hidden_sheets:'隐藏工作表',hidden_rows:'隐藏行',hidden_columns:'隐藏列',hidden_format_cells:'隐藏格式单元格',formulas:'缓存公式',uncached_formulas:'缺少缓存公式',hidden_slides:'隐藏幻灯片'})[k]||k}: ${v}`).join('；');
       $('suggestions').replaceChildren();
       for(const text of job.suggestions){const b=document.createElement('button');b.type='button';b.textContent=`补选：${text}`;b.onclick=()=>addTerm(text);$('suggestions').append(b);}
-      if(!job.suggestions.length)$('suggestions').textContent='未发现电话或邮箱格式；请自行检查姓名、机构和其它敏感文字。';
+      if(!job.suggestions.length)$('suggestions').textContent='未发现电话、邮箱、身份证或银行卡格式；请自行检查姓名、机构和其它敏感文字。建议不会自动套用。';
     }
     $('work').hidden=false;status();
   }catch(e){job=null;status(e.message);}finally{setBusy(false);}

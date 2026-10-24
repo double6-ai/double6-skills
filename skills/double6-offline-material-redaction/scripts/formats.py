@@ -71,11 +71,7 @@ def replacement(preview,plan):
     terms=engine.terms_checked(plan.get('terms',[]))
     if not terms and plan.get('clean_only')is not True:raise Rejected('请补选原文；仅清理隐藏内容需明确选择。')
     if terms and plan.get('clean_only'):raise Rejected('仅清理隐藏内容与替换词不能同时使用。')
-    if any(x not in preview for x in terms):raise Rejected('有补选原文未在预览中找到，请核对准确原文。')
-    engine.reject_partial_business_numbers(preview, terms)
-    mapping={v:mark for v,mark in zip(terms,engine.markers_for(terms))}if terms else {}
-    rx=re.compile('|'.join(map(re.escape,terms)))if terms else None
-    return lambda s:rx.sub(lambda m:mapping[m.group()],s)if rx else s
+    return engine.prepare_replacement(preview, terms)
 
 
 def rows_text(rows):return '\n'.join('\t'.join(''if v is None else str(v)for v in row)for row in rows)
@@ -234,7 +230,7 @@ def inspect(data,category,encoding=None):
     elif category=='slides':_,removed,preview=slides_model(data)
     elif category=='pdf':return {'notice':NOTICES[category],'pages':[{'page':k+1,'width':w,'height':h}for k,(w,h)in enumerate(pdf_info(data))],'manual_rectangles_required':True}
     else:raise Rejected('不支持的格式。')
-    return {'preview':preview,'notice':NOTICES[category],'removed':removed,'suggestions':sorted(set(re.findall(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|(?<!\d)1\d{10}(?!\d)',preview)))}
+    return {'preview':preview,'notice':NOTICES[category],'removed':removed,'suggestions':engine.suggest_terms(preview)}
 
 
 def export(data,category,plan):
@@ -368,7 +364,7 @@ def verify(data,category,plan,source=None):
         return verify_pdf(data,plan,source)
     checks={}
     info=inspect(data,category,plan.get('_verify_encoding',plan.get('input_encoding')));preview=info['preview'];terms=engine.terms_checked(plan.get('terms',[]))
-    checks['selected_strings_absent']=not any(x in preview for x in terms)
+    checks['selected_strings_absent']=not any(engine.term_remains(preview, x) for x in terms)
     keep=engine.keep_checked(plan.get('keep',[]))
     if keep and category in ('csv','tsv'):
         output_encoding=plan.get('_verify_encoding',plan.get('input_encoding'))
@@ -386,7 +382,7 @@ def verify(data,category,plan,source=None):
         for n,b in parts.items():
             if n.endswith(('.xml','.rels')):
                 root=engine.parse_xml(b);strings.append(''.join(root.itertext())+' '.join(v for el in root.iter()for v in el.attrib.values()))
-        checks['selected_strings_absent']=not any(x in s for x in terms for s in strings)
+        checks['selected_strings_absent']=not any(engine.term_remains(s, x) for x in terms for s in strings)
         checks['hidden_carriers_absent']=not any('/media/'in n or '/embeddings/'in n or'comment'in n.lower()or'vba'in n.lower()or n.startswith('customXml/')or'/notesSlides/'in n for n in parts)
         checks['external_links_absent']=not any(el.get('TargetMode')=='External'for n,b in parts.items()if n.endswith('.rels')for el in engine.parse_xml(b))
         checks['original_properties_absent']=not any(''.join(engine.parse_xml(parts[n]).itertext()).strip()for n in ['docProps/custom.xml']if n in parts)

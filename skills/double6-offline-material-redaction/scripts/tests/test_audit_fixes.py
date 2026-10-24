@@ -159,5 +159,63 @@ class MarkerCollisionTests(unittest.TestCase):
         self.assertNotIn("导出复检失败", message)
 
 
+class SuggestionAndRepeatTests(unittest.TestCase):
+    SAMPLE = "\n".join([
+        "联系人张三 Zhang San",
+        "半角电话13800000000",
+        "空格电话138 0000 0000",
+        "连字符电话138-0000-0000",
+        "全角电话１３８００００００００",
+        "零宽电话138\u200b00000000",
+        "邮箱zhangsan@example.com",
+        "全角邮箱ｚｈａｎｇｓａｎ＠ｅｘａｍｐｌｅ．ｃｏｍ",
+        "身份证110101199001010015",
+        "银行卡6228480000000007",
+        "订单号13600000000",
+        "长订单136000000001234",
+        "整理120条活动反馈",
+    ]) + "\n"
+
+    def test_suggestions_cover_variants_and_skip_order_numbers(self):
+        found = engine.suggest_terms(self.SAMPLE)
+        self.assertEqual(set(found), {
+            "110101199001010015",
+            "138 0000 0000",
+            "138-0000-0000",
+            "13800000000",
+            "138\u200b00000000",
+            "6228480000000007",
+            "zhangsan@example.com",
+            "ｚｈａｎｇｓａｎ＠ｅｘａｍｐｌｅ．ｃｏｍ",
+            "１３８００００００００",
+        })
+        self.assertEqual(found, sorted(found))
+        self.assertNotIn("13600000000", found)
+        self.assertNotIn("136000000001234", found)
+        self.assertNotIn("张三", found)
+
+    def test_short_order_does_not_cut_the_longer_one(self):
+        plan = {"version": 1, "kind": "text", "reviewed": True, "acknowledge_loss": True, "terms": ["13600000000"], "keep": ["136000000001234", "整理120条活动反馈"]}
+        out = formats.export(self.SAMPLE.encode(), "text", plan).decode()
+        self.assertIn("长订单136000000001234", out)
+        self.assertNotIn("订单号13600000000", out)
+        self.assertIn("【已隐去1】", out)
+
+    def test_repeat_on_redacted_text_is_unchanged(self):
+        raw = "电话13800000000\n整理120条活动反馈\n".encode()
+        plan = {"version": 1, "kind": "text", "reviewed": True, "acknowledge_loss": True, "terms": ["13800000000"], "keep": ["整理120条活动反馈"]}
+        first, report, _ = policy.export(raw, ".txt", plan)
+        self.assertNotIn("13800000000", first.decode())
+        second, _, _ = policy.export(first, ".txt", plan)
+        self.assertEqual(second, first)
+        self.assertTrue(report["checks"]["keep_phrases_preserved"])
+
+    def test_missing_term_on_fresh_text_still_stops(self):
+        plan = {"version": 1, "kind": "text", "reviewed": True, "acknowledge_loss": True, "terms": ["13800000000"], "keep": ["整理120条活动反馈"]}
+        with self.assertRaises(engine.Rejected) as caught:
+            formats.export("整理120条活动反馈\n".encode(), "text", plan)
+        self.assertIn("未在预览", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

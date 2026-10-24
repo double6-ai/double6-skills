@@ -235,7 +235,7 @@ def inspect_docx(data):
     if len(plain) > 400_000:
         raise Rejected("Word 文字量超过原型范围。")
     counts = {"images": sum(n.startswith("word/media/") for n in parts), "comment_parts": sum("comment" in n.lower() for n in parts), "deleted_or_moved_fragments": sum(el.tag in {W + "del", W + "moveFrom"} for root in roots.values() for el in root.iter()), "headers_and_footers": len(headers) + len(footers)}
-    suggestions = sorted(set(re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|(?<!\d)1\d{10}(?!\d)", plain)))
+    suggestions = suggest_terms(plain)
     return {"blocks": blocks, "preview": plain, "suggestions": suggestions, "removed": counts, "notice": "导出为可编辑的文字和表格副本；页眉页脚移到正文，图片、批注、删除修订、隐藏文字、超链接地址及原属性移除。字体、分页和合并单元格样式不保留。"}
 
 
@@ -254,6 +254,150 @@ def markers_for(terms):
             return marks
     shown = "、".join(terms[:3])
     raise Rejected("补选词“" + shown + "”会重新出现在替换标记里，无法既隐去又通过复检。默认标记是【已隐去N】，备选是〔已处理A〕。请改选不包含这些字样的原文。")
+
+
+_MARKER_PRESENT = re.compile(r"【已隐去\d+】|〔已处理[A-Z]+〕")
+_ORDER_LABEL = re.compile(r"(?:订单号|订单|单号|order\s*(?:no\.?|id|#)?)\s*$", re.IGNORECASE)
+_EMAIL = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+_FOLD = str.maketrans(
+    "０１２３４５６７８９ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ＠．＋－＿",
+    "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz@.+-_",
+)
+_PHONE_GAP = set(" \u3000\u200b-\u2010\u2011\uff0d")
+
+
+def _bounded(text, index, term):
+    if not text.startswith(term, index):
+        return False
+    if term[:1].isdigit() and index and text[index - 1].isdigit():
+        return False
+    end = index + len(term)
+    return not (term[-1:].isdigit() and end < len(text) and text[end].isdigit())
+
+
+def term_remains(text, term):
+    """数字词嵌在更长数字里不算仍留着待替换的原文。"""
+    return _has_bounded(text, term)
+
+
+def _has_bounded(text, term):
+    start = 0
+    while True:
+        at = text.find(term, start)
+        if at < 0:
+            return False
+        if _bounded(text, at, term):
+            return True
+        start = at + 1
+
+
+def _longer_digit_run(text, term):
+    start = 0
+    while True:
+        at = text.find(term, start)
+        if at < 0:
+            return term
+        if not _bounded(text, at, term):
+            left = at
+            while left and text[left - 1].isdigit():
+                left -= 1
+            right = at + len(term)
+            while right < len(text) and text[right].isdigit():
+                right += 1
+            return text[left:right]
+        start = at + 1
+
+
+def rewrite(text, terms, mapping):
+    parts = []
+    index = 0
+    while index < len(text):
+        hit = None
+        for term in terms:
+            if _bounded(text, index, term):
+                hit = term
+                break
+        if hit is None:
+            parts.append(text[index])
+            index += 1
+        else:
+            parts.append(mapping[hit])
+            index += len(hit)
+    return "".join(parts)
+
+
+def prepare_replacement(preview, terms, missing_message=None):
+    """按最长词优先替换。数字两边仍是数字时不切。补选词都已不在、且已有本工具标记时原样返回。"""
+    message = missing_message or "有补选原文未在预览中找到，请核对准确原文。"
+    if not terms:
+        return lambda text: text
+    absent = [term for term in terms if term not in preview]
+    if len(absent) == len(terms) and _MARKER_PRESENT.search(preview):
+        return lambda text: text
+    if absent:
+        raise Rejected(message)
+    if all(not _has_bounded(preview, term) for term in terms) and _MARKER_PRESENT.search(preview):
+        return lambda text: text
+    reject_partial_business_numbers(preview, terms)
+    for term in terms:
+        if not _has_bounded(preview, term):
+            longer = _longer_digit_run(preview, term)
+            raise Rejected("补选词“" + term + "”只出现在更长的数字“" + longer + "”中，不会从中切下一段。请补选完整数字。")
+    mapping = {term: mark for term, mark in zip(terms, markers_for(terms))}
+    return lambda text: rewrite(text, terms, mapping)
+
+
+def _id_check_ok(number):
+    weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
+    codes = "10X98765432"
+    body, check = number[:17], number[17]
+    if not body.isdigit() or check not in codes:
+        return False
+    total = sum(int(a) * b for a, b in zip(body, weights))
+    return codes[total % 11] == check
+
+
+def _luhn_ok(number):
+    if not number.isdigit():
+        return False
+    total = 0
+    for index, digit in enumerate(reversed(number)):
+        value = int(digit)
+        if index % 2 == 1:
+            value *= 2
+            if value > 9:
+                value -= 9
+        total += value
+    return total % 10 == 0
+
+
+def suggest_terms(preview):
+    """只作提示，不自动加入补选。订单号后面的 11 位数字不当成电话。"""
+    found = set()
+    folded = preview.translate(_FOLD)
+    for match in _EMAIL.finditer(folded):
+        found.add(preview[match.start():match.end()])
+    index = 0
+    while index < len(preview):
+        if preview[index] not in "1１" or (index and preview[index - 1].isdigit()):
+            index += 1
+            continue
+        end = index
+        while end < len(preview) and (preview[end].isdigit() or preview[end] in _PHONE_GAP):
+            end += 1
+        raw = preview[index:end].strip(" \u3000")
+        digits = "".join(ch for ch in raw.translate(_FOLD) if ch.isdigit())
+        if re.fullmatch(r"1\d{10}", digits) and not _ORDER_LABEL.search(preview[max(0, index - 12):index]):
+            found.add(raw)
+        index = end if end > index else index + 1
+    for match in re.finditer(r"(?<!\d)\d{16,19}(?!\d)", folded):
+        number = match.group()
+        original = preview[match.start():match.end()]
+        if len(number) == 18 and _id_check_ok(number):
+            found.add(original)
+        elif _luhn_ok(number) and not (len(number) == 18 and _id_check_ok(number)):
+            found.add(original)
+    return sorted(found)
 
 
 def terms_checked(values):
@@ -306,14 +450,7 @@ def export_docx(data, terms, acknowledge_loss=False, clean_only=False, keep=None
         raise Rejected("请补选正文原文；只清理隐藏内容时需明确选择该模式。")
     if selected and clean_only:
         raise Rejected("仅清理隐藏内容模式不能同时填写替换词。")
-    if any(v not in plan["preview"] for v in selected):
-        raise Rejected("有补选原文未在预览中找到，请核对准确原文后重试；隐藏部件无需列为正文替换词。")
-    reject_partial_business_numbers(plan["preview"], selected)
-    replacements = {v: mark for v, mark in zip(selected, markers_for(selected))} if selected else {}
-    # 单次匹配，避免后来输入的词再次命中替换标记。
-    regex = re.compile("|".join(re.escape(v) for v in selected)) if selected else None
-    def clean(text):
-        return regex.sub(lambda m: replacements[m.group()], text) if regex else text
+    clean = prepare_replacement(plan["preview"], selected, "有补选原文未在预览中找到，请核对准确原文后重试；隐藏部件无需列为正文替换词。") if selected else (lambda text: text)
     doc = Document()
     normal = doc.styles["Normal"]
     normal.font.name = "Arial"
@@ -388,4 +525,4 @@ def verify_docx(data, terms):
             history |= any(el.tag in {W + x for x in ["del", "ins", "moveFrom", "moveTo", "vanish", "webHidden"]} for el in root.iter())
     doc = Document(io.BytesIO(data))
     props = doc.core_properties
-    return {"selected_strings_absent": not any(v in s for s in strings for v in terms), "media_embeddings_comments_absent": not any(n.startswith(("word/media/", "word/embeddings/", "customXml/")) or "comment" in n.lower() for n in parts), "external_relationships_absent": not external, "revision_hidden_markup_absent": not history, "original_properties_absent": not any(getattr(props, f) for f in ["author", "last_modified_by", "title", "subject", "keywords", "comments"]), "internal_relationships_valid": not missing_targets(parts), "editable_document_reopened": doc._element.body is not None}
+    return {"selected_strings_absent": not any(term_remains(s, v) for s in strings for v in terms), "media_embeddings_comments_absent": not any(n.startswith(("word/media/", "word/embeddings/", "customXml/")) or "comment" in n.lower() for n in parts), "external_relationships_absent": not external, "revision_hidden_markup_absent": not history, "original_properties_absent": not any(getattr(props, f) for f in ["author", "last_modified_by", "title", "subject", "keywords", "comments"]), "internal_relationships_valid": not missing_targets(parts), "editable_document_reopened": doc._element.body is not None}
