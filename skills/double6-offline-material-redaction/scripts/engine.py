@@ -279,9 +279,17 @@ def _bounded(text, index, term):
     return not (term[-1:].isdigit() and end < len(text) and text[end].isdigit())
 
 
+_STRUCTURAL_SPACE = set("\n\r\t\f\v\u2028\u2029")
+
+
+def _is_invisible_mark(ch):
+    """变体选择符、组合附加符号和格式字符。换行、制表符不算。"""
+    return ch not in _STRUCTURAL_SPACE and unicodedata.category(ch) in {"Mn", "Me", "Cf"}
+
+
 def _is_attach_gap(ch):
     """编号和短数字之间的空白或不可见字符。不把单元格坐标和正文粘成一串。"""
-    return ch.isspace() or unicodedata.category(ch) == "Cf"
+    return ch.isspace() or _is_invisible_mark(ch)
 
 
 def _digit_runs(text):
@@ -297,9 +305,9 @@ def _digit_runs(text):
             buf.append(ch)
             index += 1
             continue
-        if buf and unicodedata.category(ch) == "Cf":
+        if buf and _is_invisible_mark(ch):
             nxt = index + 1
-            while nxt < size and unicodedata.category(folded[nxt]) == "Cf":
+            while nxt < size and _is_invisible_mark(folded[nxt]):
                 nxt += 1
             if nxt < size and folded[nxt].isdigit():
                 index = nxt
@@ -319,7 +327,6 @@ def _fold_marks(text):
 
 _LABEL_HYPHEN = set("-\u2010\u2011\u2012\u2013\u2014\u2015\uff0d")
 _NUMBER_PUNCT = {",", "/", "\\", ".", "·", "・", "、", "，"}
-_STRUCTURAL_SPACE = set("\n\r\t\f\v\u2028\u2029")
 
 
 def _digit_pieces(ch):
@@ -343,7 +350,7 @@ def _ignorable_number_sep(ch):
     if ch in _STRUCTURAL_SPACE:
         return False
     category = unicodedata.category(ch)
-    if category in {"Cf", "Zs", "Pd", "Pc"}:
+    if category in {"Cf", "Mn", "Me", "Zs", "Pd", "Pc"}:
         return True
     folded = unicodedata.normalize("NFKC", ch)
     if len(folded) == 1 and unicodedata.category(folded) in {"Pd", "Pc"}:
@@ -473,7 +480,7 @@ def prepare_replacement(preview, terms, missing_message=None):
     rewritten = rewrite(preview, terms, mapping)
     if any(term_remains(rewritten, term) for term in terms):
         if any(alternate_spelling_remains(rewritten, term) for term in terms):
-            raise Rejected("同一号码还有另一种写法留在正文里。空格、连字符、点号、斜杠、下划线或不同的数字字形都算。请把同一种号码的各种写法一起补选。已停止，未交付副本。")
+            raise Rejected("同一号码还有另一种写法留在正文里。空格、连字符、点号、斜杠、下划线、变体选择符、其它不可见字符或不同的数字字形都算。请把同一种号码的各种写法一起补选。已停止，未交付副本。")
         raise Rejected("替换后补选内容仍留在正文里，已停止，未交付副本。")
     return lambda text: rewrite(text, terms, mapping)
 

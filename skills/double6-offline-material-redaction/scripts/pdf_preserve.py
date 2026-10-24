@@ -39,7 +39,7 @@ def open_pdf(data, inspect_image_visibility=True):
                 if any(not image.get('xref')or image.get('has-mask')for image in images):
                     raise engine.Rejected('PDF含行内图片或图片遮罩，隐藏像素尚不能安全清理，原生路线停止。')
                 # 原图中被裁剪、透明或后来遮盖的像素不应随新容器交付。
-                bounds=page.rect * page.derotation_matrix
+                bounds=_content_bounds(page)
                 if any(not bounds.contains(fitz.Rect(image['bbox'])) for image in images):
                     raise engine.Rejected('PDF图片超出可见页面，可能保留隐藏像素，原生路线停止。')
                 if any(row[1] for row in page.get_images(full=True)):
@@ -91,32 +91,142 @@ def without_annotation_appearance(data):
         return output
 
 
-def _render_has_structure(image, rect):
-    """批注矩形里是不是一块平色。缩进避开纯色方块的抗锯齿边。"""
-    inset = 4
-    x0 = int(rect.x0 * 2) + inset
-    y0 = int(rect.y0 * 2) + inset
-    x1 = int(rect.x1 * 2) - inset
-    y1 = int(rect.y1 * 2) - inset
-    if x1 - x0 < 6 or y1 - y0 < 6:
-        x0, y0 = int(rect.x0 * 2), int(rect.y0 * 2)
-        x1, y1 = int(rect.x1 * 2), int(rect.y1 * 2)
-    x0, y0 = max(0, x0), max(0, y0)
-    x1, y1 = min(image.width, x1), min(image.height, y1)
-    if x1 - x0 < 2 or y1 - y0 < 2:
-        return False
-    crop = image.crop((x0, y0, x1, y1)).convert('L')
+def _pixel_scale(page, pixel_size):
+    """预览像素相对于页面显示矩形的比例。旋转、裁剪框和 UserUnit 都体现在这两个尺寸里。"""
+    width = float(page.rect.width)
+    height = float(page.rect.height)
+    if width <= 0 or height <= 0 or pixel_size[0] <= 0 or pixel_size[1] <= 0:
+        raise engine.Rejected('PDF页面尺寸无法对应到预览。')
+    return pixel_size[0] / width, pixel_size[1] / height
+
+
+def _display_unit(page):
+    """PyMuPDF 文字坐标相对 PDF 用户空间的倍数。
+
+    page.rect 已经乘过 UserUnit。内置旋转矩阵的平移仍用未缩放的裁剪框宽高，两者不能直接相乘。
+    """
+    crop = page.cropbox
+    cw = abs(float(crop.x1 - crop.x0))
+    ch = abs(float(crop.y1 - crop.y0))
+    if cw <= 0 or ch <= 0:
+        raise engine.Rejected('PDF页面尺寸无法对应到预览。')
+    if page.rotation in (90, 270):
+        unit = float(page.rect.width) / ch
+    else:
+        unit = float(page.rect.width) / cw
+    if unit <= 0:
+        raise engine.Rejected('PDF页面尺寸无法对应到预览。')
+    return unit
+
+
+def _display_matrix(page):
+    """未旋转的文字坐标转到预览上的显示矩形。平移按 UserUnit 放大，和 page.rect 同一单位。"""
+    fitz = backend()
+    unit = _display_unit(page)
+    raw = page.rotation_matrix
+    return fitz.Matrix(raw.a, raw.b, raw.c, raw.d, raw.e * unit, raw.f * unit)
+
+
+def _text_matrix(page):
+    """显示矩形回到未旋转文字坐标，是 _display_matrix 的逆。"""
+    return ~_display_matrix(page)
+
+
+def _content_bounds(page):
+    """未旋转文字坐标里的可见页面。裁剪框偏移已经折进 page.rect，这里再乘上同一套反向旋转。"""
+    fitz = backend()
+    return fitz.Rect(page.rect) * _text_matrix(page)
+
+
+def _annot_area(annot, page):
+    """批注矩形回到和文字、涂黑相同的未旋转坐标。
+
+    有 UserUnit 时，PyMuPDF 先用未缩放的反向旋转处理批注，得到的 rect 会偏到页面外。
+    先乘回它的旋转，得到预览上的位置，再用含 UserUnit 的逆矩阵回到文字坐标。
+    """
+    fitz = backend()
+    display = fitz.Rect(annot.rect) * page.rotation_matrix
+    return display * _text_matrix(page)
+
+
+def _to_page_rect(pixel_box, page, pixel_size):
+    """框选像素转成涂黑用的页面坐标。先除掉渲染比例，再乘反向旋转。"""
+    fitz = backend()
+    sx, sy = _pixel_scale(page, pixel_size)
+    rect = fitz.Rect(pixel_box[0] / sx, pixel_box[1] / sy, pixel_box[2] / sx, pixel_box[3] / sy)
+    return rect * _text_matrix(page)
+
+
+def _to_pixel_box(page_rect, page, image):
+    """文字坐标里的矩形转成渲染像素。乘与涂黑相反的旋转，再乘同一渲染比例，取样盖到矩形外沿。"""
+    fitz = backend()
+    sx, sy = _pixel_scale(page, image.size)
+    mapped = fitz.Rect(page_rect) * _display_matrix(page)
+    mapped = fitz.Rect(mapped.x0 * sx, mapped.y0 * sy, mapped.x1 * sx, mapped.y1 * sy)
+    if mapped.is_empty or mapped.is_infinite:
+        return None
+    x0 = max(0, math.floor(mapped.x0))
+    y0 = max(0, math.floor(mapped.y0))
+    x1 = min(image.width, math.ceil(mapped.x1))
+    y1 = min(image.height, math.ceil(mapped.y1))
+    if x1 - x0 < 1 or y1 - y0 < 1:
+        return None
+    return (int(x0), int(y0), int(x1), int(y1))
+
+
+def _luma(image, box):
+    crop = image.crop(box).convert('L')
     low, high = crop.getextrema()
-    return high - low >= 8 or ImageStat.Stat(crop).stddev[0] >= 3
+    return high - low, ImageStat.Stat(crop).mean[0]
 
 
-def annotation_changes_visible_content(page, pixel_boxes, original_image, baseline_image):
-    """非豁免批注在框外要么盖住了页面内容，要么自身带有可见内容。
+def _aa_interior(box):
+    """判断盖子本身是不是平色时，丢掉最外 2 像素抗锯齿。去盖后的页面仍按外沿整块取样。"""
+    x0, y0, x1, y1 = box
+    pad = 2 if x1 - x0 >= 8 and y1 - y0 >= 8 else 0
+    if pad == 0:
+        return box
+    return (x0 + pad, y0 + pad, x1 - pad, y1 - pad)
 
-    和带批注的原渲染、以及去掉批注后的渲染比较，不看批注类型名单，也不只看文字层。
-    便签、链接、高亮、下划线和删除线确定不会把底下内容藏没，跳过。
-    纯色块盖在纯色空白上两边都没有结构，可以去掉。直线、折线、矢量笔画、图片和带字的批注会留下结构。
-    选区里的内容会涂掉，先从两张渲染里抹掉，避免把已经框住的正文算成露出。
+
+def _counts_as_hidden(rect, area, selected):
+    """落在批注里、且没有被框选盖住的对象，才算揭开后仍会留下的内容。"""
+    if not rect.intersects(area):
+        return False
+    return not any(rect.intersects(sel) for sel in selected)
+
+
+def _objects_under(page, area, selected):
+    """去掉批注后的页面上，文字、矢量或图片是否落在这个矩形里。整页底色和已框选的对象不算。"""
+    if page is None:
+        return False
+    fitz = backend()
+    page_box = _content_bounds(page)
+    if not page_box.intersects(area):
+        return False
+    for span in page.get_texttrace():
+        for char in span['chars']:
+            glyph = fitz.Rect(char[3])
+            if chr(char[0]).strip() and _counts_as_hidden(glyph, area, selected):
+                return True
+    for image in page.get_image_info():
+        if _counts_as_hidden(fitz.Rect(image['bbox']), area, selected):
+            return True
+    for drawing in page.get_drawings():
+        bounds = fitz.Rect(drawing['rect'])
+        if bounds.contains(page_box):
+            continue
+        if _counts_as_hidden(bounds, area, selected):
+            return True
+    return False
+
+
+def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, baseline_image):
+    """非豁免批注在框外有没有揭开内容，或批注自己带不带可见内容。
+
+    返回 revealed、annot 或空字符串。比较两张渲染在批注外沿内的像素，并看去掉批注后的文字、矢量、图片是否落在矩形里。
+    平色盖在平色空白上可以去掉。盖子底下只要去盖后多出任何深浅差别，或有对象落在矩形里，就拒绝。
+    便签、链接、高亮、下划线和删除线确定不遮挡，跳过。选区先抹掉，避免把已经框住的正文算成露出。
     """
     fitz = backend()
     exempt = {
@@ -130,18 +240,40 @@ def annotation_changes_visible_content(page, pixel_boxes, original_image, baseli
     }
     annotations = [annot for annot in (page.annots() or []) if annot.type[0] not in exempt]
     if not annotations:
-        return False
-    original = original_image.copy()
-    baseline = baseline_image.copy()
+        return ''
+    selected = [_to_page_rect(box, page, original_image.size) for box in pixel_boxes]
+    outside = baseline_image.copy()
     for box in pixel_boxes:
         x0, y0, x1, y1 = (int(v) for v in box)
-        span = (max(0, x0 - 2), max(0, y0 - 2), min(original.width, x1 + 2), min(original.height, y1 + 2))
-        original.paste((255, 255, 255), span)
-        baseline.paste((255, 255, 255), span)
+        span = (max(0, x0 - 2), max(0, y0 - 2), min(outside.width, x1 + 2), min(outside.height, y1 + 2))
+        outside.paste((255, 255, 255), span)
+    reason = ''
     for annot in annotations:
-        if _render_has_structure(baseline, annot.rect) or _render_has_structure(original, annot.rect):
-            return True
-    return False
+        area = _annot_area(annot, page)
+        under = _objects_under(baseline_page, area, selected)
+        box = _to_pixel_box(area, page, original_image)
+        if box is None:
+            found = 'revealed'
+        else:
+            base_span, base_mean = _luma(baseline_image, box)
+            outside_span, _outside_mean = _luma(outside, box)
+            orig_span, orig_mean = _luma(original_image, _aa_interior(box))
+            full_span, _full_mean = _luma(original_image, box)
+            flat_cover = orig_span < 8
+            if flat_cover and not under and outside_span == 0:
+                # 外圈不平和、内圈却与页面同色：描边或细线。实心色块内圈和页面颜色不同，可以去掉。
+                found = 'annot' if full_span >= 8 and abs(orig_mean - base_mean) < 8 else ''
+            elif flat_cover and (under or outside_span >= 1):
+                found = 'revealed'
+            elif not flat_cover:
+                found = 'annot'
+            else:
+                found = ''
+        if found == 'revealed':
+            reason = 'revealed'
+        elif found == 'annot' and reason != 'revealed':
+            reason = 'annot'
+    return reason
 
 
 def word_rows(page, boxes):
@@ -174,9 +306,9 @@ def export(data, plan, _verify=True):
                     page.delete_annot(annot)
                 for link in page.get_links():
                     page.delete_link(link)
-                boxes = [fitz.Rect(*(n / 2 for n in box)) * page.derotation_matrix for box in selected.get(index + 1, [])]
+                boxes = [_to_page_rect(box, page, sizes[index]) for box in selected.get(index + 1, [])]
                 # 对不可见/半透明文字停止，避免把隐藏层变成普通可搜索正文。
-                visible_bounds=page.rect * page.derotation_matrix
+                visible_bounds=_content_bounds(page)
                 for span in page.get_texttrace():
                     if any(chr(char[0]).strip() and not visible_bounds.contains(fitz.Rect(char[3]))for char in span['chars']):
                         raise engine.Rejected('PDF文字超出可见页面或裁剪边界，存在隐藏原文，原生路线停止。')
@@ -222,71 +354,83 @@ def verify(data, plan, source):
               'outside_text_positions_preserved': True, 'outside_page_pixels_preserved': True,
               'covered_text_not_revealed': True, 'selected_regions_solid': True, 'pdf_hidden_objects_absent': True}
     try:
-        with open_pdf(source) as before, open_pdf(data, inspect_image_visibility=False) as after:
-            if len(before) != len(after):
-                raise engine.Rejected('PDF页数发生变化。')
-            import pdf_visibility
-            pdf_visibility.check_used_xobjects(data)
-            pdf_visibility.check_object_carriers(after)
-            if after.embfile_count() or after.get_toc() or any(after.metadata.get(k) for k in ('title','author','subject','keywords','creator','producer')) or after.get_xml_metadata():
-                checks['pdf_hidden_objects_absent'] = False
-            for index, (original, page) in enumerate(zip(before, after)):
-                if original.rect != page.rect or original.rotation != page.rotation:
-                    raise engine.Rejected('PDF页面尺寸或旋转发生变化。')
-                pixel_boxes = selected.get(index + 1, [])
-                boxes = [fitz.Rect(*(n / 2 for n in b)) * original.derotation_matrix for b in pixel_boxes]
-                if word_rows(original, boxes) != word_rows(page, boxes):
-                    checks['outside_text_positions_preserved'] = False
-                for span in page.get_texttrace():
-                    for char in span['chars']:
-                        if chr(char[0]).strip() and any(fitz.Rect(char[3]).intersects(b) for b in boxes):
-                            checks['selected_text_removed'] = False
-                used_images={image['xref']for image in page.get_image_info(xrefs=True)}
-                if any(row[0]not in used_images for row in page.get_images(full=True)):
+        stripped = open_pdf(pixel_source) if pixel_source != source else None
+        try:
+            with open_pdf(source) as before, open_pdf(data, inspect_image_visibility=False) as after:
+                if len(before) != len(after) or (stripped is not None and len(stripped) != len(before)):
+                    raise engine.Rejected('PDF页数发生变化。')
+                import pdf_visibility
+                pdf_visibility.check_used_xobjects(data)
+                pdf_visibility.check_object_carriers(after)
+                if after.embfile_count() or after.get_toc() or any(after.metadata.get(k) for k in ('title','author','subject','keywords','creator','producer')) or after.get_xml_metadata():
                     checks['pdf_hidden_objects_absent'] = False
-                if page.first_annot or page.first_widget or page.get_links():
-                    checks['pdf_hidden_objects_absent'] = False
-                # 有批注/链接时，基准是“只去掉这些对象、还没涂黑”的页面。图标消失因此不计入框外破坏；涂黑波及框外字形时，仍和这份基准不一致。
-                old = formats.pdf_image(pixel_source, index)
-                new = formats.pdf_image(data, index)
-                delta = ImageChops.difference(old, new)
-                for box in pixel_boxes:
-                    # 仅容许边缘的两像素抗锯齿差异；切到字形时框外变化会明确失败。
-                    x0,y0,x1,y1=box
-                    delta.paste((0,0,0),(max(0,x0-2),max(0,y0-2),min(new.width,x1+2),min(new.height,y1+2)))
-                    inner=(x0+2,y0+2,x1-2,y1-2)
-                    if inner[0] >= inner[2] or inner[1] >= inner[3] or new.crop(inner).getbbox() is not None:
-                        checks['selected_regions_solid'] = False
-                if delta.getbbox() is not None:
-                    checks['outside_page_pixels_preserved'] = False
-                # 与带批注的原页面再比一次。去掉浅色盖子后，框外若多出深色像素，就是被揭开的内容。
-                source_image = formats.pdf_image(source, index)
-                revealed = ImageChops.subtract(source_image.convert('L'), new.convert('L'))
-                for box in pixel_boxes:
-                    x0, y0, x1, y1 = box
-                    revealed.paste(0, (max(0, x0 - 2), max(0, y0 - 2), min(new.width, x1 + 2), min(new.height, y1 + 2)))
-                if revealed.getextrema()[1] > 0:
-                    checks['outside_page_pixels_preserved'] = False
-                    checks['covered_text_not_revealed'] = False
-                # 变深比较看不见“盖子比内容更深、揭开后变浅”。直线、折线和矢量笔画也不在文字层里。
-                # 改看渲染：框外若出现原件里没有的结构，或批注自己带了可见内容，就拒绝。
-                if annotation_changes_visible_content(original, pixel_boxes, source_image, old):
-                    checks['outside_page_pixels_preserved'] = False
-                    checks['covered_text_not_revealed'] = False
-            keep = engine.keep_checked(plan.get('keep', []))
-            if keep:
-                all_text = '\n'.join(p.get_text() for p in after)
-                checks['keep_phrases_preserved'] = all(x in all_text for x in keep)
-        if not all(checks.values()):
-            failed = {name for name, ok in checks.items() if not ok}
-            if failed == {'keep_phrases_preserved'}:
-                raise engine.Rejected('保留项没有对上：原文里没有这项，或副本里没有留下。未交付副本。')
-            revealed = ''
-            if checks.get('covered_text_not_revealed') is False:
-                revealed = '去掉批注后，原本看不见的内容变得可见。请先去掉这块方块或批注，或把被盖住的内容一起框进选区。'
-            raise engine.Rejected('PDF原生复检未通过：可能切到字形、影响框外内容或存在隐藏对象；' + revealed + '请扩大框选或检查格式，不自动图像化。')
-        return {'checks': checks, 'not_checked': [] if keep else ['keep_phrases_preserved'],
-                'effective_pages':plan.get('pages',[]),'output_sha256': engine.digest(data), 'scope': 'PDF原生删改；保留框外可搜索文字、位置和页面。仅核对已选区域及支持的隐藏载体。'}
+                cover_reason = ''
+                for index, (original, page) in enumerate(zip(before, after)):
+                    if original.rect != page.rect or original.rotation != page.rotation:
+                        raise engine.Rejected('PDF页面尺寸或旋转发生变化。')
+                    pixel_boxes = selected.get(index + 1, [])
+                    boxes = [_to_page_rect(b, original, sizes[index]) for b in pixel_boxes]
+                    if word_rows(original, boxes) != word_rows(page, boxes):
+                        checks['outside_text_positions_preserved'] = False
+                    for span in page.get_texttrace():
+                        for char in span['chars']:
+                            if chr(char[0]).strip() and any(fitz.Rect(char[3]).intersects(b) for b in boxes):
+                                checks['selected_text_removed'] = False
+                    used_images={image['xref']for image in page.get_image_info(xrefs=True)}
+                    if any(row[0]not in used_images for row in page.get_images(full=True)):
+                        checks['pdf_hidden_objects_absent'] = False
+                    if page.first_annot or page.first_widget or page.get_links():
+                        checks['pdf_hidden_objects_absent'] = False
+                    # 有批注/链接时，基准是“只去掉这些对象、还没涂黑”的页面。图标消失因此不计入框外破坏；涂黑波及框外字形时，仍和这份基准不一致。
+                    old = formats.pdf_image(pixel_source, index)
+                    new = formats.pdf_image(data, index)
+                    delta = ImageChops.difference(old, new)
+                    for box in pixel_boxes:
+                        # 仅容许边缘的两像素抗锯齿差异；切到字形时框外变化会明确失败。
+                        x0,y0,x1,y1=box
+                        delta.paste((0,0,0),(max(0,x0-2),max(0,y0-2),min(new.width,x1+2),min(new.height,y1+2)))
+                        inner=(x0+2,y0+2,x1-2,y1-2)
+                        if inner[0] >= inner[2] or inner[1] >= inner[3] or new.crop(inner).getbbox() is not None:
+                            checks['selected_regions_solid'] = False
+                    if delta.getbbox() is not None:
+                        checks['outside_page_pixels_preserved'] = False
+                    # 与带批注的原页面再比一次。去掉浅色盖子后，框外若多出深色像素，就是被揭开的内容。
+                    source_image = formats.pdf_image(source, index)
+                    revealed = ImageChops.subtract(source_image.convert('L'), new.convert('L'))
+                    for box in pixel_boxes:
+                        x0, y0, x1, y1 = box
+                        revealed.paste(0, (max(0, x0 - 2), max(0, y0 - 2), min(new.width, x1 + 2), min(new.height, y1 + 2)))
+                    baseline_page = stripped[index] if stripped is not None else None
+                    found = annotation_change_reason(original, baseline_page, pixel_boxes, source_image, old)
+                    if revealed.getextrema()[1] > 0 and found != 'annot':
+                        found = 'revealed'
+                    if found:
+                        checks['outside_page_pixels_preserved'] = False
+                        checks['covered_text_not_revealed'] = False
+                        if found == 'revealed' or cover_reason != 'revealed':
+                            cover_reason = found
+                keep = engine.keep_checked(plan.get('keep', []))
+                if keep:
+                    all_text = '\n'.join(p.get_text() for p in after)
+                    checks['keep_phrases_preserved'] = all(x in all_text for x in keep)
+                if not all(checks.values()):
+                    failed = {name for name, ok in checks.items() if not ok}
+                    if failed == {'keep_phrases_preserved'}:
+                        raise engine.Rejected('保留项没有对上：原文里没有这项，或副本里没有留下。未交付副本。')
+                    if cover_reason == 'annot':
+                        detail = '批注本身有可见内容。请先去掉这块方块或批注，或把被盖住的内容一起框进选区。'
+                    elif cover_reason == 'revealed':
+                        detail = '去掉批注后，原本看不见的内容变得可见。请先去掉这块方块或批注，或把被盖住的内容一起框进选区。'
+                    elif cover_reason == '':
+                        detail = ''
+                    else:
+                        raise engine.Rejected('PDF原生复检未通过：可能切到字形、影响框外内容或存在隐藏对象；请扩大框选或检查格式，不自动图像化。')
+                    raise engine.Rejected('PDF原生复检未通过：可能切到字形、影响框外内容或存在隐藏对象；' + detail + '请扩大框选或检查格式，不自动图像化。')
+                return {'checks': checks, 'not_checked': [] if keep else ['keep_phrases_preserved'],
+                        'effective_pages':plan.get('pages',[]),'output_sha256': engine.digest(data), 'scope': 'PDF原生删改；保留框外可搜索文字、位置和页面。仅核对已选区域及支持的隐藏载体。'}
+        finally:
+            if stripped is not None:
+                stripped.close()
     except engine.Rejected:
         raise
     except Exception as exc:
@@ -304,7 +448,8 @@ def snap_region(data,number,region):
         for span in page.get_texttrace():
             for char in span['chars']:
                 if chr(char[0]).strip():
-                    r=fitz.Rect(char[3])*page.rotation_matrix;glyphs.append(fitz.Rect(*(v*2 for v in r)))
+                    r=fitz.Rect(char[3])*_display_matrix(page)
+                    sx,sy=_pixel_scale(page,sizes[number-1]);glyphs.append(fitz.Rect(r.x0*sx,r.y0*sy,r.x1*sx,r.y1*sy))
         if len(glyphs)>200000:raise engine.Rejected('PDF字形超出对齐范围。')
         for _ in range(64):
             previous=target[:];rect=fitz.Rect(target)
