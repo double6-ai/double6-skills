@@ -85,14 +85,21 @@ def main():
             launcher = receipt['launcher']
             command = ('cmd.exe /d /s /c ""' + launcher + '" --no-browser --session-file "' + str(session) + '""') if sys.platform == 'win32' else [launcher, '--no-browser', '--session-file', str(session)]
             child = subprocess.Popen(command, stdout=launch_log, stderr=subprocess.STDOUT)
+            started = time.monotonic()
+            info = None
             try:
-                for _ in range(400):
+                deadline = started + 90
+                while time.monotonic() < deadline:
                     if session.exists():
                         break
                     if child.poll() is not None:
                         raise RuntimeError('生成的启动器提前退出')
-                    time.sleep(.05)
+                    time.sleep(.1)
+                if not session.exists():
+                    raise TimeoutError('启动器90秒内未生成会话回执，查看对应launch日志')
                 info = json.loads(session.read_text(encoding='utf-8'))
+                report.setdefault('launches', []).append({'iteration': iteration, 'pid': child.pid, 'ready_seconds': round(time.monotonic() - started, 3)})
+                save()
                 url = info['url']
                 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
                 assert 'pdf-mode' in opener.open(url, timeout=10).read().decode('utf-8')
@@ -138,6 +145,8 @@ print(json.dumps({'word_download_neutral':True,'pdf_native_reverified':report['c
             finally:
                 if child.poll() is None:
                     try:
+                        if info is None:
+                            raise RuntimeError('启动尚未生成会话，停止本次子进程')
                         request(info['url'], 'api/stop', {}).read()
                         child.wait(timeout=5)
                     except Exception:
