@@ -2,6 +2,16 @@
 
 ## 2.0.0-rc.9 本地发布候选 · 2026-10-23
 
+- 凭据不进入子进程命令行（2026-10-24，未改版本号）：翻译服务凭据的唯一入口为环境变量 `LOCAL_TRANSLATION_API_KEY`（`scripts/credential_env.py`）。此前远端凭据以 `--openai-api-key` / 适配器 `--api-key` 放进电子 PDF 后端与 `qwen-cli` 适配器的命令行，进而进入同机进程列表、后端 DEBUG 日志、`CalledProcessError` 与 tenacity 重试日志，以及 `qwen-cli` 路线的翻译缓存库（命令串是缓存身份的一部分）。现在：
+  - 电子 PDF 后端改由其原生配置环境变量 `PDF2ZH_OPENAI_API_KEY` 接收（PDFMathTranslate-next 2.8.2 `config/main.py` 的 `PDF2ZH_` 前缀与嵌套字段展开）；`qwen-cli` 适配器改为从继承的 `LOCAL_TRANSLATION_API_KEY` 读取，`--api-key` 仅为兼容保留。后端命令与适配器命令串不再含凭据，因此上述日志、异常与缓存库里也没有凭据。
+  - 启动后端前清除继承的 `PDF2ZH_OPENAI_API_KEY`、`LOCAL_TRANSLATION_API_KEY`、`OPENAI_API_KEY`、`PDF2ZH_DEBUG`，再只放入该后端需要的一个变量（`PDF2ZH_DEBUG` 会让后端把含凭据的完整配置写进日志）。
+  - 远端缺凭据：稳定错误 `remote_backend_requires_explicit_api_key`，在启动任何子进程或代理之前；兼容代理路线此前因地址已换成代理而跳过这项检查，现按原上游地址检查。回环地址仍用 `local-no-auth` 占位。
+  - 缓存身份：`qwen-cli` 命令串仍含端点、模型与提示词；电子 PDF 后端的 OpenAI 翻译器缓存身份加入 `base_url`（此前只有模型、提示词等，不同服务同名模型的译文会被复用）。凭据不入缓存身份。既有缓存条目因此不再命中电子 PDF 路线，会重新请求。
+  - 旧 LaTeX 直连（`pdf2zh_skill`，未随本仓库分发）：后端缺失时返回结构化错误 `latex_direct_backend_unavailable`，不启动子进程，端到端记 not_run；已安装且需要凭据时经本进程 `127.0.0.1` 转发器保留显式上游地址/模型/凭据，子进程命令行只含一次性令牌；转发器起不来报 `latex_direct_credential_forwarder_unavailable`。这条路线因依赖缺失无法在本仓库核实，不属于主路径失败。
+  - `doctor` 只读 `LOCAL_TRANSLATION_API_KEY`（不再采用 `OPENAI_API_KEY`），结果新增 `credential`（来源与是否存在，不含值）；远端缺凭据时记 blocker `remote_backend_requires_explicit_api_key` 且不发请求。
+  - 纵深防御（不是修复本身）：回执的命令行脱敏也处理 `--api-key VALUE` 这类“参数名 + 下一项”形式。
+  - 边界：环境变量对同一用户的其它进程可见（`/proc/<pid>/environ`），不是保密隔离边界；不宣称完全隔离。扫描路线断点的参数指纹（`scanned_raster/checkpoint.py`）仍对含 `--api-key` 的参数求哈希（只存哈希、不存值），为保持续跑兼容未改。
+  - 测试：`tests/test_credentials_out_of_argv.py`（真实子进程 argv/环境哈希、真实适配器与 vendored 翻译器对本机记录服务的 Authorization 哈希、合成缓存库扫描、失败/超时/重试日志、回执与 WORKFLOW_INTERNAL_ERROR、缓存身份、doctor、LaTeX 直连接口与拒绝），辅助 `tests/credential_probe_backend.py`。
 - 新增长文档分块翻译 `chunked-candidate`（基线 item 5）。此前 `candidate` 只接受完整 1–5 页（FREEZE 页门 `page_limit_exceeded`），一份不能在一个有界任务（120 s、5 GiB RSS、重任务并发 1）内完成的长文档无法翻译。现在把文档按页范围切成一串有界块，每块是一次**普通** `candidate`（`digital_pdf` 或 `scanned_ocr` 原路线、原门），再按原页序合并。详见 `references/chunked-translation.md`。
   - 划分：电子块 ≤4 页、扫描块 ≤2 页；安全页边界（跨页表格、续表/续图题注、“continued on next page”、行尾开放运算符不切；段落未结束为软信号，避不开时记录到 `cross_chunk_continuations`）；`per_chunk` 路线按页类别把原生文字页送 `digital_pdf`、扫描页送 `scanned_ocr`。
   - 每块：块级 FREEZE（块 PDF 身份、1..k 页、parent FREEZE 与计划作为作用域证据、同一冻结资源合同）+ 块级上下文 `CHUNK_TERM_CONTEXT.json`（整份文档术语表/专名，sha 绑定）；单块单任务预算 = FREEZE 资源合同（120 s、5 GiB RSS、并发 1）。

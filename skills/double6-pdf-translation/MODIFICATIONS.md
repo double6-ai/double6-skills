@@ -117,6 +117,7 @@
 - `vendor/pdfmathtranslate_next/pdf2zh_next/gui.py`
 - `vendor/pdfmathtranslate_next/pdf2zh_next/high_level.py`
 - `vendor/pdfmathtranslate_next/pdf2zh_next/main.py`
+- `vendor/pdfmathtranslate_next/pdf2zh_next/translator/translator_impl/openai.py`
 - `vendor/pdfmathtranslate_next/pdf2zh_next/translator/utils.py`
 - `vendor/pdfmathtranslate_next/pyproject.toml`
 
@@ -205,3 +206,9 @@
   - PR #24 review-2：`line_fragments.py` 新增 `VALUE_TOKEN`、`ANCHOR_TOLERANCE`、`_segment_text`、`_stacks`；
     `_column_evidence` 增加“数据行相邻值记号在此分开且右值与他行片段列锚点对齐”的证据。新增 `tests/test_table_value_columns.py`
     与夹具 `arxiv2512.18979-p5-table2-header.json`。
+
+## 凭据通道维护改动（2026-10-24）
+
+- 第一方：新增 `scripts/credential_env.py`（唯一入口 `LOCAL_TRANSLATION_API_KEY`、回环占位、远端缺凭据错误、后端环境清理）与 `scripts/credential_forwarder.py`（只绑定 `127.0.0.1` 的一次性令牌转发器，仅供未分发的旧 LaTeX 直连后端）；`pdf_translation_commands.py` 不再把凭据放进后端/适配器/LaTeX 直连命令行；`pdf_translation_render.py` 经 `PDF2ZH_OPENAI_API_KEY` 传入并清除继承的 `PDF2ZH_OPENAI_API_KEY`、`LOCAL_TRANSLATION_API_KEY`、`OPENAI_API_KEY`、`PDF2ZH_DEBUG`；`qwen_pdf2zh_cli_translator.py` 从环境读取，`--api-key` 兼容保留；`pdf_translation_latex_render.py`、`pdf_translation_paths.py`（`latex_direct_backend_status`）、`paper_translation_workflow.py`（doctor）、`daily_skill_research/execution.py`（回执脱敏，纵深防御）。
+- vendored PDFMathTranslate-next：`pdf2zh_next/translator/translator_impl/openai.py` 只增加一项缓存影响参数 `base_url`（不同服务端点不复用译文；凭据不入缓存身份）。未改其配置解析、日志、`clitranslator.py` 与请求协议：凭据经其既有的 `PDF2ZH_` 环境变量配置通道（`config/main.py`）传入，命令行不再含凭据，因此其 DEBUG 命令日志、`CalledProcessError`、tenacity 重试日志与缓存库不再出现凭据。
+- `PDF2ZH_DEBUG`：后端在调试模式下记录完整配置（含 `openai_api_key`，`main.py` 与 `config/main.py`），因此不再透传给后端子进程。

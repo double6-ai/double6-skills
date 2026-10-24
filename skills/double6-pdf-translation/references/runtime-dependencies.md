@@ -45,7 +45,15 @@ bash scripts/setup_venv.sh /absolute/new/venv
 
 论文、模型、字体和 TeX 由运行者自行提供或安装，各自权利独立核对。回放使用的系统中文字体和已有模型仅在本机读取，未随 Skill 再分发。
 
-本地无鉴权兼容服务由后端 SDK 要求一个非空字段时，命令适配器使用明确的 `local-no-auth` 占位值；它不是凭据。远程后端缺少密钥会明确停止。实际上游 HTTP 请求在未配置密钥时不发送 `Bearer None`。
+## 翻译服务凭据
+
+唯一入口是环境变量 `LOCAL_TRANSLATION_API_KEY`；`doctor`、`candidate` 及各路线都只读它（不再读取 `OPENAI_API_KEY`），`doctor` 结果的 `credential` 字段只报告来源与是否存在，不记录值。`run_pdf_translation.py --api-key` 仅为兼容保留，用它时值会出现在该进程自身的命令行里，不建议使用。
+
+- 回环地址（`localhost`、`127.0.0.1`、`::1`）未提供时使用明确的 `local-no-auth` 占位值；它不是凭据。远端地址（包括其它 `127.x` 地址）未提供即报 `remote_backend_requires_explicit_api_key`，在启动任何子进程或代理之前停止。实际上游 HTTP 请求在未配置密钥时不发送 `Bearer None`。
+- 凭据不进入任何子进程的命令行，按各后端原生的非命令行通道传入：电子 PDF 后端（PDFMathTranslate-next）读取其配置环境变量 `PDF2ZH_OPENAI_API_KEY`；`qwen-cli` 适配器继承 `LOCAL_TRANSLATION_API_KEY`；可信 LaTeX 路线（`independent_latex`）在本进程内发起请求。启动后端前先清除继承的 `PDF2ZH_OPENAI_API_KEY`、`LOCAL_TRANSLATION_API_KEY`、`OPENAI_API_KEY` 与 `PDF2ZH_DEBUG`（后者会让后端把含凭据的完整配置写进调试日志），再只放入该后端需要的一个变量。
+- 旧 LaTeX 直连后端 `pdf2zh_skill` 未随本仓库分发，其非命令行凭据通道无法在本仓库核实：后端缺失时返回结构化错误 `latex_direct_backend_unavailable`，不启动子进程；已安装且需要凭据时，本进程只在 `127.0.0.1` 起一个转发器，保留用户显式的上游地址、模型与凭据，子进程命令行只含一次性访问令牌（子进程结束即随转发器关闭失效）；转发器无法启动时报 `latex_direct_credential_forwarder_unavailable`。不静默改用本机服务或其它模型。
+- 翻译缓存按端点、模型、目标语言与提示词隔离，不以凭据为缓存身份；凭据不写入缓存库。
+- 边界：环境变量对同一用户的其它进程可见（如 Linux `/proc/<pid>/environ`），不构成保密隔离边界；本改动只保证凭据不出现在子进程命令行、日志、回执、清单、异常与缓存中，不宣称完全隔离。
 
 安装脚本在哈希锁定安装后实际导入主路径原生模块，最多等待 180 秒；该步骤不载入翻译模型、不发送翻译请求。安装完成后的论文任务仍按各自冻结合同计算资源与时限。
 
