@@ -239,6 +239,23 @@ def inspect_docx(data):
     return {"blocks": blocks, "preview": plain, "suggestions": suggestions, "removed": counts, "notice": "导出为可编辑的文字和表格副本；页眉页脚移到正文，图片、批注、删除修订、隐藏文字、超链接地址及原属性移除。字体、分页和合并单元格样式不保留。"}
 
 
+def markers_for(terms):
+    """优先使用【已隐去N】。该标记若会把补选词带回来，改用不含这些词的〔已处理A〕；两者都不行就说明原因。"""
+    def letters(n):
+        text = ""
+        while n:
+            n, rest = divmod(n - 1, 26)
+            text = chr(65 + rest) + text
+        return text
+    styles = (lambda n: "【已隐去" + str(n) + "】", lambda n: "〔已处理" + letters(n) + "〕")
+    for factory in styles:
+        marks = [factory(i + 1) for i in range(len(terms))]
+        if all(term not in mark for term in terms for mark in marks):
+            return marks
+    shown = "、".join(terms[:3])
+    raise Rejected("补选词“" + shown + "”会重新出现在替换标记里，无法既隐去又通过复检。默认标记是【已隐去N】，备选是〔已处理A〕。请改选不包含这些字样的原文。")
+
+
 def terms_checked(values):
     if not isinstance(values, list) or len(values) > 200:
         raise Rejected("补选内容最多 200 项。")
@@ -292,7 +309,7 @@ def export_docx(data, terms, acknowledge_loss=False, clean_only=False, keep=None
     if any(v not in plan["preview"] for v in selected):
         raise Rejected("有补选原文未在预览中找到，请核对准确原文后重试；隐藏部件无需列为正文替换词。")
     reject_partial_business_numbers(plan["preview"], selected)
-    replacements = {v: "【已隐去" + str(n + 1) + "】" for n, v in enumerate(selected)}
+    replacements = {v: mark for v, mark in zip(selected, markers_for(selected))} if selected else {}
     # 单次匹配，避免后来输入的词再次命中替换标记。
     regex = re.compile("|".join(re.escape(v) for v in selected)) if selected else None
     def clean(text):
