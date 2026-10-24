@@ -252,6 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--protected-spans", help="protected_spans.json path. Defaults to beside source.")
     parser.add_argument("--translation-blocks", help="translation_blocks.jsonl path. Defaults to beside translation.")
     parser.add_argument("--render-manifest", help="render_manifest.json path. Defaults to beside translation.")
+    parser.add_argument("--target-language", choices=["zh", "en"], help="Target language of this translation. Defaults to source_manifest/render_manifest records, then the historical en->zh default.")
     parser.add_argument("--latex-block-bridge", type=Path, help="Optional reproducible final-TeX bridge; does not grant PDF acceptance.")
     parser.add_argument("--output", help="Quality report path. Defaults to quality_report.md beside the translation.")
     return parser
@@ -259,7 +260,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     from check_translation_core import load_glossary, load_json, load_translation_blocks
     from check_translation_fidelity import build_coverage_gate
-    from check_translation_gates import collect_issues
+    from check_translation_gates import collect_issues, policies_for_target, resolve_qa_target_language
     from check_translation_memory import build_document_memory, build_entity_map, build_term_policy
     from check_translation_reports import build_alignment_report, render_quality_report
     args = build_parser().parse_args(argv)
@@ -282,6 +283,9 @@ def main(argv: list[str] | None = None) -> int:
     render_manifest = load_json(render_manifest_path)
     term_policy = build_term_policy(glossary, manifest=manifest, source=source)
     entity_map = build_entity_map(manifest, glossary)
+    qa_target = resolve_qa_target_language(args.target_language, manifest, render_manifest).get("target_language")
+    if qa_target == "en":
+        term_policy, entity_map = policies_for_target(term_policy, entity_map, "en")
     issues = collect_issues(
         source,
         translation,
@@ -291,8 +295,9 @@ def main(argv: list[str] | None = None) -> int:
         translation_blocks=translation_blocks,
         render_manifest=render_manifest,
         latex_block_bridge_path=args.latex_block_bridge,
+        target_language=args.target_language,
     )
-    report = render_quality_report(issues)
+    report = render_quality_report(issues, target_language=qa_target)
     output_path.write_text(report, encoding="utf-8")
     output_path.with_name("alignment_report.json").write_text(
         json.dumps(build_alignment_report(manifest, translation_blocks), ensure_ascii=False, indent=2) + "\n",

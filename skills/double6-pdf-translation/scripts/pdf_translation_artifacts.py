@@ -458,7 +458,11 @@ def run_quality_check(output_dir: Path, render_manifest: dict[str, Any]) -> Path
         render_manifest=render_manifest,
         target_language=qa_target,
     )
-    report_text = check_translation.render_quality_report(issues)
+    from check_translation_gates import resolve_qa_target_language
+    report_text = check_translation.render_quality_report(
+        issues,
+        target_language=resolve_qa_target_language(qa_target, manifest, render_manifest).get("target_language"),
+    )
     visual_repair = policy_utils.load_json(output_dir / "visual_repair_manifest.json")
     if visual_repair.get("status") == "repaired":
         report_text += (
