@@ -8,7 +8,21 @@
 
 历史内部包曾分别以20个界面样例核对：11份可处理材料与9份拒绝材料，实际副本另外读取隐藏种子、业务文字、数字、表格和显示格式。原生打开采用Windows/macOS的LibreOffice无头加载、PDF导出和现代格式另存；没有把这些结果写成Microsoft Office或可见桌面试学。
 
-公开版改为源码和独立Python环境安装，未随GitHub提供EXE/App/Python或LibreOffice。公开源码的安装、独立使用和CI结果分别以本版发布说明为准；内部二进制包记录不直接作为公开安装通过。
+公开版改为源码和独立Python环境安装，未随GitHub提供EXE/App/Python或LibreOffice。内部二进制包记录不直接作为公开安装通过。
+
+## 公开源码实测（2026-10-24）
+
+| 范围 | macOS Apple芯片 | Windows x64 |
+| --- | --- | --- |
+| 新建Python环境，按哈希安装、pip check、doctor、selftest | Python3.12.14通过 | Windows11、Python3.12.10通过 |
+| 源码57项回归 | 57通过 | 56通过，1项POSIX专用测试跳过 |
+| 独立无头浏览器实际补选、导出和退出 | Word与图片通过；由独立Agent执行 | 同样本Word与图片通过；由主控执行 |
+| 对下载副本的独立解包/像素检查 | 选定姓名电话与隐藏载体清除；业务表格和数字保留；图片框外像素一致 | 同样检查通过 |
+| 预备wheel后，从新环境离线安装、自检 | 通过，安装使用`--no-index` | 未另行验证wheelhouse路径 |
+
+GitHub Actions另以macos-15与windows-latest执行公开安装及源码回归。运行版本与最终结果见[PR #26](https://github.com/double6-ai/double6-skills/pull/26)及对应发布说明。Windows首次依赖下载较慢但完成；无法下载时停止，不跳过哈希验证。英文Windows云端环境曾暴露中文测试夹具编码问题，已改为显式UTF-8并通过复验。
+
+这些测试使用合成材料，浏览器为独立无头实例；本轮未新增Microsoft Office可见打开、全部格式用户试学、恶意文件隔离或未声明平台验证。
 
 ## 使用限制
 
