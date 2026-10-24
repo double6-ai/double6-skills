@@ -11,6 +11,8 @@ import venv
 
 
 def main():
+    for stream in (sys.stdout,sys.stderr):
+        if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='strict')
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--venv',type=Path,required=True)
     p.add_argument('--wheelhouse',type=Path,help='已准备的本机wheel目录；指定后不访问软件源')
