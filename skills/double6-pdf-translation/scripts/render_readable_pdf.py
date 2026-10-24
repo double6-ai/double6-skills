@@ -124,6 +124,7 @@ REFUSAL_CODES = (
     "readable_math_source_structure_lost", # 主版式成品该页的上/下标层级本身已丢失（见 formula_structure_check）
     "readable_codepoint_loss",             # 成品可读版文字层丢失了 Markdown 中的字符（字体不覆盖等）
     "readable_vector_copy_mismatch",       # 整页矢量复制后的文字层与主版式页不一致
+    "readable_math_source_missing",        # 原文含数学结构，但没有可矢量复制的主版式译文 PDF（如后端失败）
 )
 
 
@@ -260,6 +261,12 @@ def render_pdf(markdown_path: Path, output_path: Path, title: str = "", *, math_
                       and (split_method != "single_segment" or len(mono) == 1))
         fidelity["page_mapping"] = "known" if mapped else "unknown"
         vector = {k for k, v in evidence.items() if v["has_math"]}
+        if mono is None and source_pdf and Path(source_pdf).is_file():
+            # 没有主版式成品可复制时，原文含数学结构的页只能重排，会压平上下标/矩阵：写出前拒绝。
+            with fitz.open(source_pdf) as original:
+                source_math = [index + 1 for index in range(len(original)) if page_math_evidence(original[index])["has_math"]]
+            if source_math:
+                return refuse("readable_math_source_missing", source_math_pages=source_math)
         if vector and not mapped:
             return refuse("readable_page_mapping_unknown", markdown_page_split=split_method,
                           markdown_pages=sorted(pages) if pages else None, pdf_pages=len(mono))

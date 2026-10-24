@@ -342,6 +342,12 @@ def test_math_page_is_vector_copied_and_lossless(tmp_path):
     assert fsc.check_formula_structure(source, out)['severity'] == 'ok'
 
 
+def test_prose_source_without_mono_still_reflows(tmp_path):
+    source = _pdf(tmp_path / 'src.pdf', [[('Plain prose only', 20, 100, 10, 'helv')]])
+    manifest, out = _render(tmp_path, '普通正文段落。', source=source)
+    assert manifest['status'] == 'ok' and out.is_file()
+
+
 def test_prose_page_still_reflows(tmp_path):
     mono = _pdf(tmp_path / 'mono.pdf', [[('Plain prose only', 20, 100, 10, 'helv')]])
     manifest, out = _render(tmp_path, '普通正文段落，没有公式。\n\nPlain prose only.', mono=mono)
@@ -362,6 +368,7 @@ def test_form_feed_pages_mix_reflow_and_vector(tmp_path):
     ('damaged_mono', 'readable_math_source_structure_lost'),
     ('repair_conflict', 'readable_math_page_repair_conflict'),
     ('unmapped_pages', 'readable_page_mapping_unknown'),
+    ('backend_failed_no_mono', 'readable_math_source_missing'),
 ])
 def test_unsupported_readable_is_refused_before_delivery(tmp_path, case, code):
     out = tmp_path / 'final_readable.pdf'
@@ -375,9 +382,11 @@ def test_unsupported_readable_is_refused_before_delivery(tmp_path, case, code):
     elif case == 'repair_conflict':
         manifest, out = _render(tmp_path, MATH_TEXT.replace('δ_jk', 'δ_kj'), mono=_math_mono(tmp_path / 'mono.pdf'), source=source,
                                 original=MATH_TEXT)
-    else:
+    elif case == 'unmapped_pages':
         mono = _pdf(tmp_path / 'mono.pdf', [_vnmax(), _vnmax()])
         manifest, out = _render(tmp_path, MATH_TEXT, mono=mono)
+    else:   # 主版式后端失败、没有可复制的成品页：即便文字码位都能重排，原文的上下标也会被压平
+        manifest, out = _render(tmp_path, 'namely V maxn (U)', source=source)
     assert manifest['status'] == 'refused' and manifest['reason_code'] == code and code in rr.REFUSAL_CODES
     assert manifest['output_pdf'] is None and not out.exists()
     assert not list(tmp_path.glob('*.tmp-parts'))
