@@ -121,12 +121,15 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
-      - name: Install and selftest exactly as documented
+      - name: Install copied skill and verify generated launchers
         shell: bash
-        run: python scripts/bootstrap.py --venv "$RUNNER_TEMP/redaction-venv"
-      - name: Source regression and doctor
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then PY="$RUNNER_TEMP/redaction-venv/Scripts/python.exe"; else PY="$RUNNER_TEMP/redaction-venv/bin/python"; fi
-          "$PY" -m unittest discover -s scripts/tests -v
-          "$PY" scripts/cli.py doctor
+        run: python "$GITHUB_WORKSPACE/.github/scripts/redaction_install_smoke.py" --source . --work "$RUNNER_TEMP/redaction first use"
+      - name: Preserve installation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: redaction-${{ matrix.os }}-py${{ matrix.python }}
+          path: |
+            ${{ runner.temp }}/redaction first use/install-chain.json
+            ${{ runner.temp }}/redaction first use/*.log
+          if-no-files-found: error
