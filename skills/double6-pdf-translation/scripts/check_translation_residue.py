@@ -242,6 +242,76 @@ def check_untranslated_english(
         )
     return issues
 
+# 中译英文字 QA：英文目标译文里成段保留的中文才是“未译”；正常英文不是残留。
+# 与英译中的英文残留检查对称：同样跳过参考文献条目和保护值（URL、公式、代码等）。
+_CJK_RUN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff][\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3000-\u303f\uff0c\uff1a\uff1b\uff08\uff09\u3001\s]*")
+_ZH_REFERENCE_LINE = re.compile(r"\[(?:[JMCDRSNPZA]|EB|OL|J/OL|EB/OL|DB)\]|\(\d{4}\)|\b(?:19|20)\d{2}\b|doi\.org/|\b10\.\d{4,9}/|et al\.|等\.", re.I)
+
+def strip_zh_reference_lines(text: str) -> str:
+    """英文目标：剔除参考文献标题之后的文献条目（中文文献条目允许保留原文）。"""
+    kept: list[str] = []
+    in_references = False
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.strip()
+        if line.lower().strip("#:： ") in {"references", "参考文献", "bibliography"}:
+            in_references = True
+            kept.append(raw_line)
+            continue
+        if in_references and _ZH_REFERENCE_LINE.search(line):
+            continue
+        kept.append(raw_line)
+    return "\n".join(kept)
+
+def check_untranslated_chinese(
+    translation: str,
+    *,
+    protected_spans: dict[str, Any] | None = None,
+    entity_map: dict[str, Any] | None = None,
+    term_policy: dict[str, Any] | None = None,
+) -> list[Issue]:
+    """英文目标译文的中文残留：成段（≥6 个汉字）为 medium，较短片段为 low 待术语策略确认。"""
+    protected = [value for value in protected_values(protected_spans) if re.search(r"[\u3400-\u9fff]", value)]
+    allowed = {term for term in term_policy_terms(term_policy) | entity_policy_terms(entity_map) if re.search(r"[\u3400-\u9fff]", term)}
+    scan_text = strip_zh_reference_lines(translation)
+    for value in protected:
+        scan_text = scan_text.replace(value, " ")
+    long_runs: list[str] = []
+    short_runs: list[str] = []
+    for match in _CJK_RUN.finditer(scan_text):
+        snippet = " ".join(match.group(0).split()).strip("，：；（）、 ")
+        han = len(re.findall(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", snippet))
+        if not han or snippet.lower() in allowed:
+            continue
+        bucket = long_runs if han >= 6 else short_runs
+        if snippet not in bucket:
+            bucket.append(snippet[:160])
+    issues: list[Issue] = []
+    if long_runs:
+        issues.append(
+            Issue(
+                "medium",
+                "疑似大段中文未翻译",
+                "英文译文中发现可能未翻译的中文片段：" + "；".join(long_runs[:5]),
+                category="omission",
+                rule="untranslated_chinese_in_english_target",
+                translation_evidence="；".join(long_runs[:3]),
+                suggestion="回看对应段落，确认是否为必须保留的原文（专名、引文）；否则补译为英文。",
+            )
+        )
+    if short_runs:
+        issues.append(
+            Issue(
+                "low",
+                "中文残留待术语策略确认（needs_term_policy）",
+                "英文译文中的短中文片段需确认是保留原文还是给出英文译名：" + "；".join(short_runs[:8]),
+                category="terminology",
+                rule="chinese_residue_in_english_target",
+                translation_evidence="；".join(short_runs[:5]),
+                suggestion="补全 term_policy/entity_map 的保留或英文译名策略。",
+            )
+        )
+    return issues
+
 def check_translation_metadata_leak(source: str, translation: str) -> list[Issue]:
     """只提示源文没有的显式译文元字段；普通注释/代码不自动删除。"""
     from check_translation_core import excerpt

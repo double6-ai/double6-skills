@@ -371,6 +371,9 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
         enabled=bool(args.dual and args.bilingual_layout == "en-left-zh-right"),
         render_mode=args.bilingual_render_mode,
         raster_dpi=args.bilingual_raster_dpi,
+        source_language=TARGET_SOURCE_LANGUAGE.get(target_language),
+        target_language=target_language,
+        direction_basis="declared_target_language",
     )
     if bilingual_manifest.get("status") == "ok" and bilingual_manifest.get("output_pdf"):
         selected_outputs["dual_pdf"] = str(bilingual_manifest["output_pdf"])
@@ -586,6 +589,9 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
         "ignore_translation_cache": bool(getattr(args, "ignore_translation_cache", False)),
         "backend_debug_artifacts": bool(getattr(args, "backend_debug_artifacts", True)),
         "translation_cache": translation_cache,
+        "target_language": target_language,
+        "source_language": TARGET_SOURCE_LANGUAGE.get(target_language),
+        "direction_basis": "declared_target_language",
         "model": args.model,
         "base_url": original_base_url,
         "backend_base_url": proxy_info["proxy_base_url"] or original_base_url,

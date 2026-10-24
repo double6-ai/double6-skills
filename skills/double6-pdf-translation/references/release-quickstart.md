@@ -143,6 +143,18 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 
 成品检查改为渲染中文残留检查（`render_chinese_residue`）：逐页比较源/译文可抽取汉字数，页残留率 ≥0.30 为高风险、≥0.10 为中风险，整体 ≥0.25 或存在高风险页判 `fail`（退出码 3）。源页汉字少于 100 时不按比例评估，但整行中文源句（≥12 字）逐字留在译文里判高风险；所有页都短时按整份文件合计评估。以下结构性问题同样判 `fail`：源文中文正文行内已定位的结构对象（矢量公式字形、Form XObject 变量）在成品原位丢失或与译文字形压叠，任何一个即判（`inline_object_damage_pages`，规则 `inline_object_damage_high`）；源文保留字形（非 Noto 字体）与英文译文字形压叠的页，1 个字符即判（`retained_glyph_overlap_pages`，规则 `retained_glyph_overlap_high`）；字形大小的填充矢量路径比源页少 ≥3 个且 ≥25% 的页（`vector_glyph_loss_pages`，规则 `vector_glyph_loss_high`）。
 
+文字 QA 与术语策略按本次目标语言选择（`render_manifest.json` 记录 `target_language`/`source_language`/`direction_basis`）：中译英不把正常英文译文当“疑似大段英文未翻译 / must_translate”，改查英文译文里成段保留的中文（≥6 个汉字 `疑似大段中文未翻译`，较短片段记 low 待术语策略确认），参考文献标题后的文献条目与保护值不计；译法含汉字的英译中默认术语/实体策略不参与中译英 QA，也不做英→中残留替换。英译中的英文残留检查不变。目标语言优先取调用方参数，其次 `source_manifest.json`、`render_manifest.json`；三者都没有时沿用 CLI 默认英译中（`basis=legacy_default_en_to_zh`）；记录了 zh/en 以外的值报 high `QA 目标语言不受支持` 且不做语言残留检查；记录互相矛盾报 high `QA 目标语言记录不一致`。
+
+双语产物命名（左页恒为源文页、右页恒为译文页，页序不随方向变化）：
+
+| 方向 | 标准双语文件名 | `bilingual_pdf_manifest.json` 的 `layout` | 左/右语言 |
+|---|---|---|---|
+| 英译中（默认） | `<源文件名>.en-left.zh-right.dual.pdf`（不变） | `en_left_zh_right` | `en` / `zh` |
+| 中译英 | `<源文件名>.zh-left.en-right.dual.pdf` | `zh_left_en_right` | `zh` / `en` |
+| 方向未知（直接调用且未传方向） | `<源文件名>.source-left.translation-right.dual.pdf` | `source_left_translation_right` | `unknown` / `unknown` |
+
+清单另记 `left_role=source`、`right_role=translation`、`left_label`/`right_label`（如“中文原文”/“英文译文”，未知时“原文”/“译文”）与 `direction_basis`。LaTeX 直连的双语副本按清单记录的方向命名；Round38 结构化候选单语页为 `.round38-structured-candidates.<目标语言>.mono.pdf`。`--bilingual-layout en-left-zh-right` 是历史取值名，两个方向都表示“源左译右”。扫描栅格路线只接受英译中，其双语清单显式声明 `en→zh`（文件名 `bilingual_scanned.pdf` 等不变）。
+
 已知局限：
 - 行内公式由 Form XObject 或矢量路径绘制的中文 PDF 不支持（预检拒绝，见上；只要定位到 1 个即拒绝）。定位依赖“对象中心落在中文行文字范围内、字形大小”的结构规则：中文行内的小图标也会被拒绝（误拦），不在行内的对象不检测；
 - Type3 字体的源文（如网页打印 PDF）英文无法沿用粗体；

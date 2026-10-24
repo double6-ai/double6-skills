@@ -97,18 +97,29 @@ def build_standard_bilingual_output(
     enabled: bool,
     render_mode: str = "pypdf-vector",
     raster_dpi: int = 144,
+    source_language: str | None = None,
+    target_language: str | None = None,
+    direction_basis: str | None = None,
 ) -> dict[str, Any]:
+    """标准双语 PDF：左页为源文页、右页为译文页（页序固定）。
+
+    文件名与清单语言标注只来自调用方传入的本次任务方向；未传入时不猜，
+    使用中性名称 `<stem>.source-left.translation-right.dual.pdf`，清单记 unknown。
+    """
     if not enabled:
         return {"status": "skipped", "reason": "dual_output_disabled", "layout": None}
+    direction = build_bilingual_pdf.bilingual_direction(source_language, target_language, basis=direction_basis)
+    fields = build_bilingual_pdf.direction_fields(direction)
     right_pdf_value = selected_outputs.get("mono_pdf") or selected_outputs.get("translated_pdf")
     if not right_pdf_value:
-        return {"status": "skipped", "reason": "missing_mono_translated_pdf", "layout": "en_left_zh_right"}
+        return {"status": "skipped", "reason": "missing_mono_translated_pdf", **fields}
     right_pdf = Path(right_pdf_value)
     if not right_pdf.exists():
-        return {"status": "skipped", "reason": "translated_pdf_not_found", "layout": "en_left_zh_right", "translated_pdf": str(right_pdf)}
+        return {"status": "skipped", "reason": "translated_pdf_not_found", **fields, "translated_pdf": str(right_pdf)}
     source_pdf = resolve_bilingual_source_pdf(input_pdf)
-    output_pdf = output_dir / f"{input_pdf.stem}.en-left.zh-right.dual.pdf"
-    manifest = build_bilingual_pdf.build_manifest(source_pdf, right_pdf, output_pdf, mode=render_mode, raster_dpi=raster_dpi)
+    output_pdf = output_dir / f"{input_pdf.stem}.{direction['name_infix']}.dual.pdf"
+    manifest = build_bilingual_pdf.build_manifest(source_pdf, right_pdf, output_pdf, mode=render_mode, raster_dpi=raster_dpi,
+                                                  direction=direction)
     if source_pdf != input_pdf:
         manifest["requested_source_pdf"] = str(input_pdf)
         manifest["resolved_source_pdf"] = str(source_pdf)
@@ -132,7 +143,9 @@ def maybe_build_visual_repair_output(
     translated = Path(str(selected_outputs.get("mono_pdf") or selected_outputs.get("translated_pdf") or ""))
     if not translated.is_file():
         return {"version": 1, "status": "skipped", "reason": "missing_translated_pdf", "selected_as_delivery": False}
-    structured_output_pdf = output_dir / f"{input_pdf.stem}.round38-structured-candidates.zh.mono.pdf"
+    # 候选页是译文单语页：语言标注取本次目标语言（英译中仍为 .zh.mono.pdf）。
+    candidate_language = "en" if str(getattr(args, "target_language", "zh") or "zh") == "en" else "zh"
+    structured_output_pdf = output_dir / f"{input_pdf.stem}.round38-structured-candidates.{candidate_language}.mono.pdf"
     structured_manifest_path = output_dir / "structured_visual_candidates_manifest.json"
     human_review_path = output_dir / "human_visual_review.json"
     try:
@@ -197,7 +210,7 @@ def mirror_latex_direct_bilingual_output(
     latex_pdf = Path(str(latex_pdf_value))
     if not latex_pdf.exists():
         return None
-    target = latex_pdf.with_name(f"{latex_pdf.stem}.en-left.zh-right.dual.pdf")
+    target = latex_pdf.with_name(f"{latex_pdf.stem}.{build_bilingual_pdf.name_infix_for(bilingual_manifest)}.dual.pdf")
     source = Path(str(bilingual_manifest["output_pdf"]))
     try:
         if source.resolve() != target.resolve():
@@ -429,6 +442,12 @@ def run_quality_check(output_dir: Path, render_manifest: dict[str, Any]) -> Path
     manifest["coverage_gate"] = manifest.get("coverage_gate") if isinstance(manifest.get("coverage_gate"), dict) else check_translation.build_coverage_gate(manifest, translation)
     term_policy = check_translation.build_term_policy(glossary, manifest=manifest, source=source)
     entity_map = check_translation.build_entity_map(manifest, glossary)
+    if str(render_manifest.get("target_language") or "") == "en":
+        from check_translation_gates import policies_for_target
+        term_policy, entity_map = policies_for_target(term_policy, entity_map, "en")
+    # 文字 QA 按本次任务记录的目标语言选择（render_manifest.target_language）；
+    # 中译英不把正常英文译文当“未译英文”，也不做英→中残留替换。
+    qa_target = str(render_manifest.get("target_language") or "") or None
     issues = check_translation.collect_issues(
         source,
         translation,
@@ -437,6 +456,7 @@ def run_quality_check(output_dir: Path, render_manifest: dict[str, Any]) -> Path
         protected_spans=protected_spans,
         translation_blocks=translation_blocks,
         render_manifest=render_manifest,
+        target_language=qa_target,
     )
     report_text = check_translation.render_quality_report(issues)
     visual_repair = policy_utils.load_json(output_dir / "visual_repair_manifest.json")
@@ -512,7 +532,7 @@ def run_quality_check(output_dir: Path, render_manifest: dict[str, Any]) -> Path
     repaired_translation, qa_repair_plan = repair_quality_issues.repair_translation(
         translation,
         affected_blocks,
-        repair_quality_issues.DEFAULT_RESIDUE_TRANSLATIONS,
+        {} if qa_target == "en" else repair_quality_issues.DEFAULT_RESIDUE_TRANSLATIONS,
     )
     repaired_path = quality_path.with_name("translation.qa_repaired.md")
     qa_repair_plan_path = quality_path.with_name("qa_repair_plan.json")
