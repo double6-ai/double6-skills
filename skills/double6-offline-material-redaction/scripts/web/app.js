@@ -24,7 +24,18 @@ function draw(extra=null) {
   $('region-count').textContent=`已框选 ${boxes.length} 处`;if(job?.kind==='pdf'){$('pdf-progress').textContent=`已查看 ${visited.size} / ${job.pages.length} 页；框选坐标使用当前页144dpi像素。`;}
 }
 function point(event) { const r=canvas.getBoundingClientRect();return [Math.max(0,Math.min(canvas.width,(event.clientX-r.left)*canvas.width/r.width)),Math.max(0,Math.min(canvas.height,(event.clientY-r.top)*canvas.height/r.height))]; }
-function addTerm(text) {text=text.trim();if(!text)return;const lines=$('terms').value.split('\n').filter(Boolean);if(!lines.includes(text))lines.push(text);$('terms').value=lines.join('\n');invalidate();}
+function encodeTerm(text) {return text.replace(/\\/g,'\\\\').replace(/\r\n/g,'\\n').replace(/\n/g,'\\n').replace(/\r/g,'\\n');}
+function decodeLine(line) {
+  let out='';
+  for (let i=0;i<line.length;i++) {
+    if (line[i]==='\\' && line[i+1]==='n') {out+='\n';i++;}
+    else if (line[i]==='\\' && line[i+1]==='\\') {out+='\\';i++;}
+    else out+=line[i];
+  }
+  return out.trim();
+}
+function decodeTerms(value) {return value?value.split('\n').map(decodeLine).filter(Boolean):[];}
+function addTerm(text) {text=text.trim();if(!text)return;const items=decodeTerms($('terms').value);if(!items.includes(text))items.push(text);$('terms').value=items.map(encodeTerm).join('\n');invalidate();}
 canvas.addEventListener('pointerdown',e=>{if(busy)return;invalidate();start=point(e);canvas.setPointerCapture(e.pointerId);});
 canvas.addEventListener('pointermove',e=>{if(start){const end=point(e);draw([...start,...end]);}});
 canvas.addEventListener('pointerup',async e=>{
@@ -74,7 +85,7 @@ $('file').onchange=async()=>{
       $('word-counts').textContent=kind==='word'?`检测到图片 ${job.removed.images} 个、批注部件 ${job.removed.comment_parts} 个、删除/移出修订 ${job.removed.deleted_or_moved_fragments} 处。`:Object.entries(job.removed||{}).map(([k,v])=>`${({hidden_sheets:'隐藏工作表',hidden_rows:'隐藏行',hidden_columns:'隐藏列',hidden_format_cells:'隐藏格式单元格',formulas:'缓存公式',uncached_formulas:'缺少缓存公式',hidden_slides:'隐藏幻灯片'})[k]||k}: ${v}`).join('；');
       $('suggestions').replaceChildren();
       for(const text of job.suggestions){const b=document.createElement('button');b.type='button';b.textContent=`补选：${text}`;b.onclick=()=>addTerm(text);$('suggestions').append(b);}
-      if(!job.suggestions.length)$('suggestions').textContent='未发现电话或邮箱格式；请自行检查姓名、机构和其它敏感文字。';
+      if(!job.suggestions.length)$('suggestions').textContent='未发现电话、邮箱、身份证或银行卡格式；请自行检查姓名、机构和其它敏感文字。建议不会自动套用。';
     }
     $('work').hidden=false;status();
   }catch(e){job=null;status(e.message);}finally{setBusy(false);}
@@ -84,7 +95,7 @@ $('export').onclick=async()=>{
   try{
     await revoking;
     if(job.kind==='pdf'){pdfBoxes[currentPage]=boxes;if(visited.size!==job.pages.length)throw new Error('请先逐页查看全部PDF，再导出。');}
-    const data=await request('api/export',JSON.stringify({id:job.id,output_format:$('output-format').value,pdf_mode:$('pdf-mode').value,rectangles:boxes,terms:$('terms').value.split('\n').map(x=>x.trim()).filter(Boolean),keep:(job.kind==='pdf'?$('pdf-keep'):$('keep')).value.split('\n').map(x=>x.trim()).filter(Boolean),reviewed:$('reviewed').checked,acknowledge_loss:job.kind==='pdf'?$('pdf-loss').checked:$('loss').checked,pages:Object.entries(pdfBoxes).filter(([,v])=>v.length).map(([page,rectangles])=>({page:Number(page),rectangles})),reviewed_pages:[...visited],clean_only:$('clean-only').checked}),{'Content-Type':'application/json'});
+    const data=await request('api/export',JSON.stringify({id:job.id,output_format:$('output-format').value,pdf_mode:$('pdf-mode').value,rectangles:boxes,terms:decodeTerms($('terms').value),keep:(job.kind==='pdf'?$('pdf-keep'):$('keep')).value.split('\n').map(x=>x.trim()).filter(Boolean),reviewed:$('reviewed').checked,acknowledge_loss:job.kind==='pdf'?$('pdf-loss').checked:$('loss').checked,pages:Object.entries(pdfBoxes).filter(([,v])=>v.length).map(([page,rectangles])=>({page:Number(page),rectangles})),reviewed_pages:[...visited],clean_only:$('clean-only').checked}),{'Content-Type':'application/json'});
     $('report-scope').textContent=data.report.scope;$('checks').replaceChildren();
     for(const [key,ok] of Object.entries(data.report.checks)){const li=document.createElement('li');li.textContent=(ok?'✓ ':'× ')+(checkNames[key]||key);$('checks').append(li);}
     for(const key of data.report.not_checked||[]){const li=document.createElement('li');li.textContent='未检查：'+(key==='keep_phrases_preserved'?'未声明关键保留项，请打开副本核对业务内容':key);$('checks').append(li);}

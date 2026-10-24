@@ -33,8 +33,8 @@ MAX_PDF_PIXELS = 40_000_000
 NOTICES = {
  'text':'完整原文按所选词替换，输出UTF-8文本；不执行文本内容。',
  'markdown':'预览展示Markdown源码，含链接、代码、注释与front matter；按完整源码替换，输出UTF-8，不自动清除未选中的文字。',
- 'csv':'保留行列和文字值，输出UTF-8 CSV；可能被表格软件执行的文本会加单引号。请核对原分隔符。',
- 'tsv':'保留行列和文字值，输出UTF-8 TSV；可能被表格软件执行的文本会加单引号。',
+ 'csv':'保留行列和文字值，输出UTF-8 CSV。普通负数保持原样；等号、加号、at，或减号后面不是普通数字的文本会加单引号。保留项按完整单元格核对。',
+ 'tsv':'保留行列和文字值，输出UTF-8 TSV。普通负数保持原样；等号、加号、at，或减号后面不是普通数字的文本会加单引号。保留项按完整单元格核对。',
  'excel':'仅重建可见工作表、可见行列中的值；移除隐藏表/行/列、公式、图表、图片、批注、链接、宏和原属性，工作表改名。公式仅采用文件缓存值，不重新计算；缺少缓存即停止。',
  'slides':'仅重建显示幻灯片的文字与表格，按阅读顺序重排；图片、图表、动画、备注、批注、隐藏页、母版和原属性不带入，不能保留原设计。',
  'pdf':'默认原生删改PDF，保留框外文字和页面。原属性、附件、链接与批注清理；复杂隐藏层/表单会停止。只有明确选择图像化才重建扫描式PDF。无OCR，需逐页核对。',
@@ -71,10 +71,7 @@ def replacement(preview,plan):
     terms=engine.terms_checked(plan.get('terms',[]))
     if not terms and plan.get('clean_only')is not True:raise Rejected('请补选原文；仅清理隐藏内容需明确选择。')
     if terms and plan.get('clean_only'):raise Rejected('仅清理隐藏内容与替换词不能同时使用。')
-    if any(x not in preview for x in terms):raise Rejected('有补选原文未在预览中找到，请核对准确原文。')
-    mapping={v:'【已隐去'+str(k+1)+'】'for k,v in enumerate(terms)}
-    rx=re.compile('|'.join(map(re.escape,terms)))if terms else None
-    return lambda s:rx.sub(lambda m:mapping[m.group()],s)if rx else s
+    return engine.prepare_replacement(preview, terms)
 
 
 def rows_text(rows):return '\n'.join('\t'.join(''if v is None else str(v)for v in row)for row in rows)
@@ -233,7 +230,7 @@ def inspect(data,category,encoding=None):
     elif category=='slides':_,removed,preview=slides_model(data)
     elif category=='pdf':return {'notice':NOTICES[category],'pages':[{'page':k+1,'width':w,'height':h}for k,(w,h)in enumerate(pdf_info(data))],'manual_rectangles_required':True}
     else:raise Rejected('不支持的格式。')
-    return {'preview':preview,'notice':NOTICES[category],'removed':removed,'suggestions':sorted(set(re.findall(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|(?<!\d)1\d{10}(?!\d)',preview)))}
+    return {'preview':preview,'notice':NOTICES[category],'removed':removed,'suggestions':engine.suggest_terms(preview)}
 
 
 def export(data,category,plan):
@@ -323,9 +320,76 @@ def export(data,category,plan):
     return output
 
 
+_PLAIN_NUMBER = re.compile(r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)%?')
+
+
+def _lead_body(text):
+    index = 0
+    while index < len(text) and (text[index].isspace() or unicodedata.category(text[index]) == 'Cf'):
+        index += 1
+    return text[index:]
+
+
+def _plain_number_cell(text):
+    if any(unicodedata.category(ch) == 'Cf' or (ch.isspace() and ch not in ' \t') for ch in text):
+        return False
+    core = text.strip(' \t')
+    return bool(core) and _PLAIN_NUMBER.fullmatch(core) is not None
+
+
 def safe_cell(text):
-    # 即便CSV用引号包围，Excel仍可能执行公式；不把可执行表达式带入。
-    return "'"+text if text.lstrip().startswith(('=','+','-','@'))or text.startswith(('\t','\r','\n'))else text
+    # 普通负数不是公式。公式字符前面的各类空白、换页和不可见字符仍要加单引号。
+    if text == '':
+        return text
+    if _plain_number_cell(text):
+        return text
+    body = _lead_body(text)
+    if text[:1] in '\t\r\n\f\v' or body[:1] in '=+-@':
+        return "'" + text
+    return text
+
+
+def _quoted_padding(cell, item):
+    body = cell.strip()
+    if not body.startswith("'"):
+        return False
+    return body[1:].strip() == item
+
+
+def cells_preserve_keep(source_rows, output_rows, keep):
+    """保留项按原单元格留下。引号、额外空格，以及工具新写的替换标记，都不算保留。"""
+    if source_rows is not None and (len(source_rows) != len(output_rows) or any(len(a) != len(b) for a, b in zip(source_rows, output_rows))):
+        raise Rejected('保留项核对时行列结构变了。')
+    for item in keep:
+        if source_rows is not None:
+            positions = [(r, c) for r, row in enumerate(source_rows) for c, value in enumerate(row) if item in value]
+            if not positions:
+                raise Rejected('保留项“' + item + '”在原文里没有，不能把新写入的替换标记当成保留。')
+            exact = [(r, c) for r, c in positions if source_rows[r][c] == item]
+            if exact:
+                if any(output_rows[r][c] != item for r, c in exact):
+                    raise Rejected('保留项“' + item + '”按完整单元格核对已变化。防公式处理只给真正的公式文本加引号；普通负数保持原样。')
+                continue
+            kept = False
+            for r, c in positions:
+                src = source_rows[r][c]
+                out = output_rows[r][c]
+                comparable = engine.strip_new_markers(src, out)
+                if item in comparable and not _quoted_padding(out, item) and not _quoted_padding(comparable, item):
+                    kept = True
+                    break
+            if not kept:
+                raise Rejected('保留项“' + item + '”没有按原单元格留下。加了引号、多了空格，或只出现在新的替换标记里，都不算保留。')
+            continue
+        hits = []
+        for row in output_rows:
+            for cell in row:
+                comparable = engine.strip_new_markers(None, cell)
+                if item in comparable and not _quoted_padding(cell, item):
+                    hits.append(cell)
+        if not hits:
+            raise Rejected('保留项“' + item + '”没有留下。')
+    return True
 
 
 def verify(data,category,plan,source=None):
@@ -336,9 +400,17 @@ def verify(data,category,plan,source=None):
         return verify_pdf(data,plan,source)
     checks={}
     info=inspect(data,category,plan.get('_verify_encoding',plan.get('input_encoding')));preview=info['preview'];terms=engine.terms_checked(plan.get('terms',[]))
-    checks['selected_strings_absent']=not any(x in preview for x in terms)
+    checks['selected_strings_absent']=not any(engine.term_remains(preview, x) for x in terms)
     keep=engine.keep_checked(plan.get('keep',[]))
-    if keep:checks['keep_phrases_preserved']=all(x in preview for x in keep)
+    if keep and category in ('csv','tsv'):
+        output_encoding=plan.get('_verify_encoding',plan.get('input_encoding'))
+        if data.startswith(b'\xef\xbb\xbf') and output_encoding in (None,'utf-8'):output_encoding=None
+        output_rows=csv_rows(data,category,output_encoding)
+        source_rows=csv_rows(source,category,plan.get('input_encoding')) if source is not None else None
+        checks['keep_phrases_preserved']=cells_preserve_keep(source_rows,output_rows,keep)
+    elif keep:
+        source_preview=inspect(source,category,plan.get('input_encoding'))['preview'] if source is not None else None
+        checks['keep_phrases_preserved']=engine.phrases_kept(source_preview,preview,keep)
     if category in ('text','markdown','csv','tsv'):
         checks['text_encoding_readable']=True
         if category in ('csv','tsv'):checks['formula_text_neutralized']=all(safe_cell(s)==s for row in csv_rows(data,category,plan.get('_verify_encoding',plan.get('input_encoding')))for s in row)
@@ -347,7 +419,7 @@ def verify(data,category,plan,source=None):
         for n,b in parts.items():
             if n.endswith(('.xml','.rels')):
                 root=engine.parse_xml(b);strings.append(''.join(root.itertext())+' '.join(v for el in root.iter()for v in el.attrib.values()))
-        checks['selected_strings_absent']=not any(x in s for x in terms for s in strings)
+        checks['selected_strings_absent']=not any(engine.term_remains(s, x) for x in terms for s in strings)
         checks['hidden_carriers_absent']=not any('/media/'in n or '/embeddings/'in n or'comment'in n.lower()or'vba'in n.lower()or n.startswith('customXml/')or'/notesSlides/'in n for n in parts)
         checks['external_links_absent']=not any(el.get('TargetMode')=='External'for n,b in parts.items()if n.endswith('.rels')for el in engine.parse_xml(b))
         checks['original_properties_absent']=not any(''.join(engine.parse_xml(parts[n]).itertext()).strip()for n in ['docProps/custom.xml']if n in parts)

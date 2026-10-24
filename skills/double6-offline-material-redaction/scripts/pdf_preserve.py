@@ -62,6 +62,66 @@ def areas(plan, sizes):
     return formats.pdf_boxes(plan, sizes)
 
 
+def without_annotation_appearance(data):
+    """删掉批注和链接后再按与正式导出相同的新容器重绘。
+
+    只在原件确有批注或链接时返回字节。框外复检拿它当基准，这样批注图标消失不算正文被改；没有批注时仍直接对比原页面，避免放宽其它框外差异。
+    """
+    fitz = backend()
+    with open_pdf(data) as doc:
+        changed = False
+        for page in doc:
+            annotations = list(page.annots() or [])
+            if any(a.type[0] == fitz.PDF_ANNOT_REDACT for a in annotations):
+                raise engine.Rejected('PDF已有未应用的涂黑标记，请先在原软件完成或移除后再检查。')
+            links = list(page.get_links())
+            if annotations or links:
+                changed = True
+            for annot in annotations:
+                page.delete_annot(annot)
+            for link in links:
+                page.delete_link(link)
+        if not changed:
+            return None
+        fresh = fitz.open()
+        fresh.insert_pdf(doc, links=False, annots=False, widgets=False)
+        fresh.set_metadata({})
+        output = fresh.tobytes(garbage=4, clean=True, deflate=True, no_new_id=True)
+        fresh.close()
+        return output
+
+
+def annotation_reveals_outside_text(page, boxes):
+    """盖子底下、框选范围外还有字形，删掉批注后正文就会露出来。
+
+    只认会挡住正文的批注。高亮、下划线、删除线、链接和便签图标不算；空白处的色块没有字形，也不算。
+    字形中心已经落在框里时，这段文字会被涂掉，不当成框外露出。
+    """
+    fitz = backend()
+    covers = {
+        fitz.PDF_ANNOT_FREE_TEXT,
+        fitz.PDF_ANNOT_SQUARE,
+        fitz.PDF_ANNOT_CIRCLE,
+        fitz.PDF_ANNOT_POLYGON,
+        fitz.PDF_ANNOT_INK,
+        fitz.PDF_ANNOT_STAMP,
+    }
+    annotations = [annot for annot in (page.annots() or []) if annot.type[0] in covers]
+    if not annotations:
+        return False
+    for span in page.get_texttrace():
+        for char in span['chars']:
+            if not chr(char[0]).strip():
+                continue
+            rect = fitz.Rect(char[3])
+            center = fitz.Point((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2)
+            if any(box.contains(center) for box in boxes):
+                continue
+            if any(annot.rect.intersects(rect) for annot in annotations):
+                return True
+    return False
+
+
 def word_rows(page, boxes):
     fitz = backend()
     result = []
@@ -132,12 +192,13 @@ def verify(data, plan, source):
     plan=effective_plan(source,plan)
     sizes = formats.pdf_info(source)
     selected = areas(plan, sizes)
+    pixel_source = without_annotation_appearance(source) or source
     expected=export(source,plan,_verify=False)
     if data != expected:
         raise engine.Rejected('PDF实际副本与本工具按同一原件和计划重新生成的结果不一致，未接受外部覆盖或额外载体。')
     checks = {'deterministic_pdf_matches_source_plan': True, 'pdf_not_rasterized': True, 'selected_text_removed': True,
               'outside_text_positions_preserved': True, 'outside_page_pixels_preserved': True,
-              'selected_regions_solid': True, 'pdf_hidden_objects_absent': True}
+              'covered_text_not_revealed': True, 'selected_regions_solid': True, 'pdf_hidden_objects_absent': True}
     try:
         with open_pdf(source) as before, open_pdf(data, inspect_image_visibility=False) as after:
             if len(before) != len(after):
@@ -163,7 +224,8 @@ def verify(data, plan, source):
                     checks['pdf_hidden_objects_absent'] = False
                 if page.first_annot or page.first_widget or page.get_links():
                     checks['pdf_hidden_objects_absent'] = False
-                old = formats.pdf_image(source, index)
+                # 有批注/链接时，基准是“只去掉这些对象、还没涂黑”的页面。图标消失因此不计入框外破坏；涂黑波及框外字形时，仍和这份基准不一致。
+                old = formats.pdf_image(pixel_source, index)
                 new = formats.pdf_image(data, index)
                 delta = ImageChops.difference(old, new)
                 for box in pixel_boxes:
@@ -175,12 +237,30 @@ def verify(data, plan, source):
                         checks['selected_regions_solid'] = False
                 if delta.getbbox() is not None:
                     checks['outside_page_pixels_preserved'] = False
+                # 与带批注的原页面再比一次。去掉浅色盖子后，框外若多出深色像素，就是被揭开的正文。
+                revealed = ImageChops.subtract(formats.pdf_image(source, index).convert('L'), new.convert('L'))
+                for box in pixel_boxes:
+                    x0, y0, x1, y1 = box
+                    revealed.paste(0, (max(0, x0 - 2), max(0, y0 - 2), min(new.width, x1 + 2), min(new.height, y1 + 2)))
+                if revealed.getextrema()[1] > 0:
+                    checks['outside_page_pixels_preserved'] = False
+                    checks['covered_text_not_revealed'] = False
+                # 黑盖子比底下的字更深时，揭开会变浅，上面的深色差发现不了。直接看盖子底下有没有框外字形。
+                if annotation_reveals_outside_text(original, boxes):
+                    checks['outside_page_pixels_preserved'] = False
+                    checks['covered_text_not_revealed'] = False
             keep = engine.keep_checked(plan.get('keep', []))
             if keep:
                 all_text = '\n'.join(p.get_text() for p in after)
                 checks['keep_phrases_preserved'] = all(x in all_text for x in keep)
         if not all(checks.values()):
-            raise engine.Rejected('PDF原生复检未通过：可能切到字形、影响框外内容或存在隐藏对象；请扩大框选或检查格式，不自动图像化。')
+            failed = {name for name, ok in checks.items() if not ok}
+            if failed == {'keep_phrases_preserved'}:
+                raise engine.Rejected('保留项没有对上：原文里没有这项，或副本里没有留下。未交付副本。')
+            revealed = ''
+            if checks.get('covered_text_not_revealed') is False:
+                revealed = '去掉批注后，原本看不见的正文变得可见。'
+            raise engine.Rejected('PDF原生复检未通过：可能切到字形、影响框外内容或存在隐藏对象；' + revealed + '请扩大框选或检查格式，不自动图像化。')
         return {'checks': checks, 'not_checked': [] if keep else ['keep_phrases_preserved'],
                 'effective_pages':plan.get('pages',[]),'output_sha256': engine.digest(data), 'scope': 'PDF原生删改；保留框外可搜索文字、位置和页面。仅核对已选区域及支持的隐藏载体。'}
     except engine.Rejected:
