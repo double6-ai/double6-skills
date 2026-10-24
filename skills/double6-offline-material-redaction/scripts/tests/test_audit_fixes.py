@@ -5,6 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 import engine
+import formats
 import output_policy as policy
 import pdf_preserve as pdf
 
@@ -66,6 +67,31 @@ class PdfAnnotationTests(unittest.TestCase):
         with self.assertRaises(engine.Rejected) as caught:
             policy.export(raw, ".pdf", _plan(partial))
         self.assertIn("框外", str(caught.exception))
+
+
+class TableKeepTests(unittest.TestCase):
+    def _plan(self, kind, terms, keep):
+        return {"version": 1, "kind": kind, "reviewed": True, "terms": terms, "keep": keep, "acknowledge_loss": True}
+
+    def test_plain_negative_stays_and_real_formulas_are_quoted(self):
+        raw = "姓名,金额\n张三,-120\n公式,=1+1\n危险,-2+3\n命令,@SUM(A1)\n加号,+1+1\n".encode()
+        for kind in ("csv", "tsv"):
+            text = raw.decode().replace(",", "\t") if kind == "tsv" else raw.decode()
+            out = formats.export(text.encode(), kind, self._plan(kind, ["张三"], ["-120"]))
+            rows = formats.csv_rows(out, kind)
+            self.assertEqual(rows[1][1], "-120")
+            self.assertEqual(rows[2][1], "'=1+1")
+            self.assertEqual(rows[3][1], "'-2+3")
+            self.assertEqual(rows[4][1], "'@SUM(A1)")
+            self.assertEqual(rows[5][1], "'+1+1")
+            self.assertNotIn("张三", str(rows))
+
+    def test_keep_sees_quoted_formula_as_changed(self):
+        raw = "姓名,公式\n张三,=1+1\n".encode()
+        with self.assertRaises(engine.Rejected) as caught:
+            formats.export(raw, "csv", self._plan("csv", ["张三"], ["=1+1"]))
+        self.assertIn("完整单元格", str(caught.exception))
+        self.assertIn("=1+1", str(caught.exception))
 
 
 if __name__ == "__main__":
