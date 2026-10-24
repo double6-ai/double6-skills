@@ -69,7 +69,7 @@ metadata:
 
 使用 macOS/Linux、Python 3.12。从 skill 目录执行 `bash scripts/setup_venv.sh /absolute/new/venv`，随后用该环境的 Python 运行 `scripts/paper_translation_workflow.py`。详见 [运行依赖](references/runtime-dependencies.md)。
 
-新翻译必须显式提供 `--base-url`、`--model` 及所需凭据；不自动选本机服务或替换模型。库存预检需显式给定 `--catalog-url`（不给则不探测库存，`inspect-input` 照常输出事实）。运行目录可通过 `PAPER_TRANSLATION_WORKSPACE` 指定；输入、输出及回执用绝对路径，输出选全新目录。联网获取源码、字体或模型须明确授权并记录来源。
+新翻译必须显式提供 `--base-url`、`--model` 及所需凭据（只经环境变量 `LOCAL_TRANSLATION_API_KEY` 提供，不进入子进程命令行；回环地址未提供时用 `local-no-auth` 占位，远端未提供即在启动任何子进程前报 `remote_backend_requires_explicit_api_key`；详见[运行依赖](references/runtime-dependencies.md#翻译服务凭据)）；不自动选本机服务或替换模型。库存预检需显式给定 `--catalog-url`（不给则不探测库存，`inspect-input` 照常输出事实）。运行目录可通过 `PAPER_TRANSLATION_WORKSPACE` 指定；输入、输出及回执用绝对路径，输出选全新目录。联网获取源码、字体或模型须明确授权并记录来源。
 
 主入口电子 PDF 与可信 LaTeX 的完整输入限 1–5 页。LaTeX 保护拒绝后的完整单元修订和断点恢复见 [恢复说明](references/latex-recovery.md)。`preflight` / `deliver` 仍使用严格门；有限交付只适用于具名接受的精确 PDF 及披露的限制。缺少语义、视觉、阅读器或重建证据时保留未验证。
 

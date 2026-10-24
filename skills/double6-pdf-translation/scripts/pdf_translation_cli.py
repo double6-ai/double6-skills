@@ -21,7 +21,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--model", default=os.environ.get("LOCAL_TRANSLATION_MODEL"))
     parser.add_argument("--base-url", default=os.environ.get("LOCAL_TRANSLATION_BASE_URL"))
-    parser.add_argument("--api-key", default=os.environ.get("LOCAL_TRANSLATION_API_KEY", DEFAULT_API_KEY))
+    parser.add_argument("--api-key", default=os.environ.get("LOCAL_TRANSLATION_API_KEY", DEFAULT_API_KEY),
+                        help="兼容保留：会出现在本进程 argv。请改用环境变量 LOCAL_TRANSLATION_API_KEY；"
+                             "回环地址未给时用 local-no-auth 占位，远端未给时启动子进程前报 remote_backend_requires_explicit_api_key。")
     parser.add_argument("--translator-mode", choices=["auto", "openai", "qwen-cli"], default=os.environ.get("PDF_TRANSLATION_TRANSLATOR_MODE", DEFAULT_TRANSLATOR_MODE))
     parser.add_argument('--translation-transport',choices=['openai_compatible','lmstudio_native_chat_v1'],default='openai_compatible',help='显式native启用源段落代理与无历史reasoning:off合同；默认保留OpenAI协议。')
     parser.add_argument(
@@ -179,7 +181,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--bilingual-layout",
         choices=["en-left-zh-right", "backend-default", "off"],
         default=os.environ.get("PAPER_TRANSLATION_BILINGUAL_LAYOUT", "en-left-zh-right"),
-        help="Final bilingual PDF layout. Default rebuilds dual PDF as original English left, Chinese translation right.",
+        help="Final bilingual PDF layout. Default rebuilds dual PDF as source page left, translated page right (both directions; the value name is historical).",
     )
     parser.add_argument(
         "--bilingual-render-mode",

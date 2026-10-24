@@ -117,6 +117,7 @@
 - `vendor/pdfmathtranslate_next/pdf2zh_next/gui.py`
 - `vendor/pdfmathtranslate_next/pdf2zh_next/high_level.py`
 - `vendor/pdfmathtranslate_next/pdf2zh_next/main.py`
+- `vendor/pdfmathtranslate_next/pdf2zh_next/translator/translator_impl/openai.py`
 - `vendor/pdfmathtranslate_next/pdf2zh_next/translator/utils.py`
 - `vendor/pdfmathtranslate_next/pyproject.toml`
 
@@ -205,3 +206,28 @@
   - PR #24 review-2：`line_fragments.py` 新增 `VALUE_TOKEN`、`ANCHOR_TOLERANCE`、`_segment_text`、`_stacks`；
     `_column_evidence` 增加“数据行相邻值记号在此分开且右值与他行片段列锚点对齐”的证据。新增 `tests/test_table_value_columns.py`
     与夹具 `arxiv2512.18979-p5-table2-header.json`。
+
+## 凭据通道维护改动（2026-10-24）
+
+- 第一方：新增 `scripts/credential_env.py`（唯一入口 `LOCAL_TRANSLATION_API_KEY`、回环占位、远端缺凭据错误、后端环境清理）与 `scripts/credential_forwarder.py`（只绑定 `127.0.0.1` 的一次性令牌转发器，仅供未分发的旧 LaTeX 直连后端）；`pdf_translation_commands.py` 不再把凭据放进后端/适配器/LaTeX 直连命令行；`pdf_translation_render.py` 经 `PDF2ZH_OPENAI_API_KEY` 传入并清除继承的 `PDF2ZH_OPENAI_API_KEY`、`LOCAL_TRANSLATION_API_KEY`、`OPENAI_API_KEY`、`PDF2ZH_DEBUG`；`qwen_pdf2zh_cli_translator.py` 从环境读取，`--api-key` 兼容保留；`pdf_translation_latex_render.py`、`pdf_translation_paths.py`（`latex_direct_backend_status`）、`paper_translation_workflow.py`（doctor）、`daily_skill_research/execution.py`（回执脱敏，纵深防御）。
+- vendored PDFMathTranslate-next：`pdf2zh_next/translator/translator_impl/openai.py` 只增加一项缓存影响参数 `base_url`（不同服务端点不复用译文；凭据不入缓存身份）。未改其配置解析、日志、`clitranslator.py` 与请求协议：凭据经其既有的 `PDF2ZH_` 环境变量配置通道（`config/main.py`）传入，命令行不再含凭据，因此其 DEBUG 命令日志、`CalledProcessError`、tenacity 重试日志与缓存库不再出现凭据。
+- `PDF2ZH_DEBUG`：后端在调试模式下记录完整配置（含 `openai_api_key`，`main.py` 与 `config/main.py`），因此不再透传给后端子进程。
+- PR #25 review-1（兼容代理背后的真实上游与缓存身份）：第一方新增 `scripts/upstream_identity.py`；`hymt_compat_proxy.py` 增加 `GET <base_url>/double6/upstream-identity` 与每个响应头 `X-Double6-Upstream-Identity`（只在本项目回环代理上，不改上游请求）；`pdf_translation_commands.build_qwen_cli_command` 在回环端点声明身份时追加 `--upstream-identity`，`qwen_pdf2zh_cli_translator.py` 逐次核对。vendored `openai.py`：`base_url` 缓存参数改为规范化端点（去 userinfo/凭据类查询参数），回环端点声明身份时再加缓存参数 `upstream_identity`，并在 httpx 响应钩子里核对身份头，不一致即抛错（不写缓存）。仍未改其配置解析、`clitranslator.py` 与 OpenAI 请求体。
+
+## 公式结构与可读版保真维护改动（2026-10-24）
+
+- vendored BabelDOC `format/pdf/document_il/midend/styles_and_formulas.py`：新增 `SYNTHETIC_SPACE_SCRIPT_SIZE_RATIO`、`SYNTHETIC_SPACE_SCRIPT_MIN_OFFSET`、`_is_synthetic_space`、`script_vertical_offset`、`_is_script_after_synthetic_space`；`_classify_characters_in_composition` 在原角标规则之外，把“合成空格（`pdf_character_id` 为空）后、基字已是公式、字号 < 0.79 基字且竖向偏移 ≥ 0.15 字号”的字符判为角标。原角标规则与其它分组逻辑不变。文件头维护日期更新为 2026-10-24。
+- 第一方：新增 `scripts/formula_structure_check.py`（源/成品上/下标关系提取与整份文档匹配）；`qa_pipeline.py` 新增 `formula_structure_gate`、`readable_fidelity_receipt` 并接入 `attach_pipeline_quality`；`render_readable_pdf.py` 改为数学页整页矢量复制、文字页重排并逐码位核对、写出前拒绝（原 reportlab 重排逻辑保留为 `_reflow_pdf`）；`pdf_translation_artifacts.render_qa_repaired_pdf` 传入主版式成品、源 PDF 与修复前译文，标题取原文件名；`pdf_translation_render.py` 传入主版式成品路径；`paper_translation_workflow.quality_verdict` 增加 `formula_structure`、`readable_output`。
+- 第一方（PR #25 review-3）：`render_readable_pdf.render_pdf` 在有源 PDF 时先取源 PDF 逐页数学证据，原文含数学即做源↔主版式结构核对（不再只在主版式有数学页时才核对）、比对原文数学页在主版式是否仍有数学证据（页数不同按整份）；新增拒绝码 `readable_math_structure_unverifiable`。新增 `tests/test_pr25_review3_readable_source_math.py`。
+- 第一方（PR #25 review-4）：`render_readable_pdf.py` 新增 `explicit_input_unavailable`，显式提供的原件、主版式成品、修复前译文不可用时稳定拒绝或按无主版式处理，不再静默跳过；`pdf_translation_artifacts.render_qa_repaired_pdf` 原样传入显式路径。新增 `tests/test_pr25_review4_unavailable_source.py`。
+
+## 失败根因上浮维护改动（2026-10-24）
+
+- 第一方：新增 `scripts/failure_root_cause.py`（本尝试结构化产物 → 稳定原因码与细节；根因回执 `BACKEND_FAILURE_ROOT_CAUSE.json` 写出与父任务核对）。`paper_translation_workflow.py`：新增 `BackendFailure`、`attach_root_cause`、`child_marker`；`execute_digital` 记本尝试开始时间与 FREEZE 路径；`finish_digital_result` 在后端未产出候选时写根因回执并抛 `BackendFailure`（改路线仍是原 ValueError）；`main`/`structured_failure` 为它输出精简结构化行与 `root_cause`；`run_job` 上浮核对后的根因（状态不变）。`chunked_workflow.py`：新增 `child_envelope`、`failure_root_cause`、`quality_reasons`、`failure_identity`、`DETERMINISM_IMPLEMENTATION`；`classify` 对已核实的确定性根因返回 `blocked`、资源类返回 `resource_stop`；`run` 记录每次尝试根因、块失败根因/首个根因/身份，续跑跳过身份一致的确定性失败，整份回执上浮 `root_cause`/`root_causes`/`deterministic_failures_not_reexecuted`。`CHUNKING_CONTRACT` 未改。新增 `tests/test_pr25_review5_failure_root_cause.py`。
+
+## 方向 QA 与双语标注维护改动（2026-10-24）
+
+- 第一方：`check_translation_gates.py` 新增 `resolve_qa_target_language`、`direction_issues`、`policies_for_target`，`collect_issues` 增加 `target_language` 参数并按目标语言选择残留检查与术语策略；`check_render_manifest` 增加 `target_language`。`check_translation_residue.py` 新增 `check_untranslated_chinese`、`strip_zh_reference_lines`（`check_translation.py` 兼容导出）。`pdf_translation_artifacts.run_quality_check` 按 `render_manifest.target_language` 调用 QA，中译英不做英→中残留替换并按目标过滤写出的术语/实体策略。`check_translation_reports.render_quality_report` 增加 `target_language`（只影响检查项与指标标注，未给出时与历史输出一致）；`check_translation_repairs` CLI 增加可选 `--target-language` 并按目标过滤术语/实体策略。
+- 第一方：`build_bilingual_pdf.py` 新增 `bilingual_direction`、`direction_fields`、`name_infix_for` 与 CLI `--source-language/--target-language`；历史函数名 `build_en_left_zh_right_pdf*` 保留，清单 `layout` 等改由方向参数给出（未传为中性）。`build_standard_bilingual_output` 新增 `source_language/target_language/direction_basis`；`pdf_translation_render.py` 传入本次声明方向并在 `render_manifest.json` 记录；扫描栅格路线三处调用显式声明英译中。双语视觉与交付门提示改为“译文侧（右）/原文侧（左）”。Round38 候选单语页按目标语言命名。
+- 第一方（2026-10-24 第七轮复核）：`check_translation_residue.py` 新增 `reference_entry_lines`、`zh_reference_entry_class`、`is_reference_heading_line`、`is_reference_region_end`；`strip_zh_reference_lines` 与 `strip_role_passthrough_lines` 只剔除“带原逐行文献标记且属于有条目结构证据的条目块”的行，逐块判定复用 `render_residue_check.headingless_entry_class`/`_decide_entries`，区域在附录类标题或 Markdown 标题处结束。新增 `tests/test_pr25_review7_reference_entries.py`。
+

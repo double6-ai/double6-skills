@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from assess_delivery import inspect_pdf, read_object, sha256
-from build_bilingual_pdf import build_en_left_zh_right_pdf
+from build_bilingual_pdf import bilingual_direction, build_en_left_zh_right_pdf
 from scanned_raster.pipeline import _render_translated_pdf, _normalize_inline_math_for_text_layer
 from scanned_raster.quality_gate import evaluate_scan_quality_gate
 from scanned_raster.scientific_integrity import scientific_integrity_findings
@@ -202,7 +202,8 @@ def recover(source_run: Path, output: Path, repair_path: Path, *, max_pages: int
     parsed.update(reviewed_region_repairs=str(output / "scan_recovery_receipt.json"), original_parse_manifest=str(source_run / "scan_parse_manifest.json"), render_font=font)
     write(output / "scan_parse_manifest.json", parsed)
     dual = output / "bilingual.review.pdf"
-    write(output / "bilingual_pdf_manifest.json", build_en_left_zh_right_pdf(source, primary, dual))
+    write(output / "bilingual_pdf_manifest.json", build_en_left_zh_right_pdf(
+        source, primary, dual, direction=bilingual_direction("en", "zh", basis="route_contract_scanned_raster_en_to_zh")))
     write(output / "render_manifest.json", {"status": "partial", "actual_render_source": "scanned_raster", "delivery_mode": "experimental_candidate_pending_review", "outputs": {"translated_pdf": str(primary), "standard_bilingual_pdf": str(dual)}})
     receipt.update(status="rendered_pending_review", gate_status=gate["status"], candidate_sha256=sha256(primary), original_unchanged=all(sha256(source_run / name) == value for name, value in frozen.items()))
     write(output / "scan_recovery_receipt.json", receipt)

@@ -63,6 +63,23 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
      内部超时后任务以 `owned_descendants_after_command` 结束，原先按瞬时失败重试，第二次靠翻译缓存在 74–114 s 内完成；
      现在与任务超时同样二分，不依赖缓存。
    - 瞬时失败（内部错误等）重试 1 次；预检/路由/OCR 门拦截（`blocked`）与综合质量 `fail` 是确定结果，不重试。
+   - 后端未产出候选时的根因（`scripts/failure_root_cause.py`，协议 `backend_failure_root_cause_v1`）：子任务
+     `_execute-digital` 只读**本尝试**输出目录内的结构化产物——排版回执 `_backend_working/<stem>/typesetting_writeback_report.json`
+     与 `render_manifest.json`——得到稳定原因码与细节，连同本尝试身份（launch nonce、块 FREEZE 引用、输出目录、开始时间）和
+     证据 sha 写 `out/BACKEND_FAILURE_ROOT_CAUSE.json`；父任务按该次有界任务 argv 的 `--output-dir`/`--freeze` 与 launch 回执
+     nonce 逐项核对回执和证据 sha 后才采信（`root_cause.verified=true`）。不做日志关键字匹配，不读其它尝试的回执。
+     | 原因码 | 来源 | 处理 |
+     |---|---|---|
+     | `typesetting_source_fallback_cap_exceeded` | 排版回执 `source_fallback_cap.status=revoked_cap_exceeded`（细节：scope、页、count、cap、整份计数/上限） | 确定，不重试 |
+     | `typesetting_readable_floor_overflow` | 排版回执 `failures[].reason=hard_readable_floor_overflow`（细节：页、段数） | 确定，不重试 |
+     | `typesetting_writeback_failed` | 排版回执其它写回失败 | 确定，不重试 |
+     | 子任务自身的合同/输入拒绝（如 `input_or_contract_invalid`） | 子任务结构化 stdout 全文（未截断、sha 一致、退出码 2）；锁/I/O 码除外 | 确定，不重试 |
+     | `pdf_backend_timeout` | `render_manifest.errors` 的 `timeout` | 资源停止，二分（同 `backend_timeout`） |
+     | `root_cause_unavailable` | 证据缺失、不可读、早于本尝试、不在本尝试目录内、回执身份/sha 不符（`problem` 写明） | 不猜：按既有瞬时失败重试 1 次 |
+     本地 5xx/断连实测后端没有写出任何结构化证据（只在日志里），因此记 `root_cause_unavailable` 并按瞬时失败重试，不把
+     任意非零退出当作确定性失败。根因写入块 `CHUNK_RESULT.json`、`CHUNKED_RUN_STATE.json`（每次尝试 `root_cause`，块
+     `failure.root_cause` / `first_root_cause`）与整份回执（`root_cause` = 按页序第一块，`root_causes` = 全部失败块）。
+     质量门/可读版的原因码（`quality_fail_reasons` 的 id、公式层级门、可读版 `reason_code`）随完成块上浮到 `chunks[].quality_reasons`。
    - 尝试后核查（`post_attempt_guard`，协议 `launch_receipt_recovery_scan_v2`）：每次尝试结束后，对本尝试**每张** launch 回执
      做整树核实：先只读预检（与回收同一套恢复扫描——环境变量 `PAPER_TRANSLATION_BOUNDED_OWNERS` 里的本次 nonce、本次进程组、
      逐环核验身份的父链），只有“扫描完整、无所属存活、无归属未知、根已退出或号码已复用、原进程组已空”才记为已无残留；
@@ -95,7 +112,7 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
 |---|---|---|
 | 全部块完成，合并质量 `pass`/`unverified` | `candidate` | 0 |
 | 全部块完成，合并质量 `fail`（任一块 fail 或合并核对 high） | `candidate`，`quality_status=fail` | 3 |
-| 任一块没有产物（门拦截、单页超预算、重试后仍失败、清理无法核实 `chunk_cleanup_unconfirmed`） | `blocked` / `chunk_failed`（`findings[0].details.chunks` 列出每块原错误码），**不合并、不交付部分结果** | 2 |
+| 任一块没有产物（门拦截、确定性后端失败、单页超预算、重试后仍失败、清理无法核实 `chunk_cleanup_unconfirmed`） | `blocked` / `chunk_failed`（`findings[0].details.chunks` 列出每块原错误码与根因；`root_cause` / `root_causes` 上浮），**不合并、不交付部分结果** | 2 |
 | 合并任务未完成 | `blocked` / `chunk_merge_failed` | 2 |
 | 续跑前遗留进程树无法核实已回收 | `blocked` / `owned_tree_cleanup_unconfirmed` | 2 |
 | 预检/FREEZE/合同问题 | 与 `candidate` 相同（`page_limit_exceeded`、`input_or_contract_invalid` 等） | 2 |
@@ -114,6 +131,10 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
 - 已完成块只有在块 PDF、块 FREEZE、主版式译文、QA 可读件、综合质量、渲染清单、块回执（扫描块另含 OCR 重建源）的
   sha 全部一致时才复用；任何一个变化 → 记录 `invalidated.changed` 并重跑该块。
 - 每次调用的合并输出写到新的 `merged-N/`，不覆盖上一次。
+- 已登记的确定性失败（`failure.deterministic=true`，根因已核实）不重跑：续跑时比对登记的输入与配置身份（块 PDF、页范围、
+  路线、整份运行身份、计划、该尝试的块 FREEZE、决定排版结果的实现文件 sha），一致即保留原失败、首个根因与全部尝试记录
+  （块记 `not_reexecuted_by_invocations`，整份回执列 `deterministic_failures_not_reexecuted`），整份仍 `chunk_failed`、
+  不部分交付；任何一项变化则照常重跑。`root_cause_unavailable` 等非确定失败续跑时照常重跑。
 
 ## 限制
 

@@ -37,6 +37,24 @@ def default_engine_home() -> Path:
 def vendored_pdf2zh_skill_root() -> Path:
     return Path(__file__).resolve().parents[1] / "vendor" / "pdf2zh_skill"
 
+def latex_direct_backend_status() -> dict[str, Any]:
+    """LaTeX 直连后端 ``pdf2zh_skill``（本仓库未随包分发，见 references/runtime-dependencies.md）是否可用。
+
+    只做定位（不导入、不执行其代码）：vendor 目录或当前解释器可找到顶层包。"""
+    import importlib.util
+    root = vendored_pdf2zh_skill_root()
+    if (root / "pdf2zh_skill" / "cli.py").is_file():
+        return {"available": True, "module": "pdf2zh_skill", "location": "vendored", "path": str(root)}
+    try:
+        spec = importlib.util.find_spec("pdf2zh_skill")
+    except (ImportError, ValueError):
+        spec = None
+    if spec is not None:
+        return {"available": True, "module": "pdf2zh_skill", "location": "installed",
+                "path": str(spec.origin or (list(spec.submodule_search_locations or []) or [None])[0])}
+    return {"available": False, "module": "pdf2zh_skill", "location": None, "searched": [str(root), "sys.path"],
+            "reason": "dependency_not_shipped_in_this_repo"}
+
 def latex_translation_after_writeback_repair(source: str, translation: str) -> str:
     """返回 LaTeX 写回前实际会进入 TeX 的译文口径。"""
     try:

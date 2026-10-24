@@ -4,7 +4,8 @@
 from __future__ import annotations
 from check_translation_context import *
 
-def render_quality_report(issues: list[Issue]) -> str:
+def render_quality_report(issues: list[Issue], *, target_language: str | None = None) -> str:
+    """target_language 只决定检查项与指标的语言标注；未给出时保持历史英译中写法。"""
 
     from check_translation_core import excerpt
     high_count = sum(1 for item in issues if item.severity == "high")
@@ -15,6 +16,7 @@ def render_quality_report(issues: list[Issue]) -> str:
         "entity_error_count": category_counts.get("entity_accuracy", 0),
         "terminology_issue_count": category_counts.get("terminology", 0),
         "english_residue_count": sum(1 for item in issues if item.title in {"疑似大段英文未翻译", "疑似英文单词残留"}),
+        **({"chinese_residue_count": sum(1 for item in issues if item.title in {"疑似大段中文未翻译", "中文残留待术语策略确认（needs_term_policy）"})} if target_language == "en" else {}),
         "coverage_warn_fail_count": sum(1 for item in issues if item.category == "coverage" and item.severity in {"high", "medium"}),
         "source_quality_warn_fail_count": sum(1 for item in issues if item.category == "source_quality" and item.severity in {"high", "medium"}),
     }
@@ -26,6 +28,7 @@ def render_quality_report(issues: list[Issue]) -> str:
         f"- 高风险问题：{high_count}",
         f"- 中风险问题：{medium_count}",
         f"- 总问题数：{len(issues)}",
+        *([f"- 文字 QA 目标语言：`{target_language}`"] if target_language else []),
         "",
         "## MQM 问题类型统计",
         "",
@@ -72,7 +75,7 @@ def render_quality_report(issues: list[Issue]) -> str:
             "",
             "- 术语表一致性",
             "- LLM/LLMs 等缩写误译",
-            "- 疑似大段英文未翻译",
+            "- 疑似大段中文未翻译（英文译文中的中文残留）" if target_language == "en" else "- 疑似大段英文未翻译",
             "- Markdown 章节结构缺失",
             "- 数字事实、百分比和比较关系一致性",
             "- 源文本抽取质量风险",
@@ -177,7 +180,8 @@ def build_quality_report(
     translation_blocks: list[dict[str, Any]] | None = None,
     render_manifest: dict[str, Any] | None = None,
 ) -> str:
-    from check_translation_gates import collect_issues
+    from check_translation_gates import collect_issues, resolve_qa_target_language
+    direction = resolve_qa_target_language(None, manifest, render_manifest)
     return render_quality_report(
         collect_issues(
             source,
@@ -187,7 +191,8 @@ def build_quality_report(
             protected_spans=protected_spans,
             translation_blocks=translation_blocks,
             render_manifest=render_manifest,
-        )
+        ),
+        target_language=direction.get("target_language"),
     )
 
 

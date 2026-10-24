@@ -77,7 +77,7 @@ def run_mixed_cover(input_pdf: Path, output_dir: Path, route: dict, args: Any, *
                     body_runner: Callable, cover_runner: Callable | None = None) -> dict:
     import fitz
     from .pipeline import run_scanned_translation
-    from build_bilingual_pdf import build_manifest
+    from build_bilingual_pdf import bilingual_direction, build_manifest
     cover_runner = cover_runner or run_scanned_translation
     plan = cover_plan(route.get('pages', []), max_pages=getattr(args, 'mixed_max_pages', 5))
     if (not plan or route.get('document_route') != 'mixed_cover_digital'
@@ -189,7 +189,8 @@ def run_mixed_cover(input_pdf: Path, output_dir: Path, route: dict, args: Any, *
         side_check = None
         if getattr(args, 'dual', True) and getattr(args, 'bilingual_layout', 'en-left-zh-right') != 'off':
             target = output_dir / 'bilingual_mixed.pdf'
-            bilingual = build_manifest(input_pdf, mono, target)
+            bilingual = build_manifest(input_pdf, mono, target,
+                                       direction=bilingual_direction('en', 'zh', basis='route_contract_scanned_raster_en_to_zh'))
             _write(output_dir / 'bilingual_pdf_manifest.json', bilingual)
             if bilingual.get('status') != 'ok':
                 raise ValueError('mixed bilingual build failed')

@@ -190,7 +190,7 @@ def build_delivery_gates(
         if isinstance(item, dict) and item.get("delivery_blocking") and item.get("severity") == "warn"
     ]
     if delivery_dual_blocking:
-        add("dual_visual", "blocking", json.dumps(delivery_dual_blocking[:3], ensure_ascii=False), "标准双语 PDF 存在中文侧空白或英文侧背景漂移，不能作为合格双语交付。")
+        add("dual_visual", "blocking", json.dumps(delivery_dual_blocking[:3], ensure_ascii=False), "标准双语 PDF 存在译文侧（右）空白或原文侧（左）背景漂移，不能作为合格双语交付。")
     elif delivery_dual_warn:
         add("dual_visual", "warn", json.dumps(delivery_dual_warn[:3], ensure_ascii=False), "标准双语 PDF 有轻度视觉风险，需抽样复查。")
     else:
@@ -532,7 +532,7 @@ def build_fast_full_translation_draft_gates(
             },
             ensure_ascii=False,
         ),
-        "fast draft 仍要求生成英文左/中文右双语 PDF。",
+        "fast draft 仍要求生成源文左/译文右双语 PDF。",
     )
     backend_status = str(backend_quality.get("status") or "unknown")
     add(

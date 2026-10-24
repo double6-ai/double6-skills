@@ -17,6 +17,7 @@ import time
 import urllib.request
 
 from bounded_execution import run_bounded, snapshot
+import failure_root_cause
 from cutover.scoped import check_scoped_preflight, sha
 from pdf_input_preflight import DIGITAL_MAX_PAGES, PreflightError, blocked_result, finding, inspect_pdf
 from resource_limits import (ResourceLimitError, backend_timeouts, limits_from_frozen_contract, recommended_contract,
@@ -38,6 +39,14 @@ PDF_BACKEND_ROUTES = ('digital_pdf', 'scanned_ocr')
 CHUNK_ROUTES = ('digital_pdf', 'scanned_ocr', 'per_chunk')
 PER_CHUNK_ROUTING = {'selection':'per_chunk_explicit','native_text_pages':'digital_pdf','scanned_pages':'scanned_ocr',
                      'sparse_pages':'attach_to_neighbour_run','digital':DIGITAL_ROUTING,'scanned':OCR_ROUTING}
+
+
+class BackendFailure(ValueError):
+    """PDF 后端没有产出候选：携带本尝试结构化产物给出的根因（稳定原因码 + 细节）与根因回执引用。"""
+
+    def __init__(self, root_cause, receipt_ref):
+        super().__init__(root_cause.get('code') or failure_root_cause.UNAVAILABLE)
+        self.root_cause, self.receipt_ref = root_cause, receipt_ref
 
 
 def write_new(path, value):
@@ -85,9 +94,14 @@ def doctor(base_url, model=MODEL, provider_generation_required=True, include_ocr
                     for name in ('fitz', 'psutil', 'PIL', 'requests', 'pdf2zh_next', 'babeldoc')}
     blockers = [f'missing_dependency:{name}' for name, present in dependencies.items() if not present]
     models = []
-    if provider_generation_required:
+    from credential_env import CREDENTIAL_ENV, REMOTE_REQUIRES_KEY, credential_source, is_loopback_endpoint
+    # 与运行入口同一来源：只读 LOCAL_TRANSLATION_API_KEY（不再静默采用 OPENAI_API_KEY）；只报告来源，不记录值。
+    credential = credential_source(os.environ)
+    api_key = os.environ.get(CREDENTIAL_ENV) or None
+    if provider_generation_required and not api_key and not is_loopback_endpoint(base_url):
+        blockers.append(REMOTE_REQUIRES_KEY)
+    elif provider_generation_required:
         try:
-            api_key = os.environ.get('LOCAL_TRANSLATION_API_KEY') or os.environ.get('OPENAI_API_KEY')
             headers = {'Authorization': 'Bearer ' + api_key} if api_key else {}
             request = urllib.request.Request(base_url.rstrip('/') + '/models', headers=headers)
             with urllib.request.urlopen(request, timeout=5) as response:
@@ -107,6 +121,7 @@ def doctor(base_url, model=MODEL, provider_generation_required=True, include_ocr
             'model_identity': 'served model ID only; weight/provider fingerprint requires separate frozen evidence',
             'scan_dependencies_required': False, 'model_calls': 0,
             'provider_generation_required':provider_generation_required,
+            'credential': credential,
             'resources': {key: memory[key] for key in ('total', 'available', 'swap_used', 'codex')},
             'supported_routes': list(ROUTES),
             'recommended_resource_contract': recommended_contract(),
@@ -263,6 +278,22 @@ def run_job(args, command, operation, interval_seconds=2):
     if child:
         # 子任务以结构化 JSON 报告的预检/路由拒绝：上浮为 blocked，并保留错误码与发现。
         result.update(status='blocked', error_code=child.get('error_code'), findings=child.get('findings', []))
+    else:
+        attach_root_cause(result)
+    return result
+
+
+def attach_root_cause(result):
+    """PDF 后端未产出候选（子任务结构化行带 root_cause_ref）：只采信本尝试输出目录内、身份（argv 的 --output-dir /
+    --freeze、launch 回执 nonce）与 sha 逐项核对一致的根因回执；状态不变（仍是 failed），只补稳定原因码、
+    结构化细节与回执引用。核对不了 → root_cause_unavailable（verified=False）。"""
+    envelope = child_marker(result)
+    if not envelope or 'root_cause_ref' not in envelope or result.get('status') != 'failed' or result.get('error_code'):
+        return result
+    cause = failure_root_cause.verify_for_result(result, envelope['root_cause_ref'])
+    result.update(error_code=cause['code'], root_cause=cause,
+                  findings=[finding(cause['code'], failure_root_cause.message(cause), stage=cause.get('stage'),
+                                    retry=cause.get('retry'), verified=cause.get('verified'))])
     return result
 
 
@@ -374,6 +405,13 @@ def quality_verdict(output_dir, manifest=None):
     reference_exclusion = quality.get('reference_exclusion') or manifest.get('reference_exclusion')
     if reference_exclusion:
         verdict['reference_exclusion'] = reference_exclusion
+    # 公式上/下标层级门与可读版数学保真结论（拒绝时带稳定 reason_code）。
+    structure = quality.get('formula_structure_check')
+    if isinstance(structure, dict) and structure.get('status'):
+        verdict['formula_structure'] = {k: structure.get(k) for k in ('status', 'severity', 'lost', 'flagged_pages')}
+    readable = quality.get('readable_output')
+    if isinstance(readable, dict) and readable.get('status'):
+        verdict['readable_output'] = {k: readable.get(k) for k in ('status', 'reason_code', 'vector_pages')}
     if status == 'fail':
         verdict.update(quality_gate_failure(output_dir, manifest))
     return verdict
@@ -430,7 +468,8 @@ def quality_gate_failure(output_dir, manifest):
             'outputs_written': True, 'output_files': files}
 
 
-def child_structured_result(result):
+def child_marker(result):
+    """子任务 stdout 末尾的结构化结果行（有界执行只保留 stdout 末尾 2 KiB；读不出即 None）。"""
     command = result.get('command') or {}
     excerpt = ((command.get('stdout_summary') or {}).get('excerpt') or '')
     for line in reversed(excerpt.splitlines()):
@@ -439,8 +478,13 @@ def child_structured_result(result):
                 value = json.loads(line[len(CHILD_RESULT_MARKER):])
             except ValueError:
                 return None
-            return value if isinstance(value, dict) and value.get('status') == 'blocked' else None
+            return value if isinstance(value, dict) else None
     return None
+
+
+def child_structured_result(result):
+    value = child_marker(result)
+    return value if value and value.get('status') == 'blocked' else None
 
 
 def input_inspection_job(args):
@@ -615,8 +659,10 @@ def execute_digital(freeze_path, command, ocr_manifest=None):
     import fitz
     import run_pdf_translation
     from scanned_raster.route_pdf import route_pdf
+    started_at = time.time()
     freeze = read_json(freeze_path)
     args = run_pdf_translation.build_parser().parse_args(command)
+    args.attempt_started_at, args.attempt_freeze_path = started_at, freeze_path
     if ocr_manifest is None:
         if freeze.get('route')!='digital_pdf' or freeze.get('routing_contract')!=DIGITAL_ROUTING or not args.pdf_backend_only or args.latex_render_mode!='off':
             raise ValueError('explicit digital route identity missing or changed')
@@ -683,6 +729,15 @@ def finish_digital_result(freeze, args, result, context):
         if type(evidence.get('current_attempt_cache_hits')) is not int or evidence['current_attempt_cache_hits']<=0:
             raise ValueError('cache-only rendering lacked actual source boundary hits')
     target = manifest.get('outputs', {}).get('translated_pdf')
+    attempt_freeze = getattr(args, 'attempt_freeze_path', None)
+    if attempt_freeze and manifest.get('actual_render_source') == 'pdf_backend' and (not target or not Path(target).is_file()):
+        # 本次 _execute-digital 的后端失败（未产出候选）：根因只取本尝试输出目录内的结构化产物
+        # （排版回执、render_manifest），连同本尝试身份写根因回执；拿不到即 root_cause_unavailable，不猜。
+        output_dir = Path(args.output_dir)
+        started_at = getattr(args, 'attempt_started_at', None)
+        cause = failure_root_cause.derive(output_dir, manifest, expected_pages=len(freeze['pages']), started_at=started_at)
+        receipt_ref = failure_root_cause.write_receipt(output_dir, cause, freeze_path=attempt_freeze, started_at=started_at)
+        raise BackendFailure(cause, receipt_ref)
     if manifest.get('actual_render_source') != 'pdf_backend' or not target or not Path(target).is_file():
         raise ValueError('PDF backend failed or changed route; no fallback delivery')
     write_new(Path(args.output_dir)/'WORKFLOW_RENDER_RESULT.json', result)
@@ -941,6 +996,11 @@ def main(argv=None):
         print(json.dumps(result, ensure_ascii=False, indent=2))
         if args.action == '_execute-digital' and isinstance(exc, PreflightError):
             print(CHILD_RESULT_MARKER + json.dumps({k: result[k] for k in ('status', 'error_code', 'findings')}, ensure_ascii=False))
+        elif args.action == '_execute-digital' and isinstance(exc, BackendFailure):
+            # 精简结构化行（父任务据 root_cause_ref 读回执并逐项核对，不信任这一行本身的细节）。
+            print(CHILD_RESULT_MARKER + json.dumps({'status': result['status'], 'error_code': result['error_code'],
+                                                    'root_cause': failure_root_cause.compact(exc.root_cause),
+                                                    'root_cause_ref': exc.receipt_ref}, ensure_ascii=False))
         return EXIT_BLOCKED
     except Exception as exc:
         # 未预期的内部错误：仍输出结构化 JSON 与回执（不再只剩 traceback），退出码 1；不吞掉错误。
@@ -982,6 +1042,11 @@ def structured_failure(args, exc):
     if isinstance(exc, PreflightError):
         result = getattr(exc, 'result', None) or exc.to_dict()
         result = dict(result, status='blocked', error_code=exc.code)
+    elif isinstance(exc, BackendFailure):
+        cause = exc.root_cause
+        result = blocked_result([finding(cause['code'], failure_root_cause.message(cause), stage=cause.get('stage'),
+                                         retry=cause.get('retry'))])
+        result.update(status='failed', root_cause=cause, root_cause_ref=exc.receipt_ref)
     else:
         code = (getattr(exc, 'code', 'resource_limit_invalid') if isinstance(exc, ResourceLimitError) else
                 'project_lock_busy' if isinstance(exc, RuntimeError) else

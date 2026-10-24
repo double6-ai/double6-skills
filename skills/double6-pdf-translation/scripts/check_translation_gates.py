@@ -128,7 +128,7 @@ def check_translation_blocks(
             )
     return issues
 
-def check_render_manifest(render_manifest: dict[str, Any]) -> list[Issue]:
+def check_render_manifest(render_manifest: dict[str, Any], *, target_language: str = "zh") -> list[Issue]:
     if not render_manifest:
         return []
     issues: list[Issue] = []
@@ -186,7 +186,8 @@ def check_render_manifest(render_manifest: dict[str, Any]) -> list[Issue]:
                 suggestion="用 PyMuPDF/pdftotext 复查译文 PDF；若为字体问题，修复 CJK 字体 fallback 后重新渲染。",
             )
         )
-    elif translated_text_chars > 0 and cjk_char_count == 0:
+    elif translated_text_chars > 0 and cjk_char_count == 0 and target_language == "zh":
+        # 只有中文目标才要求译文 PDF 含 CJK；英文目标正常不含中文。
         issues.append(
             Issue(
                 "medium",
@@ -224,6 +225,65 @@ def check_render_manifest(render_manifest: dict[str, Any]) -> list[Issue]:
             )
     return issues
 
+SUPPORTED_QA_TARGETS = ("zh", "en")
+LEGACY_DEFAULT_QA_TARGET = "zh"
+
+
+def resolve_qa_target_language(
+    explicit: str | None,
+    manifest: dict[str, Any] | None,
+    render_manifest: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """文字 QA 的目标语言只取本任务已记录的依据：调用方参数 > source_manifest > render_manifest。
+
+    三处都没有记录时沿用既有合同的默认方向（CLI 默认 --target-language zh，即英译中），
+    并在 basis 中如实标注 legacy_default；记录了但不受支持的值不猜方向，语言残留检查不执行并报告。
+    """
+    claims = []
+    for basis, value in (("argument", explicit),
+                         ("source_manifest", (manifest or {}).get("target_language") if isinstance(manifest, dict) else None),
+                         ("render_manifest", (render_manifest or {}).get("target_language") if isinstance(render_manifest, dict) else None)):
+        if value not in (None, ""):
+            claims.append((basis, str(value).strip().lower()))
+    if not claims:
+        return {"target_language": LEGACY_DEFAULT_QA_TARGET, "basis": "legacy_default_en_to_zh", "conflict": [], "unsupported": None}
+    basis, value = claims[0]
+    conflict = [{"basis": b, "target_language": v} for b, v in claims if v != value]
+    if value not in SUPPORTED_QA_TARGETS:
+        return {"target_language": None, "basis": basis, "conflict": conflict, "unsupported": value}
+    return {"target_language": value, "basis": basis, "conflict": conflict, "unsupported": None}
+
+
+def direction_issues(direction: dict[str, Any]) -> list[Issue]:
+    issues: list[Issue] = []
+    if direction.get("unsupported"):
+        issues.append(Issue(
+            "high", "QA 目标语言不受支持",
+            f"记录的目标语言 `{direction['unsupported']}`（来源 {direction['basis']}）不是 zh/en；未执行语言残留检查，不能据此判定译文完整。",
+            category="structure", block_id="document", rule="qa_target_language_unsupported",
+            suggestion="按实际翻译方向记录 target_language（zh 或 en）后重新运行 QA。"))
+    if direction.get("conflict"):
+        issues.append(Issue(
+            "high", "QA 目标语言记录不一致",
+            f"按 {direction['basis']} 的 `{direction.get('target_language') or direction.get('unsupported')}` 执行；其它记录："
+            + json.dumps(direction["conflict"], ensure_ascii=False),
+            category="structure", block_id="document", rule="qa_target_language_conflict",
+            suggestion="核对本次任务的翻译方向，清除过期清单后重新运行 QA。"))
+    return issues
+
+
+def policies_for_target(term_policy: dict[str, Any], entity_map: dict[str, Any], target_language: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """英文目标：剔除译法/禁用译法含汉字的英译中策略项（与后端提示词同一规则）。"""
+    from policy_utils import policy_item_matches_target
+    def keep(container: dict[str, Any], field: str) -> dict[str, Any]:
+        items = container.get(field) if isinstance(container, dict) else None
+        if not isinstance(items, list):
+            return container
+        return {**container, field: [item for item in items if not isinstance(item, dict) or policy_item_matches_target(item, target_language)],
+                "target_language": target_language}
+    return keep(term_policy, "terms"), keep(entity_map, "entities")
+
+
 def collect_issues(
     source: str,
     translation: str,
@@ -234,16 +294,22 @@ def collect_issues(
     translation_blocks: list[dict[str, Any]] | None = None,
     render_manifest: dict[str, Any] | None = None,
     latex_block_bridge_path: Path | None = None,
+    target_language: str | None = None,
 ) -> list[Issue]:
     from check_translation_core import enrich_issue_locations
     from check_translation_fidelity import build_coverage_gate, check_block_faithfulness, check_protected_spans, check_source_coverage, check_source_extraction_quality
     from check_translation_memory import build_entity_map, build_term_policy
-    from check_translation_residue import check_sections, check_translation_metadata_leak, check_untranslated_english
+    from check_translation_residue import check_sections, check_translation_metadata_leak, check_untranslated_chinese, check_untranslated_english
     from check_translation_terms import check_bad_acronym_translation_blocks, check_entity_map_policies, check_glossary_by_blocks, check_term_policy
     issues: list[Issue] = []
     effective_manifest = manifest or {}
+    direction = resolve_qa_target_language(target_language, effective_manifest, render_manifest)
+    target = direction["target_language"]
+    issues.extend(direction_issues(direction))
     term_policy = build_term_policy(glossary, manifest=effective_manifest, source=source)
     entity_map = build_entity_map(effective_manifest, glossary)
+    if target == "en":
+        term_policy, entity_map = policies_for_target(term_policy, entity_map, target)
     if translation and isinstance(effective_manifest, dict):
         current_gate = effective_manifest.get("coverage_gate")
         if not isinstance(current_gate, dict) or current_gate.get("intra_page_continuity", {}).get("status") == "not_checked":
@@ -252,14 +318,16 @@ def collect_issues(
     issues.extend(check_glossary_by_blocks(source, translation, glossary, translation_blocks or []))
     issues.extend(check_term_policy(source, translation, term_policy, manifest=effective_manifest))
     issues.extend(check_entity_map_policies(source, translation, entity_map, manifest=effective_manifest))
-    issues.extend(
-        check_untranslated_english(
-            translation,
-            protected_spans=protected_spans or {},
-            entity_map=entity_map,
-            term_policy=term_policy,
+    residue_check = check_untranslated_chinese if target == "en" else check_untranslated_english
+    if target in {"zh", "en"}:
+        issues.extend(
+            residue_check(
+                translation,
+                protected_spans=protected_spans or {},
+                entity_map=entity_map,
+                term_policy=term_policy,
+            )
         )
-    )
     issues.extend(check_sections(source, translation))
     issues.extend(check_translation_metadata_leak(source, translation))
     issues.extend(check_block_faithfulness(source, translation, translation_blocks or []))
@@ -267,7 +335,7 @@ def collect_issues(
     issues.extend(check_source_extraction_quality(effective_manifest))
     issues.extend(check_protected_spans(translation, protected_spans or {}, translation_blocks or []))
     issues.extend(check_translation_blocks(effective_manifest, translation_blocks or [], render_manifest=render_manifest or {}, latex_block_bridge_path=latex_block_bridge_path))
-    issues.extend(check_render_manifest(render_manifest or {}))
+    issues.extend(check_render_manifest(render_manifest or {}, target_language=target))
     return enrich_issue_locations(issues, effective_manifest)
 
 
