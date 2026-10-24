@@ -482,8 +482,47 @@ def _stem_on_three(page, pairs, gray=0, rgb=None):
     return parts
 
 
-def contrast_page(bg=None, gray=0, rgb=None, opacity=None, paint="stem", fill_after_text=False):
-    """整页底色、中灰或彩色竖条、半透明，以及铺色画在字前还是字后。选区只框 DELETEME。"""
+def _blend_stem_parts(page, pairs, rgb=None, gray=0.0, width_ratio=0.22):
+    """用字形框而不是墨迹框，在「3」左侧开口上画一条会走 ExtGState 的竖条。"""
+    parts = []
+    color = rgb if rgb is not None else (gray, gray, gray)
+    for char, rect in pairs:
+        if char != "3":
+            continue
+        bar = fitz.Rect(
+            rect.x0,
+            rect.y0 + rect.height * 0.08,
+            rect.x0 + max(rect.width * width_ratio, 0.4),
+            rect.y1 - rect.height * 0.08,
+        )
+        box = _to_pdf(page, bar)
+        parts.append(
+            "q /GS1 gs %.3f %.3f %.3f rg %.2f %.2f %.2f %.2f re f Q"
+            % (color[0], color[1], color[2], box.x0, box.y0, box.width, box.height)
+        )
+    return parts
+
+
+def _install_extgstate(doc, annot, opacity):
+    """外观流里的真半透明。批注字典上的 CA 同时写上，和复审漏脱是同一份构造。
+
+    只写批注字典、外观仍是不透明墨时，现有检查会拒绝。绕过中点的是这里的 ExtGState。
+    """
+    ap = doc.xref_get_key(annot.xref, "AP")[1]
+    tokens = ap.replace("<<", " ").replace(">>", " ").split()
+    form = int(tokens[tokens.index("/N") + 1])
+    gs = doc.get_new_xref()
+    doc.update_object(gs, "<< /Type /ExtGState /ca %.3f /CA %.3f >>" % (opacity, opacity))
+    doc.xref_set_key(form, "Resources", "<< /ExtGState << /GS1 %d 0 R >> >>" % gs)
+    doc.xref_set_key(annot.xref, "CA", str(opacity))
+    doc.xref_set_key(annot.xref, "ca", str(opacity))
+
+
+def contrast_page(bg=None, gray=0, rgb=None, opacity=None, paint="stem", fill_after_text=False, blend=False):
+    """整页底色、中灰或彩色竖条、半透明，以及铺色画在字前还是字后。选区只框 DELETEME。
+
+    blend 为真时，竖条的不透明度写在外观流的 ExtGState 里，不靠 annot.set_opacity。
+    """
     doc, page = _fresh(640, 340)
     if bg is not None and not fill_after_text:
         level = bg / 255.0
@@ -495,7 +534,9 @@ def contrast_page(bg=None, gray=0, rgb=None, opacity=None, paint="stem", fill_af
         # 页边便签让复检真的去看这条铺色。铺色本身不是批注。
         page.add_text_annot(fitz.Point(600, 28), "核对").update()
     parts = []
-    if paint == "stem":
+    if paint == "stem" and blend:
+        parts = _blend_stem_parts(page, pairs, rgb=rgb, gray=0.0 if rgb is not None else gray)
+    elif paint == "stem":
         parts = _stem_on_three(page, pairs, gray, rgb)
     elif paint == "appearance-fill":
         level = (bg if bg is not None else 40) / 255.0
@@ -509,13 +550,17 @@ def contrast_page(bg=None, gray=0, rgb=None, opacity=None, paint="stem", fill_af
         annot.set_border(width=0)
         annot.set_colors(stroke=None, fill=None)
         annot.update()
-        if opacity is not None:
-            annot.set_opacity(opacity)
-            annot.update()
-        _write_square_ap(doc, page, annot, parts, union)
-        if opacity is not None:
-            doc.xref_set_key(annot.xref, "CA", str(opacity))
-            doc.xref_set_key(annot.xref, "ca", str(opacity))
+        if blend:
+            _write_square_ap(doc, page, annot, parts, union)
+            _install_extgstate(doc, annot, opacity)
+        else:
+            if opacity is not None:
+                annot.set_opacity(opacity)
+                annot.update()
+            _write_square_ap(doc, page, annot, parts, union)
+            if opacity is not None:
+                doc.xref_set_key(annot.xref, "CA", str(opacity))
+                doc.xref_set_key(annot.xref, "ca", str(opacity))
     side = page.search_for(SIDE)[0]
     box = preview_box(page, side)
     raw = doc.tobytes()
@@ -630,6 +675,24 @@ def attack_cases():
     for opacity in (0.40, 0.55, 0.75):
         raw, box = contrast_page(gray=0, opacity=opacity)
         rows.append(_row("半透明%.2f黑封口" % opacity, "contrast", raw, box, {"opacity": opacity}, "tamper"))
+    for opacity in (0.25, 0.35, 0.45, 0.50, 0.55):
+        raw, box = contrast_page(gray=0, opacity=opacity, blend=True)
+        rows.append(_row(
+            "真半透明%.2f" % opacity,
+            "contrast",
+            raw,
+            box,
+            {"opacity": opacity, "blend": "ExtGState", "width_ratio": 0.22},
+            "tamper",
+        ))
+    raw, box = contrast_page(gray=110 / 255, opacity=0.45, blend=True)
+    rows.append(_row("半透明灰竖条", "contrast", raw, box, {"ink": 110, "opacity": 0.45, "blend": "ExtGState"}, "tamper"))
+    raw, box = contrast_page(rgb=(220 / 255, 50 / 255, 40 / 255), opacity=0.45, blend=True)
+    rows.append(_row("半透明红竖条", "contrast", raw, box, {"rgb": [220, 50, 40], "opacity": 0.45, "blend": "ExtGState"}, "tamper"))
+    raw, box = contrast_page(bg=160, gray=0, opacity=0.45, blend=True)
+    rows.append(_row("整页灰底半透明黑竖条", "contrast", raw, box, {"bg": 160, "opacity": 0.45, "blend": "ExtGState"}, "tamper"))
+    raw, box = contrast_page(bg=160, gray=0, opacity=0.25, blend=True)
+    rows.append(_row("整页灰底半透明黑竖条0.25", "contrast", raw, box, {"bg": 160, "opacity": 0.25, "blend": "ExtGState"}, "tamper"))
     raw, box = contrast_page(bg=160, paint="highlight")
     rows.append(_row("灰底160上的高亮", "contrast", raw, box, {"bg": 160, "paint": "highlight"}, "light"))
     raw, box = contrast_page(bg=40, fill_after_text=True, paint="none")

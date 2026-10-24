@@ -60,12 +60,27 @@ def _release_mupdf():
 _finishing = False
 
 
-def _finish_after_mupdf(code):
+def _exit_message(status):
+    """sys.exit 的文字参数本来会打到 stderr。硬退出自己不会打，这里补上。"""
+    if isinstance(status, (bool, int)) or status is None:
+        return ''
+    try:
+        text = str(status)
+    except Exception:
+        return ''
+    if not text:
+        return ''
+    if not text.endswith('\n'):
+        text += '\n'
+    return text
+
+
+def _finish_after_mupdf(code, status=None):
     """先跑已经登记的退出回调，再清空 MuPDF 并刷盘，最后按原退出码结束。
 
     Python 3.10/3.11 会在最终回收 SWIG 对象时崩溃。直接 os._exit 能避开这一步，
-    但会跳过更早登记的 atexit，也会丢掉还在缓冲区里的小文件。这里在硬退出之前把这两件事做完。
-    命令行用 raise SystemExit 收尾，不走这条路径，仍由解释器自己回收。
+    但会跳过更早登记的 atexit，也会丢掉还在缓冲区里的小文件，并吞掉 sys.exit 的文字参数。
+    这里在硬退出之前把这三件事做完。命令行用 raise SystemExit 收尾，不走这条路径，仍由解释器自己回收。
     """
     global _finishing
     if _finishing:
@@ -77,6 +92,12 @@ def _finish_after_mupdf(code):
     except BaseException:
         pass
     _release_mupdf()
+    message = _exit_message(status)
+    if message:
+        try:
+            sys.stderr.write(message)
+        except Exception:
+            pass
     _flush_open_streams()
     os._exit(code)
 
@@ -85,7 +106,7 @@ def _tracking_exit(status=0):
     global _exit_status
     _exit_status = _normalize_exit_status(status)
     if _mupdf_used:
-        _finish_after_mupdf(_exit_status)
+        _finish_after_mupdf(_exit_status, status)
     _original_exit(status)
 
 
@@ -604,6 +625,10 @@ _CONTRAST_MIN = 40
 # 跨过中点、并且明暗变化至少达到这段对比度的两成，才计入掩码差异。贴着中点的抗锯齿不算。
 _CONTRAST_MOVE_NUM = 1
 _CONTRAST_MOVE_DEN = 5
+# 没跨过中点、但底色变暗达到这段对比度的两成，同样计入。半透明墨会停在中点以上。
+# 两成能接住黑墨 0.25（白纸上大约暗 63）。办公高亮大约只暗 29，不到两成。再收到 25% 会放走 0.25。
+_DARKEN_NUM = 1
+_DARKEN_DEN = 5
 # 细线也能凑满 6 个预览像素。一两粒抗锯齿不算改字。
 _MASK_DIFF_MIN = 6
 _GLYPH_INK_MARGIN = 2
@@ -729,6 +754,45 @@ def _mask_change_count(base_img, covered_img, box, background, ink):
     return count
 
 
+def _background_darken_count(base_img, covered_img, box, background, ink):
+    """外扩框里，去掉批注后属于局部背景、带批注后明显变暗的像素。
+
+    只看亮度高于中点的底色。变暗量达到这段对比度的两成才计入。
+    贴着原来字迹 2 个预览像素以内的变暗不计。两张图对不齐就返回 None。
+    半透明竖条常常整段停在中点以上，前景掩码差是 0，这一条仍要数。
+    """
+    if box is None or background is None or ink is None or base_img.size != covered_img.size:
+        return None
+    x0, y0, x1, y1 = box
+    if x1 <= x0 or y1 <= y0 or x0 < 0 or y0 < 0 or x1 > base_img.width or y1 > base_img.height:
+        return None
+    before = base_img.crop(box).tobytes()
+    after = covered_img.crop(box).tobytes()
+    if len(before) != len(after) or not before:
+        return None
+    span = background - ink
+    if span < _CONTRAST_MIN:
+        return None
+    midpoint = background + ink
+    width = x1 - x0
+    height = y1 - y0
+    if len(before) != width * height:
+        return None
+    base_mask = bytearray(width * height)
+    for index, origin in enumerate(before):
+        if origin * 2 <= midpoint:
+            base_mask[index] = 1
+    near_base = _dilate_mask(base_mask, width, height, _MASK_SHIFT_RADIUS)
+    count = 0
+    for index, (origin, painted) in enumerate(zip(before, after)):
+        if origin * 2 <= midpoint or near_base[index] or origin <= painted:
+            continue
+        if (origin - painted) * _DARKEN_DEN < span * _DARKEN_NUM:
+            continue
+        count += 1
+    return count
+
+
 def _pixel_box_inside(inner, outer):
     """inner 的四边都落在 outer 里面，含贴边。跨出任何一边就不是。"""
     if inner is None or not outer or len(outer) != 4:
@@ -759,10 +823,11 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
 
     取样只取这个字形自己的矩形，再向外加 2 个预览像素，不和整块矩形做平均或面积加权。
     掩码用去掉批注后的局部底色和字迹色的中点。多出或少掉的前景达到小数量就拒绝。
-    贴着原字迹一两像素的挪动不计，离字迹更远的新墨或少掉的墨要计。
+    高于中点的底色如果变暗达到这段对比度的两成，累计到同样的小数量也拒绝。
+    贴着原字迹一两像素的挪动和变暗不计，离字迹更远的新墨或半透明墨要计。
     整个字形框都落在某一个选区里时，这些改动会随这次涂黑一起去掉，不再单为掩码拒绝。
     对比度太低、底色或字迹色估不出，也拒绝。骑在边界上的字按选区外计算。
-    任何一个选区外的字不达标，或者任一渲染器看到足够的掩码差异，整条批注就不放行。
+    任何一个选区外的字不达标，或者任一渲染器看到足够的差异，整条批注就不放行。
     """
     for _text, rect in _each_glyph(baseline_page, area):
         box = _to_pixel_box(rect, page, covered)
@@ -783,9 +848,14 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
         grown = _grow_pixel_box(box, covered, _GLYPH_INK_MARGIN)
         left = _mask_change_count(base, covered, grown, left_level[0], left_level[1])
         right = _mask_change_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1])
-        if left is None or right is None:
+        left_dark = _background_darken_count(base, covered, grown, left_level[0], left_level[1])
+        right_dark = _background_darken_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1])
+        if left is None or right is None or left_dark is None or right_dark is None:
             return 'invalid', grown or box
-        if left >= _MASK_DIFF_MIN or right >= _MASK_DIFF_MIN:
+        if (
+            left >= _MASK_DIFF_MIN or right >= _MASK_DIFF_MIN
+            or left_dark >= _MASK_DIFF_MIN or right_dark >= _MASK_DIFF_MIN
+        ):
             return 'tamper', grown
     return '', None
 
@@ -934,8 +1004,8 @@ def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, b
 
     每条批注都用 pdfium 和 MuPDF 各渲染有批注、无批注两张图。覆盖区里只认去掉批注之后还在的文字边缘。
     整块矩形的存活率只说明这一块大体还读不读得清。矩形里再逐个字形看：任何一个字的存活率或明暗差不达标，
-    或者选区没有完整罩住的字形前景掩码被改掉，整条批注就拒绝。不把可读正文平均进去。字形对不齐、局部对比度不够也拒绝。
-    掩码用这个字自己的底色和字迹色的中点，不看固定亮度。整个字形框都在某一个选区里时，掩码变化会随涂黑去掉。骑在边界上的字仍要查。
+    或者选区没有完整罩住的字形前景掩码被改掉，或者高于中点的底色被明显涂暗，整条批注就拒绝。不把可读正文平均进去。字形对不齐、局部对比度不够也拒绝。
+    掩码用这个字自己的底色和字迹色的中点，不看固定亮度。底色变暗达到这段对比度的两成也计入。整个字形框都在某一个选区里时，这些变化会随涂黑去掉。骑在边界上的字仍要查。
     便签、图章、签名自己的图标，底下是空白时不算遮盖。两个渲染器只要有一个判盖住或判不了，就拒绝。
     文字层有字、画面上却没有这些字的边缘，也拒绝。批注下面的矢量或图片无法用文字边缘判断，继续拒绝。
     类型名、颜色和线宽都不是放行条件。矩形外多画出来的差异另判；判不了同样拒绝。

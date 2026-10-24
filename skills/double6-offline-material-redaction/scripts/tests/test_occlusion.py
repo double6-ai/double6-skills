@@ -22,6 +22,7 @@ import output_policy as policy
 import pdf_preserve as pdf
 import pymupdf as fitz
 from generators.glyph_attacks import attack_cases
+from generators.glyph_attacks import contrast_page
 from generators.glyph_attacks import strikeout_cut_through_glyph
 from generators.glyph_attacks import strikeout_extends_outside
 from generators.glyph_attacks import strikeout_on_selected_word
@@ -32,6 +33,7 @@ from generators.review_cases import NEIGHBOR
 from generators.review_cases import OUTSIDE_SPECS
 from generators.review_cases import SECRET as REVIEW_SECRET
 from generators.review_cases import dilution
+from generators.office_cases import office_samples
 from generators.review_cases import plain_phone
 
 
@@ -539,6 +541,14 @@ class ExitCleanupTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 1)
         self.assertIn(b"RuntimeError", proc.stderr)
 
+    def test_sys_exit_text_is_written_before_the_hard_exit(self):
+        script = "import pdf_preserve\npdf_preserve.backend()\nimport sys\nsys.exit('boom')\n"
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(Path(__file__).parents[1]) + os.pathsep + env.get("PYTHONPATH", "")
+        proc = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True)
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn(b"boom", proc.stderr)
+
 
 class AddedInkAttackTests(unittest.TestCase):
     def test_only_a_glyph_fully_inside_one_selection_skips_added_ink(self):
@@ -585,7 +595,77 @@ class AddedInkAttackTests(unittest.TestCase):
         self.assertEqual(pdf._MASK_DIFF_MIN, 6)
         self.assertEqual(pdf._GLYPH_INK_MARGIN, 2)
         self.assertEqual(pdf._MASK_SHIFT_RADIUS, 2)
+        self.assertEqual(pdf._DARKEN_NUM, 1)
+        self.assertEqual(pdf._DARKEN_DEN, 5)
         self.assertFalse(hasattr(pdf, "_ADDED_INK_BRIGHT"))
+
+    def _darken_on(self, raw, glyph=None):
+        """带上 2 像素贴边忽略之后，每个字形的变暗计数和掩码计数。"""
+        baseline_raw = pdf.without_annotation_appearance(raw)
+        source = formats.pdf_image(raw, 0).convert("L")
+        base = formats.pdf_image(baseline_raw, 0).convert("L")
+        rows = []
+        with fitz.open(stream=raw, filetype="pdf") as doc, fitz.open(stream=baseline_raw, filetype="pdf") as stripped:
+            page = doc[0]
+            baseline_page = stripped[0]
+            mupdf_covered = pdf._mupdf_gray(page, source.size)
+            mupdf_base = pdf._mupdf_gray(baseline_page, source.size)
+            area = pdf._areas_to_judge(page)[0][0]
+            for text, rect in pdf._each_glyph(baseline_page, area):
+                if glyph is not None and text != glyph:
+                    continue
+                box = pdf._to_pixel_box(rect, page, source)
+                grown = pdf._grow_pixel_box(box, source, pdf._GLYPH_INK_MARGIN)
+                left_level = pdf._local_threshold(base, box)
+                right_level = pdf._local_threshold(mupdf_base, box)
+                self.assertIsNotNone(left_level, text)
+                self.assertIsNotNone(right_level, text)
+                rows.append((
+                    text,
+                    pdf._background_darken_count(base, source, grown, left_level[0], left_level[1]),
+                    pdf._background_darken_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1]),
+                    pdf._mask_change_count(base, source, grown, left_level[0], left_level[1]),
+                    pdf._mask_change_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1]),
+                ))
+        return rows
+
+    def test_translucent_seal_cannot_hide_inside_the_two_pixel_halo(self):
+        """0.35 和 0.45 的开口封条停在中点以上。贴边 2 像素忽略之后，变暗计数仍要达到 6。"""
+        for opacity in (0.35, 0.45):
+            raw, box = contrast_page(gray=0, opacity=opacity, blend=True)
+            counted = [row for row in self._darken_on(raw, glyph="3")]
+            self.assertTrue(counted, opacity)
+            for text, left, right, left_mask, right_mask in counted:
+                self.assertGreaterEqual(
+                    left,
+                    6,
+                    (opacity, text, left, right, left_mask, right_mask),
+                )
+                self.assertGreaterEqual(
+                    right,
+                    6,
+                    (opacity, text, left, right, left_mask, right_mask),
+                )
+            with self.assertRaises(engine.Rejected) as caught:
+                policy.export(raw, ".pdf", _pdf_plan(box, [REVIEW_KEEP]))
+            message = str(caught.exception)
+            self.assertIn("接近字迹的深色", message)
+            self.assertNotIn(REVIEW_SECRET, message)
+
+    def test_office_highlight_darkening_stays_under_the_fraction(self):
+        samples = {item["name"]: item for item in office_samples()}
+        for name in ("正常-黄色高亮在保留句", "正常-黄色高亮压在号码上"):
+            sample = samples[name]
+            for text, left, right, left_mask, right_mask in self._darken_on(sample["raw"]):
+                self.assertLess(left, 6, (name, text, left, right, left_mask, right_mask))
+                self.assertLess(right, 6, (name, text, left, right, left_mask, right_mask))
+            out, _report, _ext = policy.export(sample["raw"], ".pdf", _pdf_plan(sample["box"], [sample["keep"]]))
+            self.assertIn(sample["keep"], _page_text(out))
+        strike_raw, strike_box = strikeout_on_selected_word()
+        out, _report, _ext = policy.export(strike_raw, ".pdf", _pdf_plan(strike_box, [REVIEW_KEEP]))
+        text = _page_text(out)
+        self.assertIn(REVIEW_KEEP, text)
+        self.assertNotIn("DELETEME", text)
 
     def test_review_stroke_samples_and_the_hairline_are_refused(self):
         rows = attack_cases()
@@ -603,6 +683,15 @@ class AddedInkAttackTests(unittest.TestCase):
             "框外-4pt黑块",
             "框外-整字黑块",
             "旧-浅色字-0.985",
+            "真半透明0.25",
+            "真半透明0.35",
+            "真半透明0.45",
+            "真半透明0.50",
+            "真半透明0.55",
+            "半透明灰竖条",
+            "半透明红竖条",
+            "整页灰底半透明黑竖条",
+            "整页灰底半透明黑竖条0.25",
         ):
             self.assertIn(required, names)
         self.assertGreaterEqual(len(rows), 89)
