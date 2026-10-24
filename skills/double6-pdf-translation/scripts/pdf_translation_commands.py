@@ -55,6 +55,12 @@ def build_qwen_cli_command(args: argparse.Namespace, context_file: Path | None =
         command.extend(["--target-language", target_language])
     if context_file:
         command.extend(["--context-file", str(context_file)])
+    # 回环端点若是本项目兼容代理：把它声明的真实上游身份（不含凭据）写进命令串——命令串即 CLITranslator 的缓存身份，
+    # 同一本机代理地址换了上游不复用译文；适配器逐次核对响应身份头，不一致即失败关闭。直连/非回环端点不追加，命令串不变。
+    from upstream_identity import discover, encode_identity
+    identity = discover(args.base_url)
+    if identity is not None:
+        command.extend(["--upstream-identity", encode_identity(identity)])
     return " ".join(shlex.quote(item) for item in command)
 
 def _compact_policy_items(items: list[dict[str, Any]], *, limit: int = 12) -> list[str]:

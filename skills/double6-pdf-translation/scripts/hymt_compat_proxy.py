@@ -20,6 +20,7 @@ from collections import Counter
 
 import layout_role_policy
 import policy_utils
+import upstream_identity
 
 
 DEFAULT_MODEL = None
@@ -686,6 +687,26 @@ class _HyMTJsonCompatHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
         return
+
+    def upstream_identity(self) -> dict:
+        """本代理实际转发到的真实上游身份（规范化地址、上游模型、传输方式；不含凭据）。"""
+        return upstream_identity.build_identity(self.config.upstream_base_url, self.config.model, self.config.transport)
+
+    def end_headers(self) -> None:
+        # Double6 Skills，2026-10-24：每个响应（含 send_error）都声明真实上游身份，后端据此绑定/核对翻译缓存身份。
+        self.send_header(upstream_identity.IDENTITY_HEADER, upstream_identity.encode_identity(self.upstream_identity()))
+        super().end_headers()
+
+    def do_GET(self) -> None:
+        if self.path.split("?", 1)[0].rstrip("/").endswith(upstream_identity.IDENTITY_PATH):
+            body = upstream_identity.encode_identity(self.upstream_identity()).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_error(404)
 
     def do_POST(self) -> None:
         if not self.path.endswith("/chat/completions"):
