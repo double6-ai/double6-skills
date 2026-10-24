@@ -3,7 +3,7 @@ import io
 import math
 from collections import Counter
 
-from PIL import ImageChops
+from PIL import Image, ImageChops
 import engine
 
 
@@ -216,25 +216,36 @@ def _counts_as_hidden(rect, area, selected):
     return not any(rect.intersects(sel) for sel in selected)
 
 
-def _objects_under(page, area, selected):
-    """去掉批注后的页面上，文字、矢量或图片是否落在这个矩形里。整页底色和已框选的对象不算。"""
-    if page is None:
+def _glyphs_under(page, area):
+    """去掉批注后，落在这个矩形里的文字层字符。不把这些字符写进报错。"""
+    if page is None or area is None or area.is_empty or area.is_infinite:
+        return ''
+    fitz = backend()
+    chars = []
+    for span in page.get_texttrace():
+        for char in span['chars']:
+            text = chr(char[0])
+            if text.strip() and fitz.Rect(char[3]).intersects(area):
+                chars.append(text)
+    return ''.join(chars)
+
+
+def _graphics_under(page, area, selected):
+    """批注下面还有没有未框选的矢量或图片。文字改由边缘判断，这里不再把文字当遮盖。"""
+    if page is None or area is None or area.is_empty or area.is_infinite:
         return False
     fitz = backend()
     page_box = _content_bounds(page)
     if not page_box.intersects(area):
         return False
-    for span in page.get_texttrace():
-        for char in span['chars']:
-            glyph = fitz.Rect(char[3])
-            if chr(char[0]).strip() and _counts_as_hidden(glyph, area, selected):
-                return True
     for image in page.get_image_info():
         if _counts_as_hidden(fitz.Rect(image['bbox']), area, selected):
             return True
     for drawing in page.get_drawings():
         bounds = fitz.Rect(drawing['rect'])
         if bounds.contains(page_box):
+            continue
+        if bounds.width > page_box.width * 0.9 and bounds.height > page_box.height * 0.9:
             continue
         if _counts_as_hidden(bounds, area, selected):
             return True
@@ -279,53 +290,6 @@ def _pdf_rect_values(value):
         return None
 
 
-def _positive_number(text, key):
-    parts = text.split(key, 1)
-    if len(parts) != 2:
-        return 0.0
-    number = ''
-    started = False
-    for char in parts[1].lstrip():
-        if char.isdigit() or char == '.':
-            number += char
-            started = True
-            continue
-        if started or char not in ' \n\r\t':
-            break
-    if not number or number == '.':
-        return 0.0
-    return abs(float(number))
-
-
-def _xref_pad(doc, xref):
-    """边框宽度和 /RD。单位与批注矩形相同，用来把描边收进外接矩形。"""
-    pad = 0.0
-    kind, value = doc.xref_get_key(xref, 'RD')
-    if kind == 'array':
-        numbers = _pdf_rect_values(value)
-        if numbers:
-            pad = max(pad, max(abs(number) for number in numbers))
-    kind, value = doc.xref_get_key(xref, 'BS')
-    if kind == 'dict':
-        pad = max(pad, _positive_number(value, '/W'))
-    kind, value = doc.xref_get_key(xref, 'Border')
-    if kind == 'array':
-        tokens = value.replace('[', ' ').replace(']', ' ').split()
-        if len(tokens) >= 3:
-            try:
-                pad = max(pad, abs(float(tokens[2])))
-            except ValueError:
-                pass
-    return pad
-
-
-def _grow_area(area, pad):
-    if area is None or pad <= 0:
-        return area
-    fitz = backend()
-    return fitz.Rect(area.x0 - pad, area.y0 - pad, area.x1 + pad, area.y1 + pad)
-
-
 def _grow_pixel_box(box, image, pad=2):
     """多取 2 个预览像素，把描边的抗锯齿收进比较范围。这不是忽略差异的容差。"""
     if box is None:
@@ -350,17 +314,17 @@ def _visual_bound(annot):
 
 
 def _areas_to_judge(page):
-    """每条会被删掉的批注，含 PyMuPDF 不列出的 /Annots。返回 (文字坐标矩形或 None, 报错用的称呼)。"""
+    """每条会被删掉的批注，含 PyMuPDF 不列出的 /Annots。返回 (文字坐标矩形或 None, 报错用的称呼)。
+
+    取样用批注矩形本身，并在外观框与它相交时并进外观框。不再按线宽把矩形撑大，
+    否则旁边仍可读的字会把真正的遮盖判成没盖住。矩形外多画出来的部分另做差分。
+    """
     seen = set()
     areas = []
     for annot in page.annots() or []:
         seen.add(annot.xref)
-        border = annot.border or {}
-        pad = max(float(border.get('width') or 0), _xref_pad(page.parent, annot.xref))
-        delta = annot.rect_delta
-        if delta:
-            pad = max(pad, max(abs(float(value)) for value in delta))
-        area = _grow_area(_annot_area_from_bound(_visual_bound(annot), page), pad)
+        visual = _visual_bound(annot)
+        area = None if visual is None or visual.is_empty or visual.is_infinite else _annot_area_from_bound(visual, page)
         areas.append((area, _annot_label(annot.type[1])))
     raw = _annots_array(page)
     if not raw:
@@ -381,71 +345,334 @@ def _areas_to_judge(page):
             areas.append((None, label))
             continue
         bound = _bound_from_pdf_rect(page, pdf_rect)
-        areas.append((_grow_area(_annot_area_from_bound(bound, page), _xref_pad(doc, xref)), label))
+        areas.append((_annot_area_from_bound(bound, page), label))
     return areas
 
 
-def _box_changed(diff, box):
-    if box is None:
-        return True
-    return diff.crop(box).getbbox() is not None
+def _clamp_pixel_box(box, image):
+    if not box:
+        return None
+    x0, y0, x1, y1 = (int(round(value)) for value in box)
+    if x1 < x0:
+        x0, x1 = x1, x0
+    if y1 < y0:
+        y0, y1 = y1, y0
+    x0 = max(0, x0)
+    y0 = max(0, y0)
+    x1 = min(image.width, x1)
+    y1 = min(image.height, y1)
+    if x1 - x0 < 4 or y1 - y0 < 4:
+        return None
+    return (x0, y0, x1, y1)
 
 
-def _annot_problem(page_number, label, box, changed, under):
-    where = ''
-    if box is not None:
-        where = f'预览范围大约是 {box[0]},{box[1]} 到 {box[2]},{box[3]}。'
-    name = label or '批注'
-    if changed and under:
-        return f'第{page_number}页有一处{name}。{where}去掉之后，这个范围里的画面变了，底下还有没框选的文字、线条或图片。请先去掉这块批注。'
-    if changed:
-        return f'第{page_number}页有一处{name}。{where}去掉之后，这个范围里的画面变了。请先去掉这块批注。'
-    if under:
-        return f'第{page_number}页有一处{name}。{where}它盖住了还没框选的文字、线条或图片。请先去掉这块批注。'
+def _sample_box(area, page, image):
+    """文字坐标矩形转到预览像素，再外扩 2 像素，把描边收进覆盖区。"""
+    if area is None or area.is_empty or area.is_infinite:
+        return None
+    return _clamp_pixel_box(_grow_pixel_box(_to_pixel_box(area, page, image), image), image)
+
+
+def _ink_stats(base_px, covered_px, width, height):
+    """3×3 局部最大值减去本点，差值至少 8 才算文字边缘。只统计去掉批注后的画面。"""
+    count = 0
+    survived = 0
+    for y in range(height):
+        row = y * width
+        y0 = y - 1 if y else 0
+        y1 = y + 1 if y + 1 < height else height - 1
+        for x in range(width):
+            center = base_px[row + x]
+            local = center
+            x0 = x - 1 if x else 0
+            x1 = x + 1 if x + 1 < width else width - 1
+            for yy in (y0, y, y1):
+                sample = yy * width
+                for xx in (x0, x, x1):
+                    value = base_px[sample + xx]
+                    if value > local:
+                        local = value
+            if local - center < 8:
+                continue
+            count += 1
+            if abs(int(covered_px[row + x]) - int(center)) <= 28:
+                survived += 1
+    return count, survived
+
+
+def _judge_crop(base_img, covered_img, box):
+    """覆盖区里，去掉批注后才有的文字边缘还在不在。批注自己的图标底下是空白，不算遮盖。"""
+    box = _clamp_pixel_box(box, base_img)
+    if box is None or base_img.size != covered_img.size:
+        return 'invalid'
+    base = base_img.crop(box)
+    covered = covered_img.crop(box)
+    base_px = base.tobytes()
+    covered_px = covered.tobytes()
+    width, height = base.size
+    if width < 4 or height < 4 or len(base_px) != len(covered_px):
+        return 'invalid'
+    low, high = base.getextrema()
+    covered_low, covered_high = covered.getextrema()
+    span_base = int(high - low)
+    span_covered = int(covered_high - covered_low)
+    mean_base = sum(base_px) / len(base_px)
+    mean_covered = sum(covered_px) / len(covered_px)
+    count, survived = _ink_stats(base_px, covered_px, width, height)
+    survival = None if count < 8 else survived / count
+    no_underlying = count < 8 and span_base < 12
+    solid = span_covered <= 12 and (span_base >= 8 or abs(mean_base - mean_covered) >= 20)
+    if no_underlying and not solid:
+        return 'empty'
+    if solid or (survival is not None and survival <= 0.35 and span_covered <= 50):
+        return 'opaque'
+    if survival is not None and survival >= 0.55 and span_covered >= 60:
+        return 'readable'
+    if no_underlying:
+        return 'empty'
+    return 'partial'
+
+
+def _worst_kind(kinds):
+    order = {'opaque': 4, 'partial': 3, 'invalid': 3, 'readable': 1, 'empty': 0}
+    return max(kinds, key=lambda kind: order.get(kind, 2))
+
+
+def _kinds_disagree(left, right):
+    if left == right or 'invalid' in (left, right):
+        return False
+    hard = {'opaque', 'partial'}
+    soft = {'readable', 'empty'}
+    return (left in hard or right in hard) and (left in soft or right in soft)
+
+
+def _garbled_text(text):
+    """文字层对不上画面：替换字符、未映射字形。正常汉字和数字不是这类。"""
+    for char in text:
+        code = ord(char)
+        if char == '\ufffd' or code == 0 or 0xE000 <= code <= 0xF8FF:
+            return True
+    return False
+
+
+def _occlusion_reason(left, right, glyphs, graphics, outside=False):
+    """pdfium 与 MuPDF 只要有一个判盖住或判不了，就不放行。空白上的图标不是遮盖。
+
+    矩形外的小块差异里，pdfium 仍能看见字、MuPDF 只是重绘发虚时，不当成遮盖。
+    pdfium 自己判成盖住或看不清，或者 MuPDF 判成完全盖住，仍然拒绝。
+    """
+    if 'invalid' in (left, right):
+        return 'invalid'
+    if glyphs and 'empty' in (left, right):
+        return 'mismatch'
+    if _garbled_text(glyphs):
+        return 'mismatch'
+    if graphics:
+        return 'vector'
+    if outside:
+        if left in {'opaque', 'partial'} or right == 'opaque' or (right == 'partial' and left not in {'readable', 'empty'}):
+            if 'opaque' in (left, right) or left == 'partial':
+                return 'opaque'
+            return 'disagree'
+        return ''
+    if _kinds_disagree(left, right):
+        return 'disagree'
+    if _worst_kind((left, right)) in {'opaque', 'partial'}:
+        return 'opaque'
     return ''
 
 
-def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, baseline_image, page_number=1):
-    """删除前后逐像素比较。外接矩形里任何变化都拒绝，没有颜色或亮度门槛。
+_OCCLUSION_DETAIL = {
+    'opaque': '这块批注把底下的字盖住了，去掉之后字才会露出来。请先去掉这块批注。',
+    'invalid': '这块批注盖住的范围没法对齐，不能确认底下的字还在不在。请先去掉这块批注。',
+    'disagree': '两种渲染对底下的字看不一致，不能确认字还在不在。请先去掉这块批注。',
+    'mismatch': '文字层里有字，画面上却看不到这些字的边缘。请先去掉这块批注。',
+    'vector': '这块批注下面有线条或图片，没法确认去掉之后会不会露出来。请先去掉这块批注。',
+}
 
-    比较的两张图都由同一渲染器、同一比例画出。链接和隐藏便签这类不改像素的批注，整页差分为空，
-    所以没被批注碰到的正文不会产生抗锯齿噪声。因此这里不设容差：差一个像素也拒绝。
-    外接矩形含边框、与矩形相交的外观框，并外扩 2 个预览像素，只为把描边边缘收进来。
-    矩形里若有未框选的文字、矢量或图片，同样拒绝。类型名、颜色和线宽都不作为放行条件。
+
+def _occlusion_message(page_number, label, box, reason):
+    detail = _OCCLUSION_DETAIL.get(reason)
+    if not detail:
+        return ''
+    where = ''
+    if box is not None:
+        where = f'预览范围大约是 {box[0]},{box[1]} 到 {box[2]},{box[3]}。'
+    return f'第{page_number}页有一处{label or "批注"}。{where}{detail}'
+
+
+def _mupdf_gray(page, size):
+    """按 pdfium 同一像素尺寸渲染。对不齐就当判不了。"""
+    if page is None:
+        return None
+    fitz = backend()
+    sx, sy = _pixel_scale(page, size)
+    try:
+        pix = page.get_pixmap(matrix=fitz.Matrix(sx, sy), annots=True, alpha=False)
+    except Exception:
+        return None
+    if pix.width != size[0] or pix.height != size[1] or pix.n < 3:
+        return None
+    return Image.frombytes('RGB', (pix.width, pix.height), pix.samples).convert('L')
+
+
+def _expand_sample(box, image):
+    """不足 4 像素的差分块向外补到能取样。补完仍不够就保持原样，交给后面判为对齐不了。"""
+    def grow(start, end, limit):
+        if end - start >= 4:
+            return start, end
+        extra = 4 - (end - start)
+        start = max(0, start - extra // 2)
+        end = min(limit, end + extra - extra // 2)
+        if end - start < 4:
+            start = max(0, end - 4)
+            end = min(limit, start + 4)
+        return start, end
+
+    x0, y0, x1, y1 = (int(value) for value in box)
+    x0, x1 = grow(x0, x1, image.width)
+    y0, y1 = grow(y0, y1, image.height)
+    return (x0, y0, x1, y1)
+
+
+def _changed_components(covered, base, claimed):
+    """已核对矩形之外，还有哪些成片的画面差异。空白上的小毛边不到 8 个像素就忽略。"""
+    diff = ImageChops.difference(covered, base)
+    for box in claimed:
+        diff.paste(0, box)
+    pixels = diff.tobytes()
+    width, height = diff.size
+    seen = bytearray(width * height)
+    boxes = []
+    for start, value in enumerate(pixels):
+        if not value or seen[start]:
+            continue
+        stack = [start]
+        seen[start] = 1
+        count = 0
+        min_x = max_x = start % width
+        min_y = max_y = start // width
+        while stack:
+            index = stack.pop()
+            count += 1
+            x = index % width
+            y = index // width
+            if x < min_x:
+                min_x = x
+            elif x > max_x:
+                max_x = x
+            if y < min_y:
+                min_y = y
+            elif y > max_y:
+                max_y = y
+            if x > 0 and pixels[index - 1] and not seen[index - 1]:
+                seen[index - 1] = 1
+                stack.append(index - 1)
+            if x + 1 < width and pixels[index + 1] and not seen[index + 1]:
+                seen[index + 1] = 1
+                stack.append(index + 1)
+            if y > 0 and pixels[index - width] and not seen[index - width]:
+                seen[index - width] = 1
+                stack.append(index - width)
+            if y + 1 < height and pixels[index + width] and not seen[index + width]:
+                seen[index + width] = 1
+                stack.append(index + width)
+        if count >= 8:
+            boxes.append((min_x, min_y, max_x + 1, max_y + 1))
+    return boxes
+
+
+def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, baseline_image, page_number=1):
+    """看每条被删批注有没有把底下的字盖住，不看像素变没变。
+
+    每条批注都用 pdfium 和 MuPDF 各渲染有批注、无批注两张图。覆盖区里只认去掉批注之后还在的文字边缘。
+    便签、图章、签名自己的图标，底下是空白时不算遮盖。两个渲染器只要有一个判盖住或判不了，就拒绝。
+    文字层有字、画面上却没有这些字的边缘，也拒绝。批注下面的矢量或图片无法用文字边缘判断，继续拒绝。
+    类型名、颜色和线宽都不是放行条件。矩形外多画出来的差异另判；判不了同样拒绝。
     """
     areas = _areas_to_judge(page)
     if not areas:
         return ''
     if original_image.size != baseline_image.size:
-        return f'第{page_number}页去掉批注后无法与原渲染对齐。请先去掉这块批注。'
+        return _occlusion_message(page_number, '批注', None, 'invalid')
     selected = [_to_page_rect(box, page, original_image.size) for box in pixel_boxes]
-    diff = ImageChops.difference(original_image, baseline_image)
+    covered = original_image.convert('L')
+    base = baseline_image.convert('L')
+    mupdf_covered = _mupdf_gray(page, original_image.size)
+    mupdf_base = _mupdf_gray(baseline_page, original_image.size)
+    if mupdf_covered is None or mupdf_base is None:
+        return _occlusion_message(page_number, areas[0][1], None, 'invalid')
     problems = []
     claimed = []
     for area, label in areas:
-        box = None
-        if area is not None and not area.is_empty and not area.is_infinite:
-            box = _grow_pixel_box(_to_pixel_box(area, page, original_image), original_image)
-        changed = _box_changed(diff, box)
-        under = False if area is None else _objects_under(baseline_page, area, selected)
-        problem = _annot_problem(page_number, label, box, changed, under)
-        if problem:
-            problems.append(problem)
-        if box is not None:
+        box = _sample_box(area, page, covered)
+        glyphs = _glyphs_under(baseline_page, area)
+        graphics = _graphics_under(baseline_page, area, selected)
+        if box is None:
+            reason = 'invalid'
+        else:
+            reason = _occlusion_reason(
+                _judge_crop(base, covered, box),
+                _judge_crop(mupdf_base, mupdf_covered, box),
+                glyphs,
+                graphics,
+            )
             claimed.append(box)
-    remain = diff.copy()
-    for box in claimed:
-        remain.paste((0, 0, 0), box)
-    if remain.getbbox() is not None:
-        bounds = remain.getbbox()
-        problems.append(
-            f'第{page_number}页去掉批注后，还有画面和原来不一样。预览范围大约是 {bounds[0]},{bounds[1]} 到 {bounds[2]},{bounds[3]}。请先去掉这块批注。'
-        )
+        if reason:
+            problems.append(_occlusion_message(page_number, label, box, reason))
+    for source_covered, source_base in ((covered, base), (mupdf_covered, mupdf_base)):
+        for box in _changed_components(source_covered, source_base, claimed):
+            box = _expand_sample(box, covered)
+            area = _to_page_rect(box, page, original_image.size)
+            reason = _occlusion_reason(
+                _judge_crop(base, covered, box),
+                _judge_crop(mupdf_base, mupdf_covered, box),
+                _glyphs_under(baseline_page, area),
+                _graphics_under(baseline_page, area, selected),
+                outside=True,
+            )
+            if reason:
+                problems.append(_occlusion_message(page_number, '批注', box, reason))
+                break
+        if problems:
+            break
     if not problems:
         return ''
     if len(problems) == 1:
         return problems[0]
     return problems[0] + '同一页还有别处批注同样要先去掉。'
+
+
+def _stored_user_unit(page):
+    """页面上不是 1 的 UserUnit 原文。没有或就是 1 时不改这一页。"""
+    kind, value = page.parent.xref_get_key(page.xref, 'UserUnit')
+    if kind not in ('real', 'int'):
+        return None
+    try:
+        number = float(value)
+    except ValueError:
+        return None
+    # 只处理大于 1 的 UserUnit。等于 1 不用改。小于 1 时同一写法会把黑块缩小，尚未证明不会留住字形，所以保持拒绝。
+    if number <= 1.0:
+        return None
+    return value
+
+
+def _apply_redactions(page):
+    """涂黑时暂时把 UserUnit 写成 1。
+
+    PyMuPDF 的 apply_redactions 会把已经按 UserUnit 放大过的宽高再乘一次，黑块超出选区，
+    复检就误以为切到了框外。矩形本身先按文字坐标记好，这里只避免第二次放大；涂完再写回原值。
+    把选区缩小来迁就这次放大会留下正文，不能那样做。
+    """
+    saved = _stored_user_unit(page)
+    if saved is not None:
+        page.parent.xref_set_key(page.xref, 'UserUnit', '1')
+    try:
+        page.apply_redactions(images=2, graphics=1, text=0)
+    finally:
+        if saved is not None:
+            page.parent.xref_set_key(page.xref, 'UserUnit', saved)
 
 
 def word_rows(page, boxes):
@@ -495,7 +722,7 @@ def export(data, plan, _verify=True):
                 for box in boxes:
                     page.add_redact_annot(box, fill=(0, 0, 0), cross_out=False)
                 if boxes:
-                    page.apply_redactions(images=2, graphics=1, text=0)
+                    _apply_redactions(page)
             # 新建容器，不保存增量历史，不导入链接、注释、书签和文档级脚本。
             fresh = fitz.open()
             fresh.insert_pdf(doc, links=False, annots=False, widgets=False)
@@ -542,7 +769,9 @@ def verify(data, plan, source):
                         raise engine.Rejected('PDF页面尺寸或旋转发生变化。')
                     pixel_boxes = selected.get(index + 1, [])
                     boxes = [_to_page_rect(b, original, sizes[index]) for b in pixel_boxes]
-                    if word_rows(original, boxes) != word_rows(page, boxes):
+                    # 图章、便签的外观文字不算页面正文。有批注时跟去掉批注、尚未涂黑的页面比位置。
+                    text_before = stripped[index] if stripped is not None else original
+                    if word_rows(text_before, boxes) != word_rows(page, boxes):
                         checks['outside_text_positions_preserved'] = False
                     for span in page.get_texttrace():
                         for char in span['chars']:

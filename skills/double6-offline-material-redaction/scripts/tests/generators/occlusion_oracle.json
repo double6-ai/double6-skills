@@ -1,0 +1,1322 @@
+[
+  {
+    "name": "正常-黄色高亮在保留句",
+    "group": "office",
+    "cohort": "normal",
+    "d1": "deliver"
+  },
+  {
+    "name": "正常-黄色高亮压在号码上",
+    "group": "office",
+    "cohort": "normal",
+    "d1": "deliver"
+  },
+  {
+    "name": "正常-下划线",
+    "group": "office",
+    "cohort": "normal",
+    "d1": "deliver"
+  },
+  {
+    "name": "正常-删除线在被选词上",
+    "group": "office",
+    "cohort": "normal",
+    "d1": "deliver"
+  },
+  {
+    "name": "正常-波浪线",
+    "group": "office",
+    "cohort": "normal",
+    "d1": "deliver"
+  },
+  {
+    "name": "正常-页边便签",
+    "group": "office",
+    "cohort": "normal",
+    "d1": "deliver"
+  },
+  {
+    "name": "正常-空白处审批图章",
+    "group": "office",
+    "cohort": "normal",
+    "d1": "deliver"
+  },
+  {
+    "name": "正常-图章压住号码",
+    "group": "attack",
+    "cohort": "normal",
+    "d1": "deliver"
+  },
+  {
+    "name": "正常-页边手写签名",
+    "group": "office",
+    "cohort": "normal",
+    "d1": "deliver"
+  },
+  {
+    "name": "正常-红圈圈注",
+    "group": "office",
+    "cohort": "normal",
+    "d1": "deliver"
+  },
+  {
+    "name": "正常-用户黑框盖住号码",
+    "group": "attack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "正常-高亮下划线便签同时在",
+    "group": "office",
+    "cohort": "normal",
+    "d1": "deliver"
+  },
+  {
+    "name": "攻击-黑方块透明度0.25",
+    "group": "attack",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "攻击-黑方块透明度0.45",
+    "group": "attack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "攻击-黑方块透明度0.7",
+    "group": "attack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "攻击-黑方块透明度0.85",
+    "group": "attack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "攻击-黑方块透明度0.95",
+    "group": "attack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "攻击-黑方块透明度0.99",
+    "group": "attack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "攻击-黑方块盖住灰度0.9的号码",
+    "group": "attack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "攻击-黑方块盖住灰度0.96的号码",
+    "group": "attack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "攻击-黑方块盖住灰度0.985的号码",
+    "group": "attack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "攻击-黑方块盖住灰度0.99的号码",
+    "group": "attack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "攻击-黑方块盖住1点号码",
+    "group": "attack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "攻击-黑方块盖住矢量笔画",
+    "group": "attack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "攻击-黑方块盖住图片",
+    "group": "attack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "攻击-只有不可见文字层",
+    "group": "attack",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "攻击-白方块盖住不可见文字层",
+    "group": "attack",
+    "cohort": "other",
+    "d1": "reject"
+  },
+  {
+    "name": "攻击-灰底白边伪造高亮",
+    "group": "attack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Highlight",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Highlight",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Highlight",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Underline",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Underline",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Underline",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/StrikeOut",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/StrikeOut",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/StrikeOut",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Squiggly",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Squiggly",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Squiggly",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Text",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Text",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Text",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Link",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Link",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Link",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Popup",
+    "group": "round7:p1-gray-border",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "灰底白边伪造/Popup",
+    "group": "round7:p1-gray-border",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "灰底白边伪造/Popup",
+    "group": "round7:p1-gray-border",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "灰底白边伪造/Square",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Square",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Square",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Circle",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Circle",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Circle",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/FreeText",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/FreeText",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/FreeText",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Stamp",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Stamp",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Stamp",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Ink",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Ink",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Ink",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Caret",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Caret",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Caret",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Line",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Line",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边伪造/Line",
+    "group": "round7:p1-gray-border",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-square",
+    "group": "round7:native-cover",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-square",
+    "group": "round7:native-cover",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-square",
+    "group": "round7:native-cover",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-circle",
+    "group": "round7:native-cover",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-circle",
+    "group": "round7:native-cover",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-circle",
+    "group": "round7:native-cover",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-polygon",
+    "group": "round7:native-cover",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-polygon",
+    "group": "round7:native-cover",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-polygon",
+    "group": "round7:native-cover",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰高亮伪造-框号码",
+    "group": "round7:selection",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰高亮伪造-整页",
+    "group": "round7:selection",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰高亮伪造-框批注",
+    "group": "round7:selection",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "外观-gradient",
+    "group": "round7:appearance",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "外观-two-color",
+    "group": "round7:appearance",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "外观-texture",
+    "group": "round7:appearance",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "半透明灰底白边",
+    "group": "round7:appearance",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "只描白边",
+    "group": "round7:appearance",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "完全透明方块压住号码",
+    "group": "round7:appearance",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "旋转90-灰下划线伪造",
+    "group": "round7:geometry",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "旋转180-灰下划线伪造",
+    "group": "round7:geometry",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "旋转270-灰下划线伪造",
+    "group": "round7:geometry",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "裁剪框偏移-灰便签伪造",
+    "group": "round7:geometry",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "外观流负坐标画出矩形",
+    "group": "round7:bypass",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "BS线宽0但Border为28",
+    "group": "round7:bypass",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "矩形在号码上方-Border30",
+    "group": "round7:bypass",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "外观流clip后仍画大黑块",
+    "group": "round7:bypass",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "外观框与Rect不相交",
+    "group": "round7:bypass",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "标志Hidden-灰底白边",
+    "group": "round7:flags",
+    "cohort": "other",
+    "d1": "reject"
+  },
+  {
+    "name": "标志NoView-灰底白边",
+    "group": "round7:flags",
+    "cohort": "other",
+    "d1": "reject"
+  },
+  {
+    "name": "标志Print-灰底白边",
+    "group": "round7:flags",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "标志Hidden+Print-灰底白边",
+    "group": "round7:flags",
+    "cohort": "other",
+    "d1": "reject"
+  },
+  {
+    "name": "标志NoView+Print-灰底白边",
+    "group": "round7:flags",
+    "cohort": "other",
+    "d1": "reject"
+  },
+  {
+    "name": "标志NoView+ToggleNoView-灰底白边",
+    "group": "round7:flags",
+    "cohort": "other",
+    "d1": "reject"
+  },
+  {
+    "name": "可选内容层上的灰方块",
+    "group": "round7:bypass",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "外观透明组",
+    "group": "round7:bypass",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "与底色同灰的方块",
+    "group": "round7:bypass",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "弹出框Rect在角落-原外观盖号码",
+    "group": "round7:bypass",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "灰方块加高亮-只框旁边",
+    "group": "round7:stack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰方块加图章-只框图章",
+    "group": "round7:stack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰方块上再叠黑方块",
+    "group": "round7:stack",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰粗线",
+    "group": "round7:kinds",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰折线",
+    "group": "round7:kinds",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰墨迹铺满号码",
+    "group": "round7:kinds",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底自由文本",
+    "group": "round7:kinds",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "插字号压在号码旁",
+    "group": "round7:kinds",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "文件附件批注",
+    "group": "round7:kinds",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "未应用涂黑标记",
+    "group": "round7:kinds",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "没有批注",
+    "group": "round7:expect-deliver",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "页眉和表格底色-框号码",
+    "group": "round7:expect-deliver",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "普通高亮",
+    "group": "round7:expect-reject-visible",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "普通下划线",
+    "group": "round7:expect-reject-visible",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "普通删除线",
+    "group": "round7:expect-reject-visible",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "普通波浪线",
+    "group": "round7:expect-reject-visible",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "可见便签",
+    "group": "round7:expect-reject-visible",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "下划线只画在被选词上",
+    "group": "round7:expect-reject-visible",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "空白处线宽0黑方块",
+    "group": "round7:expect-reject-visible",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "图章整块框住",
+    "group": "round7:expect-reject-visible",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "线宽0黑方块整块框住",
+    "group": "round7:expect-reject-visible",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "隐藏便签和链接不压文字",
+    "group": "round7:expect-deliver",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "链接矩形压住号码",
+    "group": "round7:expect-reject-visible",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "空白处完全透明白方块",
+    "group": "round7:expect-deliver",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "黑方块盖号码-框旁边",
+    "group": "round7:prior",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "浅灰字上的黑方块",
+    "group": "round7:prior",
+    "cohort": "other",
+    "d1": "reject"
+  },
+  {
+    "name": "黑方块盖住矢量笔画",
+    "group": "round7:prior",
+    "cohort": "other",
+    "d1": "reject"
+  },
+  {
+    "name": "UserUnit2框住被盖号码-不计误拒",
+    "group": "round7:userunit-out-of-scope",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "灰底白边-square",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-square",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-square",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-square",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-square",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-circle",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-circle",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-circle",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-circle",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-circle",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-polygon",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-polygon",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-polygon",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-polygon",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-polygon",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/FreeText",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/FreeText",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/FreeText",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Stamp",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Stamp",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Stamp",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Highlight",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Highlight",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Highlight",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Ink",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Ink",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Ink",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Underline",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Underline",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Underline",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Squiggly",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Squiggly",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Squiggly",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/StrikeOut",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/StrikeOut",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/StrikeOut",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Text",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Text",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Text",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Link",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Link",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Link",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Popup",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "灰底白边-伪造/Popup",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "灰底白边-伪造/Popup",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "灰底白边-伪造/Circle",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Circle",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰底白边-伪造/Circle",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "灰笔画-墨迹",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "外观-gradient",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "外观-two-color",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "外观-texture",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "半透明灰底白边",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "描边-灰",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "描边-白",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "旋转90-灰底白边",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "旋转180-灰底白边",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "旋转270-灰底白边",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "CropBox偏移-灰底白边",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "原生高亮盖在号码上",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "浅灰字上的黑方块",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "深色黑方块",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "框住被盖号码",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "整页框选仍留黑方块",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "低透明度黑方块",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "白方块",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "直线盖住号码",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "折线盖住号码",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "黑方块盖住矢量笔画",
+    "group": "author",
+    "cohort": "other",
+    "d1": "reject"
+  },
+  {
+    "name": "贴边1pt字",
+    "group": "author",
+    "cohort": "other",
+    "d1": "reject"
+  },
+  {
+    "name": "旋转90-黑方块",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "黑外观伪造高亮",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "普通高亮",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "普通下划线",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "普通删除线",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "普通波浪线",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "普通可见便签",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "空白处黑方块",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "图章整块框住",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "线宽0黑方块整块框住",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  },
+  {
+    "name": "链接和弹出框压住未选文字",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "隐藏便签和链接不压文字",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "页眉和表格底色",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "没有批注",
+    "group": "author",
+    "cohort": "other",
+    "d1": "deliver"
+  },
+  {
+    "name": "UserUnit框住被盖号码",
+    "group": "author",
+    "cohort": "reveal",
+    "d1": "reject"
+  }
+]
