@@ -289,6 +289,7 @@ def test_deterministic_chunk_failure_one_attempt_root_cause_on_top_and_resume_do
     assert runner.calls == ['c001', 'c002', 'c003']                       # 只 1 次尝试
     assert first['root_cause']['code'] == 'typesetting_source_fallback_cap_exceeded'
     assert first['root_cause']['chunk'] == 'c002' and first['root_cause']['details']['violations'][0]['cap'] == 12
+    assert first['root_cause']['details']['violations'][0]['document_page'] == 5     # c002 = 原文第 5–8 页，块内第 1 页
     c002 = next(c for c in first['chunks'] if c['id'] == 'c002')
     assert c002['attempts'] == 1 and c002['error_code'] == 'typesetting_source_fallback_cap_exceeded'
     assert first['findings'][0]['details']['chunks'][0]['root_cause']['code'] == 'typesetting_source_fallback_cap_exceeded'
