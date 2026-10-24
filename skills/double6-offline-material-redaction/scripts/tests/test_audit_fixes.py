@@ -139,5 +139,25 @@ class WrappedTermTests(unittest.TestCase):
         self.assertEqual(items, ["1380000\n0000", "整理120条活动反馈"])
 
 
+class MarkerCollisionTests(unittest.TestCase):
+    def test_marker_word_uses_a_marker_that_does_not_contain_the_term(self):
+        raw = "请已隐去此段 整理120条活动反馈\n".encode()
+        plan = {"version": 1, "kind": "text", "reviewed": True, "acknowledge_loss": True, "terms": ["已隐去"], "keep": ["整理120条活动反馈"]}
+        out = formats.export(raw, "text", plan).decode()
+        self.assertNotIn("已隐去", out)
+        self.assertIn("〔已处理A〕", out)
+        self.assertIn("整理120条活动反馈", out)
+
+    def test_both_markers_collide_explains_why(self):
+        raw = "已隐去并且已处理\n".encode()
+        plan = {"version": 1, "kind": "text", "reviewed": True, "acknowledge_loss": True, "terms": ["已隐去", "已处理"], "keep": []}
+        with self.assertRaises(engine.Rejected) as caught:
+            formats.export(raw, "text", plan)
+        message = str(caught.exception)
+        self.assertIn("替换标记", message)
+        self.assertIn("已隐去", message)
+        self.assertNotIn("导出复检失败", message)
+
+
 if __name__ == "__main__":
     unittest.main()
