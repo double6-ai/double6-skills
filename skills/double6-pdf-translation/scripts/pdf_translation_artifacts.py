@@ -559,8 +559,9 @@ def render_qa_repaired_pdf(output_dir: Path, args: argparse.Namespace, translate
         repaired_path,
         final_pdf,
         title=title,
-        math_source_pdf=math_source if math_source is not None and math_source.is_file() else None,
-        source_pdf=source_pdf if source_pdf is not None and source_pdf.is_file() else None,
+        # 显式路径原样传入：不可用由 render_pdf 稳定拒绝，不在这里折成“未提供”（review-4）。
+        math_source_pdf=math_source,
+        source_pdf=source_pdf,
         original_markdown_path=output_dir / "translation.md",
     )
     manifest.update(
