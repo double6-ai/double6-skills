@@ -104,3 +104,28 @@ jobs:
           for action in inspect-input candidate collect review doctor run-reviewed-scan trial-render prepare-scan; do
             "$PY" scripts/paper_translation_workflow.py "$action" --help > /dev/null
           done
+
+  offline-material-redaction:
+    name: double6-offline-material-redaction (py3.12, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-latest]
+    defaults:
+      run:
+        working-directory: skills/double6-offline-material-redaction
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install and selftest exactly as documented
+        shell: bash
+        run: python scripts/bootstrap.py --venv "$RUNNER_TEMP/redaction-venv"
+      - name: Source regression and doctor
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then PY="$RUNNER_TEMP/redaction-venv/Scripts/python.exe"; else PY="$RUNNER_TEMP/redaction-venv/bin/python"; fi
+          "$PY" -m unittest discover -s scripts/tests -v
+          "$PY" scripts/cli.py doctor
