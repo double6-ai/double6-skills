@@ -14,6 +14,7 @@ import urllib.request
 from typing import Any
 
 import policy_utils
+import upstream_identity
 
 DEFAULT_BASE_URL = None
 DEFAULT_MODEL = None
@@ -129,6 +130,16 @@ def effective_api_key(args: argparse.Namespace) -> str:
     return os.environ.get(CREDENTIAL_ENV) or DEFAULT_API_KEY
 
 
+def declared_upstream_identity(args: argparse.Namespace) -> dict | None:
+    value = getattr(args, "upstream_identity", None)
+    if value is None:
+        return None
+    identity = upstream_identity.decode_identity(value)
+    if identity is None:
+        raise RuntimeError(upstream_identity.UPSTREAM_IDENTITY_MISMATCH + ": malformed --upstream-identity")
+    return identity
+
+
 def request_translation(user_text: str, system_prompt: str, args: argparse.Namespace) -> str:
     context_prompt = load_context_prompt(args.context_file, resolve_target_language(args))
     if context_prompt:
@@ -161,6 +172,8 @@ def request_translation(user_text: str, system_prompt: str, args: argparse.Names
     )
     try:
         with urllib.request.urlopen(request, timeout=args.timeout) as response:
+            # 命令串声明的真实上游身份（缓存身份的一部分）必须与本次响应一致；不一致即失败关闭（非零退出，不写缓存）。
+            upstream_identity.verify_header(declared_upstream_identity(args), response.headers.get(upstream_identity.IDENTITY_HEADER))
             raw = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
@@ -200,6 +213,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", required=True)
     parser.add_argument("--api-key", default=None,
                         help=f"兼容保留，不推荐（会进入 argv）。未给时读取环境变量 {CREDENTIAL_ENV}，再退回本地占位。")
+    parser.add_argument("--upstream-identity", default=None,
+                        help="回环兼容代理声明的真实上游身份 JSON（由命令构建器探测写入，不含凭据）；逐次核对响应身份头。")
     parser.add_argument("--reasoning-effort", default=DEFAULT_REASONING_EFFORT)
     parser.add_argument("--temperature", type=float, default=0.1)
     parser.add_argument("--max-tokens", type=int, default=4096)
