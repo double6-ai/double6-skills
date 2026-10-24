@@ -52,7 +52,7 @@ bash scripts/setup_venv.sh /absolute/new/venv
 - 回环地址（`localhost`、`127.0.0.1`、`::1`）未提供时使用明确的 `local-no-auth` 占位值；它不是凭据。远端地址（包括其它 `127.x` 地址）未提供即报 `remote_backend_requires_explicit_api_key`，在启动任何子进程或代理之前停止。实际上游 HTTP 请求在未配置密钥时不发送 `Bearer None`。
 - 凭据不进入任何子进程的命令行，按各后端原生的非命令行通道传入：电子 PDF 后端（PDFMathTranslate-next）读取其配置环境变量 `PDF2ZH_OPENAI_API_KEY`；`qwen-cli` 适配器继承 `LOCAL_TRANSLATION_API_KEY`；可信 LaTeX 路线（`independent_latex`）在本进程内发起请求。启动后端前先清除继承的 `PDF2ZH_OPENAI_API_KEY`、`LOCAL_TRANSLATION_API_KEY`、`OPENAI_API_KEY` 与 `PDF2ZH_DEBUG`（后者会让后端把含凭据的完整配置写进调试日志），再只放入该后端需要的一个变量。
 - 旧 LaTeX 直连后端 `pdf2zh_skill` 未随本仓库分发，其非命令行凭据通道无法在本仓库核实：后端缺失时返回结构化错误 `latex_direct_backend_unavailable`，不启动子进程；已安装且需要凭据时，本进程只在 `127.0.0.1` 起一个转发器，保留用户显式的上游地址、模型与凭据，子进程命令行只含一次性访问令牌（子进程结束即随转发器关闭失效）；转发器无法启动时报 `latex_direct_credential_forwarder_unavailable`。不静默改用本机服务或其它模型。
-- 翻译缓存按端点、模型、目标语言与提示词隔离，不以凭据为缓存身份；凭据不写入缓存库。
+- 翻译缓存按端点、模型、目标语言与提示词隔离，不以凭据为缓存身份；凭据不写入缓存库。经本机兼容代理时，缓存身份还包含代理声明的真实上游身份（规范化上游地址、上游模型、传输方式，见 `scripts/upstream_identity.py`），同一本机代理端口换了上游不会复用另一服务的译文；运行中响应声明的上游与缓存身份不一致即失败关闭。本机其它（非本项目）中间层不声明身份，无法据此区分其背后的上游，此时缓存身份只有它的本机地址。
 - 边界：环境变量对同一用户的其它进程可见（如 Linux `/proc/<pid>/environ`），不构成保密隔离边界；本改动只保证凭据不出现在子进程命令行、日志、回执、清单、异常与缓存中，不宣称完全隔离。
 
 安装脚本在哈希锁定安装后实际导入主路径原生模块，最多等待 180 秒；该步骤不载入翻译模型、不发送翻译请求。安装完成后的论文任务仍按各自冻结合同计算资源与时限。
