@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import engine
 import formats
+from PIL import Image
 import output_policy as policy
 import pdf_preserve as pdf
 import pymupdf as fitz
@@ -599,6 +600,16 @@ class AddedInkAttackTests(unittest.TestCase):
         self.assertEqual(pdf._DARKEN_DEN, 5)
         self.assertFalse(hasattr(pdf, "_ADDED_INK_BRIGHT"))
 
+    def _paper_darken_count(self, drop, ink):
+        """细笔画：8 个黑像素，10 分位仍是浅色。纸面变暗 drop，看贴边忽略之后还剩多少。"""
+        side = 20
+        base = Image.new("L", (side, side), 255)
+        covered = Image.new("L", (side, side), 255 - drop)
+        for index in range(8):
+            base.putpixel((0, index), 0)
+            covered.putpixel((0, index), 0)
+        return pdf._background_darken_count(base, covered, (0, 0, side, side), 255, ink)
+
     def _darken_on(self, raw, glyph=None):
         """带上 2 像素贴边忽略之后，每个字形的变暗计数和掩码计数。"""
         baseline_raw = pdf.without_annotation_appearance(raw)
@@ -661,6 +672,8 @@ class AddedInkAttackTests(unittest.TestCase):
                 self.assertLess(right, 6, (name, text, left, right, left_mask, right_mask))
             out, _report, _ext = policy.export(sample["raw"], ".pdf", _pdf_plan(sample["box"], [sample["keep"]]))
             self.assertIn(sample["keep"], _page_text(out))
+        self.assertEqual(self._paper_darken_count(drop=29, ink=120), 0)
+        self.assertGreaterEqual(self._paper_darken_count(drop=63, ink=120), 6)
         strike_raw, strike_box = strikeout_on_selected_word()
         out, _report, _ext = policy.export(strike_raw, ".pdf", _pdf_plan(strike_box, [REVIEW_KEEP]))
         text = _page_text(out)

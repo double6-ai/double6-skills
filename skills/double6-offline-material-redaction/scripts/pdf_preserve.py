@@ -757,7 +757,8 @@ def _mask_change_count(base_img, covered_img, box, background, ink):
 def _background_darken_count(base_img, covered_img, box, background, ink):
     """外扩框里，去掉批注后属于局部背景、带批注后明显变暗的像素。
 
-    只看亮度高于中点的底色。变暗量达到这段对比度的两成才计入。
+    只看亮度高于中点的底色。中点仍用框内 10 分位。变暗比例则用这块里最暗的像素和底色来比，
+    达到这段对比度的两成才计入。细笔画的 10 分位常常落在纸面上，对比度会被估小，黄色高亮就过线。
     贴着原来字迹 2 个预览像素以内的变暗不计。两张图对不齐就返回 None。
     半透明竖条常常整段停在中点以上，前景掩码差是 0，这一条仍要数。
     """
@@ -770,7 +771,9 @@ def _background_darken_count(base_img, covered_img, box, background, ink):
     after = covered_img.crop(box).tobytes()
     if len(before) != len(after) or not before:
         return None
-    span = background - ink
+    # 细字内部大多是纸。10 分位会停在浅灰上，黄色高亮大约暗 29 也会被算成两成。
+    # 比例改跟这块最暗的像素比。中点仍用调用方传来的 10 分位。
+    span = background - min(before)
     if span < _CONTRAST_MIN:
         return None
     midpoint = background + ink
