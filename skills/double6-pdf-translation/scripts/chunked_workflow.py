@@ -8,7 +8,10 @@
   既有路由合同、整份术语上下文绑定），以 ``candidate`` 动作原样执行——单份 candidate 的全部门
   （预检、路由、OCR 守门、质量门、拥有式计量与回收）逐块生效，单块单任务预算即 FREEZE 资源合同。
 * 资源停止（超时/超内存）的块二分到单页；单页仍超限即失败关闭并记录实测。瞬时失败重试一次；
-  预检拦截与质量 fail 不重试（结果确定）。
+  预检拦截与质量 fail 不重试（结果确定）。PDF 后端未产出候选时，根因取本尝试自己写出、身份核对一致的
+  结构化回执（``failure_root_cause``）：确定性根因（排版上限、可读下限溢出、子任务自身的合同/输入拒绝）
+  不重试，``--resume`` 也不重跑（同一输入与配置）；拿不到可核实的根因记 ``root_cause_unavailable``，
+  按既有瞬时失败处理（重试一次）。根因上浮到块结果、``CHUNKED_RUN_STATE`` 与整份回执。
 * 任何一块没有产物：整份 ``blocked``（``chunk_failed``，退出码 2），不合并、不交付部分结果。
   全部有产物：有界 ``chunk-merge`` 任务按页序合并并写合并综合质量（不好于最差的一块，fail 退出码 3）。
 * 状态 ``CHUNKED_RUN_STATE.json`` 原子替换；每次尝试先登记 started 再执行。``--resume``：先回收上次
@@ -316,6 +319,60 @@ def launch_identity_race(result: dict[str, Any]) -> bool:
             and isinstance(findings[0], dict) and findings[0].get('message') in LAUNCH_IDENTITY_RACE)
 
 
+# 子任务把这些异常映射成的错误码是环境性质（锁被占、I/O），不是输入/配置的确定性质：不据此判确定性失败。
+CHILD_ENVIRONMENT_CODES = ('project_lock_busy', 'io_error')
+
+
+def child_envelope(result: dict[str, Any]) -> dict[str, Any] | None:
+    """``_execute-digital`` 子任务自己以结构化 JSON 报告的拒绝（stdout 全文：未截断、sha 与摘录一致、退出码 2、
+    动作与错误码自洽）。读不出、截断或不一致即 None——不从日志/摘录里找关键字。"""
+    import hashlib
+    command = result.get('command') or {}
+    summary = command.get('stdout_summary') or {}
+    excerpt = summary.get('excerpt')
+    if (command.get('returncode') != 2 or summary.get('truncated') is not False or not isinstance(excerpt, str)
+            or hashlib.sha256(excerpt.encode('utf-8')).hexdigest() != summary.get('sha256')):
+        return None
+    try:
+        value = json.loads(excerpt)
+    except ValueError:
+        return None
+    findings = value.get('findings') if isinstance(value, dict) else None
+    if (not isinstance(value, dict) or value.get('action') != '_execute-digital' or value.get('status') != 'blocked'
+            or not value.get('error_code') or not isinstance(findings, list) or not findings
+            or not isinstance(findings[0], dict) or findings[0].get('code') != value['error_code']):
+        return None
+    return value
+
+
+def failure_root_cause(result: dict[str, Any], attempt: Path | None = None) -> dict[str, Any] | None:
+    """本次尝试失败的根因（只用本尝试的结构化回执）。``retry``：deterministic / resource / unknown。"""
+    from failure_root_cause import UNKNOWN, unavailable
+    if result.get('status') in ('succeeded', 'candidate'):
+        return None
+    cause = result.get('root_cause')
+    if isinstance(cause, dict) and cause.get('code'):
+        return cause   # run_job 已按本尝试 argv / launch nonce / FREEZE / sha 核对过（verified 字段）
+    command = result.get('command') or {}
+    if result.get('status') == 'blocked' and command and result.get('error_code'):
+        # 子任务结构化拒绝行（预检/路由守门，PreflightError）已由 run_job 上浮为 blocked。
+        return {'code': result['error_code'], 'retry': 'deterministic', 'stage': 'child_preflight_refusal',
+                'verified': True, 'source': 'child_structured_result_marker',
+                'details': {'findings': [{k: f.get(k) for k in ('code', 'message')} for f in result.get('findings') or []
+                                         if isinstance(f, dict)][:3]}}
+    envelope = child_envelope(result) if command else None
+    if envelope:
+        code, message = envelope['error_code'], str(envelope['findings'][0].get('message') or '')
+        retry = UNKNOWN if code in CHILD_ENVIRONMENT_CODES else 'deterministic'
+        cause = {'code': code, 'retry': retry, 'stage': 'child_contract_refusal', 'verified': True,
+                 'source': 'child_structured_stdout', 'details': {'message': message[:300]}}
+        if message.startswith('ValueError: PDF backend failed or changed route'):
+            # 旧版子任务的笼统拒绝：本结果里没有本尝试的结构化根因回执，明确记为不可得，不猜具体原因。
+            cause['backend_root_cause'] = unavailable('legacy_child_refusal_without_root_cause_receipt')
+        return cause
+    return None
+
+
 def classify(result: dict[str, Any], contract: dict[str, Any], attempt: Path | None = None) -> str:
     if result.get('status') in ('succeeded', 'candidate'):
         return 'completed'   # candidate 的有界任务成功（综合质量另计，fail 也是确定结果，照常合并后整份 fail）
@@ -328,6 +385,12 @@ def classify(result: dict[str, Any], contract: dict[str, Any], attempt: Path | N
         return 'resource_stop'
     if result.get('status') == 'blocked' and launch_identity_race(result):
         return 'transient'
+    cause = failure_root_cause(result, attempt)
+    if cause and cause.get('verified') is True:
+        if cause.get('retry') == 'resource' and 'backend_timeout' in contract['split_on_resource_stop']:
+            return 'resource_stop'
+        if cause.get('retry') == 'deterministic':
+            return 'blocked'   # 同一输入与配置必然重现：不重试（续跑也不重跑，见 run）
     if result.get('status') == 'blocked':
         return 'blocked'
     return 'transient'
@@ -353,7 +416,41 @@ def chunk_outputs(wf, attempt: Path) -> dict[str, Any] | None:
     backend_input = ocr.get('reconstructed_source_ref')
     return {'outputs': refs, 'quality_ref': wf.ref(quality_path), 'render_manifest_ref': wf.ref(manifest_path),
             'receipt_ref': wf.ref(receipt), 'backend_input': backend_input,
-            'quality_status': result.get('quality_status')}
+            'quality_status': result.get('quality_status'), 'quality_reasons': quality_reasons(result)}
+
+
+def quality_reasons(result: dict[str, Any]) -> dict[str, Any]:
+    """块回执里质量门/可读版的稳定原因码（fail 原因 id、公式上下标层级门、可读版拒绝码），上浮到整份回执。"""
+    reasons: dict[str, Any] = {'fail_reason_codes': sorted({str(r.get('id')) for r in result.get('quality_fail_reasons') or []
+                                                            if isinstance(r, dict) and r.get('id')})}
+    structure = result.get('formula_structure')
+    if isinstance(structure, dict) and structure.get('status'):
+        reasons['formula_structure'] = {k: structure.get(k) for k in ('status', 'lost', 'flagged_pages')}
+    readable = result.get('readable_output')
+    if isinstance(readable, dict) and readable.get('status'):
+        reasons['readable_output'] = {k: readable.get(k) for k in ('status', 'reason_code')}
+    return reasons
+
+
+# 决定排版上限/可读下限结果的实现文件：任何一个变了，登记的确定性失败不再沿用（续跑照常重跑）。
+DETERMINISM_IMPLEMENTATION = ('scripts/chunked_workflow.py', 'scripts/failure_root_cause.py',
+                              'scripts/paper_translation_workflow.py', 'scripts/run_pdf_translation.py',
+                              'vendor/babeldoc/babeldoc/format/pdf/document_il/midend/typesetting.py',
+                              'vendor/babeldoc/babeldoc/format/pdf/document_il/midend/overflow_source_fallback.py')
+
+
+def failure_identity(wf, entry: dict[str, Any], state: dict[str, Any], attempt_freeze_ref: dict[str, str]) -> dict[str, Any]:
+    """确定性失败登记时的输入与配置身份：块 PDF、页范围、路线、整份运行身份（parent FREEZE / 输入 / 路线 / 语言 /
+    模型 / 端点 / 分块合同）、计划、该尝试的块 FREEZE、实现文件 sha。续跑时逐项一致才沿用登记的失败（不重跑）。"""
+    skill = Path(__file__).resolve().parent.parent
+    implementation = {}
+    for name in DETERMINISM_IMPLEMENTATION:
+        path = skill / name
+        implementation[name] = wf.sha(path) if path.is_file() else None
+    freeze_now = (wf.ref(attempt_freeze_ref['path']) if Path(attempt_freeze_ref['path']).is_file() else None)
+    return {'chunk_source_ref': entry['source_ref'], 'pages': [entry['start'], entry['end']], 'route': entry['route'],
+            'run_identity': state.get('identity'), 'plan_ref': state.get('plan_ref'),
+            'attempt_freeze_ref': freeze_now, 'implementation': implementation}
 
 
 def prune_temporaries(wf, attempt: Path, patterns: list[str]) -> dict[str, Any]:
@@ -496,7 +593,7 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
             raise ValueError('document term context changed after planning')
         parent_ref = wf.ref(args.freeze)
         table, order = state['chunk_table'], state['order']
-        reused, executed = [], []
+        reused, executed, not_reexecuted = [], [], []
         index = 0
         while index < len(order):
             cid = order[index]
@@ -514,6 +611,16 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
             elif entry['status'] in ('failed', 'blocked') and entry.get('final_invocation') == invocation:
                 index += 1
                 continue
+            elif entry['status'] == 'blocked' and (entry.get('failure') or {}).get('deterministic') is True:
+                recorded = entry['failure'].get('identity')
+                current = failure_identity(wf, entry, state, entry['attempts'][-1]['freeze_ref']) if entry['attempts'] else None
+                if recorded and current == recorded:
+                    # 同一输入与配置下登记过的确定性失败：不重跑，保留首个根因与全部尝试记录。
+                    entry.setdefault('not_reexecuted_by_invocations', []).append(invocation)
+                    not_reexecuted.append(cid)
+                    index += 1
+                    continue
+                entry['failure']['identity_changed_at_invocation'] = invocation
             transient_retries = sum(1 for a in entry['attempts'] if a.get('classification') == 'transient'
                                     and a.get('invocation') == invocation)
             number = len(entry['attempts']) + 1
@@ -529,8 +636,14 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
             started = time.monotonic()
             result = CHUNK_RUNNER(wf, args, freeze_path, entry, attempt_dir, entry_context)
             kind = classify(result, CHUNKING_CONTRACT, attempt_dir)
+            cause = failure_root_cause(result, attempt_dir) if kind != 'completed' else None
             record.update(status='finished', classification=kind, wall_seconds=round(time.monotonic() - started, 3),
                           measurements=_measure(result), error_code=result.get('error_code'))
+            if kind != 'completed':
+                from failure_root_cause import unavailable
+                record['root_cause'] = cause or unavailable('no_structured_cause_in_result',
+                                                            status=result.get('status'), error_code=result.get('error_code'),
+                                                            failure_code=(result.get('command') or {}).get('failure_code'))
             if effective_stop_reason(result, attempt_dir) == 'backend_timeout':
                 record['stop_reason'] = 'backend_timeout'
             wf.write_new(attempt_dir / 'CHUNK_RESULT.json', result)
@@ -573,18 +686,34 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
                     order[index:index + 1] = [c['id'] for c in children]
                     save_state(state_path, state)
                     continue
+                stop = effective_stop_reason(result, attempt_dir)
                 entry.update(status='failed', final_invocation=invocation, failure={
-                    'error_code': 'chunk_page_exceeds_task_budget', 'stop_reason': effective_stop_reason(result, attempt_dir),
+                    'error_code': 'chunk_page_exceeds_task_budget', 'stop_reason': stop,
                     'measurements': record['measurements'],
-                    'message': '单页仍超出冻结的单任务资源预算；不放宽限制，整份失败关闭。'})
+                    'message': '单页仍超出冻结的单任务资源预算；不放宽限制，整份失败关闭。',
+                    'root_cause': {'code': 'chunk_page_exceeds_task_budget', 'retry': 'resource', 'stage': 'bounded_task',
+                                   'verified': True, 'details': {'stop_reason': stop, 'pages': [entry['start'], entry['end']]}},
+                    'attempt': number, 'invocation': invocation})
             elif kind == 'transient' and transient_retries < CHUNKING_CONTRACT['retry_transient_failures']:
                 save_state(state_path, state)
                 continue
             else:
-                entry.update(status='blocked' if kind == 'blocked' else 'failed', final_invocation=invocation,
-                             failure={'error_code': ('chunk_cleanup_unconfirmed' if kind == 'cleanup_unconfirmed'
-                                                     else result.get('error_code') or kind),
-                                      'classification': kind, 'findings': result.get('findings', [])[:5]})
+                root = record.get('root_cause') or {}
+                first = next((a['root_cause'] for a in entry['attempts'] if a.get('root_cause')), root)
+                deterministic = kind == 'blocked' and root.get('retry') == 'deterministic' and root.get('verified') is True
+                if kind == 'cleanup_unconfirmed':
+                    code = 'chunk_cleanup_unconfirmed'
+                elif root.get('code') and root['code'] != 'root_cause_unavailable':
+                    code = root['code']
+                else:
+                    code = result.get('error_code') or root.get('code') or kind
+                failure = {'error_code': code,
+                           'classification': kind, 'findings': result.get('findings', [])[:5],
+                           'root_cause': root, 'first_root_cause': first, 'attempt': number, 'invocation': invocation,
+                           'deterministic': deterministic}
+                if deterministic:
+                    failure['identity'] = failure_identity(wf, entry, state, record['freeze_ref'])
+                entry.update(status='blocked' if kind == 'blocked' else 'failed', final_invocation=invocation, failure=failure)
                 if kind == 'cleanup_unconfirmed':
                     # 本块进程树无法核实已回收：不再启动任何块（重任务并发 1），整份失败关闭。
                     save_state(state_path, state)
@@ -595,12 +724,18 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
         summary = [{'id': c['id'], 'pages': [c['start'], c['end']], 'route': c['route'], 'status': c['status'],
                     'attempts': len(c['attempts']),
                     'last_attempt': ({k: c['attempts'][-1].get(k) for k in ('number', 'invocation', 'classification',
-                                                                            'wall_seconds', 'measurements')}
+                                                                            'wall_seconds', 'measurements', 'error_code',
+                                                                            'root_cause')}
                                      if c['attempts'] else None),
-                    'quality_status': (c.get('completed') or {}).get('quality_status')} for c in chunks]
+                    'quality_status': (c.get('completed') or {}).get('quality_status'),
+                    **({'quality_reasons': c['completed']['quality_reasons']}
+                       if (c.get('completed') or {}).get('quality_reasons') else {}),
+                    **({'error_code': c['failure'].get('error_code'), 'root_cause': c['failure'].get('root_cause')}
+                       if c['status'] != 'completed' and c.get('failure') else {})} for c in chunks]
         base = {'action': 'chunked-candidate', 'freeze_ref': parent_ref, 'input_ref': wf.ref(args.input),
                 'route': args.route, 'declared_pages': pages, 'plan_ref': plan_ref, 'chunk_count': len(chunks),
                 'chunks': summary, 'reused_chunks': reused, 'executed_chunks': executed, 'invocation': invocation,
+                'deterministic_failures_not_reexecuted': not_reexecuted,
                 'human_accepted': False, 'strict_delivery': False, 'heavy_task_concurrency': 1,
                 'resource_contract_frozen': freeze.get('resource_contract'), 'chunking_contract': CHUNKING_CONTRACT,
                 'input_preflight': {k: report.get(k) for k in ('status', 'warnings', 'source_language', 'page_count')},
@@ -611,7 +746,13 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
                           f"{len(failed)} 块未产出可合并的结果；整份失败关闭，不合并、不交付部分结果。",
                           chunks=[{'id': c['id'], 'pages': [c['start'], c['end']], 'status': c['status'],
                                    **(c.get('failure') or {})} for c in failed])]), **base)
-            result.update(error_code='chunk_failed', merged=False)
+            # 整份回执：保留稳定的 chunk_failed，另上浮按页序第一块的根因与全部失败块的根因（含块、页、尝试）。
+            from failure_root_cause import unavailable
+            causes = [dict((c.get('failure') or {}).get('root_cause') or unavailable('chunk_not_executed', status=c['status']),
+                           chunk=c['id'], chunk_pages=[c['start'], c['end']],
+                           attempt=(c.get('failure') or {}).get('attempt'), invocation=(c.get('failure') or {}).get('invocation'))
+                      for c in failed]
+            result.update(error_code='chunk_failed', merged=False, root_cause=causes[0], root_causes=causes)
         else:
             rows = [{'chunk': {k: c[k] for k in ('id', 'start', 'end', 'pages', 'route', 'source_ref')},
                      'outputs': c['completed']['outputs'], 'quality_ref': c['completed']['quality_ref'],
