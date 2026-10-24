@@ -85,9 +85,14 @@ def doctor(base_url, model=MODEL, provider_generation_required=True, include_ocr
                     for name in ('fitz', 'psutil', 'PIL', 'requests', 'pdf2zh_next', 'babeldoc')}
     blockers = [f'missing_dependency:{name}' for name, present in dependencies.items() if not present]
     models = []
-    if provider_generation_required:
+    from credential_env import CREDENTIAL_ENV, REMOTE_REQUIRES_KEY, credential_source, is_loopback_endpoint
+    # 与运行入口同一来源：只读 LOCAL_TRANSLATION_API_KEY（不再静默采用 OPENAI_API_KEY）；只报告来源，不记录值。
+    credential = credential_source(os.environ)
+    api_key = os.environ.get(CREDENTIAL_ENV) or None
+    if provider_generation_required and not api_key and not is_loopback_endpoint(base_url):
+        blockers.append(REMOTE_REQUIRES_KEY)
+    elif provider_generation_required:
         try:
-            api_key = os.environ.get('LOCAL_TRANSLATION_API_KEY') or os.environ.get('OPENAI_API_KEY')
             headers = {'Authorization': 'Bearer ' + api_key} if api_key else {}
             request = urllib.request.Request(base_url.rstrip('/') + '/models', headers=headers)
             with urllib.request.urlopen(request, timeout=5) as response:
@@ -107,6 +112,7 @@ def doctor(base_url, model=MODEL, provider_generation_required=True, include_ocr
             'model_identity': 'served model ID only; weight/provider fingerprint requires separate frozen evidence',
             'scan_dependencies_required': False, 'model_calls': 0,
             'provider_generation_required':provider_generation_required,
+            'credential': credential,
             'resources': {key: memory[key] for key in ('total', 'available', 'swap_used', 'codex')},
             'supported_routes': list(ROUTES),
             'recommended_resource_contract': recommended_contract(),
