@@ -72,6 +72,7 @@ def replacement(preview,plan):
     if not terms and plan.get('clean_only')is not True:raise Rejected('请补选原文；仅清理隐藏内容需明确选择。')
     if terms and plan.get('clean_only'):raise Rejected('仅清理隐藏内容与替换词不能同时使用。')
     if any(x not in preview for x in terms):raise Rejected('有补选原文未在预览中找到，请核对准确原文。')
+    engine.reject_partial_business_numbers(preview, terms)
     mapping={v:'【已隐去'+str(k+1)+'】'for k,v in enumerate(terms)}
     rx=re.compile('|'.join(map(re.escape,terms)))if terms else None
     return lambda s:rx.sub(lambda m:mapping[m.group()],s)if rx else s

@@ -247,6 +247,33 @@ def terms_checked(values):
     return sorted(set(v.strip() for v in values), key=lambda v: (-len(v), v))
 
 
+def reject_partial_business_numbers(preview, terms):
+    """短数字若只是「编号0000」这类标记后的一段，就停止，避免拆行后的短词改掉别的业务编号。"""
+    for term in terms:
+        if not term.isdigit() or len(term) > 7:
+            continue
+        tokens = []
+        start = 0
+        while True:
+            at = preview.find(term, start)
+            if at < 0:
+                break
+            if at and preview[at - 1].isalnum():
+                left = at
+                while left and preview[left - 1].isalnum():
+                    left -= 1
+                right = at + len(term)
+                while right < len(preview) and preview[right].isdigit():
+                    right += 1
+                token = preview[left:right]
+                if token != term and token not in tokens:
+                    tokens.append(token)
+            start = at + len(term)
+        if tokens:
+            shown = "、".join(tokens[:3])
+            raise Rejected('补选词“' + term + '”会改掉“' + shown + '”。它只是其中一段。请补选完整原文；跨行内容要作为一项，不要按换行拆开。')
+
+
 def keep_checked(values):
     if not isinstance(values,list) or len(values)>200 or any(not isinstance(v,str)or not 1<=len(v.strip())<=500 for v in values):
         raise Rejected('关键保留项需为最多200项、每项1–500字的列表。')
@@ -264,6 +291,7 @@ def export_docx(data, terms, acknowledge_loss=False, clean_only=False, keep=None
         raise Rejected("仅清理隐藏内容模式不能同时填写替换词。")
     if any(v not in plan["preview"] for v in selected):
         raise Rejected("有补选原文未在预览中找到，请核对准确原文后重试；隐藏部件无需列为正文替换词。")
+    reject_partial_business_numbers(plan["preview"], selected)
     replacements = {v: "【已隐去" + str(n + 1) + "】" for n, v in enumerate(selected)}
     # 单次匹配，避免后来输入的词再次命中替换标记。
     regex = re.compile("|".join(re.escape(v) for v in selected)) if selected else None
