@@ -560,6 +560,77 @@ class DarkCoverTests(unittest.TestCase):
             self.assertNotIn("OTHERTEXT", doc[0].get_text())
             self.assertIsNone(doc[0].first_annot)
 
+    def test_line_and_polyline_over_text_are_refused(self):
+        def line(fitz, page, phone):
+            y = (phone.y0 + phone.y1) / 2
+            annot = page.add_line_annot(fitz.Point(phone.x0 - 6, y), fitz.Point(phone.x1 + 18, y))
+            annot.set_border(width=12)
+            annot.set_colors(stroke=(0, 0, 0))
+            annot.update()
+
+        def polyline(fitz, page, phone):
+            y = (phone.y0 + phone.y1) / 2
+            points = [fitz.Point(phone.x0 - 4, y - 3), fitz.Point((phone.x0 + phone.x1) / 2, y + 4), fitz.Point(phone.x1 + 14, y - 2)]
+            annot = page.add_polyline_annot(points)
+            annot.set_border(width=10)
+            annot.set_colors(stroke=(0, 0, 0))
+            annot.update()
+
+        for draw in (line, polyline):
+            raw, other, _phone = self._pdf((0, 0, 0), draw)
+            leaked = pdf.export(raw, self._plan(other), _verify=False)
+            with pdf.backend().open(stream=leaked, filetype="pdf") as doc:
+                self.assertIn(COVERED, doc[0].get_text())
+            with self.assertRaises(engine.Rejected) as caught:
+                policy.export(raw, ".pdf", self._plan(other))
+            message = str(caught.exception)
+            self.assertIn("看不见", message)
+            self.assertIn("去掉", message)
+            self.assertNotIn(COVERED, message)
+
+    def test_vector_strokes_under_a_black_square_are_refused(self):
+        fitz = pdf.backend()
+        doc = fitz.open()
+        page = doc.new_page(width=400, height=280)
+        page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+        page.insert_text((20, 230), "OTHERTEXT", fontname="helv", fontsize=14)
+        shape = page.new_shape()
+        for dx in range(0, 120, 8):
+            shape.draw_line(fitz.Point(30 + dx, 100), fitz.Point(32 + dx, 140))
+        shape.finish(color=(0, 0, 0), width=1.5)
+        shape.commit()
+        annot = page.add_rect_annot(fitz.Rect(24, 92, 160, 148))
+        annot.set_colors(stroke=(0, 0, 0), fill=(0, 0, 0))
+        annot.set_opacity(1)
+        annot.update()
+        other = page.search_for("OTHERTEXT")[0]
+        raw = doc.tobytes()
+        doc.close()
+        plan = self._plan(other)
+        leaked = pdf.export(raw, plan, _verify=False)
+        with pdf.backend().open(stream=leaked, filetype="pdf") as opened:
+            self.assertNotIn(COVERED, opened[0].get_text())
+        with self.assertRaises(engine.Rejected) as caught:
+            policy.export(raw, ".pdf", plan)
+        message = str(caught.exception)
+        self.assertIn("看不见", message)
+        self.assertIn("去掉", message)
+
+    def test_faint_or_stroke_only_square_tells_user_to_remove_it(self):
+        def stroke(fitz, page, phone):
+            annot = page.add_rect_annot(fitz.Rect(phone.x0 - 2, phone.y0 - 2, phone.x1 + 2, phone.y1 + 2))
+            annot.set_colors(stroke=(0, 0, 0))
+            annot.set_border(width=2)
+            annot.update()
+
+        for draw in (self._square((0, 0, 0), 0.08), stroke):
+            raw, other, _phone = self._pdf((0, 0, 0), draw)
+            with self.assertRaises(engine.Rejected) as caught:
+                policy.export(raw, ".pdf", self._plan(other))
+            message = str(caught.exception)
+            self.assertIn("去掉", message)
+            self.assertNotIn(COVERED, message)
+
 
 class ShortNumberSideTests(unittest.TestCase):
     def test_right_side_and_hyphen_are_refused(self):
@@ -582,6 +653,34 @@ class ShortNumberSideTests(unittest.TestCase):
         self.assertIn(KEEP, text)
         self.assertTrue(report["checks"]["selected_strings_absent"])
 
+    def test_underscore_slash_and_hyphenated_digits_are_refused(self):
+        samples = ("ID_0000", "0000_合同", "ID/0000", "0000/合同", "ID／0000", "0000-1234", "1234-0000")
+        for sample in samples:
+            body = sample + "\n" + KEEP + "\n"
+            with self.assertRaises(engine.Rejected, msg=sample) as caught:
+                policy.export(body.encode(), ".txt", _office_plan("text", ["0000"]))
+            message = str(caught.exception)
+            self.assertIn("整段", message, sample)
+            self.assertNotIn("0000", message, sample)
+            self.assertNotIn("1234", message, sample)
+            self.assertNotIn("合同", message, sample)
+            self.assertNotIn("ID", message, sample)
+
+    def test_short_number_beside_words_tells_user_to_select_the_span(self):
+        body = "价格 12 元\n活动反馈说明\n"
+        with self.assertRaises(engine.Rejected) as caught:
+            policy.export(body.encode(), ".txt", _office_plan("text", ["12"], ["活动反馈说明"]))
+        message = str(caught.exception)
+        self.assertIn("整段", message)
+        self.assertIn("一起选上", message)
+        self.assertNotIn("12", message)
+        self.assertNotIn("价格", message)
+        self.assertNotIn("元", message)
+
+
+def _circled(phone):
+    return "".join("\u24ea" if ch == "0" else chr(0x245F + int(ch)) for ch in phone)
+
 
 class AlternateSpellingTests(unittest.TestCase):
     def _variants(self):
@@ -596,6 +695,14 @@ class AlternateSpellingTests(unittest.TestCase):
             _digits(PHONE, 0x06F0),
             _digits(PHONE, 0x1D7CE),
             _superscript(PHONE),
+            _circled(PHONE),
+            "138\u20090000\u20090000",
+            "138\u20070000\u20070000",
+            "138\u202f0000\u202f0000",
+            "138,0000,0000",
+            "138/0000/0000",
+            "138_0000_0000",
+            "138 \u200b0000 \u200b0000",
         ]
 
     def test_other_spelling_of_the_same_number_is_refused(self):
@@ -617,6 +724,16 @@ class AlternateSpellingTests(unittest.TestCase):
         self.assertIn(other, text)
         self.assertTrue(report["checks"]["selected_strings_absent"])
         self.assertIn(KEEP, text)
+
+    def test_selecting_only_the_other_spelling_still_refuses(self):
+        for variant in self._variants():
+            body = "电话" + PHONE + "\n另一种" + variant + "\n" + KEEP + "\n"
+            with self.assertRaises(engine.Rejected) as caught:
+                policy.export(body.encode(), ".txt", _office_plan("text", [variant]))
+            message = str(caught.exception)
+            self.assertIn("另一种写法", message)
+            self.assertNotIn(PHONE, message)
+            self.assertNotIn(variant, message)
 
 
 class PdfKeepMessageTests(unittest.TestCase):
