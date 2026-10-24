@@ -47,7 +47,7 @@ def load_plan(path, expected):
     try: plan = json.loads(load_file(path, 256 * 1024).decode('utf-8-sig'))
     except (ValueError, UnicodeError, RecursionError): raise Failure('计划文件不是有效UTF-8 JSON。')
     common = {'version', 'kind', 'reviewed', 'keep', 'output_format', 'pdf_mode'}
-    allowed = common | ({'terms', 'acknowledge_loss', 'clean_only'} if expected == 'word' else {'rectangles'} if expected == 'image' else {'pages','reviewed_pages','acknowledge_loss'} if expected == 'pdf' else {'terms','acknowledge_loss','clean_only','input_encoding'})
+    allowed = common | ({'terms', 'acknowledge_loss', 'clean_only'} if expected == 'word' else {'rectangles'} if expected == 'image' else {'pages','reviewed_pages','acknowledge_loss','snap_to_text'} if expected == 'pdf' else {'terms','acknowledge_loss','clean_only','input_encoding'})
     if not isinstance(plan, dict) or set(plan) - allowed or type(plan.get('version')) is not int or plan.get('version') != 1 or plan.get('kind') != expected or plan.get('reviewed') is not True:
         raise Failure('计划需声明version=1、对应kind与reviewed=true，且不能有未知字段。')
     plan['keep'] = engine.keep_checked(plan.get('keep', []))

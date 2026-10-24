@@ -76,3 +76,9 @@ PYTHON scripts/cli.py redact --input <原件.pdf> --plan <已接受图像化损�
 计划也可填写`output_format: ".png"`；`pdf_mode`只有preserve/rasterize两个值，默认preserve。网页的输出格式和PDF处理方式选择对应这些字段。结果报告写实际输入/输出格式和是否转换；创建新文件后不会改写原件、计划或已有副本。
 
 旧DOC/XLS/PPT/RTF预览会调用本机Office转换，CLI的inspect需明确`--allow-conversion`；网页在调用前说明并征得本次转换选择。
+
+## PDF整字对齐与下载名
+
+网页拖框后会先向本机服务请求整字范围，并用黑块显示实际处理区域；请按这个范围确认，尤其注意相邻标点、行和保留数值。CLI默认使用原坐标；需相同对齐时在计划中明确加入`"snap_to_text": true`，导出/复检均按同一规则计算，报告`effective_pages`记录实际坐标。对齐不能绕过保留项和框外检查。
+
+网页每次成功导出均生成`redacted-时间戳-随机标识.原扩展名`，不使用原件的姓名、电话或目录。CLI按用户明确指定的输出路径新建，工具不会擅自改名；请勿在该路径中写敏感原值。

@@ -159,7 +159,20 @@ def run():
             for xref in page.get_contents():original.update_stream(xref,b'q 10 10 20 20 re W n '+original.xref_stream(xref)+b' Q')
             raw=original.tobytes()
         original.close();return rejected(lambda:policy.export(raw,'.pdf',pdf_plan()),'原生路线')
-    case('反例PDF嵌套FormXObject','negative',lambda:nested_or_clipped_text(True))
+    def safe_form():
+        f=__import__('pdf_preserve').backend();original=f.open(stream=pdf(),filetype='pdf');d=f.open();page=d.new_page(width=300,height=200);page.show_pdf_page(page.rect,original,0);raw=d.tobytes();d.close();original.close()
+        out,r,ext=policy.export(raw,'.pdf',pdf_plan())
+        return ext=='.pdf'and r['checks']['keep_phrases_preserved']and r['checks']['pdf_not_rasterized']
+    case('正常嵌套FormXObject','positive',safe_form)
+    def clipped_form():
+        f=__import__('pdf_preserve').backend();original=f.open(stream=image_pdf('clipped'),filetype='pdf');d=f.open();page=d.new_page(width=300,height=200);page.show_pdf_page(page.rect,original,0);raw=d.tobytes();d.close();original.close()
+        return rejected(lambda:policy.export(raw,'.pdf',image_plan),'原生路线')
+    case('反例Form内隐藏裁剪图片','negative',clipped_form)
+    def safe_rect_clip():
+        f=__import__('pdf_preserve').backend();d=f.open(stream=pdf(),filetype='pdf');page=d[0]
+        for xref in page.get_contents():d.update_stream(xref,b'q 0 0 300 200 re W n '+d.xref_stream(xref)+b' Q')
+        raw=d.tobytes();d.close();out,r,ext=policy.export(raw,'.pdf',pdf_plan());return ext=='.pdf'and r['checks']['keep_phrases_preserved']
+    case('正常矩形裁剪内完整文字','positive',safe_rect_clip)
     case('反例PDF被裁剪的文字','negative',lambda:nested_or_clipped_text(False))
     def forged_image_overlay():
         f=__import__('pdf_preserve').backend();raw=image_pdf();d=f.open(stream=raw,filetype='pdf');d[0].draw_rect(f.Rect(20,20,92.5,72.5),color=None,fill=(0,0,0));fake=d.tobytes();d.close()
@@ -174,6 +187,38 @@ def run():
     case('反例PDF页面之外隐藏文字','negative',lambda:offpage_text(False))
     case('反例PDF裁剪之外隐藏文字','negative',lambda:offpage_text(True))
     case('反例已有文件不得覆盖','negative',no_overwrite)
+    def neutral_download():
+        import server,threading,urllib.request,urllib.parse
+        service=server.LocalServer(0);thread=threading.Thread(target=service.serve_forever);thread.start();base=service.base+'/'+service.nonce+'/'
+        opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        def post(route,data,headers):return opener.open(urllib.request.Request(base+route,data,{'Origin':service.base,**headers},method='POST'))
+        try:
+            job=__import__('json').load(post('api/import',word(),{'X-File-Kind':'word','X-File-Extension':'.docx','X-File-Name':urllib.parse.quote(SECRET+'_13800000000.docx')}))
+            result=__import__('json').load(post('api/export',__import__('json').dumps({**plan('word'),'id':job['id']}).encode(),{'Content-Type':'application/json'}))
+            header=urllib.parse.unquote(opener.open(base+result['download']).headers['Content-Disposition'])
+            return SECRET not in header and '13800000000'not in header and '.docx'in header and result['report']['checks']['neutral_output_filename']
+        finally:service.shutdown();thread.join();service.server_close()
+    case('下载中性新文件名','positive',neutral_download)
+    def object_metadata(private=False):
+        import pdf_preserve
+        f=pdf_preserve.backend();original=f.open(stream=pdf(),filetype='pdf');doc=f.open();page=doc.new_page(width=300,height=200);page.show_pdf_page(page.rect,original,0);original.close()
+        xref=next(x for x in range(1,doc.xref_length())if doc.xref_get_key(x,'Subtype')[1]=='/Form')
+        if private:doc.xref_set_key(xref,'UnsupportedPrivate','(PRIVATE_FORM_782)')
+        else:
+            meta=doc.get_new_xref();doc.update_object(meta,'<</Type /Metadata /Subtype /XML>>');doc.update_stream(meta,b'<xmp>PRIVATE_FORM_782</xmp>');doc.xref_set_key(xref,'Metadata',str(meta)+' 0 R');doc.xref_set_key(xref,'PieceInfo','<</History (PRIVATE_FORM_782)>>')
+        raw=doc.tobytes();doc.close();return raw
+    def cleaned_object_metadata():
+        import pdf_preserve
+        output,_,_=policy.export(object_metadata(),'.pdf',pdf_plan())
+        with pdf_preserve.backend().open(stream=output,filetype='pdf')as doc:
+            raw=b' '.join(doc.xref_object(x).encode()+(doc.xref_stream(x)or b'')for x in range(1,doc.xref_length()))
+            return b'PRIVATE_FORM_782'not in raw
+    case('PDF嵌套对象元数据与历史清理','positive',cleaned_object_metadata)
+    case('PDF未知私有绘制字段','negative',lambda:rejected(lambda:policy.export(object_metadata(True),'.pdf',pdf_plan()),'私有字段'))
+    def group_private():
+        import pdf_preserve
+        f=pdf_preserve.backend();raw=object_metadata();doc=f.open(stream=raw,filetype='pdf');xref=next(x for x in range(1,doc.xref_length())if doc.xref_get_key(x,'Subtype')[1]=='/Form');doc.xref_set_key(xref,'Group','<</S /Transparency /CS /DeviceRGB /Private (HIDDEN_GROUP_782)>>');raw=doc.tobytes();doc.close();return raw
+    case('PDF混合组隐藏字段','negative',lambda:rejected(lambda:policy.export(group_private(),'.pdf',pdf_plan()),'混合组'))
     files=sorted(Path(__file__).parent.rglob('*.py'))+sorted((Path(__file__).parent/'web').glob('*'))
     source_sha=engine.digest('\n'.join(p.relative_to(Path(__file__).parents[1]).as_posix()+':'+engine.digest(p.read_bytes())for p in files if p.is_file()).encode())
     return {'ok':all(c['passed']for c in cases),'version':engine.VERSION,'source_sha256':source_sha,'lock_sha256':engine.digest((Path(__file__).parents[1]/'requirements-runtime.lock').read_bytes()),'python':platform.python_version(),'platform':platform.system(),'machine':platform.machine(),

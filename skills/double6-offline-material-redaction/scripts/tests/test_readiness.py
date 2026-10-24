@@ -81,6 +81,16 @@ class ServerReadinessTests(unittest.TestCase):
         self.assertTrue(self.post('api/invalidate',json.dumps({'id':job['id']}).encode())['invalidated'])
         with self.assertRaises(urllib.error.HTTPError):urllib.request.urlopen(self.url+out['download']).read()
 
+    def test_download_name_never_reuses_private_source_name(self):
+        import urllib.parse
+        source_name='PRIVATE_NAME_782_13800000000_简历.xlsx'
+        job=self.post('api/import',data_book(),{'X-File-Kind':'excel','X-File-Extension':'.xlsx','X-File-Name':urllib.parse.quote(source_name)})
+        payload={**plan(keep=[]),'id':job['id'],'reviewed':True}
+        first=self.post('api/export',json.dumps(payload).encode());response=urllib.request.urlopen(self.url+first['download']);name=urllib.parse.unquote(response.headers['Content-Disposition'])
+        self.assertNotIn('PRIVATE_NAME_782',name);self.assertNotIn('13800000000',name);self.assertNotIn('简历',name);self.assertIn('.xlsx',name)
+        self.assertTrue(first['report']['checks']['neutral_output_filename'])
+        second=self.post('api/export',json.dumps(payload).encode());name2=urllib.parse.unquote(urllib.request.urlopen(self.url+second['download']).headers['Content-Disposition']);self.assertNotEqual(name,name2)
+
     def test_served_version_and_support_from_current_runtime(self):
         html=urllib.request.urlopen(self.url).read().decode();self.assertIn(engine.VERSION,html);self.assertNotIn('__VERSION__',html);self.assertNotIn('尚未完成适配',html);self.assertIn('.ods',html)
 

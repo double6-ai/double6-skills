@@ -12,6 +12,7 @@ def backend():
         import pymupdf as fitz
     except ImportError as exc:
         raise engine.Rejected('缺少PDF原生处理依赖，请重新执行安装和验收。') from exc
+    fitz.TOOLS.set_small_glyph_heights(True)
     fitz.TOOLS.mupdf_display_errors(False)
     fitz.TOOLS.mupdf_display_warnings(False)
     return fitz
@@ -30,15 +31,9 @@ def open_pdf(data, inspect_image_visibility=True):
         if any(page.first_widget for page in doc):
             raise engine.Rejected('PDF含表单/签名域，原生路线暂不安全处理；请明确选择图像化副本或先处理表单。')
         if inspect_image_visibility:
-            from pypdf import PdfReader
-            parsed=None
-            for index,page in enumerate(doc):
-                if page.get_xobjects():
-                    raise engine.Rejected('PDF含嵌套FormXObject，隐藏内容尚不能安全清理，原生路线停止。')
-                if parsed is None:parsed=PdfReader(io.BytesIO(data))
-                contents=parsed.pages[index].get_contents()
-                if contents is not None and any(op in (b'W',b'W*')for _,op in contents.operations):
-                    raise engine.Rejected('PDF含裁剪路径，可能保留不可见文字或原像素，原生路线停止。')
+            import pdf_visibility
+            for page in doc:
+                pdf_visibility.validate(page)
                 images=page.get_image_info(xrefs=True)
                 if not images:continue
                 if any(not image.get('xref')or image.get('has-mask')for image in images):
@@ -70,20 +65,24 @@ def areas(plan, sizes):
 def word_rows(page, boxes):
     fitz = backend()
     result = []
-    for word in page.get_text('words'):
-        rect = fitz.Rect(word[:4])
-        if not any(rect.intersects(box) for box in boxes):
-            result.append((word[4], *(round(x, 1) for x in word[:4])))
+    for span in page.get_texttrace():
+        for char in span['chars']:
+            rect=fitz.Rect(char[3])
+            if chr(char[0]).strip()and not any(rect.intersects(box)for box in boxes):
+                result.append((char[0],*(round(x,1)for x in char[3])))
     return Counter(result)
 
 
 def export(data, plan, _verify=True):
     import formats
+    import pdf_visibility
     fitz = backend()
+    plan=effective_plan(data,plan)
     sizes = formats.pdf_info(data)
     selected = areas(plan, sizes)
     try:
         with open_pdf(data) as doc:
+            pdf_visibility.check_object_carriers(doc,clean=True)
             for index, page in enumerate(doc):
                 # 注释中的附件/原词不移入正文；已存在的待应用涂黑标记不能直接删除。
                 annotations = list(page.annots() or [])
@@ -99,17 +98,18 @@ def export(data, plan, _verify=True):
                 for span in page.get_texttrace():
                     if any(chr(char[0]).strip() and not visible_bounds.contains(fitz.Rect(char[3]))for char in span['chars']):
                         raise engine.Rejected('PDF文字超出可见页面或裁剪边界，存在隐藏原文，原生路线停止。')
-                    if span.get('type') == 3 or span.get('opacity', 1) < .999 or span.get('size',1)<.5 or (isinstance(span.get('color'),tuple) and all(c>=.99 for c in span['color'])):
+                    if span.get('type') == 3 or span.get('opacity', 1) < .999 or span.get('size',1)<.5 or (isinstance(span.get('color'),tuple) and all(c>=.99 for c in span['color']) and not pdf_visibility.white_text_visible(page,span)):
                         raise engine.Rejected('PDF含不可见或半透明文字，原生路线无法保证隐藏层清理，已停止。')
                 covers=[(seq,fitz.Rect(rect))for seq,(kind,rect)in enumerate(page.get_bboxlog())if kind in {'fill-path','stroke-path','fill-image'}]
                 for span in page.get_texttrace():
                     for char in span['chars']:
                         if chr(char[0]).strip() and any(seq>span.get('seqno',-1) and rect.intersects(fitz.Rect(char[3])) for seq,rect in covers):
                             raise engine.Rejected('PDF文字被后绘制的图形/图片遮住，存在可恢复的隐藏内容；原生路线停止。')
+                pdf_visibility.redaction_graphics(page,boxes)
                 for box in boxes:
                     page.add_redact_annot(box, fill=(0, 0, 0), cross_out=False)
                 if boxes:
-                    page.apply_redactions(images=2, graphics=2, text=0)
+                    page.apply_redactions(images=2, graphics=1, text=0)
             # 新建容器，不保存增量历史，不导入链接、注释、书签和文档级脚本。
             fresh = fitz.open()
             fresh.insert_pdf(doc, links=False, annots=False, widgets=False)
@@ -129,6 +129,7 @@ def verify(data, plan, source):
     fitz = backend()
     if source is None:
         raise engine.Rejected('PDF复检需要原件，才能检查框外页面及文字。')
+    plan=effective_plan(source,plan)
     sizes = formats.pdf_info(source)
     selected = areas(plan, sizes)
     expected=export(source,plan,_verify=False)
@@ -141,6 +142,9 @@ def verify(data, plan, source):
         with open_pdf(source) as before, open_pdf(data, inspect_image_visibility=False) as after:
             if len(before) != len(after):
                 raise engine.Rejected('PDF页数发生变化。')
+            import pdf_visibility
+            pdf_visibility.check_used_xobjects(data)
+            pdf_visibility.check_object_carriers(after)
             if after.embfile_count() or after.get_toc() or any(after.metadata.get(k) for k in ('title','author','subject','keywords','creator','producer')) or after.get_xml_metadata():
                 checks['pdf_hidden_objects_absent'] = False
             for index, (original, page) in enumerate(zip(before, after)):
@@ -178,8 +182,37 @@ def verify(data, plan, source):
         if not all(checks.values()):
             raise engine.Rejected('PDF原生复检未通过：可能切到字形、影响框外内容或存在隐藏对象；请扩大框选或检查格式，不自动图像化。')
         return {'checks': checks, 'not_checked': [] if keep else ['keep_phrases_preserved'],
-                'output_sha256': engine.digest(data), 'scope': 'PDF原生删改；保留框外可搜索文字、位置和页面。仅核对已选区域及支持的隐藏载体。'}
+                'effective_pages':plan.get('pages',[]),'output_sha256': engine.digest(data), 'scope': 'PDF原生删改；保留框外可搜索文字、位置和页面。仅核对已选区域及支持的隐藏载体。'}
     except engine.Rejected:
         raise
     except Exception as exc:
         raise engine.Rejected('PDF实际副本原生复检失败。') from exc
+
+
+def snap_region(data,number,region):
+    """在预览中对齐完整字符；仅返回范围，不返回原文。"""
+    import formats
+    sizes=formats.pdf_info(data)
+    if type(number)is not int or not 1<=number<=len(sizes):raise engine.Rejected('PDF页码无效。')
+    target=list(engine.rectangles([region],sizes[number-1])[0]);fitz=backend()
+    with fitz.open(stream=data,filetype='pdf')as doc:
+        page=doc[number-1];glyphs=[]
+        for span in page.get_texttrace():
+            for char in span['chars']:
+                if chr(char[0]).strip():
+                    r=fitz.Rect(char[3])*page.rotation_matrix;glyphs.append(fitz.Rect(*(v*2 for v in r)))
+        if len(glyphs)>200000:raise engine.Rejected('PDF字形超出对齐范围。')
+        for _ in range(64):
+            previous=target[:];rect=fitz.Rect(target)
+            for glyph in glyphs:
+                if glyph.intersects(rect):target=[min(target[0],math.floor(glyph.x0)),min(target[1],math.floor(glyph.y0)),max(target[2],math.ceil(glyph.x1)),max(target[3],math.ceil(glyph.y1))]
+            if target==previous:return list(engine.rectangles([target],sizes[number-1])[0])
+    raise engine.Rejected('整字范围无法稳定对齐，请在预览调整框选。')
+
+
+def effective_plan(data,plan):
+    if not isinstance(plan.get('snap_to_text',False),bool):raise engine.Rejected('整字对齐选项必须为布尔值。')
+    if plan.get('snap_to_text')is not True or plan.get('pdf_mode','preserve')!='preserve':return plan
+    import formats
+    original=areas(plan,formats.pdf_info(data))
+    return {**plan,'snap_to_text':False,'pages':[{'page':number,'rectangles':[snap_region(data,number,list(region))for region in rows]}for number,rows in original.items()]}

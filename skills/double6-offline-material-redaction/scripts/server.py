@@ -154,6 +154,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(200, {"stopped": True})
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return
+            if path == "api/snap-pdf":
+                job=self.job(values.get('id'))
+                if job['kind']!='pdf':raise Rejected('整字对齐只适用于PDF。')
+                import pdf_preserve
+                region=pdf_preserve.snap_region(job['data'],values.get('page'),values.get('rectangle'))
+                return self.send(200,{'rectangle':region})
             if path == "api/invalidate":
                 self.job(values.get("id")).pop("output",None)
                 return self.send(200,{"invalidated":True})
@@ -164,9 +170,9 @@ class Handler(BaseHTTPRequestHandler):
                     raise Rejected("请先核对预览和补选范围。")
                 values['input_encoding']=job['encoding']
                 output,report,ext=output_policy.export(job['original'],job['extension'],values,values.get('output_format'))
-                stem=Path(job['original_name'].replace('\\','/')).stem
-                stem=''.join(c for c in stem if c.isprintable() and c not in '/\\:*?"<>|')[:80] or 'material'
-                job['output_name']=stem+'-脱敏-'+datetime.now().strftime('%Y%m%d-%H%M%S')+'-'+secrets.token_hex(3)+ext
+                # 下载名不沿用原名，避免正文已处理而姓名/号码仍随文件名上传。
+                job['output_name']='redacted-'+datetime.now().strftime('%Y%m%d-%H%M%S')+'-'+secrets.token_hex(6)+ext
+                report['checks']['neutral_output_filename']=True
                 job['output_ext']=ext
                 job["output"] = output
                 return self.send(200, {"download": "file/" + values["id"] + "/output", "report": report})
