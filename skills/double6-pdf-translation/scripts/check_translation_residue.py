@@ -215,20 +215,112 @@ def _starts_entry(line: str) -> bool:
     return bool(_rrc.entry_lead(text) or _rrc.ENTRY_MARKER.match(text) or _ZH_AUTHOR_LEAD.match(text))
 
 
+# 作者/条目角色证据（第八轮收紧）：编号、年份、DOI 都不能证明一行是文献条目，编号只是可选前缀。
+# 中文条目必须是“作者段（人名列表/等/机构作者）. 题名[类型标识]. 出处……”的 GB/T 7714 结构；
+# 普通中文叙述（逗号连接的多个分句、句中句号）一律 break，未知照常计数。
+_ZH_INSTITUTION_LEAD = re.compile(
+    r"^\s*[\u4e00-\u9fff（）()·]{2,24}?(?:大学|学院|研究院|研究所|研究中心|中心|实验室|委员会|协会|学会|"
+    r"出版社|局|部|署|院|所|办公室|公司|集团|组织|联盟)\s*[.．]")
+# GB/T 7714 的西文作者著录：“Smith J, Lee K, et al.”（姓 + 大写首字母缩写，逗号分隔，句点结束）。
+_GBT_LATIN_AUTHOR_LEAD = re.compile(
+    r"^\s*[A-Z][A-Za-z'\u2019\-]+(?:\s+[A-Z]{1,3})+(?:\s*,\s*[A-Z][A-Za-z'\u2019\-]+(?:\s+[A-Z]{1,3})+){0,9}"
+    r"(?:\s*,\s*(?:et\s+al|等))?\s*[.．]")
+# GB/T 类型标识后面紧跟著录分隔符（“[J]. ”“[C]//”或条目结束）；“[J]，……”这类正文里的方括号不算。
+_GBT_TYPE_CODE_FIELD = re.compile(_GBT_TYPE_CODE.pattern + r"(?=\s*(?:[.．]|//|$))", re.I)
+_ZH_SOURCE = re.compile(
+    r"\d+\s*[(（]\s*\d+\s*[)）]\s*[:：]\s*\d+"            # 卷(期): 页
+    r"|[\u4e00-\u9fff]{2,}\s*[:：]\s*[\u4e00-\u9fff]{2,}[^,，.．]*[,，]\s*(?:19|20)\d{2}")  # 出版地: 出版者, 年
+_ZH_CLAUSE_CHAIN = re.compile(
+    r"[\u4e00-\u9fff][^，,。.．\[\]]*[\u4e00-\u9fff]{4}[^，,。.．\[\]]*[，,]\s*"
+    r"[^，,。.．\[\]]*[\u4e00-\u9fff]{4}[^，,。.．\[\]]*[，,]\s*[^，,。.．\[\]]*[\u4e00-\u9fff]{4}")
+_ZH_INNER_FULL_STOP = re.compile(r"。\s*\S")
+
+
+def _zh_author_segment_end(value: str) -> int | None:
+    """去掉可选编号后，作者段（中文人名列表/“等”/机构作者，或英文作者列表）结束的位置；没有作者段返回 None。"""
+    marker = _rrc.LEADING_MARKER.match(value)
+    start = marker.end() if marker else 0
+    body = value[start:]
+    for pattern in (_ZH_AUTHOR_LEAD, _ZH_INSTITUTION_LEAD, _GBT_LATIN_AUTHOR_LEAD):
+        match = pattern.match(body)
+        if match:
+            return start + match.end()
+    fields = _rrc.entry_fields(value)
+    if fields is not None:
+        return start + body.find(fields["authors"]) + len(fields["authors"]) + 1
+    if _rrc.AUTHOR_LEAD.match(body):
+        end = _rrc._field_boundary(body)
+        return None if end is None else start + end + 1
+    return None
+
+
+def zh_narrative_veto(text: str) -> list[str]:
+    """中文叙述否决（结构证据，不用禁词）：第一人称；逗号连接的 ≥3 个各含 ≥4 个汉字的分句；句号后还有正文。"""
+    value = " ".join(str(text or "").split())
+    reasons = []
+    if _ZH_FIRST_PERSON.search(value):
+        reasons.append("first_person")
+    if _ZH_CLAUSE_CHAIN.search(value):
+        reasons.append("clause_chain")
+    if _ZH_INNER_FULL_STOP.search(value):
+        reasons.append("inner_full_stop")
+    return reasons
+
+
 def zh_reference_entry_class(text: str) -> str:
-    """含中文的条目：strong = 编号/作者开头 + 年份 + 出处（GB/T 7714 文献类型标识、出处/卷期页、DOI），
-    weak = 开头证据 + 只有年份或出处之一；第一人称/叙述句一律 break。只有年份/DOI 不足以成为条目。"""
+    """含中文的条目：必须先有作者段（编号只是可选前缀，本身不是作者或条目角色证据），作者段之后是题名；
+    strong = 作者段 + 题名 + 出处结构（GB/T 7714 类型标识后接 . 或 //、卷(期):页、出版地: 出版者，或英文出处）+ 年份；
+    weak = 作者段 + 题名 + 年份或出处之一。年份/DOI 都不算出处；中文叙述或英文正文否决一律 break。"""
     value = " ".join(text.split())
-    if _ZH_FIRST_PERSON.search(value) or _rrc.prose_veto(value):
+    if zh_narrative_veto(value) or _rrc.prose_veto(value):
         return "break"
-    lead = bool(_rrc.ENTRY_MARKER.match(value) or _rrc.AUTHOR_LEAD.match(value) or _ZH_AUTHOR_LEAD.match(value))
-    year = bool(_rrc.YEAR.search(value))
-    source = bool(_GBT_TYPE_CODE.search(value) or _rrc.VENUE.search(value))
-    if lead and year and source:
+    end = _zh_author_segment_end(value)
+    if end is None:
+        return "break"
+    rest = value[end:].strip()
+    # 题名字段：作者段之后到第一个著录分隔符（. ． 或 GB/T 类型标识）为止；年份与出处必须出现在题名字段之后，
+    # 写在叙述句里的年份/DOI 不算条目的出版信息。
+    split = re.search(r"[.．]|" + _GBT_TYPE_CODE.pattern, rest, re.I)
+    title = rest[:split.start()].strip() if split else rest
+    after = rest[split.start():] if split else ""
+    if len(_CJK_CHAR.findall(title)) < 2 and len(re.findall(r"[A-Za-z]{2,}", title)) < 2:
+        return "break"
+    year = bool(_rrc.YEAR.search(after))
+    venue = _rrc.VENUE.search(after)
+    english_venue = bool(venue and not re.fullmatch(r"doi|10\.\d{4,9}/", venue.group(0), re.I))
+    source = bool(_GBT_TYPE_CODE_FIELD.search(after) or _ZH_SOURCE.search(after) or english_venue)
+    if year and source:
         return "strong"
-    if lead and (year or source):
+    if year or source:
         return "weak"
     return "break"
+
+
+def en_author_evidence(text: str) -> bool:
+    """英文条目的作者角色证据：去掉编号后是作者开头/作者列表、含 et al./缩写式人名，或“机构名. 题名. ……”结构。
+    编号、年份、DOI 本身都不算。"""
+    value = " ".join(text.split())
+    body = _rrc.LEADING_MARKER.sub("", value, count=1).strip()
+    if _rrc.entry_lead(body) in ("author", "author_list") or _rrc.AUTHOR.search(value):
+        return True
+    if _rrc.entry_fields(value) is not None:
+        return True
+    end = _rrc._field_boundary(body)
+    if end is not None:
+        tokens = [t.strip(",;:") for t in body[:end].split()]
+        tokens = [t for t in tokens if t and t != "&"]
+        # 机构/单名作者：“OpenAI. 题名. 出处……”——作者字段 1–6 个首字母大写的词，后面还有题名字段
+        if (1 <= len(tokens) <= 6 and all(_rrc._is_name_token(t) for t in tokens)
+                and _rrc._field_boundary(body, end + 1) is not None):
+            return True
+    # 逗号分隔的机构作者：“IEEE, 题名, ……”——缩写/内部大写（IEEE、OpenAI）或 ≥2 个首字母大写的词
+    comma = re.match(r"([^,]{2,60}),\s+\S", body)
+    if comma:
+        tokens = [t for t in comma.group(1).split() if t not in ("&",)]
+        if (1 <= len(tokens) <= 6 and all(_rrc._is_name_token(t) for t in tokens)
+                and (len(tokens) >= 2 or re.search(r"[A-Z].*[A-Z]", tokens[0]))):
+            return True
+    return False
 
 
 def _reference_line_groups(lines: list[str], opens_region) -> tuple[list[dict[str, Any]], list[int]]:
@@ -276,6 +368,8 @@ def reference_entry_lines(text: str, *, target_language: str = "en") -> set[int]
             g["_class"] = zh_reference_entry_class(group["text"])
         else:
             g["_class"] = _rrc.headingless_entry_class(g, region=True)
+            if g["_class"] in ("strong", "weak") and not en_author_evidence(group["text"]):
+                g["_class"] = "break"  # 只有编号/年份/DOI/出处，没有作者角色证据：不是条目
         seq.append(g)
     _rrc._decide_entries(seq, "reference_section")
     excluded: set[int] = set()
