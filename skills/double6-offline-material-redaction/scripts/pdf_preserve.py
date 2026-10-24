@@ -91,6 +91,37 @@ def without_annotation_appearance(data):
         return output
 
 
+def annotation_reveals_outside_text(page, boxes):
+    """盖子底下、框选范围外还有字形，删掉批注后正文就会露出来。
+
+    只认会挡住正文的批注。高亮、下划线、删除线、链接和便签图标不算；空白处的色块没有字形，也不算。
+    字形中心已经落在框里时，这段文字会被涂掉，不当成框外露出。
+    """
+    fitz = backend()
+    covers = {
+        fitz.PDF_ANNOT_FREE_TEXT,
+        fitz.PDF_ANNOT_SQUARE,
+        fitz.PDF_ANNOT_CIRCLE,
+        fitz.PDF_ANNOT_POLYGON,
+        fitz.PDF_ANNOT_INK,
+        fitz.PDF_ANNOT_STAMP,
+    }
+    annotations = [annot for annot in (page.annots() or []) if annot.type[0] in covers]
+    if not annotations:
+        return False
+    for span in page.get_texttrace():
+        for char in span['chars']:
+            if not chr(char[0]).strip():
+                continue
+            rect = fitz.Rect(char[3])
+            center = fitz.Point((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2)
+            if any(box.contains(center) for box in boxes):
+                continue
+            if any(annot.rect.intersects(rect) for annot in annotations):
+                return True
+    return False
+
+
 def word_rows(page, boxes):
     fitz = backend()
     result = []
@@ -206,7 +237,7 @@ def verify(data, plan, source):
                         checks['selected_regions_solid'] = False
                 if delta.getbbox() is not None:
                     checks['outside_page_pixels_preserved'] = False
-                # 与带批注的原页面再比一次。去掉白框等遮盖后，框外若出现原来没有的深色像素，就是被揭开的正文。
+                # 与带批注的原页面再比一次。去掉浅色盖子后，框外若多出深色像素，就是被揭开的正文。
                 revealed = ImageChops.subtract(formats.pdf_image(source, index).convert('L'), new.convert('L'))
                 for box in pixel_boxes:
                     x0, y0, x1, y1 = box
@@ -214,11 +245,18 @@ def verify(data, plan, source):
                 if revealed.getextrema()[1] > 0:
                     checks['outside_page_pixels_preserved'] = False
                     checks['covered_text_not_revealed'] = False
+                # 黑盖子比底下的字更深时，揭开会变浅，上面的深色差发现不了。直接看盖子底下有没有框外字形。
+                if annotation_reveals_outside_text(original, boxes):
+                    checks['outside_page_pixels_preserved'] = False
+                    checks['covered_text_not_revealed'] = False
             keep = engine.keep_checked(plan.get('keep', []))
             if keep:
                 all_text = '\n'.join(p.get_text() for p in after)
                 checks['keep_phrases_preserved'] = all(x in all_text for x in keep)
         if not all(checks.values()):
+            failed = {name for name, ok in checks.items() if not ok}
+            if failed == {'keep_phrases_preserved'}:
+                raise engine.Rejected('保留项没有对上：原文里没有这项，或副本里没有留下。未交付副本。')
             revealed = ''
             if checks.get('covered_text_not_revealed') is False:
                 revealed = '去掉批注后，原本看不见的正文变得可见。'

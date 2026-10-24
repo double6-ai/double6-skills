@@ -317,17 +317,93 @@ def _fold_marks(text):
     return "".join(ch for ch in text.translate(_FOLD) if unicodedata.category(ch) != "Cf")
 
 
+_VARIANT_GAP = set(" \u00a0\u3000-\u2010\u2011\u2012\u2013\u2014\u2015\uff0d.\uff0e\u00b7\u30fb")
+_LABEL_HYPHEN = set("-\u2010\u2011\u2012\u2013\u2014\u2015\uff0d")
+_SUPER_DIGIT = {
+    "\u2070": "0",
+    "\u00b9": "1",
+    "\u00b2": "2",
+    "\u00b3": "3",
+    "\u2074": "4",
+    "\u2075": "5",
+    "\u2076": "6",
+    "\u2077": "7",
+    "\u2078": "8",
+    "\u2079": "9",
+}
+
+
+def _as_digit(ch):
+    """把常见数字字形收成 ASCII 数字。其它文字的 isdigit 不能直接拿来比较。"""
+    mapped = _SUPER_DIGIT.get(ch)
+    if mapped:
+        return mapped
+    code = ord(ch)
+    if 0x0660 <= code <= 0x0669:
+        return str(code - 0x0660)
+    if 0x06F0 <= code <= 0x06F9:
+        return str(code - 0x06F0)
+    if 0x1D7CE <= code <= 0x1D7FF:
+        return str((code - 0x1D7CE) % 10)
+    folded = ch.translate(_FOLD)
+    if len(folded) == 1 and folded in "0123456789":
+        return folded
+    return ""
+
+
+def _alternate_digit_spelling(text, digits):
+    """同一串数字的另一种写法：中间可以是空格、连字符或点号，字形可以不是 ASCII。"""
+    if not digits:
+        return False
+    size = len(text)
+    index = 0
+    while index < size:
+        if _as_digit(text[index]) != digits[0]:
+            index += 1
+            continue
+        cursor = index
+        used_variant = False
+        matched = True
+        for nth, expected in enumerate(digits):
+            if nth:
+                saw_gap = False
+                while cursor < size and text[cursor] in _VARIANT_GAP:
+                    cursor += 1
+                    saw_gap = True
+                if saw_gap:
+                    used_variant = True
+            if cursor >= size or _as_digit(text[cursor]) != expected:
+                matched = False
+                break
+            if text[cursor] != expected:
+                used_variant = True
+            cursor += 1
+        if matched and used_variant:
+            return True
+        index += 1
+    return False
+
+
 def term_remains(text, term):
-    """补选词只要还在，包括嵌在更长数字里、或被不可见字符隔开，都不能当成已经不在。"""
+    """补选词只要还在，包括嵌在更长数字里、被不可见字符隔开，或换了分隔符和数字字形，都不能当成已经不在。"""
     if term in text:
         return True
     folded = _fold_marks(term)
     if folded and folded in _fold_marks(text):
         return True
-    digits = "".join(ch for ch in folded if ch.isdigit())
-    if folded and digits == folded:
-        return any(folded in run for run in _digit_runs(text))
+    if folded and folded.isdigit():
+        if any(folded in run for run in _digit_runs(text)):
+            return True
+        if _alternate_digit_spelling(text, folded):
+            return True
     return False
+
+
+def alternate_spelling_remains(text, term):
+    folded = _fold_marks(term)
+    if not folded.isdigit():
+        return False
+    return _alternate_digit_spelling(text, folded)
 
 
 def _digit_term_embedded(text, term):
@@ -391,6 +467,8 @@ def prepare_replacement(preview, terms, missing_message=None):
     mapping = {term: mark for term, mark in zip(terms, markers_for(terms, preview))}
     rewritten = rewrite(preview, terms, mapping)
     if any(term_remains(rewritten, term) for term in terms):
+        if any(alternate_spelling_remains(rewritten, term) for term in terms):
+            raise Rejected("同一号码还有另一种写法留在正文里。空格、连字符、点号或不同的数字字形都算。已停止，未交付副本。")
         raise Rejected("替换后补选内容仍留在正文里，已停止，未交付副本。")
     return lambda text: rewrite(text, terms, mapping)
 
@@ -456,8 +534,23 @@ def terms_checked(values):
     return sorted(set(v.strip() for v in values), key=lambda v: (-len(v), v))
 
 
+def _label_on_side(preview, index, step):
+    """从短数字的一侧看过去。空白、不可见字符和连字符都隔不断旁边的汉字或字母。"""
+    size = len(preview)
+    cursor = index
+    while True:
+        pos = cursor - 1 if step < 0 else cursor
+        if pos < 0 or pos >= size:
+            return False
+        ch = preview[pos]
+        if _is_attach_gap(ch) or ch in _LABEL_HYPHEN:
+            cursor = pos if step < 0 else pos + 1
+            continue
+        return ch.isalnum() and not ch.isdigit()
+
+
 def reject_partial_business_numbers(preview, terms):
-    """短数字若贴着或隔着空白/不可见字符贴着别的编号，就停止，避免改掉业务编号。不把原文编号写进错误。"""
+    """短数字若贴着或隔着空白、连字符、不可见字符贴着别的编号，就停止。左右两侧同样算。不把原文编号写进错误。"""
     for term in terms:
         if not term.isdigit() or len(term) > 7:
             continue
@@ -466,12 +559,10 @@ def reject_partial_business_numbers(preview, terms):
             at = preview.find(term, start)
             if at < 0:
                 break
-            left = at
-            while left and _is_attach_gap(preview[left - 1]):
-                left -= 1
-            if left and preview[left - 1].isalnum() and not preview[left - 1].isdigit():
-                raise Rejected("补选的短数字会改掉前后连着的业务编号。换行、空格或不可见字符隔开也算连在一起。请补选完整原文，不要只选其中一段。")
-            start = at + len(term)
+            end = at + len(term)
+            if _label_on_side(preview, at, -1) or _label_on_side(preview, end, 1):
+                raise Rejected("补选的短数字会改掉前后连着的业务编号。换行、空格、连字符或不可见字符隔开也算连在一起。请补选完整原文，不要只选其中一段。")
+            start = end
 
 
 def keep_checked(values):
