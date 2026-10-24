@@ -516,6 +516,15 @@ def _mupdf_gray(page, size):
     return Image.frombytes('RGB', (pix.width, pix.height), pix.samples).convert('L')
 
 
+def _outside_change_is_noise(box):
+    """矩形外比一颗字还短的差分，是换一次渲染留下的毛边，不是遮盖。
+
+    普通高亮在 Windows 上会让页面另一处的字边重画大约 4×9 个预览像素，这块小窗会被误判成涂平。
+    能盖住号码的框外外观长边远大于 12 个预览像素，仍然要判断。
+    """
+    return max(box[2] - box[0], box[3] - box[1]) < 12
+
+
 def _expand_sample(box, image):
     """不足 4 像素的差分块向外补到能取样。补完仍不够就保持原样，交给后面判为对齐不了。"""
     def grow(start, end, limit):
@@ -622,6 +631,8 @@ def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, b
             problems.append(_occlusion_message(page_number, label, box, reason))
     for source_covered, source_base in ((covered, base), (mupdf_covered, mupdf_base)):
         for box in _changed_components(source_covered, source_base, claimed):
+            if _outside_change_is_noise(box):
+                continue
             box = _expand_sample(box, covered)
             area = _to_page_rect(box, page, original_image.size)
             reason = _occlusion_reason(

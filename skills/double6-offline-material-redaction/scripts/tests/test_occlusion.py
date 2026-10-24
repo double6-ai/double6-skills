@@ -170,6 +170,14 @@ def _expected(key, oracle):
     return "deliver"
 
 
+class OutsideNoiseTests(unittest.TestCase):
+    def test_sub_glyph_raster_speck_is_not_treated_as_a_cover(self):
+        # Windows 上高亮旁路出来的毛边大约是 4×9。框外真把号码涂平的块长边是两百像素上下。
+        self.assertTrue(pdf._outside_change_is_noise((69, 67, 73, 76)))
+        self.assertFalse(pdf._outside_change_is_noise((20, 309, 232, 389)))
+        self.assertFalse(pdf._outside_change_is_noise((30, 320, 40, 360)))
+
+
 class OcclusionOracleTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
