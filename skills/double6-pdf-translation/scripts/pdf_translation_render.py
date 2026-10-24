@@ -863,7 +863,7 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
         encoding="utf-8",
     )
     run_quality_check(output_dir, render_manifest)
-    readable_manifest = render_qa_repaired_pdf(output_dir, args)
+    readable_manifest = render_qa_repaired_pdf(output_dir, args, translated_pdf=(render_manifest.get("outputs") or {}).get("translated_pdf"))
     render_manifest["outputs"]["readable_repaired_pdf"] = readable_manifest.get("output") if readable_manifest.get("status") == "ok" else None
     render_manifest["outputs"]["readable_repaired_pdf_manifest"] = readable_manifest.get("manifest_path") if readable_manifest.get("status") == "ok" else None
     render_manifest["qa_repaired_pdf"] = readable_manifest

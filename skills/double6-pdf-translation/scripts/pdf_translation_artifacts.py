@@ -541,7 +541,7 @@ def run_quality_check(output_dir: Path, render_manifest: dict[str, Any]) -> Path
     )
     return quality_path
 
-def render_qa_repaired_pdf(output_dir: Path, args: argparse.Namespace) -> dict[str, Any]:
+def render_qa_repaired_pdf(output_dir: Path, args: argparse.Namespace, translated_pdf: str | Path | None = None) -> dict[str, Any]:
     mode = str(getattr(args, "post_qa_repair", "auto") or "auto")
     repaired_path = output_dir / "translation.qa_repaired.md"
     final_pdf = output_dir / "final_readable.pdf"
@@ -550,11 +550,23 @@ def render_qa_repaired_pdf(output_dir: Path, args: argparse.Namespace) -> dict[s
         return {"status": "skipped", "reason": "post_qa_repair_off"}
     if not repaired_path.exists():
         return {"status": "skipped", "reason": "missing_translation_qa_repaired"}
-    manifest = render_readable_pdf.render_pdf(repaired_path, final_pdf, title=output_dir.name)
+    input_pdf = getattr(args, "input_pdf", None)
+    source_pdf = Path(str(input_pdf)).expanduser() if input_pdf else None
+    # 标题取原文件名（不再用输出目录名，曾导致可读版标题为 "out"）。
+    title = source_pdf.stem if source_pdf is not None else output_dir.name
+    math_source = Path(str(translated_pdf)) if translated_pdf else None
+    manifest = render_readable_pdf.render_pdf(
+        repaired_path,
+        final_pdf,
+        title=title,
+        math_source_pdf=math_source if math_source is not None and math_source.is_file() else None,
+        source_pdf=source_pdf if source_pdf is not None and source_pdf.is_file() else None,
+        original_markdown_path=output_dir / "translation.md",
+    )
     manifest.update(
         {
             "source": str(repaired_path),
-            "output": str(final_pdf),
+            "output": str(final_pdf) if manifest.get("status") == "ok" else None,
             "manifest_path": str(final_manifest_path),
             "delivery_boundary": "QA 修复可读 PDF 只同步文本修复和 protected span 恢复清单，不替代主版式 PDF。",
         }
