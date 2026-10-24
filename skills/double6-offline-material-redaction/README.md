@@ -1,37 +1,39 @@
 # 本地材料脱敏
 
-准备把简历、作业、合同节选或表格交给在线AI之前，先在自己电脑上生成脱敏副本。用户补选敏感文字或区域，工具清理支持的隐藏内容，导出后核对业务信息是否保留。原文件不覆盖。
+在上传AI材料前，用本机工具生成脱敏副本。用户补选敏感文字或区域，工具清理支持的隐藏内容，再核对必须保留的业务内容。原件、计划和已有结果都不覆盖。
 
-本Skill免费开源，提供源码和本地浏览器界面；不需要模型或API key。首次安装下载Python依赖，处理材料不调用在线服务。支持Windows11 x64与Apple芯片Mac、Python3.12。
+支持Windows x64、Apple芯片macOS，兼容Python3.10–3.14。优先复用已有兼容Python；首次安装按哈希清单下载依赖，材料处理可以离线完成。原格式无法安全导出时停止，转换须明确选择。
 
-## 安装与启动
+## 让Agent准备工具
 
-先按仓库说明安装整个Skill目录。进入该目录：
+> 请使用 $double6-offline-material-redaction 安装并检查本机环境，自动跑正例与反例，全部通过后给我双击启动文件和本机离线指令。真实材料和补选原文不要发到聊天。
+
+安装整个Skill目录，进入目录后运行：
 
 ```bash
-# macOS
-python3.12 scripts/bootstrap.py --venv /absolute/new/redaction-venv
-/absolute/new/redaction-venv/bin/python scripts/cli.py gui
+# macOS：复用已有兼容Python，也可直接用对应Python执行bootstrap.py
+sh scripts/setup-macos.sh --venv /absolute/new/redaction-venv
 ```
 
 ```powershell
-# Windows
-py -3.12 scripts/bootstrap.py --venv C:\absolute\new\redaction-venv
-& 'C:\absolute\new\redaction-venv\Scripts\python.exe' scripts/cli.py gui
+# Windows：在本次进程内正常执行已审阅脚本，不改系统执行策略
+powershell -NoProfile -File scripts/setup-windows.ps1 -Venv C:\absolute\new\redaction-venv
 ```
 
-也可以告诉具备本地执行能力的Agent：
+缺少Python时先按[安装说明](references/install.md)从正规来源安装。脚本不替换系统Python。安装依赖、自检或正反例失败时不会生成“可用”状态。
 
-> 请用 $double6-offline-material-redaction 准备本机脱敏工具，检查安装和自检结果，然后打开界面让我补选。不要把真实材料内容发送到聊天。
+## 以后离线使用
 
-安装会检查依赖、运行环境与合成材料自检。目录已有其它内容、依赖哈希不符或自检失败会停止；详细处理见[安装说明](references/install.md)。
+安装成功返回验收报告、`Start-Redaction.command`或`Start-Redaction.cmd`及本机使用说明。双击启动文件，工具会打开系统浏览器中的本地HTML页面。选择文件、补选、填写业务保留项、导出并复检，最后打开实际副本核对。也可以复制安装返回的完整离线命令运行。
 
-## 能处理什么
+界面与处理服务都在本机，不需要在线Agent、模型或API。HTML页面由本机Python服务提供，不能只双击源码中的index.html。退出请点击“结束工具并清空会话”；关闭标签页不结束服务，已下载副本仍保留。
 
-图片、DOCX、文本/Markdown、CSV/TSV、PDF、XLSX/XLSM、PPTX及ODT/ODS/ODP有对应路线。DOC/XLS/PPT/RTF需要另外安装LibreOffice。输入和输出格式、版式变化及拒绝条件见[格式说明](references/formats.md)。
+## 格式和许可
 
-图片/PDF需要人工选全敏感区域，PDF需逐页查看。Word/PPTX的图片、图表及原设计无法完整保留，复杂表格显示也可能被拒绝。请填写关键保留内容，打开实际副本核对；自动复检不能保证找全敏感信息。
+图片保持PNG/JPEG/WebP原编码；Word、文本、表格、PPT及ODF按支持范围生成同格式新副本。PDF默认原生删除选定内容，保留框外文字与页面；整页图像化必须明确选择。旧DOC/XLS/PPT/RTF暂不能安全原格式导出，需要用户明确选择转换路线，另需LibreOffice。
 
-图形界面用“结束工具并清空会话”退出；关闭标签页不会结束工具。已下载副本和系统缓存不属于会话清理范围。
+同格式不代表版式无损：Word/PPT/ODF仍会重建支持的文字与表格，图片和复杂设计可能丢失；JPEG会重编码。缺少必要业务内容、存在不支持的隐藏结构或复检失败时停止。详情见[格式说明](references/formats.md)。
 
-入口：[SKILL.md](SKILL.md) · [命令计划](references/commands.md) · [兼容依赖](references/compatibility.md) · [验证范围](references/validation.md) · [依赖许可](references/runtime-dependencies.md)
+原创源码MIT；PDF原生引擎PyMuPDF/MuPDF适用AGPL-3.0，MIT声明不覆盖该依赖。分发组合运行环境或对外提供服务时须遵守对应许可，详见[依赖说明](references/runtime-dependencies.md)。
+
+入口：[SKILL.md](SKILL.md) · [安装与离线使用](references/install.md) · [命令](references/commands.md) · [验证范围](references/validation.md)

@@ -1,52 +1,50 @@
-# 安装与故障处理
+# 安装、验收与离线启动
 
-完整安装`double6-offline-material-redaction`目录。公开包包含源码、指引和依赖哈希清单，需要Python3.12；不包含预编译EXE、App或Python运行时。Python可从[官方网站](https://www.python.org/downloads/)取得，按系统正常方式安装，不关闭安全检查。
+支持Windows x64、Apple芯片macOS，Python3.10–3.14。安装完整Skill目录。优先复用已有兼容解释器；新装从[Python官网](https://www.python.org/downloads/)取得仍受维护的较新兼容版本，按正常方式安装。Python3.10兼容用于已有环境，其[官方维护期限](https://devguide.python.org/versions/)与工具功能兼容分别判断。
 
-从Skill目录新建独立环境：
+## 安装
+
+从Skill目录执行：
 
 ```bash
-# macOS Apple芯片
-python3.12 scripts/bootstrap.py --venv /absolute/new/redaction-venv
+# macOS自动选择已有兼容版本
+sh scripts/setup-macos.sh --venv /absolute/new/redaction-venv
+# 或明确使用已有解释器
+python3.10 scripts/bootstrap.py --venv /absolute/new/redaction-venv
 ```
 
 ```powershell
-# Windows x64
-py -3.12 scripts/bootstrap.py --venv C:\absolute\new\redaction-venv
+# Windows已有py启动器或python命令
+powershell -NoProfile -File scripts/setup-windows.ps1 -Venv C:\absolute\new\redaction-venv
+# 或明确使用已有解释器
+py -3.10 scripts/bootstrap.py --venv C:\absolute\new\redaction-venv
 ```
 
-首次安装从PyPI下载已登记哈希的wheel；不执行源码构建。安装完成返回Python路径，下文称`PYTHON`。已准备依赖的离线电脑可以额外指定`--wheelhouse <本机wheel目录>`；此时不访问软件源。哈希校验检测依赖文件是否匹配清单，不能证明发布者身份或材料安全。
+系统策略拦截脚本时，使用已获准Python直接执行bootstrap，不更改机器/用户执行策略。目录已有其它内容、旧版/不同Python环境或未完成安装时改用新目录，保留现场。
 
-需要离线安装时，先在与目标电脑系统、架构相同且已安装Python3.12的联网电脑上，从Skill目录准备wheel目录，再把整个Skill及wheel目录一起复制过去：
+安装会创建独立venv，用`--require-hashes --only-binary=:all:`从PyPI取得固定版本wheel，不自动源码编译。完成pip check、环境诊断、适配器自检和合成正反例验收后，才创建安装完成回执与本次启动入口。解释器的小版本和架构写入回执；不同版本不共用同一venv。
+
+## 自动验收与交付
+
+基础安装自动执行23个正例、26个反例，包括同格式图片/Word/表格/PPT/ODF、PDF文字保留、显式转换，以及禁止覆盖、保留项缺失、越界框选、伪装扩展名、旧格式未经授权转换、PDF加密/不可见文字/遮盖后仍可恢复文字等拒绝场景。反例必须按预期拒绝，意外崩溃不能算通过。
+
+输出`acceptance.json`列出每例结果、实际系统/架构/Python版本及未测试范围。旧Office兼容引擎的执行、真实材料补选完整性和可见桌面操作不列为基础验收通过。
+
+成功后Agent交付本次`checks/<本次编号>/launchers/`中的双击文件、`离线使用说明.md`和完整离线命令。重复核对生成新的报告/入口目录，不覆盖用户改过的文件。
+
+## 离线准备与使用
+
+在与目标电脑系统/架构相同的联网电脑、对应Python版本下，从Skill目录准备依赖：
 
 ```text
-# PYTHON312 在Mac为python3.12，在Windows为py -3.12。
-PYTHON312 -m pip download --require-hashes --only-binary=:all: --index-url https://pypi.org/simple -r requirements-runtime.lock --dest <新wheel目录>
-PYTHON312 scripts/bootstrap.py --venv <新环境绝对路径> --wheelhouse <已复制的wheel目录>
+PYTHON -m pip download --require-hashes --only-binary=:all: --index-url https://pypi.org/simple -r requirements-runtime.lock --dest <新wheel目录>
+PYTHON scripts/bootstrap.py --venv <新环境绝对路径> --wheelhouse <wheel目录>
 ```
 
-Windows与Mac的原生wheel不能混用；离线电脑也须先正常安装对应Python3.12。准备下载会联网，指定wheelhouse的安装不访问软件源。
+将完整Skill、wheel和正常Python安装带到离线电脑。不同小版本的原生wheel可能不同，不要把一台电脑的wheel当作覆盖全部平台/版本。`--wheelhouse`使用`--no-index`安装，不访问软件源；仍执行全部验收。
 
-安装脚本运行pip check、doctor和selftest，成功后才记录安装完成。同版完整环境可重复核对；已有其它文件或未完成环境时改用新目录，不覆盖、不自动删除用户文件。
+以后断网双击安装返回的启动文件，或运行返回的完整命令。Python和Skill源码目录需保留原位置；移动后重新安装到新环境，勿手改旧回执冒充验证。HTML由本机Python服务提供，直接双击scripts/web/index.html不会处理文档。
 
-```text
-PYTHON scripts/cli.py doctor
-PYTHON scripts/cli.py selftest
-PYTHON scripts/cli.py gui
-```
+## 故障
 
-`doctor`报告系统、Python、Web资源及兼容依赖路径；检测到LibreOffice路径不等于已验证转换。`selftest`只用自编材料测试主要适配器、实际PDF原生库、隐藏清理、内容保留和禁止覆盖，不启动旧格式转换器，也不保证任意材料可用。
-
-服务启动后默认打开本机浏览器。独立自动化测试可用`gui --no-browser --session-file <新JSON路径>`取得本次地址；该文件不含材料。正常退出使用“结束工具并清空会话”，再次运行gui会创建新地址。
-
-| 实际结果 | 处理 |
-| --- | --- |
-| Python版本或架构不支持 | 安装Python3.12并核对Windows x64/macOS Apple芯片；不要运行另一平台文件 |
-| 无网络、无匹配wheel、哈希不符 | 保留具体错误，暂不处理材料；检查网络或正规离线wheel来源，不跳过哈希和TLS检查 |
-| 目标目录已有其它内容 | 改用新目录，不覆盖或清空 |
-| doctor正常但selftest失败 | 保存不含原文的错误，停止处理真实材料 |
-| 旧格式缺依赖或隔离未配置 | 按[兼容导入](compatibility.md)完成准备；现代格式不要求Office |
-| 工具拒绝复杂材料 | 按[格式边界](formats.md)核对，不静默换在线工具或强行转换 |
-
-退出码0表示命令成功，2表示输入/计划/本地文件问题，3表示导出复检失败，4表示环境检查失败。成功仍需阅读JSON范围，未检查项不代表通过。
-
-材料处理不需要网络；软件首次准备可能联网。普通格式在进程内处理，旧二进制/RTF转换使用私有临时文件，正常结束清理，异常退出可能残留。关闭标签页不结束工具，清空会话不删除已经下载的副本。
+无Python或版本/架构不支持时停止并引导正常安装；无匹配wheel、TLS/哈希失败时保留错误，不跳过校验。验收失败保留目录，未生成完成回执和启动入口。doctor检测到LibreOffice路径不等于转换已测试，另按兼容指引验证。正常退出请用页面“结束工具并清空会话”，已下载副本和系统缓存由用户管理。

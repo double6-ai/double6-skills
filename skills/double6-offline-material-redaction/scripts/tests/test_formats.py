@@ -31,7 +31,7 @@ class FormatTests(unittest.TestCase):
  def test_text_markdown_unicode_and_full_source(self):
   for category in ['text','markdown']:
    original=('# '+KEEP+'\n<!-- '+SECRET+' -->\n姓名：'+SECRET+'\n`'+SECRET+'`').encode()
-   output=formats.export(original,category,plan(category));self.assertNotIn(SECRET,output.decode());self.assertIn(KEEP,output.decode());self.assertTrue(formats.verify(output,category,plan(category))['checks']['utf8_readable'])
+   output=formats.export(original,category,plan(category));self.assertNotIn(SECRET,output.decode());self.assertIn(KEEP,output.decode());self.assertTrue(formats.verify(output,category,plan(category))['checks']['text_encoding_readable'])
  def test_encoding_requires_choice_and_preserves_business(self):
   raw=(SECRET+' '+KEEP).encode('gb18030')
   with self.assertRaises(engine.Rejected):formats.inspect(raw,'text')
@@ -55,7 +55,7 @@ class FormatTests(unittest.TestCase):
    data=b' '.join(z.read(n)for n in z.namelist());self.assertNotIn(b'PRIVATE',data);self.assertNotIn(SECRET.encode(),data)
  def test_pdf_flatten_masks_all_pages_and_drops_hidden_carriers(self):
   source=pdf_source();p={'reviewed_pages':[1,2],'pages':[{'page':1,'rectangles':[[20,20,120,70]]}],'acknowledge_loss':True}
-  out=formats.export(source,'pdf',p);rd=PdfReader(io.BytesIO(out));self.assertIsNone(rd.metadata);self.assertNotIn(b'PRIVATE',out);self.assertFalse(any(page.extract_text()for page in rd.pages));self.assertTrue(formats.verify(out,'pdf',p,source)['checks']['outside_pixels_preserved'])
+  p['pdf_mode']='rasterize';out=formats.export(source,'pdf',p);rd=PdfReader(io.BytesIO(out));self.assertIsNone(rd.metadata);self.assertNotIn(b'PRIVATE',out);self.assertFalse(any(page.extract_text()for page in rd.pages));self.assertTrue(formats.verify(out,'pdf',p,source)['checks']['outside_pixels_preserved'])
   a=formats.pdf_image(out,0);self.assertEqual(a.getpixel((40,40)),(0,0,0));self.assertEqual(a.getpixel((220,180)),(0,128,0))
  def test_pdf_missing_page_review_rejects(self):
   with self.assertRaises(engine.Rejected):formats.export(pdf_source(),'pdf',{'reviewed_pages':[1],'pages':[{'page':1,'rectangles':[[20,20,120,70]]}],'acknowledge_loss':True})

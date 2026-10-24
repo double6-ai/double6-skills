@@ -75,6 +75,12 @@ class ServerReadinessTests(unittest.TestCase):
         payload['keep']=['不存在的业务条件']
         with self.assertRaises(urllib.error.HTTPError):self.post('api/export',json.dumps(payload).encode())
         with self.assertRaises(urllib.error.HTTPError):urllib.request.urlopen(self.url+r['download']).read()
+    def test_plan_change_revokes_previous_download_before_reexport(self):
+        job=self.post('api/import',data_book(),{'X-File-Kind':'excel','X-File-Extension':'.xlsx'});payload={**plan(keep=[]),'id':job['id'],'reviewed':True}
+        out=self.post('api/export',json.dumps(payload).encode());urllib.request.urlopen(self.url+out['download']).read()
+        self.assertTrue(self.post('api/invalidate',json.dumps({'id':job['id']}).encode())['invalidated'])
+        with self.assertRaises(urllib.error.HTTPError):urllib.request.urlopen(self.url+out['download']).read()
+
     def test_served_version_and_support_from_current_runtime(self):
         html=urllib.request.urlopen(self.url).read().decode();self.assertIn(engine.VERSION,html);self.assertNotIn('__VERSION__',html);self.assertNotIn('尚未完成适配',html);self.assertIn('.ods',html)
 

@@ -7,6 +7,7 @@ PYTHON scripts/cli.py inspect --input <原文件>
 PYTHON scripts/cli.py redact --input <原文件> --plan <计划.json> --output <新副本>
 PYTHON scripts/cli.py verify --input <新副本> --plan <计划.json> [--source <原图>]
 PYTHON scripts/cli.py gui
+PYTHON scripts/acceptance.py --report <新验收JSON路径>
 ```
 
 `inspect --show-preview`会向本地标准输出显示Word全文，只在确有需要且不会发送到外部日志时使用。默认inspect、redact、verify输出不包含原文或替换词。
@@ -24,7 +25,7 @@ Word计划示例（自编信息）：
 }
 ```
 
-`reviewed`表示已核对实际材料和补选范围；不要仅为让命令运行而填true。`acknowledge_loss`接受图片移除和版式重排。`keep`填写本材料必须保留的短句或数值显示，例如`15%`、`00123`；已填写但缺失时不创建输出。留空会明确记录“未检查”，不会返回这一项通过。图形界面提供同样的关键保留项输入。未知字段会报错，避免拼写错误被忽略。terms中的每项必须能在可见预览中准确找到；未找到时停止，避免错字导致正文漏处理。隐藏载体由重建统一移除，无需把其中原值列为正文替换词。
+`reviewed`表示已核对实际材料和补选范围；不要仅为让命令运行而填true。`acknowledge_loss`接受图片移除和版式重排，不表示同意转换文件格式。`keep`填写本材料必须保留的短句或数值显示，例如`15%`、`00123`；已填写但缺失时不创建输出。留空会明确记录“未检查”，不会返回这一项通过。图形界面提供同样的关键保留项输入。未知字段会报错，避免拼写错误被忽略。terms中的每项必须能在可见预览中准确找到；未找到时停止，避免错字导致正文漏处理。隐藏载体由重建统一移除，无需把其中原值列为正文替换词。
 
 只清理Word隐藏内容时设 `terms: []`、`clean_only: true`，保留同样的reviewed与acknowledge_loss。此模式不会隐去正文中的姓名或联系方式。
 
@@ -39,25 +40,39 @@ Word计划示例（自编信息）：
 }
 ```
 
-矩形为按EXIF旋转后的显示坐标 `[左, 上, 右, 下]`；先inspect读取显示尺寸，或直接用gui人工框选。最多200框，框外像素保留。图片输出必须是.png，verify需同时传 `--source` 才能检查框外像素。Word输出必须是.docx。
+矩形为按EXIF旋转后的显示坐标 `[左, 上, 右, 下]`；先inspect读取显示尺寸，或直接用gui人工框选。最多200框，PNG/WebP框外像素一致；JPEG明确记录重编码容差。图片verify需同时传 `--source` 才能检查框外像素。Word输出必须是.docx；图片默认保持输入扩展名。
 
 命令不会覆盖原件、计划或已有输出，错误时不创建可交付副本。输出目录应是支持安全独占创建文件的本地目录。原值未在输出中检出只覆盖计划指定内容；补选不全仍可能留下敏感信息。
 
 ## 文本、表格与演示文稿
 
-`kind`分别用`text`、`markdown`、`csv`、`tsv`、`excel`、`slides`。沿用`version=1`、`reviewed=true`、`terms`和`keep`。CSV/TSV/Excel/PPTX必须`acknowledge_loss=true`，接受格式说明中的重建方式。GB18030输入计划另设`input_encoding: "gb18030"`。输出扩展名见格式说明，`.xlsm`导出`.xlsx`。
+`kind`分别用`text`、`markdown`、`csv`、`tsv`、`excel`、`slides`。沿用`version=1`、`reviewed=true`、`terms`和`keep`。CSV/TSV/Excel/PPTX必须`acknowledge_loss=true`，接受格式说明中的重建方式。GB18030输入计划另设`input_encoding: "gb18030"`。输出扩展名见格式说明，XLSM默认导出同格式XLSM，宏内容不保留；只有明确选择才转为XLSX。
 
 ## PDF逐页计划
 
 ```json
 {
   "version": 1, "kind": "pdf", "reviewed": true,
-  "acknowledge_loss": true,
+  "pdf_mode": "preserve",
   "reviewed_pages": [1, 2],
   "pages": [{"page": 1, "rectangles": [[20, 20, 120, 70]]}]
 }
 ```
 
-页码从1开始，坐标为`inspect`所报144dpi渲染像素，矩形是左、上、右、下。`reviewed_pages`必须完整列出每一页；不需要框选的页也要核对。至少一处框选；不接受文字`keep`。PDF的`verify`必须加`--source <原PDF>`。旧PPT使用相同的逐页计划，`--source`传原PPT；工具在隔离条件下重建同一渲染来源再比对框外像素。真实材料的框选在本机界面完成，不把原页面发给在线Agent。
+页码从1开始，坐标为`inspect`所报144dpi渲染像素，矩形是左、上、右、下。默认保留可搜索文字与页面。`pdf_mode=rasterize`并`acknowledge_loss=true`才允许整页图像化。`reviewed_pages`必须完整列出每一页；不需要框选的页也要核对。至少一处框选；原生PDF可用`keep`核对保留的可搜索业务文字，图像化模式不接受。PDF的`verify`必须加`--source <原PDF>`。旧PPT须先明确选择转换为PDF，再使用相同的逐页计划，`--source`传原PPT；工具在隔离条件下重建同一渲染来源再比对框外像素。真实材料的框选在本机界面完成，不把原页面发给在线Agent。
 
-`verify --input`只接受已经导出的现代格式副本；DOC/XLS/PPT、RTF、ODT/ODS/ODP原件会拒绝。不能先转换原件再当作检查原件；PDF的`--source`仍可提供原PPT，用于渲染比较。
+`verify --input`接受已经导出的受支持同格式/明确转换副本；旧DOC/XLS/PPT、RTF原件仍拒绝，ODF副本会读取实际容器并核对可见内容。不能先转换原件再当作检查原件；PDF的`--source`仍可提供原PPT，用于渲染比较。
+
+
+## 显式转换
+
+默认输出路径扩展名须与输入一致。仅改输出文件名不能授权转换：
+
+```text
+PYTHON scripts/cli.py redact --input <原件.jpg> --plan <计划.json> --output <新副本.png> --output-format .png
+PYTHON scripts/cli.py redact --input <原件.pdf> --plan <已接受图像化损耗的计划.json> --output <新副本.pdf> --pdf-mode rasterize
+```
+
+计划也可填写`output_format: ".png"`；`pdf_mode`只有preserve/rasterize两个值，默认preserve。网页的输出格式和PDF处理方式选择对应这些字段。结果报告写实际输入/输出格式和是否转换；创建新文件后不会改写原件、计划或已有副本。
+
+旧DOC/XLS/PPT/RTF预览会调用本机Office转换，CLI的inspect需明确`--allow-conversion`；网页在调用前说明并征得本次转换选择。
