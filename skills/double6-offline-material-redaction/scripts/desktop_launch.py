@@ -20,9 +20,15 @@ def main():
     session = {'url': server.base + '/' + server.nonce + '/', 'pid': os.getpid(), 'version': VERSION}
     try:
         if args.session_file:
-            # 测试入口只创建新文件，避免覆盖其它会话。
-            with args.session_file.open('x', encoding='utf-8') as f:
-                json.dump(session, f)
+            # 先写到旁边的文件，写完再换名。检查脚本一看到目标文件就读取，不能让它读到还没写完的空文件。
+            if args.session_file.exists():
+                raise FileExistsError(args.session_file)
+            temporary = args.session_file.with_name(args.session_file.name + '.partial')
+            with temporary.open('w', encoding='utf-8') as handle:
+                json.dump(session, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, args.session_file)
         if sys.stdout:
             print(json.dumps(session), flush=True)
         if not args.no_browser:

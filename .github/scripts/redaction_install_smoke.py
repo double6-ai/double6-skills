@@ -91,13 +91,17 @@ def main():
                 deadline = started + 90
                 while time.monotonic() < deadline:
                     if session.exists():
-                        break
-                    if child.poll() is not None:
+                        try:
+                            info = json.loads(session.read_text(encoding='utf-8'))
+                        except json.JSONDecodeError:
+                            info = None
+                        else:
+                            break
+                    if child.poll() is not None and not session.exists():
                         raise RuntimeError('生成的启动器提前退出')
                     time.sleep(.1)
-                if not session.exists():
+                if not info:
                     raise TimeoutError('启动器90秒内未生成会话回执，查看对应launch日志')
-                info = json.loads(session.read_text(encoding='utf-8'))
                 report.setdefault('launches', []).append({'iteration': iteration, 'pid': child.pid, 'ready_seconds': round(time.monotonic() - started, 3)})
                 save()
                 url = info['url']
