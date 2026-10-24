@@ -257,8 +257,8 @@ def get_char_unicode_string(chars: list[PdfCharacter | str]) -> str:
     else:
         median_distance = distinct_distances[1]
 
-    # 同一行普通拉丁词界的字距基线（字距/整体加字距），见 _is_latin_word_gap
-    tracking_em = _latin_tracking_em(chars)
+    # 同一行普通拉丁词界的字距基线（字距/整体加字距），按物理行分别计算，见 _is_latin_word_gap
+    line_tracking_em = _latin_line_tracking_ems(chars)
 
     # 构建 unicode 字符串，根据间距插入空格
     unicode_chars = []
@@ -289,7 +289,7 @@ def get_char_unicode_string(chars: list[PdfCharacter | str]) -> str:
             if (
                 distance >= median_distance  # 间距大于中位数
                 or Layout.is_newline(chars[i], chars[i + 1])  # 换行
-                or _is_latin_word_gap(chars[i], chars[i + 1], tracking_em)
+                or _is_latin_word_gap(chars[i], chars[i + 1], line_tracking_em[i])
             ):
                 unicode_chars.append(" ")  # 添加空格
 
@@ -522,7 +522,8 @@ CJK_NO_SPACE_MAX_GAP_EM = 0.5
 # 规则会漏掉比它小的真实词间距（如标题只有两个词间距时较小的那个）。这里只按原字形几何补判：
 # 两字同一基线、同一字号、非竖排、不在公式版面区域，左为拉丁字母/数字/句末与右括号类标点，
 # 右为拉丁字母/数字/左引号；间隙（下一字形起点减本字形按前进宽度的终点）不小于
-# LATIN_WORD_GAP_EM 个字号，并扣除本串同行拉丁字母间的字距基线（整体加字距时字内间隙也为正）。
+# LATIN_WORD_GAP_EM 个字号，并扣除该字所在物理行的拉丁字母间字距基线（整体加字距时字内间隙也为正）。
+# 字距基线逐物理行计算：段落把多行字形拼成一串时，另一行的普通字距不能把加字距行的基线稀释掉。
 # 阈值依据：评测语料同基线拉丁字母对里，字内字距/小型大写字母间隙最大约 0.063 em，排版压缩后的
 # 真实词间距最小约 0.17 em（Times 自然空格 0.25 em），0.15 em 落在两者之间的空档。连字符、下划线、
 # 左括号、运算符与其它符号不在判定字符集内，上下标因字号或基线不同不参与。
@@ -561,7 +562,8 @@ def _latin_same_line_em(curr_char: PdfCharacter, next_char: PdfCharacter) -> flo
 
 
 def _latin_tracking_em(chars: list[PdfCharacter | str]) -> float:
-    """本串同一行相邻拉丁字母之间间隙的中位数（em，下限 0），作为字距/整体加字距基线。"""
+    """给定字形串内同一行相邻拉丁字母之间间隙的中位数（em，下限 0），作为字距/整体加字距基线；
+    多行字形串由 _latin_line_tracking_ems 先按物理行切段再调用。"""
     gaps = []
     for curr_char, next_char in zip(chars, chars[1:]):
         if not (isinstance(curr_char, PdfCharacter) and isinstance(next_char, PdfCharacter)):
@@ -577,6 +579,33 @@ def _latin_tracking_em(chars: list[PdfCharacter | str]) -> float:
     middle = len(gaps) // 2
     median = gaps[middle] if len(gaps) % 2 else (gaps[middle - 1] + gaps[middle]) / 2
     return max(0.0, median)
+
+
+def _same_physical_line(curr_char: PdfCharacter, next_char: PdfCharacter) -> bool:
+    """相邻两字是否仍在同一物理行：两字框竖向有重叠，且下一字没有回到本字左侧之前（换行回到行首）。"""
+    if curr_char.box is None or next_char.box is None:
+        return False
+    if min(curr_char.box.y2, next_char.box.y2) <= max(curr_char.box.y, next_char.box.y):
+        return False
+    return next_char.box.x2 >= curr_char.box.x
+
+
+def _latin_line_tracking_ems(chars: list[PdfCharacter | str]) -> list[float]:
+    """每个位置所在物理行的字距基线（em）：按相邻字形的物理行连续性切段，各段单独取 _latin_tracking_em。"""
+    result = [0.0] * len(chars)
+    start = 0
+    previous = None  # 段内上一个 PdfCharacter
+    for index, char in enumerate(chars):
+        if not isinstance(char, PdfCharacter):
+            continue
+        if previous is not None and not _same_physical_line(previous, char):
+            tracking = _latin_tracking_em(chars[start:index])
+            result[start:index] = [tracking] * (index - start)
+            start = index
+        previous = char
+    tracking = _latin_tracking_em(chars[start:])
+    result[start:] = [tracking] * (len(chars) - start)
+    return result
 
 
 def _is_latin_word_gap(curr_char: PdfCharacter, next_char: PdfCharacter, tracking_em: float = 0.0) -> bool:
