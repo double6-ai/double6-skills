@@ -14,7 +14,7 @@ from xml.etree import ElementTree as ET
 from PIL import Image, ImageChops, ImageOps
 from docx import Document
 
-VERSION = "0.6.1"
+VERSION = "0.7.0"
 MAX_BYTES = 20 * 1024 * 1024
 MAX_PIXELS = 24_000_000
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
@@ -103,27 +103,9 @@ def rectangles(values, size):
     return result
 
 
-def export_image(data, selected):
-    source = image_source(data)
-    boxes = rectangles(selected, source.size)
-    target = source.copy()
-    for box in boxes:
-        target.paste((0, 0, 0), box)
-    output = png_bytes(target)
-    if len(output) > MAX_BYTES:
-        raise Rejected("导出PNG超过20MB，请先缩小原图后重新框选。")
-    with Image.open(io.BytesIO(output)) as reopened:
-        reopened.load()
-        metadata_clean = not reopened.info and not reopened.getexif()
-        masks_solid = all(reopened.crop(box).getbbox() is None for box in boxes)
-        outside = ImageChops.difference(source, reopened.convert("RGB"))
-        for box in boxes:
-            outside.paste((0, 0, 0), box)
-        outside_preserved = outside.getbbox() is None
-    checks = {"metadata_removed": metadata_clean, "selected_regions_solid": masks_solid, "outside_pixels_preserved": outside_preserved}
-    if not all(checks.values()):
-        raise Rejected("图片导出复检未通过，未提供下载。")
-    return output, {"version": VERSION, "format": "png", "checks": checks, "regions": len(boxes), "sha256": digest(output), "scope": "仅确认框选区域、单帧像素和元数据；未自动证明所有敏感内容已选全。"}
+def export_image(data, selected, output_format=None):
+    from image_native import export
+    return export(data, selected, output_format)
 
 
 def read_package(data):

@@ -1,8 +1,8 @@
 # 依赖与许可
 
-Double6原创代码按本Skill目录的[MIT许可](../LICENSE)发布。这里不分发Python运行时、Office、第三方wheel、模型或API key；安装脚本下载依赖，材料处理阶段不调用在线服务。
+Double6原创代码按本Skill目录的[MIT许可](../LICENSE)发布。原生PDF使用的PyMuPDF/MuPDF适用[AGPL-3.0及其官方许可说明](https://pymupdf.readthedocs.io/en/latest/about.html#license-and-copyright)，MIT不覆盖该依赖。组合分发或对外服务时应遵守该组件的许可义务，不将本包声明为纯MIT依赖栈。这里不分发Python运行时、Office、第三方wheel、模型或API key；安装脚本下载依赖，材料处理阶段不调用在线服务。
 
-`requirements-runtime.lock`锁定版本及Windows x64/macOS Apple芯片Python3.12所需wheel的SHA256。只允许二进制wheel，不自动退回源码编译，不跳过TLS或哈希检查。依赖适用各自随wheel附带的许可：
+`requirements-runtime.lock`锁定版本及Windows x64/macOS Apple芯片Python3.10–3.14所需wheel的SHA256。只允许二进制wheel，不自动退回源码编译，不跳过TLS或哈希检查。依赖适用各自随wheel附带的许可：
 
 | 依赖 | 本版版本 | 用途与主要许可 |
 | --- | --- | --- |
@@ -15,6 +15,7 @@ Double6原创代码按本Skill目录的[MIT许可](../LICENSE)发布。这里不
 | python-pptx | 1.0.2 | PPTX读取/重建；MIT |
 | XlsxWriter | 3.3.0 | PPTX的表格依赖；BSD-2-Clause |
 | pypdf | 6.21.2 | PDF结构；BSD-3-Clause |
+| PyMuPDF/MuPDF | 1.27.2.3 | PDF原生删改、文字与页面保留；AGPL-3.0（商业许可另行提供） |
 | pypdfium2 | 5.14.0 | 本机PDF渲染；Apache-2.0/BSD及随附PDFium子许可 |
 
 Python本身及其本机依赖由用户从正规Python分发取得，适用对应分发条款。LibreOffice只在DOC/XLS/PPT/RTF路径使用，由用户独立安装，适用其MPL/LGPL等许可；本Skill未修改或打包Office。每次兼容转换创建私有配置并禁用活动内容，Windows另外要求专用引擎的出站隔离规则；这不构成恶意文件的完整沙盒。
