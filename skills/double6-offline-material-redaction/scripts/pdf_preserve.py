@@ -52,7 +52,9 @@ def _release_mupdf():
         backend().TOOLS.store_shrink(100)
     except Exception:
         pass
-    gc.collect()
+    # 3.10/3.11 回收 SWIG 对象会在 gc 里崩溃。这里不再主动收集。
+    if sys.version_info >= (3, 12):
+        gc.collect()
 
 
 _finishing = False
@@ -106,6 +108,10 @@ def backend():
     if not _mupdf_used:
         sys.exit = _tracking_exit
         _mupdf_used = True
+        # 测试中途的自动回收也会撞上 3.10/3.11 的 none_dealloc。关掉自动回收，
+        # 退出时不再 gc.collect，改由上面的硬退出跳过最终回收。
+        if sys.version_info < (3, 12):
+            gc.disable()
     fitz.TOOLS.set_small_glyph_heights(True)
     fitz.TOOLS.mupdf_display_errors(False)
     fitz.TOOLS.mupdf_display_warnings(False)
@@ -601,6 +607,8 @@ _CONTRAST_MOVE_DEN = 5
 # 细线也能凑满 6 个预览像素。一两粒抗锯齿不算改字。
 _MASK_DIFF_MIN = 6
 _GLYPH_INK_MARGIN = 2
+# 原字迹只挪了一两像素时，新前景贴着旧前景。开口里离字迹更远的墨不会被这圈盖住。
+_MASK_SHIFT_RADIUS = 2
 
 
 def _byte_percentile(values, percent):
@@ -654,8 +662,33 @@ def _local_threshold(base_img, tight):
     return background, ink
 
 
+def _dilate_mask(mask, width, height, radius):
+    """把前景向外扩 radius 个像素。方框距离，和预览像素对齐。"""
+    if radius <= 0:
+        return mask
+    out = bytearray(mask)
+    for index, value in enumerate(mask):
+        if not value:
+            continue
+        x = index % width
+        y = index // width
+        y0 = max(0, y - radius)
+        y1 = min(height, y + radius + 1)
+        x0 = max(0, x - radius)
+        x1 = min(width, x + radius + 1)
+        for yy in range(y0, y1):
+            row = yy * width
+            for xx in range(x0, x1):
+                out[row + xx] = 1
+    return out
+
+
 def _mask_change_count(base_img, covered_img, box, background, ink):
-    """外扩框里，前景掩码多出或少掉的像素。两张图对不齐就返回 None。"""
+    """外扩框里，前景掩码多出或少掉的像素。两张图对不齐就返回 None。
+
+    贴着原来字迹、或贴着涂完后字迹的一两像素不算。那是同一笔字在两个渲染里挪了一下。
+    离字迹更远的新墨或少掉的墨仍然计入。
+    """
     if box is None or background is None or ink is None or base_img.size != covered_img.size:
         return None
     x0, y0, x1, y1 = box
@@ -669,11 +702,28 @@ def _mask_change_count(base_img, covered_img, box, background, ink):
     if span < _CONTRAST_MIN:
         return None
     midpoint = background + ink
+    width = x1 - x0
+    height = y1 - y0
+    if len(before) != width * height:
+        return None
+    base_mask = bytearray(width * height)
+    painted_mask = bytearray(width * height)
+    for index, (origin, painted) in enumerate(zip(before, after)):
+        if origin * 2 <= midpoint:
+            base_mask[index] = 1
+        if painted * 2 <= midpoint:
+            painted_mask[index] = 1
+    near_base = _dilate_mask(base_mask, width, height, _MASK_SHIFT_RADIUS)
+    near_painted = _dilate_mask(painted_mask, width, height, _MASK_SHIFT_RADIUS)
     count = 0
-    for origin, painted in zip(before, after):
-        if (origin * 2 <= midpoint) == (painted * 2 <= midpoint):
+    for index, (origin, painted) in enumerate(zip(before, after)):
+        if base_mask[index] == painted_mask[index]:
             continue
         if abs(origin - painted) * _CONTRAST_MOVE_DEN < span * _CONTRAST_MOVE_NUM:
+            continue
+        if painted_mask[index] and near_base[index]:
+            continue
+        if base_mask[index] and near_painted[index]:
             continue
         count += 1
     return count
@@ -709,6 +759,7 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
 
     取样只取这个字形自己的矩形，再向外加 2 个预览像素，不和整块矩形做平均或面积加权。
     掩码用去掉批注后的局部底色和字迹色的中点。多出或少掉的前景达到小数量就拒绝。
+    贴着原字迹一两像素的挪动不计，离字迹更远的新墨或少掉的墨要计。
     整个字形框都落在某一个选区里时，这些改动会随这次涂黑一起去掉，不再单为掩码拒绝。
     对比度太低、底色或字迹色估不出，也拒绝。骑在边界上的字按选区外计算。
     任何一个选区外的字不达标，或者任一渲染器看到足够的掩码差异，整条批注就不放行。

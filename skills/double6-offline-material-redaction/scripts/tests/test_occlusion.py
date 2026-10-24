@@ -584,6 +584,7 @@ class AddedInkAttackTests(unittest.TestCase):
         self.assertEqual(pdf._CONTRAST_MOVE_DEN, 5)
         self.assertEqual(pdf._MASK_DIFF_MIN, 6)
         self.assertEqual(pdf._GLYPH_INK_MARGIN, 2)
+        self.assertEqual(pdf._MASK_SHIFT_RADIUS, 2)
         self.assertFalse(hasattr(pdf, "_ADDED_INK_BRIGHT"))
 
     def test_review_stroke_samples_and_the_hairline_are_refused(self):
