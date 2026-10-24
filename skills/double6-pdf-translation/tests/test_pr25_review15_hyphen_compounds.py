@@ -51,8 +51,24 @@ def test_review15_real_excerpt_keeps_compound_and_repairs_ordinary_wrap():
 
 
 def test_continuation_fragment_with_hyphen_is_a_multi_part_compound():
+    # 只有续行带连字符这一结构线索（同文档无行内词形）：保留原连字符，但计入待审而不当作已证实。
     new, changes = normalize('a sparse mixture-\nof-experts layer\n')
     assert 'mixture-of-experts layer' in new
+    assert changes.get('hyphenated_compound_preservations', 0) == 0
+    assert changes.get('hyphenated_line_break_review_needed', 0) == 1
+
+
+def test_continuation_hyphen_that_may_be_a_dash_is_kept_for_review_not_guessed():
+    # NACA 1135 真实抽取：adiabati-|cally-that（续行连字符其实是破折号）。不猜拼接，原样保留并待审。
+    new, changes = normalize('take place adiabati-\ncally-that is, without heat\n')
+    assert 'adiabati-cally-that' in new
+    assert changes.get('hyphenated_compound_preservations', 0) == 0
+    assert changes.get('hyphenated_line_break_review_needed', 0) == 1
+
+
+def test_multi_part_compound_with_attested_pair_is_kept():
+    new, changes = normalize('a single-mode-\nsqueezing term and a two-mode-squeezing term\n')
+    assert 'a single-mode-squeezing term' in new
     assert changes.get('hyphenated_compound_preservations', 0) == 1
 
 

@@ -292,11 +292,12 @@ def normalize_pdf_extracted_text(text: str) -> tuple[str, dict[str, Any]]:
         continues_compound = re.match(r"-[A-Za-z]", match.string[match.end():match.end() + 2]) is not None
         joined_attested = (before + after).lower() in attested_words
         if hyphen_attested or continues_compound:
-            if joined_attested:
-                # 同文档也出现拼接词形：证据矛盾，不猜，保留原连字符并计入待审。
-                changes["hyphenated_line_break_review_needed"] += 1
-            else:
+            if hyphen_attested and not joined_attested:
                 changes["hyphenated_compound_preservations"] += 1
+            else:
+                # 同文档也出现拼接词形（证据矛盾），或只有续行带连字符这一结构线索
+                # （也可能是破折号，如 adiabati-|cally-that）：不猜，保留原连字符并计入待审。
+                changes["hyphenated_line_break_review_needed"] += 1
             return f"{before}-{after}"
         # 无复合词证据：保持原有普通断词修复（如 re-|current → recurrent）。
         return before + after
