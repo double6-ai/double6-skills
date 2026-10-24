@@ -442,5 +442,196 @@ class SeparatorAndKeepTests(unittest.TestCase):
         self.assertIn(KEEP, out)
 
 
+COVERED = "13800006661"
+
+
+def _digits(phone, base):
+    return "".join(chr(base + int(ch)) for ch in phone)
+
+
+def _superscript(phone):
+    table = {"0": "\u2070", "1": "\u00b9", "2": "\u00b2", "3": "\u00b3", "4": "\u2074", "5": "\u2075", "6": "\u2076", "7": "\u2077", "8": "\u2078", "9": "\u2079"}
+    return "".join(table[ch] for ch in phone)
+
+
+class DarkCoverTests(unittest.TestCase):
+    def _pdf(self, color, cover):
+        fitz = pdf.backend()
+        doc = fitz.open()
+        page = doc.new_page(width=400, height=280)
+        page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+        page.insert_text((20, 130), COVERED, fontname="helv", fontsize=16, color=color)
+        page.insert_text((20, 230), "OTHERTEXT", fontname="helv", fontsize=14)
+        phone = page.search_for(COVERED)[0]
+        other = page.search_for("OTHERTEXT")[0]
+        cover(fitz, page, phone)
+        raw = doc.tobytes()
+        doc.close()
+        return raw, other, phone
+
+    def _plan(self, target):
+        return _pdf_plan(_pixel_box(target))
+
+    def _square(self, fill, opacity):
+        def draw(fitz, page, phone):
+            annot = page.add_rect_annot(fitz.Rect(phone.x0 - 2, phone.y0 - 2, phone.x1 + 2, phone.y1 + 2))
+            annot.set_colors(stroke=fill, fill=fill)
+            annot.set_opacity(opacity)
+            annot.update()
+
+        return draw
+
+    def test_dark_cover_over_lighter_or_darker_text_is_refused(self):
+        colors = {
+            "black": (0, 0, 0),
+            "red": (0.8, 0.1, 0.1),
+            "yellow": (0.85, 0.75, 0.1),
+            "gray": (0.45, 0.45, 0.45),
+            "light": (0.75, 0.75, 0.75),
+            "near_white": (0.92, 0.92, 0.92),
+        }
+        covers = (
+            self._square((0, 0, 0), 1),
+            self._square((0, 0, 0), 0.98),
+            self._square((0.25, 0.25, 0.25), 1),
+        )
+
+        def freetext(fitz, page, phone):
+            page.add_freetext_annot(
+                fitz.Rect(phone.x0 - 2, phone.y0 - 2, phone.x1 + 2, phone.y1 + 4),
+                "盖",
+                fontsize=12,
+                fontname="china-s",
+                fill_color=(0, 0, 0),
+                text_color=(0, 0, 0),
+            ).update()
+
+        covers = covers + (freetext,)
+        for name, color in colors.items():
+            for draw in covers:
+                raw, other, _phone = self._pdf(color, draw)
+                leaked = pdf.export(raw, self._plan(other), _verify=False)
+                with pdf.backend().open(stream=leaked, filetype="pdf") as doc:
+                    self.assertIn(COVERED, doc[0].get_text(), name)
+                with self.assertRaises(engine.Rejected, msg=name) as caught:
+                    policy.export(raw, ".pdf", self._plan(other))
+                message = str(caught.exception)
+                self.assertIn("看不见", message, name)
+                self.assertNotIn(COVERED, message, name)
+
+    def test_black_square_on_blank_space_still_delivers(self):
+        def draw(fitz, page, _phone):
+            annot = page.add_rect_annot(fitz.Rect(300, 30, 360, 80))
+            annot.set_colors(stroke=(0, 0, 0), fill=(0, 0, 0))
+            annot.set_opacity(1)
+            annot.update()
+
+        raw, other, _phone = self._pdf((0, 0, 0), draw)
+        out, report, _ext = policy.export(raw, ".pdf", self._plan(other))
+        self.assertTrue(report["checks"]["covered_text_not_revealed"])
+        self.assertTrue(report["checks"]["outside_page_pixels_preserved"])
+        with pdf.backend().open(stream=out, filetype="pdf") as doc:
+            text = doc[0].get_text()
+            self.assertIn(KEEP, text)
+            self.assertIn(COVERED, text)
+            self.assertNotIn("OTHERTEXT", text)
+            self.assertIsNone(doc[0].first_annot)
+
+    def test_boxing_the_covered_number_still_removes_it(self):
+        raw, _other, phone = self._pdf((0, 0, 0), self._square((0, 0, 0), 1))
+        out, report, _ext = policy.export(raw, ".pdf", self._plan(phone))
+        self.assertTrue(report["checks"]["covered_text_not_revealed"])
+        self.assertTrue(report["checks"]["selected_text_removed"])
+        with pdf.backend().open(stream=out, filetype="pdf") as doc:
+            self.assertNotIn(COVERED, doc[0].get_text())
+            self.assertIn(KEEP, doc[0].get_text())
+
+    def test_highlight_over_visible_text_still_delivers(self):
+        def draw(fitz, page, _phone):
+            found = page.search_for(KEEP)[0]
+            page.add_highlight_annot(found).update()
+
+        raw, other, _phone = self._pdf((0, 0, 0), draw)
+        out, report, _ext = policy.export(raw, ".pdf", self._plan(other))
+        self.assertTrue(report["checks"]["covered_text_not_revealed"])
+        self.assertTrue(report["checks"]["keep_phrases_preserved"])
+        with pdf.backend().open(stream=out, filetype="pdf") as doc:
+            self.assertIn(KEEP, doc[0].get_text())
+            self.assertNotIn("OTHERTEXT", doc[0].get_text())
+            self.assertIsNone(doc[0].first_annot)
+
+
+class ShortNumberSideTests(unittest.TestCase):
+    def test_right_side_and_hyphen_are_refused(self):
+        samples = ("0000合同", "0000 合同", "0000\n合同", "ID-0000", "ID\u20140000", "0000-ID")
+        for sample in samples:
+            body = sample + "\n" + KEEP + "\n"
+            with self.assertRaises(engine.Rejected, msg=sample) as caught:
+                policy.export(body.encode(), ".txt", _office_plan("text", ["0000"]))
+            message = str(caught.exception)
+            self.assertNotIn("0000", message, sample)
+            self.assertNotIn("合同", message, sample)
+            self.assertNotIn("ID", message, sample)
+
+    def test_standalone_short_number_still_delivers(self):
+        body = KEEP + "。\n0000\n120\n"
+        out, report, _ext = policy.export(body.encode(), ".txt", _office_plan("text", ["0000"], [KEEP]))
+        text = out.decode()
+        self.assertNotIn("0000", text)
+        self.assertIn("【已隐去1】", text)
+        self.assertIn(KEEP, text)
+        self.assertTrue(report["checks"]["selected_strings_absent"])
+
+
+class AlternateSpellingTests(unittest.TestCase):
+    def _variants(self):
+        return [
+            "138 0000 0000",
+            "138-0000-0000",
+            "138\u00a00000\u00a00000",
+            "138\u30000000\u30000000",
+            "138.0000.0000",
+            "138\u00b70000\u00b70000",
+            _digits(PHONE, 0x0660),
+            _digits(PHONE, 0x06F0),
+            _digits(PHONE, 0x1D7CE),
+            _superscript(PHONE),
+        ]
+
+    def test_other_spelling_of_the_same_number_is_refused(self):
+        for variant in self._variants():
+            body = "电话" + PHONE + "\n另一种" + variant + "\n" + KEEP + "\n"
+            with self.assertRaises(engine.Rejected) as caught:
+                policy.export(body.encode(), ".txt", _office_plan("text", [PHONE]))
+            message = str(caught.exception)
+            self.assertIn("另一种写法", message)
+            self.assertNotIn(PHONE, message)
+            self.assertNotIn(variant, message)
+
+    def test_a_different_number_can_remain_and_is_not_called_absent(self):
+        other = "139 0000 0000"
+        body = "电话" + PHONE + "\n其它" + other + "\n" + KEEP + "\n"
+        out, report, _ext = policy.export(body.encode(), ".txt", _office_plan("text", [PHONE]))
+        text = out.decode()
+        self.assertNotIn(PHONE, text)
+        self.assertIn(other, text)
+        self.assertTrue(report["checks"]["selected_strings_absent"])
+        self.assertIn(KEEP, text)
+
+
+class PdfKeepMessageTests(unittest.TestCase):
+    def test_missing_keep_names_the_keep_item(self):
+        raw, found = _page()
+        plan = _pdf_plan(_pixel_box(found))
+        plan["keep"] = ["原文里没有的保留句"]
+        with self.assertRaises(engine.Rejected) as caught:
+            policy.export(raw, ".pdf", plan)
+        message = str(caught.exception)
+        self.assertIn("保留项", message)
+        self.assertIn("没有对上", message)
+        self.assertNotIn("框外", message)
+        self.assertNotIn("原文里没有的保留句", message)
+
+
 if __name__ == "__main__":
     unittest.main()
