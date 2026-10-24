@@ -164,13 +164,28 @@ PROTECTED_BOUNDARY_DELIMITER_DEDUPLICATED = "protected_boundary_delimiter_dedupl
 _PROTECTED_BOUNDARY_DELIMITERS = frozenset(",")
 
 
+def _source_placeholder_has_no_outer_punctuation(source, placeholder) -> bool:
+    """源中该占位符至少出现一次，且每次出现后（跳过空白）都不是标点字符。"""
+    occurrences = list(re.finditer(placeholder.regex_pattern, source or "", flags=re.I))
+    if not occurrences:
+        return False
+    for match in occurrences:
+        following = (source or "")[match.end():].lstrip()
+        if following and unicodedata.category(following[0]).startswith("P"):
+            return False
+    return True
+
+
 def dedupe_protected_boundary_delimiters(source, translated, placeholders):
     """公式占位符边界的重复分隔符：只在有源证据时去掉译文侧那一个。
 
     证据要求：受保护公式字面本身以分隔符结尾（该字形随公式原样恢复），
-    且源输入中该占位符后没有紧跟同一分隔符；此时译文在占位符后再写的
-    同一分隔符必然与受保护字形重复。公式内部、源文本已有的重复、其它
-    标点和非占位符文本均不改动。返回 (文本, 被处理的占位符列表)。
+    且源输入中该占位符每次出现后都没有任何外部标点（ASCII、全角或其它
+    分隔符都算一个独立来源，译文里的同一分隔符可能就是它的译写）；此时
+    译文在占位符后再写的同一分隔符才与受保护字形重复。源中找不到该占位符、
+    或任一出现后跟标点（来源未知或有两个来源）时保守跳过，保留回答原样。
+    公式内部、源文本已有的重复、其它标点和非占位符文本均不改动。
+    返回 (文本, 被处理的占位符列表)。
     """
     removed: list[str] = []
     for placeholder in placeholders or []:
@@ -186,7 +201,7 @@ def dedupe_protected_boundary_delimiters(source, translated, placeholders):
             f"({placeholder.regex_pattern})(\\s*){re.escape(delimiter)}",
             flags=re.I,
         )
-        if boundary.search(source or ""):
+        if not _source_placeholder_has_no_outer_punctuation(source, placeholder):
             continue
 
         def _keep_protected(match: re.Match, token=placeholder.placeholder) -> str:
