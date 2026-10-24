@@ -62,6 +62,35 @@ def areas(plan, sizes):
     return formats.pdf_boxes(plan, sizes)
 
 
+def without_annotation_appearance(data):
+    """删掉批注和链接后再按与正式导出相同的新容器重绘。
+
+    只在原件确有批注或链接时返回字节。框外复检拿它当基准，这样批注图标消失不算正文被改；没有批注时仍直接对比原页面，避免放宽其它框外差异。
+    """
+    fitz = backend()
+    with open_pdf(data) as doc:
+        changed = False
+        for page in doc:
+            annotations = list(page.annots() or [])
+            if any(a.type[0] == fitz.PDF_ANNOT_REDACT for a in annotations):
+                raise engine.Rejected('PDF已有未应用的涂黑标记，请先在原软件完成或移除后再检查。')
+            links = list(page.get_links())
+            if annotations or links:
+                changed = True
+            for annot in annotations:
+                page.delete_annot(annot)
+            for link in links:
+                page.delete_link(link)
+        if not changed:
+            return None
+        fresh = fitz.open()
+        fresh.insert_pdf(doc, links=False, annots=False, widgets=False)
+        fresh.set_metadata({})
+        output = fresh.tobytes(garbage=4, clean=True, deflate=True, no_new_id=True)
+        fresh.close()
+        return output
+
+
 def word_rows(page, boxes):
     fitz = backend()
     result = []
@@ -132,6 +161,7 @@ def verify(data, plan, source):
     plan=effective_plan(source,plan)
     sizes = formats.pdf_info(source)
     selected = areas(plan, sizes)
+    pixel_source = without_annotation_appearance(source) or source
     expected=export(source,plan,_verify=False)
     if data != expected:
         raise engine.Rejected('PDF实际副本与本工具按同一原件和计划重新生成的结果不一致，未接受外部覆盖或额外载体。')
@@ -163,7 +193,8 @@ def verify(data, plan, source):
                     checks['pdf_hidden_objects_absent'] = False
                 if page.first_annot or page.first_widget or page.get_links():
                     checks['pdf_hidden_objects_absent'] = False
-                old = formats.pdf_image(source, index)
+                # 有批注/链接时，基准是“只去掉这些对象、还没涂黑”的页面。图标消失因此不计入框外破坏；涂黑波及框外字形时，仍和这份基准不一致。
+                old = formats.pdf_image(pixel_source, index)
                 new = formats.pdf_image(data, index)
                 delta = ImageChops.difference(old, new)
                 for box in pixel_boxes:
