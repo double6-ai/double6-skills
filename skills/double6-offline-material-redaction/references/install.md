@@ -16,6 +16,16 @@ py -3.12 scripts/bootstrap.py --venv C:\absolute\new\redaction-venv
 
 首次安装从PyPI下载已登记哈希的wheel；不执行源码构建。安装完成返回Python路径，下文称`PYTHON`。已准备依赖的离线电脑可以额外指定`--wheelhouse <本机wheel目录>`；此时不访问软件源。哈希校验检测依赖文件是否匹配清单，不能证明发布者身份或材料安全。
 
+需要离线安装时，先在与目标电脑系统、架构相同且已安装Python3.12的联网电脑上，从Skill目录准备wheel目录，再把整个Skill及wheel目录一起复制过去：
+
+```text
+# PYTHON312 在Mac为python3.12，在Windows为py -3.12。
+PYTHON312 -m pip download --require-hashes --only-binary=:all: --index-url https://pypi.org/simple -r requirements-runtime.lock --dest <新wheel目录>
+PYTHON312 scripts/bootstrap.py --venv <新环境绝对路径> --wheelhouse <已复制的wheel目录>
+```
+
+Windows与Mac的原生wheel不能混用；离线电脑也须先正常安装对应Python3.12。准备下载会联网，指定wheelhouse的安装不访问软件源。
+
 安装脚本运行pip check、doctor和selftest，成功后才记录安装完成。同版完整环境可重复核对；已有其它文件或未完成环境时改用新目录，不覆盖、不自动删除用户文件。
 
 ```text
