@@ -165,6 +165,15 @@ def test_in_figure_text_is_rejected(kind):
     assert not laid, '图内文字不借用行带'
 
 
+def test_source_baseline_anchored_paragraph_is_not_expanded():
+    para, page, style = _material()
+    para.source_baseline = 197.0
+    para.source_ceiling = 207.0
+    assert _stage()._latin_ruled_row_band_box(para.box, para.box, page, para, _units('Research field', style)) is None
+    scale, laid = _stage()._find_optimal_scale_and_layout(para, page, _units('Research field', style), apply_layout=True)
+    assert not laid, '既有源基线/上限约束的段落不借行带扩框'
+
+
 def test_unrelated_layout_region_in_band_is_rejected():
     region = il.PageLayout(box=il.Box(60.0, 205.5, 95.0, 207.0), class_name='plain text', id=1, conf=1.0)
     _, _, _, _, laid = _run('Research field', layouts=[region])
