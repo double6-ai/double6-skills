@@ -31,6 +31,11 @@
   - 现在：文字 QA 目标语言取调用方参数 > `source_manifest` > `render_manifest`（渲染清单新记 `target_language`/`source_language`/`direction_basis`），都没有时沿用默认英译中并标 `legacy_default_en_to_zh`；中译英改查英文译文中的中文残留（`疑似大段中文未翻译`），译法含汉字的英译中术语/实体策略不参与，不做英→中残留替换；渲染清单“缺少中文可复制文本”只对中文目标；`quality_report.md` 写明文字 QA 目标语言，中译英检查项为“疑似大段中文未翻译”并新增 `chinese_residue_count`；独立入口 `check_translation.py` 新增可选 `--target-language`，写出的术语/实体策略同样按目标过滤。双语文件名/清单按调用方声明的方向：英译中不变，中译英 `zh-left.en-right` / `zh_left_en_right`，未知方向中性 `source-left.translation-right` / `source_left_translation_right`；清单新增左右角色、语言与标注；页序不变。
   - 不变：英译中的英文正文残留负例、中译英渲染中文残留门、URL/专名/参考文献/公式窄保护、全部门限与上限。
   - 测试：`tests/test_pr25_review6_direction_qa.py`（四个方向成对正负、默认/未知/冲突合同、参考文献与保护值、术语策略、双语名称/清单/左右页内容、LaTeX 副本、CLI、路线合同调用方）。
+- 文字 QA 参考文献区只豁免有条目结构证据的文献条目（PR #25 第七轮复核，2026-10-24，未改版本号）：
+  - 问题：`strip_zh_reference_lines`（中译英）在 References/参考文献标题之后只凭任意年份/DOI 等就把整行当文献剔除，且区域不再结束；含“2024 年”的普通未译中文正文因此不计入中文残留。英译中的 `strip_role_passthrough_lines` 同样只凭 `(2024)`/DOI/et al. 剔除。
+  - 现在：两个方向共用同一判定，复用渲染残留检查（`render_residue_check`）已验证的逐条规则：参考文献区按条目切块（编号/作者开头起新块，续行与悬挂缩进并入），strong 条目剔除，weak 只在编号连续等正面证据下剔除，正文与未知块计数；中文条目按 GB/T 7714 结构（编号/作者开头 + 年份 + 文献类型标识/出处），第一人称/叙述句一律不算条目。区域在附录类标题或 Markdown 标题处结束，之后的正文/附录照常计数。剔除仍要求原逐行文献标记，豁免只比修复前更窄。
+  - 不变：真实文献条目、保护值与专名的窄保护；全部门限、阈值与其它检查。
+  - 测试：`tests/test_pr25_review7_reference_entries.py`（区内正文含年份/DOI 计数与真实条目放行成对、未知块、weak 编号序列、附录/标题章节恢复、第二个参考文献标题、英译中同一合同、豁免只收窄）。
 - 新增长文档分块翻译 `chunked-candidate`（基线 item 5）。此前 `candidate` 只接受完整 1–5 页（FREEZE 页门 `page_limit_exceeded`），一份不能在一个有界任务（120 s、5 GiB RSS、重任务并发 1）内完成的长文档无法翻译。现在把文档按页范围切成一串有界块，每块是一次**普通** `candidate`（`digital_pdf` 或 `scanned_ocr` 原路线、原门），再按原页序合并。详见 `references/chunked-translation.md`。
   - 划分：电子块 ≤4 页、扫描块 ≤2 页；安全页边界（跨页表格、续表/续图题注、“continued on next page”、行尾开放运算符不切；段落未结束为软信号，避不开时记录到 `cross_chunk_continuations`）；`per_chunk` 路线按页类别把原生文字页送 `digital_pdf`、扫描页送 `scanned_ocr`。
   - 每块：块级 FREEZE（块 PDF 身份、1..k 页、parent FREEZE 与计划作为作用域证据、同一冻结资源合同）+ 块级上下文 `CHUNK_TERM_CONTEXT.json`（整份文档术语表/专名，sha 绑定）；单块单任务预算 = FREEZE 资源合同（120 s、5 GiB RSS、并发 1）。
