@@ -1,5 +1,6 @@
 """回归：0.7.0 离线实测里确认过的脱敏问题。材料全部是虚构示例。"""
 import io
+import math
 import sys
 import unittest
 from pathlib import Path
@@ -45,6 +46,24 @@ def _pdf_plan(box):
 
 def _pixel_box(rect):
     return [(rect.x0 - 1) * 2, (rect.y0 - 1) * 2, (rect.x1 + 1) * 2, (rect.y1 + 1) * 2]
+
+
+def _preview_box(page, text_rect):
+    """用 pdfium 的未缩放显示页乘 2 得到预览框。不经过产品自己的旋转函数。
+
+    PyMuPDF 的文字坐标含 UserUnit，它自带的旋转平移不含。先除掉这个倍数，再乘未缩放旋转，才是渲染上的位置。
+    """
+    fitz = pdf.backend()
+    crop = page.cropbox
+    cw = abs(crop.x1 - crop.x0)
+    ch = abs(crop.y1 - crop.y0)
+    if page.rotation in (90, 270):
+        unit = page.rect.width / ch
+    else:
+        unit = page.rect.width / cw
+    unscaled = fitz.Rect(text_rect.x0 / unit, text_rect.y0 / unit, text_rect.x1 / unit, text_rect.y1 / unit)
+    mapped = unscaled * page.rotation_matrix
+    return [mapped.x0 * 2 - 2, mapped.y0 * 2 - 2, mapped.x1 * 2 + 2, mapped.y1 * 2 + 2]
 
 
 class PdfAnnotationTests(unittest.TestCase):
@@ -389,7 +408,10 @@ class CoveredAnnotationTests(unittest.TestCase):
             raw, target = self._pdf(draw)
             with self.assertRaises(engine.Rejected) as caught:
                 policy.export(raw, ".pdf", self._plan_for(target))
-            self.assertIn("框外", str(caught.exception))
+            message = str(caught.exception)
+            self.assertIn("框外", message)
+            self.assertIn("可见内容", message)
+            self.assertNotIn("看不见", message)
 
 
 class SeparatorAndKeepTests(unittest.TestCase):
@@ -584,8 +606,9 @@ class DarkCoverTests(unittest.TestCase):
             with self.assertRaises(engine.Rejected) as caught:
                 policy.export(raw, ".pdf", self._plan(other))
             message = str(caught.exception)
-            self.assertIn("看不见", message)
+            self.assertIn("可见内容", message)
             self.assertIn("去掉", message)
+            self.assertNotIn("看不见", message)
             self.assertNotIn(COVERED, message)
 
     def test_vector_strokes_under_a_black_square_are_refused(self):
@@ -628,7 +651,9 @@ class DarkCoverTests(unittest.TestCase):
             with self.assertRaises(engine.Rejected) as caught:
                 policy.export(raw, ".pdf", self._plan(other))
             message = str(caught.exception)
+            self.assertIn("可见内容", message)
             self.assertIn("去掉", message)
+            self.assertNotIn("看不见", message)
             self.assertNotIn(COVERED, message)
 
 
@@ -703,6 +728,11 @@ class AlternateSpellingTests(unittest.TestCase):
             "138/0000/0000",
             "138_0000_0000",
             "138 \u200b0000 \u200b0000",
+            "1380000\ufe0e0000",
+            "138\ufe0f00000000",
+            "138" + "\U000E0100" + "00000000",
+            "138\u20dd00000000",
+            "138\u0300" + "00000000",
         ]
 
     def test_other_spelling_of_the_same_number_is_refused(self):
@@ -748,6 +778,245 @@ class PdfKeepMessageTests(unittest.TestCase):
         self.assertIn("没有对上", message)
         self.assertNotIn("框外", message)
         self.assertNotIn("原文里没有的保留句", message)
+
+
+class RenderGeometryTests(unittest.TestCase):
+    def _refuse_covered(self, raw, plan):
+        leaked = pdf.export(raw, plan, _verify=False)
+        with pdf.backend().open(stream=leaked, filetype="pdf") as doc:
+            self.assertIn(COVERED, doc[0].get_text())
+        with self.assertRaises(engine.Rejected) as caught:
+            policy.export(raw, ".pdf", plan)
+        message = str(caught.exception)
+        self.assertIn("看不见", message)
+        self.assertIn("去掉", message)
+        self.assertNotIn(COVERED, message)
+
+    def test_light_text_under_a_black_square_is_refused(self):
+        colors = (
+            (0.975, 0.975, 0.975),
+            (0.980, 0.980, 0.980),
+            (0.985, 0.985, 0.985),
+            (1, 0.97, 0.97),
+        )
+        fitz = pdf.backend()
+        for color in colors:
+            doc = fitz.open()
+            page = doc.new_page(width=400, height=300)
+            page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+            page.insert_text((20, 90), COVERED, fontname="helv", fontsize=16, color=color)
+            page.insert_text((20, 220), "DELETEME", fontname="helv", fontsize=14)
+            phone = page.search_for(COVERED)[0]
+            other = page.search_for("DELETEME")[0]
+            annot = page.add_rect_annot(fitz.Rect(phone.x0 - 2, phone.y0 - 2, phone.x1 + 2, phone.y1 + 2))
+            annot.set_colors(stroke=(0, 0, 0), fill=(0, 0, 0))
+            annot.set_opacity(1)
+            annot.update()
+            raw = doc.tobytes()
+            doc.close()
+            self._refuse_covered(raw, _pdf_plan(_pixel_box(other)))
+
+    def test_text_on_each_edge_of_a_square_is_refused(self):
+        fitz = pdf.backend()
+        square = fitz.Rect(30, 140, 340, 270)
+        spots = {
+            "top": (48, 141.2),
+            "bottom": (48, 269.2),
+            "left": (30.6, 200),
+            "right": (338.4, 200),
+        }
+        for name, point in spots.items():
+            doc = fitz.open()
+            page = doc.new_page(width=400, height=300)
+            page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+            page.insert_text((20, 90), "DELETEME", fontname="helv", fontsize=14)
+            page.insert_text(point, COVERED, fontname="helv", fontsize=1)
+            other = page.search_for("DELETEME")[0]
+            annot = page.add_rect_annot(square)
+            annot.set_colors(stroke=(0, 0, 0), fill=(0, 0, 0))
+            annot.set_opacity(1)
+            annot.update()
+            raw = doc.tobytes()
+            doc.close()
+            self._refuse_covered(raw, _pdf_plan(_pixel_box(other)))
+
+    def _covered_geometry(self, angle=0, crop=None, userunit=None, mediabox=None, word="DELETEME"):
+        fitz = pdf.backend()
+        doc = fitz.open()
+        if crop is None:
+            page = doc.new_page(width=400, height=300)
+            origin = (24, 90)
+        else:
+            page = doc.new_page(width=500, height=400)
+            page.set_cropbox(fitz.Rect(*crop))
+            origin = (80, 110)
+        if mediabox is not None:
+            page.set_mediabox(fitz.Rect(*mediabox))
+        if userunit is not None:
+            page.parent.xref_set_key(page.xref, "UserUnit", str(userunit))
+        page.insert_text((origin[0], origin[1] - 50), KEEP, fontname="china-s", fontsize=14)
+        page.insert_text(origin, COVERED, fontname="helv", fontsize=14)
+        page.insert_text((origin[0], origin[1] + 100), "DELETEME", fontname="helv", fontsize=14)
+        phone = page.search_for(COVERED)[0]
+        chosen = page.search_for(word)[0]
+        annot = page.add_rect_annot(fitz.Rect(phone.x0 - 2, phone.y0 - 2, phone.x1 + 2, phone.y1 + 2))
+        annot.set_colors(stroke=(0, 0, 0), fill=(0, 0, 0))
+        annot.set_opacity(1)
+        annot.update()
+        if angle:
+            page.set_rotation(angle)
+        # 先在页面还开着时算出批注的文字坐标和显示矩阵。关掉后再用 pdfium，不能回头读 annot.rect。
+        area = pdf._annot_area(page.first_annot, page)
+        matrix = pdf._display_matrix(page)
+        shown = fitz.Rect(page.rect)
+        box = _preview_box(page, chosen)
+        raw = doc.tobytes()
+        doc.close()
+        image = formats.pdf_image(raw, 0)
+        sx = image.size[0] / shown.width
+        sy = image.size[1] / shown.height
+        mapped = fitz.Rect(area) * matrix
+        cover = (
+            max(0, math.floor(mapped.x0 * sx)),
+            max(0, math.floor(mapped.y0 * sy)),
+            min(image.width, math.ceil(mapped.x1 * sx)),
+            min(image.height, math.ceil(mapped.y1 * sy)),
+        )
+        self.assertGreater(cover[2] - cover[0], 1)
+        self.assertGreater(cover[3] - cover[1], 1)
+        _span, mean = pdf._luma(image, cover)
+        self.assertLess(mean, 40, cover)
+        return raw, _pdf_plan(box)
+
+    def test_rotated_black_square_uses_the_same_transform(self):
+        for angle in (0, 90, 180, 270):
+            raw, plan = self._covered_geometry(angle=angle)
+            self._refuse_covered(raw, plan)
+
+    def test_crop_offset_and_user_unit_use_the_same_scale(self):
+        cases = (
+            {"crop": (40, 20, 440, 320)},
+            {"userunit": 2},
+            {"userunit": 2, "angle": 90},
+            {"userunit": 2, "angle": 180},
+            {"userunit": 2, "angle": 270},
+            {"mediabox": (100, 50, 500, 350)},
+        )
+        for case in cases:
+            raw, plan = self._covered_geometry(**case)
+            self._refuse_covered(raw, plan)
+
+    def test_crop_and_rotation_together_stay_refused(self):
+        fitz = pdf.backend()
+        doc = fitz.open()
+        page = doc.new_page(width=500, height=400)
+        page.set_cropbox(fitz.Rect(40, 20, 440, 320))
+        page.insert_text((80, 60), KEEP, fontname="china-s", fontsize=14)
+        page.insert_text((80, 140), "DELETEME", fontname="helv", fontsize=14)
+        page.set_rotation(90)
+        other = page.search_for("DELETEME")[0]
+        box = _preview_box(page, other)
+        raw = doc.tobytes()
+        doc.close()
+        with self.assertRaises(engine.Rejected) as caught:
+            policy.export(raw, ".pdf", _pdf_plan(box))
+        message = str(caught.exception)
+        self.assertIn("裁剪框和旋转", message)
+        self.assertNotIn(COVERED, message)
+
+    def test_header_shading_highlight_and_note_still_deliver(self):
+        fitz = pdf.backend()
+        doc = fitz.open()
+        page = doc.new_page(width=400, height=300)
+        shape = page.new_shape()
+        shape.draw_rect(fitz.Rect(0, 0, 400, 36))
+        shape.finish(fill=(0.12, 0.14, 0.2), color=None, width=0)
+        shape.commit()
+        shape = page.new_shape()
+        shape.draw_rect(fitz.Rect(30, 70, 200, 110))
+        shape.finish(fill=(0.93, 0.93, 0.86), color=(0.7, 0.7, 0.7), width=0.6)
+        shape.commit()
+        page.insert_text((36, 96), "CELL", fontname="helv", fontsize=12)
+        page.insert_text((20, 170), "DELETEME", fontname="helv", fontsize=14)
+        page.insert_text((20, 230), KEEP, fontname="china-s", fontsize=14)
+        page.add_highlight_annot(page.search_for("CELL")[0]).update()
+        page.add_text_annot(fitz.Point(320, 48), "便签甲").update()
+        other = page.search_for("DELETEME")[0]
+        raw = doc.tobytes()
+        doc.close()
+        out, report, _ext = policy.export(raw, ".pdf", _pdf_plan(_pixel_box(other)))
+        self.assertTrue(report["checks"]["covered_text_not_revealed"])
+        self.assertTrue(report["checks"]["outside_page_pixels_preserved"])
+        self.assertTrue(report["checks"]["keep_phrases_preserved"])
+        with pdf.backend().open(stream=out, filetype="pdf") as opened:
+            text = opened[0].get_text()
+            self.assertIn("CELL", text)
+            self.assertIn(KEEP, text)
+            self.assertNotIn("DELETEME", text)
+            self.assertIsNone(opened[0].first_annot)
+        image = formats.pdf_image(out, 0).convert("L")
+        self.assertLess(image.getpixel((20, 20)), 80)
+        self.assertLess(image.getpixel((320, 160)), 250)
+        self.assertGreater(image.getpixel((320, 160)), 180)
+
+    def test_ink_and_file_attachment_name_their_own_marks(self):
+        fitz = pdf.backend()
+
+        def ink(page):
+            page.add_ink_annot([[(280, 40), (350, 70), (300, 110)]]).update()
+
+        def attachment(page):
+            page.add_file_annot(fitz.Point(300, 60), b"note", filename="a.txt").update()
+
+        for draw in (ink, attachment):
+            doc = fitz.open()
+            page = doc.new_page(width=400, height=280)
+            page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+            page.insert_text((20, 200), "DELETEME", fontname="helv", fontsize=14)
+            draw(page)
+            other = page.search_for("DELETEME")[0]
+            raw = doc.tobytes()
+            doc.close()
+            with self.assertRaises(engine.Rejected) as caught:
+                policy.export(raw, ".pdf", _pdf_plan(_pixel_box(other)))
+            message = str(caught.exception)
+            self.assertIn("可见内容", message)
+            self.assertIn("去掉", message)
+            self.assertNotIn("看不见", message)
+            self.assertNotIn(COVERED, message)
+
+    def test_one_point_glyph_in_the_selection_halo_is_not_left_readable(self):
+        fitz = pdf.backend()
+        doc = fitz.open()
+        page = doc.new_page(width=400, height=280)
+        page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+        page.insert_text((20, 140), "DELETEME", fontname="helv", fontsize=14)
+        target = page.search_for("DELETEME")[0]
+        box = fitz.Rect(target.x0 - 1, target.y0 - 1, target.x1 + 1, target.y1 + 1)
+        # 字形框跨进选区，墨迹主要落在框外两像素里。涂黑会删掉这个字，交付后正文里没有它。
+        page.insert_text((box.x1 - 0.4, box.y1 - 0.4), "9", fontname="helv", fontsize=1)
+        raw = doc.tobytes()
+        doc.close()
+        plan = _pdf_plan([box.x0 * 2, box.y0 * 2, box.x1 * 2, box.y1 * 2])
+        out, report, _ext = policy.export(raw, ".pdf", plan)
+        self.assertTrue(report["checks"]["selected_text_removed"])
+        with pdf.backend().open(stream=out, filetype="pdf") as opened:
+            self.assertNotIn("9", opened[0].get_text())
+            self.assertIn(KEEP, opened[0].get_text())
+        outside = fitz.open()
+        page = outside.new_page(width=400, height=280)
+        page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+        page.insert_text((20, 140), "DELETEME", fontname="helv", fontsize=14)
+        target = page.search_for("DELETEME")[0]
+        box = fitz.Rect(target.x0 - 1, target.y0 - 1, target.x1 + 1, target.y1 + 1)
+        # 完全落在框外的同一点字仍留下，不因为晕圈被删掉。
+        page.insert_text((box.x1 + 0.6, box.y1 - 0.4), "9", fontname="helv", fontsize=1)
+        raw = outside.tobytes()
+        outside.close()
+        out, _report, _ext = policy.export(raw, ".pdf", plan)
+        with pdf.backend().open(stream=out, filetype="pdf") as opened:
+            self.assertIn("9", opened[0].get_text())
+            self.assertIn(KEEP, opened[0].get_text())
 
 
 if __name__ == "__main__":
