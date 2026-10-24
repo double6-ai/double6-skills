@@ -2,7 +2,7 @@ const $ = (id) => document.getElementById(id);
 let job = null, picture = null, boxes = [], start = null, busy = false, pdfBoxes = {}, visited = new Set(), currentPage = 1;
 let revoking=Promise.resolve();
 const canvas = $('canvas'), ctx = canvas.getContext('2d');
-const checkNames = {deterministic_pdf_matches_source_plan:'实际PDF与原件和补选计划的重建结果一致',text_encoding_readable:'原编码可重新读取',utf8_readable:'文本可用UTF-8重新读取',keep_phrases_preserved:'关键保留句仍在副本中',formula_text_neutralized:'公式样式文本已转为普通文字',hidden_carriers_absent:'未带入图片、备注、批注或嵌入对象',external_links_absent:'外部链接已移除',formulas_hidden_absent:'公式与隐藏表行列已移除',hidden_slides_absent:'隐藏幻灯片未带入',image_only_pdf:'按明确选择生成图像化PDF',pdf_not_rasterized:'PDF未整页图像化',selected_text_removed:'框内原文字已删除',outside_text_positions_preserved:'框外文字与位置保留',outside_page_pixels_preserved:'框外页面像素保留',pdf_hidden_objects_absent:'已支持的隐藏PDF对象清理',output_format_matches_request:'实际编码符合选择的输出格式',outside_pixels_within_jpeg_tolerance:'JPEG框外误差在明确容差内',odf_clean_container:'ODF原容器未复制',odf_reopened:'ODF副本可重新读取',original_objects_absent:'原PDF对象和隐藏附件未带入',metadata_removed:'图片元数据已移除',selected_regions_solid:'框选区域已实色覆盖',outside_pixels_preserved:'框选之外的像素保留',selected_strings_absent:'补选原文未在导出包中检出',media_embeddings_comments_absent:'图片、嵌入文件、批注与自定义 XML 未带入',external_relationships_absent:'外部超链接关系已移除',revision_hidden_markup_absent:'修订和隐藏文字标记已移除',original_properties_absent:'作者与文档属性已清理',internal_relationships_valid:'内部文件引用完整',editable_document_reopened:'可编辑 Word 结构可重新读取'};
+const checkNames = {neutral_output_filename:'下载使用中性新文件名，未带出原文件名',deterministic_pdf_matches_source_plan:'实际PDF与原件和补选计划的重建结果一致',text_encoding_readable:'原编码可重新读取',utf8_readable:'文本可用UTF-8重新读取',keep_phrases_preserved:'关键保留句仍在副本中',formula_text_neutralized:'公式样式文本已转为普通文字',hidden_carriers_absent:'未带入图片、备注、批注或嵌入对象',external_links_absent:'外部链接已移除',formulas_hidden_absent:'公式与隐藏表行列已移除',hidden_slides_absent:'隐藏幻灯片未带入',image_only_pdf:'按明确选择生成图像化PDF',pdf_not_rasterized:'PDF未整页图像化',selected_text_removed:'框内原文字已删除',outside_text_positions_preserved:'框外文字与位置保留',outside_page_pixels_preserved:'框外页面像素保留',pdf_hidden_objects_absent:'已支持的隐藏PDF对象清理',output_format_matches_request:'实际编码符合选择的输出格式',outside_pixels_within_jpeg_tolerance:'JPEG框外误差在明确容差内',odf_clean_container:'ODF原容器未复制',odf_reopened:'ODF副本可重新读取',original_objects_absent:'原PDF对象和隐藏附件未带入',metadata_removed:'图片元数据已移除',selected_regions_solid:'框选区域已实色覆盖',outside_pixels_preserved:'框选之外的像素保留',selected_strings_absent:'补选原文未在导出包中检出',media_embeddings_comments_absent:'图片、嵌入文件、批注与自定义 XML 未带入',external_relationships_absent:'外部超链接关系已移除',revision_hidden_markup_absent:'修订和隐藏文字标记已移除',original_properties_absent:'作者与文档属性已清理',internal_relationships_valid:'内部文件引用完整',editable_document_reopened:'可编辑 Word 结构可重新读取'};
 function status(message='') { $('status').textContent=message; }
 function setBusy(value) {
   busy=value;
@@ -25,9 +25,19 @@ function draw(extra=null) {
 }
 function point(event) { const r=canvas.getBoundingClientRect();return [Math.max(0,Math.min(canvas.width,(event.clientX-r.left)*canvas.width/r.width)),Math.max(0,Math.min(canvas.height,(event.clientY-r.top)*canvas.height/r.height))]; }
 function addTerm(text) {text=text.trim();if(!text)return;const lines=$('terms').value.split('\n').filter(Boolean);if(!lines.includes(text))lines.push(text);$('terms').value=lines.join('\n');invalidate();}
-canvas.addEventListener('pointerdown',e=>{if(busy)return;start=point(e);canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointerdown',e=>{if(busy)return;invalidate();start=point(e);canvas.setPointerCapture(e.pointerId);});
 canvas.addEventListener('pointermove',e=>{if(start){const end=point(e);draw([...start,...end]);}});
-canvas.addEventListener('pointerup',e=>{if(!start)return;const end=point(e);if(Math.abs(start[0]-end[0])>=2&&Math.abs(start[1]-end[1])>=2){boxes.push([...start,...end]);invalidate();}start=null;draw();});
+canvas.addEventListener('pointerup',async e=>{
+  if(!start||busy)return;const end=point(e);let region=[...start,...end];start=null;
+  if(Math.abs(region[0]-region[2])<2||Math.abs(region[1]-region[3])<2){draw();return;}
+  setBusy(true);
+  try{
+    if(job?.kind==='pdf'&&$('pdf-mode').value==='preserve'){
+      const result=await request('api/snap-pdf',JSON.stringify({id:job.id,page:currentPage,rectangle:region}),{'Content-Type':'application/json'});region=result.rectangle;status('已对齐完整字符，请核对黑块显示的实际范围。');
+    }
+    boxes.push(region);invalidate();draw();
+  }catch(error){status(error.message);draw();}finally{setBusy(false);}
+});
 canvas.addEventListener('pointercancel',()=>{start=null;draw();});
 $('undo').onclick=()=>{boxes.pop();invalidate();draw();};
 $('terms').oninput=invalidate;$('keep').oninput=invalidate;
