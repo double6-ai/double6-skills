@@ -213,3 +213,8 @@
 - vendored PDFMathTranslate-next：`pdf2zh_next/translator/translator_impl/openai.py` 只增加一项缓存影响参数 `base_url`（不同服务端点不复用译文；凭据不入缓存身份）。未改其配置解析、日志、`clitranslator.py` 与请求协议：凭据经其既有的 `PDF2ZH_` 环境变量配置通道（`config/main.py`）传入，命令行不再含凭据，因此其 DEBUG 命令日志、`CalledProcessError`、tenacity 重试日志与缓存库不再出现凭据。
 - `PDF2ZH_DEBUG`：后端在调试模式下记录完整配置（含 `openai_api_key`，`main.py` 与 `config/main.py`），因此不再透传给后端子进程。
 - PR #25 review-1（兼容代理背后的真实上游与缓存身份）：第一方新增 `scripts/upstream_identity.py`；`hymt_compat_proxy.py` 增加 `GET <base_url>/double6/upstream-identity` 与每个响应头 `X-Double6-Upstream-Identity`（只在本项目回环代理上，不改上游请求）；`pdf_translation_commands.build_qwen_cli_command` 在回环端点声明身份时追加 `--upstream-identity`，`qwen_pdf2zh_cli_translator.py` 逐次核对。vendored `openai.py`：`base_url` 缓存参数改为规范化端点（去 userinfo/凭据类查询参数），回环端点声明身份时再加缓存参数 `upstream_identity`，并在 httpx 响应钩子里核对身份头，不一致即抛错（不写缓存）。仍未改其配置解析、`clitranslator.py` 与 OpenAI 请求体。
+
+## 公式结构与可读版保真维护改动（2026-10-24）
+
+- vendored BabelDOC `format/pdf/document_il/midend/styles_and_formulas.py`：新增 `SYNTHETIC_SPACE_SCRIPT_SIZE_RATIO`、`SYNTHETIC_SPACE_SCRIPT_MIN_OFFSET`、`_is_synthetic_space`、`script_vertical_offset`、`_is_script_after_synthetic_space`；`_classify_characters_in_composition` 在原角标规则之外，把“合成空格（`pdf_character_id` 为空）后、基字已是公式、字号 < 0.79 基字且竖向偏移 ≥ 0.15 字号”的字符判为角标。原角标规则与其它分组逻辑不变。文件头维护日期更新为 2026-10-24。
+- 第一方：新增 `scripts/formula_structure_check.py`（源/成品上/下标关系提取与整份文档匹配）；`qa_pipeline.py` 新增 `formula_structure_gate`、`readable_fidelity_receipt` 并接入 `attach_pipeline_quality`；`render_readable_pdf.py` 改为数学页整页矢量复制、文字页重排并逐码位核对、写出前拒绝（原 reportlab 重排逻辑保留为 `_reflow_pdf`）；`pdf_translation_artifacts.render_qa_repaired_pdf` 传入主版式成品、源 PDF 与修复前译文，标题取原文件名；`pdf_translation_render.py` 传入主版式成品路径；`paper_translation_workflow.quality_verdict` 增加 `formula_structure`、`readable_output`。
