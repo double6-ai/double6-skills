@@ -76,7 +76,8 @@ def main():
         report.update(receipt=receipt, acceptance=acceptance)
         report['steps'].append('复制后的完整Skill安装与正反例验收')
         with (args.work / 'regression.log').open('wb') as log:
-            subprocess.run([receipt['python'], '-m', 'unittest', 'discover', '-s', str(installed / 'scripts/tests'), '-v'], stdout=log, stderr=subprocess.STDOUT, check=True, timeout=180)
+            # 加墨回归大约多了 90 份双渲染导出。Windows 上原先接近 180 秒，放到 300 秒，不删漏脱样例。
+            subprocess.run([receipt['python'], '-m', 'unittest', 'discover', '-s', str(installed / 'scripts/tests'), '-v'], stdout=log, stderr=subprocess.STDOUT, check=True, timeout=300)
         report['steps'].append('安装目录内源码回归')
         save()
         for iteration in range(2):

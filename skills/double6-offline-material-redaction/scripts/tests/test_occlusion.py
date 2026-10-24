@@ -21,6 +21,7 @@ import formats
 import output_policy as policy
 import pdf_preserve as pdf
 import pymupdf as fitz
+from generators.glyph_attacks import attack_cases
 from generators.review_cases import DILUTION_SPECS
 from generators.review_cases import KEEP as REVIEW_KEEP
 from generators.review_cases import NEIGHBOR
@@ -50,6 +51,14 @@ VISIBLE_DESPITE_FLAG = {
 PER_GLYPH_COVER = {
     ("attack", "正常-图章压住号码"),
     ("attack", "攻击-黑方块透明度0.25"),
+}
+# 删除线和红圈把原来的空白涂到接近字迹。边缘存活率仍可能达标，加墨这一关要拒绝。
+# 不按类型放行。高亮、下划线和波浪线只是略变暗，仍交付。
+ADDED_INK_STROKE = {
+    ("office", "正常-删除线在被选词上"),
+    ("office", "正常-红圈圈注"),
+    ("round7:expect-reject-visible", "普通删除线"),
+    ("author", "普通删除线"),
 }
 
 
@@ -178,7 +187,7 @@ def _raw_of(row):
 def _expected(key, oracle):
     if key in VISIBLE_DESPITE_FLAG:
         return "deliver"
-    if key in PER_GLYPH_COVER or key in STRICTER or oracle["d1"] == "reject" or oracle["cohort"] == "reveal":
+    if key in ADDED_INK_STROKE or key in PER_GLYPH_COVER or key in STRICTER or oracle["d1"] == "reject" or oracle["cohort"] == "reveal":
         return "reject"
     return "deliver"
 
@@ -260,8 +269,11 @@ class OcclusionOracleTests(unittest.TestCase):
                 if "盖住了" not in message or "方形" not in message:
                     problems.append(f"用户黑框的说明不对：{message}")
             if row["name"] == "正常-图章压住号码":
-                if "盖住了" not in message or "图章" not in message:
-                    problems.append(f"压住号码的图章应说明字形被盖住：{message}")
+                if "图章" not in message or ("盖住了" not in message and "接近字迹的深色" not in message):
+                    problems.append(f"压住号码的图章应说明字被盖住或被改掉：{message}")
+            if row["name"] in ("正常-删除线在被选词上", "正常-红圈圈注"):
+                if "接近字迹的深色" not in message:
+                    problems.append(f"{row['name']} 应说明空白被涂成接近字迹：{message}")
             if row["name"] == "攻击-黑方块透明度0.25":
                 if "看不一致" not in message:
                     problems.append(f"25% 黑方块应说明两种渲染看不一致：{message}")
@@ -288,8 +300,8 @@ class OcclusionOracleTests(unittest.TestCase):
         self.assertEqual(leaks, 0, office_note)
         self.assertEqual(
             office_deliver,
-            10,
-            "正常办公 12 份里应有 10 份交付。用户黑框，以及压住两个数字的图章，都拒绝。\n" + office_note,
+            8,
+            "正常办公 12 份里应有 8 份交付。用户黑框、压住数字的图章、穿过字的删除线、压到字上的红圈，都拒绝。\n" + office_note,
         )
         self.assertEqual(len(office_names), 12)
         self.assertFalse(problems, office_note)
@@ -477,6 +489,89 @@ class FloatUserUnitTests(unittest.TestCase):
         message = str(caught.exception)
         self.assertNotIn(REVIEW_SECRET, message)
         self.assertNotIn("盖住了", message)
+
+
+def _source_digits_visible(raw):
+    image = formats.pdf_image(raw, 0)
+    return any(_region_visible(image, box) for box in _digit_boxes(raw))
+
+
+class AddedInkAttackTests(unittest.TestCase):
+    def test_added_ink_thresholds_stay_written_down(self):
+        # 白纸约 255。涂到不超过 96 且至少暗 80，才接近字迹。高亮仍远亮于这条线。
+        self.assertEqual(pdf._ADDED_INK_BRIGHT, 176)
+        self.assertEqual(pdf._ADDED_INK_DARK, 96)
+        self.assertEqual(pdf._ADDED_INK_DROP, 80)
+        self.assertEqual(pdf._ADDED_INK_MIN, 6)
+        self.assertEqual(pdf._GLYPH_INK_MARGIN, 2)
+
+    def test_review_stroke_samples_and_the_hairline_are_refused(self):
+        rows = attack_cases()
+        names = [row["name"] for row in rows]
+        self.assertEqual(len(names), len(set(names)))
+        for required in (
+            "改字-3左侧封口",
+            "改字-1加顶横",
+            "改字-填孔",
+            "改字-封口加顶横再填孔",
+            "只涂内部留边缘",
+            "改字-细线封口",
+            "只涂字形中心",
+            "字间黑块",
+            "框外-4pt黑块",
+            "框外-整字黑块",
+            "旧-浅色字-0.985",
+        ):
+            self.assertIn(required, names)
+        self.assertGreaterEqual(len(rows), 89)
+        for row in rows:
+            with self.subTest(name=row["name"]):
+                self._check(row)
+
+    def _check(self, row):
+        try:
+            out, _report, _ext = policy.export(row["raw"], ".pdf", _pdf_plan(row["box"], row["keep"]))
+        except engine.Rejected as exc:
+            message = str(exc)
+            self.assertNotIn(REVIEW_SECRET, message)
+            self.assertNotIn(REVIEW_SECRET, _joined_digits(message))
+            expect = row["expect"]
+            if expect == "tamper":
+                self.assertIn("接近字迹的深色", message)
+            elif expect == "cover":
+                self.assertIn("盖住了", message)
+            elif expect == "invalid":
+                self.assertIn("没法对齐", message)
+            elif expect == "crop-rotation":
+                self.assertIn("裁剪框和旋转", message)
+            elif expect == "userunit-low":
+                self.assertIn("可能切到字形", message)
+                self.assertNotIn("盖住了", message)
+            elif expect == "invisible":
+                self.assertIn("不可见", message)
+            else:
+                self.fail(f"应交付，实际拒绝：{message[:180]}")
+            return
+        text = _page_text(out)
+        self.assertIn(REVIEW_KEEP, text)
+        expect = row["expect"]
+        if expect == "redact":
+            self.assertNotIn(REVIEW_SECRET, text)
+            self.assertNotIn(REVIEW_SECRET, _joined_digits(text))
+            self.assertIn(NEIGHBOR, text)
+            source_size = formats.pdf_info(row["raw"])[0]
+            with fitz.open(stream=row["raw"], filetype="pdf") as source_doc:
+                phone = source_doc[0].search_for(REVIEW_SECRET)[0]
+                phone_box = pdf._to_pixel_box(phone, source_doc[0], _ImageSize(source_size))
+            self.assertFalse(_region_visible(formats.pdf_image(out, 0), phone_box))
+        elif expect == "visible":
+            self.assertTrue(_source_digits_visible(row["raw"]))
+        elif expect == "aside":
+            self.assertIn(REVIEW_KEEP, text)
+        elif expect == "light":
+            self.assertIn(REVIEW_SECRET, text)
+        else:
+            self.fail("应拒绝，实际交付了")
 
 
 if __name__ == "__main__":

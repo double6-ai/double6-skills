@@ -57,6 +57,7 @@ def _cover_words(message):
         "看不到这些字的边缘",
         "没法对齐",
         "线条或图片",
+        "接近字迹的深色",
     ))
 
 
@@ -677,15 +678,22 @@ class DarkCoverTests(unittest.TestCase):
             annot.set_border(width=2)
             annot.update()
 
-        for draw in (self._square((0, 0, 0), 0.08), stroke):
-            raw, other, phone = self._pdf((0, 0, 0), draw)
-            span, _mean = _crop_luma(formats.pdf_image(raw, 0), [phone.x0 * 2 + 2, phone.y0 * 2 + 2, phone.x1 * 2 - 2, phone.y1 * 2 - 2])
-            self.assertGreater(span, 60)
-            out, report, _ext = policy.export(raw, ".pdf", self._plan(other))
-            self.assertTrue(report["checks"]["covered_text_not_revealed"])
-            with pdf.backend().open(stream=out, filetype="pdf") as doc:
-                self.assertIn(COVERED, doc[0].get_text())
-                self.assertNotIn("OTHERTEXT", doc[0].get_text())
+        raw, other, phone = self._pdf((0, 0, 0), self._square((0, 0, 0), 0.08))
+        span, _mean = _crop_luma(formats.pdf_image(raw, 0), [phone.x0 * 2 + 2, phone.y0 * 2 + 2, phone.x1 * 2 - 2, phone.y1 * 2 - 2])
+        self.assertGreater(span, 60)
+        out, report, _ext = policy.export(raw, ".pdf", self._plan(other))
+        self.assertTrue(report["checks"]["covered_text_not_revealed"])
+        with pdf.backend().open(stream=out, filetype="pdf") as doc:
+            self.assertIn(COVERED, doc[0].get_text())
+            self.assertNotIn("OTHERTEXT", doc[0].get_text())
+        raw, other, phone = self._pdf((0, 0, 0), stroke)
+        span, _mean = _crop_luma(formats.pdf_image(raw, 0), [phone.x0 * 2 + 2, phone.y0 * 2 + 2, phone.x1 * 2 - 2, phone.y1 * 2 - 2])
+        self.assertGreater(span, 60)
+        with self.assertRaises(engine.Rejected) as caught:
+            policy.export(raw, ".pdf", self._plan(other))
+        message = str(caught.exception)
+        self.assertIn("接近字迹的深色", message)
+        self.assertNotIn(COVERED, message)
 
 
 class ShortNumberSideTests(unittest.TestCase):
@@ -1195,7 +1203,7 @@ class MarkupAppearanceTests(unittest.TestCase):
             self.assertNotIn("DELETEME", text)
             self.assertIsNone(doc[0].first_annot)
 
-    def test_ordinary_highlight_underline_strikeout_squiggly_and_note_are_removed(self):
+    def test_highlight_underline_squiggly_and_note_are_removed_and_strikeout_is_refused(self):
         fitz = pdf.backend()
 
         def highlight(page):
@@ -1213,7 +1221,7 @@ class MarkupAppearanceTests(unittest.TestCase):
         def note(page):
             page.add_text_annot(fitz.Point(320, 50), "便签甲乙丙").update()
 
-        for draw in (highlight, underline, strikeout, squiggly, note):
+        for draw in (highlight, underline, squiggly, note):
             doc = fitz.open()
             page = doc.new_page(width=400, height=300)
             page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
@@ -1231,6 +1239,21 @@ class MarkupAppearanceTests(unittest.TestCase):
                 self.assertIn(COVERED, text)
                 self.assertNotIn("DELETEME", text)
                 self.assertIsNone(doc[0].first_annot)
+        doc = fitz.open()
+        page = doc.new_page(width=400, height=300)
+        page.insert_text((20, 40), KEEP, fontname="china-s", fontsize=14)
+        page.insert_text((20, 90), "DELETEME", fontname="helv", fontsize=14)
+        page.insert_text((20, 180), COVERED, fontname="helv", fontsize=14)
+        strikeout(page)
+        other = page.search_for("DELETEME")[0]
+        raw = doc.tobytes()
+        doc.close()
+        with self.assertRaises(engine.Rejected) as caught:
+            policy.export(raw, ".pdf", _page_plan(_pixel_box(other)))
+        message = str(caught.exception)
+        self.assertIn("接近字迹的深色", message)
+        self.assertIn("删除线", message)
+        self.assertNotIn(COVERED, message)
 
     def test_zero_width_black_square_is_refused_even_when_boxed(self):
         raw, other, _phone, rect = self._covered(border=0)

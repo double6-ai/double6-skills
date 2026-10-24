@@ -462,11 +462,40 @@ def _garbled_text(text):
     return False
 
 
-def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mupdf_covered):
-    """逐个字形看存活率和明暗差。任何一个不达标，整条批注就不放行。
+# 白纸大约是 255。接近字迹指涂完不超过 96，并且比原来至少暗 80。
+# 黄色高亮只把白纸略降暗，仍远高于 96，不计。不看批注的类型和颜色。
+_ADDED_INK_BRIGHT = 176
+_ADDED_INK_DARK = 96
+_ADDED_INK_DROP = 80
+# 细线也能凑满 6 个预览像素。一两粒抗锯齿不算改字。
+_ADDED_INK_MIN = 6
+_GLYPH_INK_MARGIN = 2
 
-    取样只取这个字形自己的矩形，不向外扩到旁边仍可读的字，也不和整块矩形做平均或面积加权。
-    字形小到对不齐，同样拒绝。两个渲染器只要有一个判盖住或判不了，就拒绝。
+
+def _added_ink_count(base_img, covered_img, box):
+    """字形框加小边距里，原来的亮像素被涂到接近字迹的有多少。数不清就返回 None。"""
+    if box is None or base_img.size != covered_img.size:
+        return None
+    x0, y0, x1, y1 = box
+    if x1 <= x0 or y1 <= y0 or x0 < 0 or y0 < 0 or x1 > base_img.width or y1 > base_img.height:
+        return None
+    before = base_img.crop(box).tobytes()
+    after = covered_img.crop(box).tobytes()
+    if len(before) != len(after) or not before:
+        return None
+    count = 0
+    for origin, painted in zip(before, after):
+        if origin >= _ADDED_INK_BRIGHT and painted <= _ADDED_INK_DARK and origin - painted >= _ADDED_INK_DROP:
+            count += 1
+    return count
+
+
+def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mupdf_covered):
+    """逐个字形看存活率、明暗差，以及空白处有没有被涂成字迹。
+
+    取样只取这个字形自己的矩形，再向外加 2 个预览像素，不和整块矩形做平均或面积加权。
+    边缘存活率只统计原来就黑的文字边，白底被涂黑不会拉低它，所以另外数新涂上的深色。
+    任何一个字不达标，或者任一渲染器看到足够的新墨，整条批注就不放行。对不齐也拒绝。
     """
     for _text, rect in _each_glyph(baseline_page, area):
         box = _to_pixel_box(rect, page, covered)
@@ -478,6 +507,13 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
         )
         if reason:
             return reason, box
+        grown = _grow_pixel_box(box, covered, _GLYPH_INK_MARGIN)
+        left = _added_ink_count(base, covered, grown)
+        right = _added_ink_count(mupdf_base, mupdf_covered, grown)
+        if left is None or right is None:
+            return 'invalid', grown or box
+        if left >= _ADDED_INK_MIN or right >= _ADDED_INK_MIN:
+            return 'tamper', grown
     return '', None
 
 
@@ -510,6 +546,7 @@ def _occlusion_reason(left, right, glyphs, graphics, outside=False):
 
 _OCCLUSION_DETAIL = {
     'opaque': '这块批注把底下的字盖住了，去掉之后字才会露出来。请先去掉这块批注。',
+    'tamper': '这块批注在字的空白处加了接近字迹的深色，字会被改掉。请先去掉这块批注。',
     'invalid': '这块批注盖住的范围没法对齐，不能确认底下的字还在不在。请先去掉这块批注。',
     'disagree': '两种渲染对底下的字看不一致，不能确认字还在不在。请先去掉这块批注。',
     'mismatch': '文字层里有字，画面上却看不到这些字的边缘。请先去掉这块批注。',
@@ -546,7 +583,9 @@ def _outside_change_is_noise(box):
     """矩形外比一颗字还短的差分，是换一次渲染留下的毛边，不是遮盖。
 
     普通高亮在 Windows 上会让页面另一处的字边重画大约 4×9 个预览像素，这块小窗会被误判成涂平。
+    那块毛边落在别的字形上。若改成「字形框里的小差分一律要判」，Windows 上的高亮会再次被拒。
     能盖住号码的框外外观长边远大于 12 个预览像素，仍然要判断。
+    pdfium 和 MuPDF 会把画在外观框以外的内容裁掉，画面上不会出现这些像素，小于 12 的跳过也碰不到它们。
     """
     return max(box[2] - box[0], box[3] - box[1]) < 12
 
@@ -622,7 +661,7 @@ def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, b
 
     每条批注都用 pdfium 和 MuPDF 各渲染有批注、无批注两张图。覆盖区里只认去掉批注之后还在的文字边缘。
     整块矩形的存活率只说明这一块大体还读不读得清。矩形里再逐个字形看：任何一个字的存活率或明暗差不达标，
-    整条批注就拒绝，不用可读正文把被盖住的字平均掉。字形对不齐也拒绝。
+    或者字形框外扩 2 个预览像素里有原来的亮像素被涂到接近字迹，整条批注就拒绝。不把可读正文平均进去。字形对不齐也拒绝。
     便签、图章、签名自己的图标，底下是空白时不算遮盖。两个渲染器只要有一个判盖住或判不了，就拒绝。
     文字层有字、画面上却没有这些字的边缘，也拒绝。批注下面的矢量或图片无法用文字边缘判断，继续拒绝。
     类型名、颜色和线宽都不是放行条件。矩形外多画出来的差异另判；判不了同样拒绝。
