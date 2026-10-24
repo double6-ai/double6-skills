@@ -1289,6 +1289,8 @@ class Typesetting:
         段落不是图内角色、没有源基线锚点。任一条件不满足（含未知）返回 None，沿用原拒绝。
         横向范围沿用当前框（已被右侧阻挡物约束）；纵向为本行两条横线之间各留 1pt 的空白，
         当前框已更低时保持当前框下边。字形墨迹另由 _ink_inside_box 逐字核对。
+        横线与阻挡物都按实际绘制范围（_ruled_band_curve_extent：路径框外扩半个变换后描边宽）判断，
+        不凭零高路径框认细线；本页任一路径的绘制范围不能确定时返回 None。
         """
         try:
             label = (getattr(paragraph, "layout_label", None) or "").lower()
@@ -1300,12 +1302,22 @@ class Typesetting:
             if not self._is_single_source_line(source_box, typesetting_units):
                 return None
             eps = 0.5
-            rules = [c.box for c in page.pdf_curve or []
-                     if getattr(c, "box", None) is not None
-                     and c.box.y2 - c.box.y <= self._RULED_BAND_RULE_MAX_THICKNESS
-                     and c.box.x <= box.x + eps and c.box.x2 >= box.x2 - eps]
-            above = [r.y for r in rules if r.y >= source_box.y2 - eps]
-            below = [r.y2 for r in rules if r.y2 <= source_box.y + eps]
+            # (路径框, 实际绘制范围)；任一路径绘制范围未知即不走行带（未知不当安全）。
+            painted = []
+            for c in page.pdf_curve or []:
+                if getattr(c, "box", None) is None:
+                    continue
+                extent = self._ruled_band_curve_extent(c)
+                if extent is None:
+                    return None
+                painted.append((c.box, extent))
+            rules = [(path, ext) for path, ext in painted
+                     if ext.y2 - ext.y <= self._RULED_BAND_RULE_MAX_THICKNESS
+                     and path.x <= box.x + eps and path.x2 >= box.x2 - eps]
+            # 行带边界仍为路径框外 1pt：细线实际绘制厚度 <= 1.5，半宽 <= 0.75，
+            # 所以行带与实际描边边缘至少留 0.25pt。
+            above = [path.y for path, ext in rules if path.y >= source_box.y2 - eps]
+            below = [path.y2 for path, ext in rules if path.y2 <= source_box.y + eps]
             if not above or not below:
                 return None
             top = min(above) - self._RULED_BAND_PAD
@@ -1326,8 +1338,11 @@ class Typesetting:
                 if other is not paragraph and hits(other.box):
                     return None
             for item in [*(page.pdf_character or []), *(page.pdf_figure or []),
-                         *(getattr(page, "pdf_form", None) or []), *(page.pdf_curve or [])]:
+                         *(getattr(page, "pdf_form", None) or [])]:
                 if hits(getattr(item, "box", None)):
+                    return None
+            for _path, ext in painted:
+                if hits(ext):
                     return None
             cx, cy = (source_box.x + source_box.x2) / 2, (source_box.y + source_box.y2) / 2
             for region in getattr(page, "page_layout", None) or []:
@@ -1342,6 +1357,69 @@ class Typesetting:
             return band
         except Exception:
             return None
+
+    @staticmethod
+    def _ruled_band_stroke_width(instruction) -> float | None:
+        """从 graphic_state 的 passthrough 指令取当前描边宽（用户空间）；不能确定时返回 None。
+
+        frontend 按设置先后追加指令，新的 w 会替换旧的 w 并排到末尾；/名 gs 可经 ExtGState 的
+        /LW 改线宽而 IL 不含该字典，所以最后一个 w 之后出现 gs、没有 w、数值非法或为 0（设备最细线，
+        宽度取决于输出分辨率）都视为未知。
+        """
+        if not isinstance(instruction, str):
+            return None
+        tokens = instruction.split()
+        width = None
+        for i, token in enumerate(tokens):
+            if token == "w":
+                try:
+                    width = float(tokens[i - 1]) if i > 0 else None
+                except ValueError:
+                    width = None
+            elif token == "gs":
+                width = None
+        if width is None or not math.isfinite(width) or width <= 0:
+            return None
+        return width
+
+    @classmethod
+    def _ruled_band_curve_extent(cls, curve) -> Box | None:
+        """返回路径的实际绘制范围；不能可靠确定时返回 None。
+
+        - 完全没有绘制状态（graphic_state、stroke_path、fill_background 都缺）的路径只有几何框，
+          按路径框本身处理（frontend 生成的真实 IL 总带 graphic_state，不走这里）。
+        - 描边路径：路径框四周外扩 描边宽 × CTM 线性部分谱范数 / 2（任意旋转/缩放/错切下的
+          可靠上界）；描边宽或 CTM 不能确定即未知。
+        - 只填充不描边：填充范围就是路径框。
+        - 带绘制状态但描边/填充标记缺失：未知。
+        """
+        b = curve.box
+        gs = getattr(curve, "graphic_state", None)
+        stroke = getattr(curve, "stroke_path", None)
+        fill = getattr(curve, "fill_background", None)
+        if gs is None and stroke is None and fill is None:
+            return b
+        if stroke is None or (not stroke and fill is None):
+            return None
+        if not stroke:
+            return b
+        width = cls._ruled_band_stroke_width(getattr(gs, "passthrough_per_char_instruction", None))
+        ctm = getattr(curve, "ctm", None)
+        if width is None or ctm is None or len(ctm) != 6:
+            return None
+        try:
+            a, bb, c, d = (float(v) for v in ctm[:4])
+        except (TypeError, ValueError):
+            return None
+        if not all(math.isfinite(v) for v in (a, bb, c, d)):
+            return None
+        sq = a * a + bb * bb + c * c + d * d
+        det = a * d - bb * c
+        norm = math.sqrt(max(0.0, (sq + math.sqrt(max(0.0, sq * sq - 4 * det * det))) / 2))
+        half = width * norm / 2
+        if not math.isfinite(half):
+            return None
+        return Box(x=b.x - half, y=b.y - half, x2=b.x2 + half, y2=b.y2 + half)
 
     _INK_FONTS: dict = {}
 
