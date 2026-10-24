@@ -167,7 +167,7 @@ def verify(data, plan, source):
         raise engine.Rejected('PDF实际副本与本工具按同一原件和计划重新生成的结果不一致，未接受外部覆盖或额外载体。')
     checks = {'deterministic_pdf_matches_source_plan': True, 'pdf_not_rasterized': True, 'selected_text_removed': True,
               'outside_text_positions_preserved': True, 'outside_page_pixels_preserved': True,
-              'selected_regions_solid': True, 'pdf_hidden_objects_absent': True}
+              'covered_text_not_revealed': True, 'selected_regions_solid': True, 'pdf_hidden_objects_absent': True}
     try:
         with open_pdf(source) as before, open_pdf(data, inspect_image_visibility=False) as after:
             if len(before) != len(after):
@@ -206,12 +206,23 @@ def verify(data, plan, source):
                         checks['selected_regions_solid'] = False
                 if delta.getbbox() is not None:
                     checks['outside_page_pixels_preserved'] = False
+                # 与带批注的原页面再比一次。去掉白框等遮盖后，框外若出现原来没有的深色像素，就是被揭开的正文。
+                revealed = ImageChops.subtract(formats.pdf_image(source, index).convert('L'), new.convert('L'))
+                for box in pixel_boxes:
+                    x0, y0, x1, y1 = box
+                    revealed.paste(0, (max(0, x0 - 2), max(0, y0 - 2), min(new.width, x1 + 2), min(new.height, y1 + 2)))
+                if revealed.getextrema()[1] > 0:
+                    checks['outside_page_pixels_preserved'] = False
+                    checks['covered_text_not_revealed'] = False
             keep = engine.keep_checked(plan.get('keep', []))
             if keep:
                 all_text = '\n'.join(p.get_text() for p in after)
                 checks['keep_phrases_preserved'] = all(x in all_text for x in keep)
         if not all(checks.values()):
-            raise engine.Rejected('PDF原生复检未通过：可能切到字形、影响框外内容或存在隐藏对象；请扩大框选或检查格式，不自动图像化。')
+            revealed = ''
+            if checks.get('covered_text_not_revealed') is False:
+                revealed = '去掉批注后，原本看不见的正文变得可见。'
+            raise engine.Rejected('PDF原生复检未通过：可能切到字形、影响框外内容或存在隐藏对象；' + revealed + '请扩大框选或检查格式，不自动图像化。')
         return {'checks': checks, 'not_checked': [] if keep else ['keep_phrases_preserved'],
                 'effective_pages':plan.get('pages',[]),'output_sha256': engine.digest(data), 'scope': 'PDF原生删改；保留框外可搜索文字、位置和页面。仅核对已选区域及支持的隐藏载体。'}
     except engine.Rejected:

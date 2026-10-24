@@ -323,36 +323,72 @@ def export(data,category,plan):
 _PLAIN_NUMBER = re.compile(r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)%?')
 
 
+def _lead_body(text):
+    index = 0
+    while index < len(text) and (text[index].isspace() or unicodedata.category(text[index]) == 'Cf'):
+        index += 1
+    return text[index:]
+
+
+def _plain_number_cell(text):
+    if any(unicodedata.category(ch) == 'Cf' or (ch.isspace() and ch not in ' \t') for ch in text):
+        return False
+    core = text.strip(' \t')
+    return bool(core) and _PLAIN_NUMBER.fullmatch(core) is not None
+
+
 def safe_cell(text):
-    # 普通负数不是公式。只给表格软件可能执行的文本加单引号，避免把 -120 改成文本。
+    # 普通负数不是公式。公式字符前面的各类空白、换页和不可见字符仍要加单引号。
     if text == '':
         return text
-    core = text.strip(' \t')
-    if '\r' not in text and '\n' not in text and _PLAIN_NUMBER.fullmatch(core):
+    if _plain_number_cell(text):
         return text
-    head = text.lstrip(' \t')
-    if text[:1] in '\t\r\n' or head[:1] in '=+-@':
+    body = _lead_body(text)
+    if text[:1] in '\t\r\n\f\v' or body[:1] in '=+-@':
         return "'" + text
     return text
 
 
+def _quoted_padding(cell, item):
+    body = cell.strip()
+    if not body.startswith("'"):
+        return False
+    return body[1:].strip() == item
+
+
 def cells_preserve_keep(source_rows, output_rows, keep):
-    """保留项按完整单元格比对。子串命中加了引号的格子不算保留。"""
+    """保留项按原单元格留下。引号、额外空格，以及工具新写的替换标记，都不算保留。"""
     if source_rows is not None and (len(source_rows) != len(output_rows) or any(len(a) != len(b) for a, b in zip(source_rows, output_rows))):
         raise Rejected('保留项核对时行列结构变了。')
     for item in keep:
-        exact = []
         if source_rows is not None:
-            exact = [(r, c) for r, row in enumerate(source_rows) for c, value in enumerate(row) if value == item]
-        if exact:
-            if any(output_rows[r][c] != item for r, c in exact):
-                raise Rejected('保留项“' + item + '”按完整单元格核对已变化。防公式处理只给真正的公式文本加引号；普通负数保持原样。')
+            positions = [(r, c) for r, row in enumerate(source_rows) for c, value in enumerate(row) if item in value]
+            if not positions:
+                raise Rejected('保留项“' + item + '”在原文里没有，不能把新写入的替换标记当成保留。')
+            exact = [(r, c) for r, c in positions if source_rows[r][c] == item]
+            if exact:
+                if any(output_rows[r][c] != item for r, c in exact):
+                    raise Rejected('保留项“' + item + '”按完整单元格核对已变化。防公式处理只给真正的公式文本加引号；普通负数保持原样。')
+                continue
+            kept = False
+            for r, c in positions:
+                src = source_rows[r][c]
+                out = output_rows[r][c]
+                comparable = engine.strip_new_markers(src, out)
+                if item in comparable and not _quoted_padding(out, item) and not _quoted_padding(comparable, item):
+                    kept = True
+                    break
+            if not kept:
+                raise Rejected('保留项“' + item + '”没有按原单元格留下。加了引号、多了空格，或只出现在新的替换标记里，都不算保留。')
             continue
-        hits = [cell for row in output_rows for cell in row if item in cell]
+        hits = []
+        for row in output_rows:
+            for cell in row:
+                comparable = engine.strip_new_markers(None, cell)
+                if item in comparable and not _quoted_padding(cell, item):
+                    hits.append(cell)
         if not hits:
             raise Rejected('保留项“' + item + '”没有留下。')
-        if all(cell == "'" + item for cell in hits):
-            raise Rejected('保留项“' + item + '”只出现在加了引号的单元格里，完整值已经变了。')
     return True
 
 
@@ -373,7 +409,8 @@ def verify(data,category,plan,source=None):
         source_rows=csv_rows(source,category,plan.get('input_encoding')) if source is not None else None
         checks['keep_phrases_preserved']=cells_preserve_keep(source_rows,output_rows,keep)
     elif keep:
-        checks['keep_phrases_preserved']=all(x in preview for x in keep)
+        source_preview=inspect(source,category,plan.get('input_encoding'))['preview'] if source is not None else None
+        checks['keep_phrases_preserved']=engine.phrases_kept(source_preview,preview,keep)
     if category in ('text','markdown','csv','tsv'):
         checks['text_encoding_readable']=True
         if category in ('csv','tsv'):checks['formula_text_neutralized']=all(safe_cell(s)==s for row in csv_rows(data,category,plan.get('_verify_encoding',plan.get('input_encoding')))for s in row)
