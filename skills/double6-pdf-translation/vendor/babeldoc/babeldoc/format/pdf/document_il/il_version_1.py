@@ -759,6 +759,20 @@ class PdfCurve:
             "tokens": True,
         },
     )
+    line_width: float | None = field(
+        default=None,
+        metadata={
+            "name": "lineWidth",
+            "type": "Attribute",
+        },
+    )
+    line_width_source: str | None = field(
+        default=None,
+        metadata={
+            "name": "lineWidthSource",
+            "type": "Attribute",
+        },
+    )
 
 
 @dataclass(slots=True)
