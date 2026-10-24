@@ -2,6 +2,7 @@
 
 ## 2.0.0-rc.9 本地发布候选 · 2026-10-23
 
+- 输入预检拒绝后的下一步提示（2026-10-24，未改版本号）：`candidate` 输入预检以 `page_limit_exceeded` 或 `non_digital_pages` 拒绝时，stdout 与持久化回执 `WORKFLOW_INPUT_PREFLIGHT.json` 增加同一个结构化 `guidance`（`input_preflight_guidance_v1`，中文），只依据稳定错误码与预检已核实的页数/页型：整份页数在分块上限（500 页）之内且路线为 `digital_pdf`/`scanned_ocr` 时指向只读 `inspect-input`（最多 20 页）与既有 `chunked-candidate`，须先核对、再按整份重新冻结 parent FREEZE 与分块合同；超过 500 页、`latex_verified` 路线或页数未核实时不承诺路线；全部非原生页均为整页扫描图像时指向显式 `candidate --route scanned_ocr` 与既有 `inspect-input`/`prepare-scan`，并写明仍需原始具名源组/角色、人工复核及 1–5 页、Tesseract 引擎与公式/版式准入门；无文字层矢量页或未知页型、损坏/加密/其它错误、另有 error 级发现或非 `candidate` 动作不给路线；正常原生页不加提示。提示 `auto_switch=false`、`executed=false`：不自动切换路线、不分块、不执行任何入口；拒绝码、退出码 2、原 findings 文字与页数/页型字段不变，不放宽任何门。测试：`tests/test_input_preflight_guidance.py`。
 - 文档（2026-10-24，未改版本号）：README 第 5 行的当前候选版本说明由 `2.0.0-rc.2` 更正为 `2.0.0-rc.9`，与 `SKILL.md` `metadata.version` 和 `configs/default-routes.json` `candidate_version` 一致；只改说明文字，不改版本、发布状态、路线或代码。
 - 凭据不进入子进程命令行（2026-10-24，未改版本号）：翻译服务凭据的唯一入口为环境变量 `LOCAL_TRANSLATION_API_KEY`（`scripts/credential_env.py`）。此前远端凭据以 `--openai-api-key` / 适配器 `--api-key` 放进电子 PDF 后端与 `qwen-cli` 适配器的命令行，进而进入同机进程列表、后端 DEBUG 日志、`CalledProcessError` 与 tenacity 重试日志，以及 `qwen-cli` 路线的翻译缓存库（命令串是缓存身份的一部分）。现在：
   - 电子 PDF 后端改由其原生配置环境变量 `PDF2ZH_OPENAI_API_KEY` 接收（PDFMathTranslate-next 2.8.2 `config/main.py` 的 `PDF2ZH_` 前缀与嵌套字段展开）；`qwen-cli` 适配器改为从继承的 `LOCAL_TRANSLATION_API_KEY` 读取，`--api-key` 仅为兼容保留。后端命令与适配器命令串不再含凭据，因此上述日志、异常与缓存库里也没有凭据。
