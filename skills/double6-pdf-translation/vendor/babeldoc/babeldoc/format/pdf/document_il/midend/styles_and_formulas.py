@@ -88,6 +88,23 @@ def _is_script_after_synthetic_space(
     return abs(script_vertical_offset(char, base)) >= SYNTHETIC_SPACE_SCRIPT_MIN_OFFSET
 
 
+# Double6: 独立角标（如脚注号）之后回到正文基线/字号的分隔逗号判定阈值。
+# 字号须与角标前的正文基字一致（±10%），且垂直中心偏移不超过 0.05 个基字字号（同基线）；
+# 角标本身须相对基字明显抬升（上标，同 SYNTHETIC_SPACE_SCRIPT_MIN_OFFSET）。
+BODY_SEPARATOR_SIZE_TOLERANCE = 0.1
+BODY_SEPARATOR_MAX_OFFSET = 0.05
+
+
+def _is_body_like(char: PdfCharacter, base: PdfCharacter) -> bool:
+    """char 与正文基字 base 同字号、同基线（不是上/下标）。"""
+    size, base_size = char.pdf_style.font_size, base.pdf_style.font_size
+    if not size or not base_size:
+        return False
+    if abs(size - base_size) > base_size * BODY_SEPARATOR_SIZE_TOLERANCE:
+        return False
+    return abs(script_vertical_offset(char, base)) <= BODY_SEPARATOR_MAX_OFFSET
+
+
 class StylesAndFormulas:
     stage_name = "Parse Formulas and Styles"
 
@@ -503,6 +520,77 @@ class StylesAndFormulas:
         self.update_all_formula_data(page)
         self.process_page_styles(page)
 
+    def _is_body_separator_after_independent_script(
+        self,
+        chars: list[PdfCharacter],
+        index: int,
+        tags: list[bool],
+        corner_flags: list[bool],
+        formula_font_ids: set[int],
+        smallcaps_text_positions: set[int],
+    ) -> bool:
+        """Double6 review27: 只由“公式中间字符”续接规则判成公式的逗号，若它紧跟一个独立角标
+        （角标前的基字是正文、非公式），自身回到该正文的字号与基线，且其后第一个可见字形也是同字号、
+        同基线、非公式字体的正文，则它是脚注标记与正文之间的分隔符，不属于角标公式。
+
+        只看源字形几何/字体/公式布局信号，不看具体字符内容或坐标；数学字体、公式布局、竖排、
+        视觉框异常、仍为小字号的角标内逗号（如 ``1,2``）及基字本身为公式的情形都保持原保护。
+        """
+        char = chars[index]
+        if char.char_unicode != ",":
+            return False
+        # 调用方字符模式或目标字体缺字使逗号本身成为公式起始字符时，保持原保护。
+        if is_formulas_start_char(
+            char.char_unicode, self.font_mapper, self.translation_config
+        ):
+            return False
+        if index < 2 or len(tags) < index or not tags[index - 1]:
+            return False
+        if not corner_flags[index - 1]:
+            return False
+        if (
+            char.formula_layout_id
+            or char.vertical
+            or (
+                char.pdf_style.font_id in formula_font_ids
+                and index not in smallcaps_text_positions
+            )
+            or char.box.x > char.visual_bbox.box.x2
+            or char.box.x2 < char.visual_bbox.box.x
+            or char.box.y > char.visual_bbox.box.y2
+            or char.box.y2 < char.visual_bbox.box.y
+        ):
+            return False
+        start = index - 1
+        while start > 0 and corner_flags[start - 1] and tags[start - 1]:
+            start -= 1
+        if start == 0:
+            return False
+        base = chars[start - 1]
+        if tags[start - 1] or not base.char_unicode or base.char_unicode.isspace():
+            return False
+        if base.vertical or base.formula_layout_id:
+            return False
+        if not _is_body_like(char, base):
+            return False
+        # 角标须是真正抬升的上标（脚注号形态）；同基线的小字号字形或下标保持原保护。
+        if any(
+            script_vertical_offset(chars[k], base) < SYNTHETIC_SPACE_SCRIPT_MIN_OFFSET
+            for k in range(start, index)
+            if chars[k].char_unicode and not chars[k].char_unicode.isspace()
+        ):
+            return False
+        for following in chars[index + 1 :]:
+            if following.char_unicode is None or following.char_unicode.isspace():
+                continue
+            return (
+                not following.formula_layout_id
+                and not following.vertical
+                and following.pdf_style.font_id not in formula_font_ids
+                and _is_body_like(following, base)
+            )
+        return False
+
     def update_line_data(self, line: PdfLine):
         min_x = min(char.visual_bbox.box.x for char in line.pdf_character)
         min_y = min(char.visual_bbox.box.y for char in line.pdf_character)
@@ -674,6 +762,23 @@ class StylesAndFormulas:
                 is_corner_mark = True
 
             is_formula = is_formula or is_corner_mark
+
+            if (
+                is_formula
+                and in_formula_state
+                and not is_corner_mark
+                and self._is_body_separator_after_independent_script(
+                    line.pdf_character,
+                    i,
+                    is_formula_tags,
+                    corner_mark_info,
+                    formula_font_ids,
+                    smallcaps_text_positions,
+                )
+            ):
+                # Double6 review27: 独立脚注号后回到正文基线/字号的逗号是正文分隔符，
+                # 不再被“公式中间逗号”续接规则锁进脚注公式（如源脚注 1 后的 “, ”）。
+                is_formula = False
 
             if char.char_unicode == " ":
                 is_formula = in_formula_state
