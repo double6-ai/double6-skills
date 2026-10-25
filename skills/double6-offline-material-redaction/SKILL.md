@@ -2,7 +2,7 @@
 name: double6-offline-material-redaction
 description: 为上传AI前的图片、Word、文本、PDF、表格和PPT在本机生成脱敏副本；引导轻量环境安装、自动正反例验收、双击本地HTML界面、人工补选和导出复检。默认新建同格式。PDF默认只删除框选正文并保留批注；清除批注、格式转换和PDF图像化都须用户明确选择。
 metadata:
-  version: "0.7.0"
+  version: "0.7.1"
   openclaw:
     homepage: https://github.com/double6-ai/double6-skills/tree/main/skills/double6-offline-material-redaction
     requires:

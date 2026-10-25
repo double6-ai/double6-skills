@@ -27,7 +27,7 @@ def main():
     if a.wheelhouse and not a.wheelhouse.is_dir():p.error('wheel目录不存在。')
     root=Path(__file__).resolve().parents[1];lock=root/'requirements-runtime.lock'
     dest=a.venv.expanduser().absolute();receipt=dest/'.redaction-install.json'
-    identity={'version':'0.7.0','lock_sha256':hashlib.sha256(lock.read_bytes()).hexdigest(),'python_minor':list(sys.version_info[:2]),'machine':platform.machine().lower()}
+    identity={'version':'0.7.1','lock_sha256':hashlib.sha256(lock.read_bytes()).hexdigest(),'python_minor':list(sys.version_info[:2]),'machine':platform.machine().lower()}
     python=dest/('Scripts/python.exe'if sys.platform=='win32'else'bin/python')
     if dest.exists():
         if not receipt.is_file()or json.loads(receipt.read_text(encoding='utf-8'))!=identity or not python.is_file():

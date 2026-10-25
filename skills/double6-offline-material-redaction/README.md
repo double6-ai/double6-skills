@@ -1,5 +1,7 @@
 # 本地材料脱敏
 
+当前正式源码版本：**0.7.1**。下载包与校验文件见 [GitHub Release](https://github.com/double6-ai/double6-skills/releases/tag/double6-offline-material-redaction-v0.7.1)。
+
 在上传AI材料前，用本机工具生成脱敏副本。用户补选敏感文字或区域，工具清理支持的隐藏内容，再核对必须保留的业务内容。原件、计划和已有结果都不覆盖。
 
 支持Windows x64、Apple芯片macOS，兼容Python3.10–3.14。新装推荐Python3.14；3.10仅兼容已有环境，3.15未验证。优先复用已有兼容Python；首次安装按哈希清单下载依赖，材料处理可以离线完成。原格式无法安全导出时停止，转换须明确选择。
