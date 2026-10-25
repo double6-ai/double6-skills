@@ -28,6 +28,7 @@ from generators.glyph_attacks import anchor_cases
 from generators.glyph_attacks import attack_cases
 from generators.glyph_attacks import contrast_page
 from generators.glyph_attacks import cyan_stem_cases
+from generators.glyph_attacks import light_stroke_cases
 from generators.glyph_attacks import small_seal_cases
 from generators.glyph_attacks import whiteout_cases
 from generators.glyph_attacks import strikeout_cut_through_glyph
@@ -67,7 +68,9 @@ PER_GLYPH_COVER = {
 }
 # 选区外的字前景被改掉就拒绝。画在被选词上、整框落在选区里的删除线会随涂黑去掉。
 # 下划线和波浪线的笔画落在保留句的字形框里，并且跨过这个字的局部中点，同样拒绝。
+# 灰色描边不铺满纸面，只是沿字加的一条，数字边缘还在也拒绝。白色描边不压暗纸面，仍可去掉。
 ADDED_INK_STROKE = {
+    ("author", "描边-灰"),
     ("office", "正常-红圈圈注"),
     ("office", "正常-下划线"),
     ("office", "正常-波浪线"),
@@ -606,6 +609,9 @@ class AddedInkAttackTests(unittest.TestCase):
         self.assertEqual(pdf._DARKEN_NUM, 1)
         self.assertEqual(pdf._DARKEN_DEN, 5)
         self.assertEqual(pdf._LIGHT_STROKE_MIN, 36)
+        self.assertEqual(pdf._STROKE_MARK_MIN, 18)
+        self.assertEqual(pdf._STROKE_WASH_NUM, 1)
+        self.assertEqual(pdf._STROKE_WASH_DEN, 2)
         self.assertFalse(hasattr(pdf, "_ADDED_INK_BRIGHT"))
 
     def _paper_darken_count(self, drop, ink):
@@ -638,6 +644,18 @@ class AddedInkAttackTests(unittest.TestCase):
         self.assertEqual(pdf._background_darken_count(base, pale, (0, 0, side, side), 255, 200), 0)
         self.assertEqual(pdf._light_stroke_count(base, light, (0, 0, side, side), 255, 200), 0)
         self.assertGreaterEqual(pdf._light_stroke_count(base, pale, (0, 0, side, side), 255, 200), 6)
+        # 整片压暗 29 是高亮，覆盖过半，浅条计数是 0。只有一条暗 22 的才计入。
+        sheet = Image.new("L", (side, side), 255 - 29)
+        for y in range(side):
+            sheet.putpixel((2, y), 0)
+        thin = base.copy()
+        for y in range(4, 16):
+            thin.putpixel((8, y), 255 - 22)
+        self.assertEqual(pdf._sparse_stroke_count(base, sheet, (0, 0, side, side), (0, 0, side, side), 255, 0), 0)
+        self.assertGreaterEqual(
+            pdf._sparse_stroke_count(base, thin, (0, 0, side, side), (0, 0, side, side), 255, 0),
+            6,
+        )
         # 前景掩码仍忽略贴着旧字迹一两像素的挪动，离得更远的新墨要计。
         stroke = Image.new("L", (side, side), 255)
         for y in range(6, 14):
@@ -796,7 +814,30 @@ class AddedInkAttackTests(unittest.TestCase):
             self.assertGreaterEqual(right_pale, 6, (text, left_pale, right_pale))
         self._check(row)
 
-    def test_small_opening_seals_count_even_beside_the_stroke(self):
+    def test_shallow_marks_are_strokes_and_a_highlight_sheet_is_not(self):
+        """暗差 22 到 35 的细条、分段、字间和弯里的浅色都要拒绝。整片高亮不走这条。"""
+        rows = light_stroke_cases()
+        names = [row["name"] for row in rows]
+        self.assertEqual(len(names), len(set(names)))
+        for required in (
+            "黄线35-48",
+            "青线32-48",
+            "灰线33-48",
+            "青透0.55-48",
+            "青透0.70-48",
+            "青35分4段-48",
+            "青35字间-48",
+            "弯内黄35-48",
+            "白纸黑条0.12",
+            "白纸黑条0.14",
+            "灰底160黑条0.15",
+            "灰底200黑条0.15",
+            "灰底220黑条0.15",
+        ):
+            self.assertIn(required, names)
+        for row in rows:
+            with self.subTest(name=row["name"]):
+                self._check(row)
         """6/8/9 pt 复审封口，以及 5–12 pt 细线和多段短线。贴边的深色也要数到 6。"""
         rows = small_seal_cases()
         names = [row["name"] for row in rows]

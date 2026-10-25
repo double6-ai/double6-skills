@@ -1066,6 +1066,67 @@ def cyan_stem_cases():
     )]
 
 
+def light_mark_page(rgb, x0f=-0.04, x1f=0.04, y0f=0.08, y1f=0.92, opacity=1.0, segments=1, size=48):
+    """在第一个「3」附近加一条浅色。宽批注，选区仍是旁边的 DELETEME。"""
+    doc, page = _fresh(640, 400)
+    pairs = _page_chrome(page, 280, size)
+    target = next(rect for text, rect in pairs if text == "3")
+    full = fitz.Rect(
+        target.x0 + target.width * x0f,
+        target.y0 + target.height * y0f,
+        target.x0 + target.width * x1f,
+        target.y0 + target.height * y1f,
+    )
+    bars = [full]
+    if segments > 1:
+        gap = full.height * 0.04
+        piece = (full.height - gap * (segments - 1)) / segments
+        bars = []
+        top = full.y0
+        for _index in range(segments):
+            bars.append(fitz.Rect(full.x0, top, full.x1, top + piece))
+            top += piece + gap
+    raw, box = _annot_bars(doc, page, pairs, bars, rgb, opacity, False)
+    doc.close()
+    return raw, box
+
+
+def light_stroke_cases():
+    """暗差停在 36 以下的浅色加笔。几何和复审漏脱一致。"""
+    rows = []
+
+    def add(name, raw, box, params):
+        rows.append(_row(name, "light-stroke", raw, box, params, "tamper"))
+
+    yellow = (1, 230 / 255.0, 80 / 255.0)
+    cyan = (148 / 255.0, 1, 1)
+    gray = (222 / 255.0, 222 / 255.0, 222 / 255.0)
+    raw, box = light_mark_page(yellow)
+    add("黄线35-48", raw, box, {"rgb": [255, 230, 80]})
+    raw, box = light_mark_page(cyan)
+    add("青线32-48", raw, box, {"rgb": [148, 255, 255]})
+    raw, box = light_mark_page(gray)
+    add("灰线33-48", raw, box, {"rgb": [222, 222, 222]})
+    raw, box = light_mark_page((125 / 255.0, 1, 1), opacity=0.55)
+    add("青透0.55-48", raw, box, {"opacity": 0.55})
+    raw, box = light_mark_page((125 / 255.0, 1, 1), opacity=0.70)
+    add("青透0.70-48", raw, box, {"opacity": 0.70})
+    raw, box = light_mark_page(cyan, x0f=-0.02, x1f=0.05, segments=4)
+    add("青35分4段-48", raw, box, {"segments": 4})
+    raw, box = light_mark_page(cyan, x0f=-0.22, x1f=-0.12)
+    add("青35字间-48", raw, box, {"x0": -0.22, "x1": -0.12})
+    raw, box = light_mark_page(yellow, x0f=0.35, x1f=0.62, y0f=0.18, y1f=0.32)
+    add("弯内黄35-48", raw, box, {"place": "bowl"})
+    raw, box = contrast_page(gray=0, opacity=0.12, blend=True)
+    add("白纸黑条0.12", raw, box, {"opacity": 0.12})
+    raw, box = contrast_page(gray=0, opacity=0.14, blend=True)
+    add("白纸黑条0.14", raw, box, {"opacity": 0.14})
+    for bg in (160, 200, 220):
+        raw, box = contrast_page(bg=bg, gray=0, opacity=0.15, blend=True)
+        add("灰底%d黑条0.15" % bg, raw, box, {"bg": bg, "opacity": 0.15})
+    return rows
+
+
 def anchor_cases():
     """灰字加更深锚点后再涂白。文字锚必须靠字迹估计拒绝，矢量或图片可以报线条或图片。"""
     rows = []

@@ -1494,7 +1494,7 @@ class StrictPixelCompareTests(unittest.TestCase):
         self._square(page, phone, 0.25, 4, fill=False)
         raw = doc.tobytes()
         doc.close()
-        self._assert_still_readable(raw, _page_plan(_pixel_box(other)), "stroke")
+        self._assert_refused(raw, _page_plan(_pixel_box(other)), "stroke")
 
         _fitz, doc, page, phone, other = self._base()
         self._square(page, phone, 1, 3, fill=False)

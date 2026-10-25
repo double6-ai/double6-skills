@@ -639,6 +639,13 @@ _DARKEN_DEN = 5
 # 36 落在黄色高亮的 29 和复审青线的 39 之间。不把两成改小，免得高亮在对比度被估小时过线。
 # 这一档不按贴边跳过。青线就贴在黑色字的左缘上。
 _LIGHT_STROKE_MIN = 36
+# 36 挡不住更浅的细条。黄线只暗 35，半透明青线只暗 22，灰纸上的浅黑条只暗 24。
+# 不把 36 改成 30：普通高亮只暗 29，再往下收一档，更浅的一条又能绕过。
+# 改看这一笔占了多少纸面。大半张纸一起变暗是高亮那种整片；纸面大多没变、只暗了一条，才是新笔画。
+# 18 低于高亮的 29，也低于上面那些浅条。整片高亮靠覆盖面排除，不靠把这个数抬高。
+_STROKE_MARK_MIN = 18
+_STROKE_WASH_NUM = 1
+_STROKE_WASH_DEN = 2
 # 细线也能凑满 6 个预览像素。一两粒抗锯齿不算改字。
 _MASK_DIFF_MIN = 6
 _GLYPH_INK_MARGIN = 2
@@ -876,6 +883,126 @@ def _light_stroke_count(base_img, covered_img, box, background, ink):
     return count
 
 
+def _stroke_search_box(grown, self_box, neighbors, image_width):
+    """字形两侧各看到半个字宽，但停在相邻字形的边上。
+
+    字间的浅条可能落在本字框外面。半个字宽够到离字框 0.22 个字宽的位置。
+    再往外会把邻字上的高亮卷进来，所以遇到邻字就停。
+    """
+    if grown is None or self_box is None:
+        return None
+    x0, y0, x1, y1 = grown
+    pad = max((self_box[2] - self_box[0]) // 2, _GLYPH_INK_MARGIN)
+    left = max(0, x0 - pad)
+    right = min(image_width, x1 + pad)
+    for other in neighbors:
+        if other is None or other == self_box:
+            continue
+        ox0, oy0, ox1, oy1 = other
+        if oy1 <= y0 or oy0 >= y1:
+            continue
+        if ox1 <= x0:
+            left = max(left, ox1)
+        elif ox0 >= x1:
+            right = min(right, ox0)
+    if right <= left:
+        return grown
+    return (left, y0, right, y1)
+
+
+def _sparse_stroke_count(base_img, covered_img, tight, search, background, ink):
+    """纸面大多没变时，连成一条的浅色变暗。整片一起变暗则返回 0。
+
+    高亮把这个字里大半张纸压暗大约 29，覆盖面过半，不当成新笔画。
+    细条只碰到一小部分纸，暗差可以只有 22，连成 6 个预览像素就计入。
+    查找范围比字形框再宽半个字，用来接住落在字间的条。两张图对不齐就返回 None。
+    """
+    if (
+        tight is None or search is None or background is None or ink is None
+        or base_img.size != covered_img.size
+    ):
+        return None
+    wash = _paper_darken_fraction(base_img, covered_img, tight, background, ink)
+    if wash is None:
+        return None
+    if wash[0] >= 8 and wash[1] * _STROKE_WASH_DEN >= wash[0] * _STROKE_WASH_NUM:
+        return 0
+    return _largest_marked_run(base_img, covered_img, search, background, ink)
+
+
+def _paper_darken_fraction(base_img, covered_img, box, background, ink):
+    """高于中点的纸面里，有多少像素变暗达到浅条下限。对不齐返回 None。"""
+    crop = _aligned_pair(base_img, covered_img, box)
+    if crop is None:
+        return None
+    before, after, _width, _height = crop
+    paper = 0
+    marked = 0
+    for origin, painted in zip(before, after):
+        if origin * 2 <= background + ink:
+            continue
+        paper += 1
+        if origin - painted >= _STROKE_MARK_MIN:
+            marked += 1
+    return paper, marked
+
+
+def _largest_marked_run(base_img, covered_img, box, background, ink):
+    """高于中点、变暗达到浅条下限的最大连通块。对不齐返回 None。"""
+    crop = _aligned_pair(base_img, covered_img, box)
+    if crop is None:
+        return None
+    before, after, width, height = crop
+    mask = bytearray(width * height)
+    for index, (origin, painted) in enumerate(zip(before, after)):
+        if origin * 2 <= background + ink or origin - painted < _STROKE_MARK_MIN:
+            continue
+        mask[index] = 1
+    seen = bytearray(width * height)
+    largest = 0
+    for start, value in enumerate(mask):
+        if not value or seen[start]:
+            continue
+        stack = [start]
+        seen[start] = 1
+        count = 0
+        while stack:
+            index = stack.pop()
+            count += 1
+            x = index % width
+            y = index // width
+            if x > 0 and mask[index - 1] and not seen[index - 1]:
+                seen[index - 1] = 1
+                stack.append(index - 1)
+            if x + 1 < width and mask[index + 1] and not seen[index + 1]:
+                seen[index + 1] = 1
+                stack.append(index + 1)
+            if y > 0 and mask[index - width] and not seen[index - width]:
+                seen[index - width] = 1
+                stack.append(index - width)
+            if y + 1 < height and mask[index + width] and not seen[index + width]:
+                seen[index + width] = 1
+                stack.append(index + width)
+        if count > largest:
+            largest = count
+    return largest
+
+
+def _aligned_pair(base_img, covered_img, box):
+    if box is None or base_img.size != covered_img.size:
+        return None
+    x0, y0, x1, y1 = box
+    if x1 <= x0 or y1 <= y0 or x0 < 0 or y0 < 0 or x1 > base_img.width or y1 > base_img.height:
+        return None
+    before = base_img.crop(box).tobytes()
+    after = covered_img.crop(box).tobytes()
+    width = x1 - x0
+    height = y1 - y0
+    if len(before) != len(after) or len(before) != width * height or not before:
+        return None
+    return before, after, width, height
+
+
 def _ink_brighten_count(base_img, covered_img, box, background, ink):
     """外扩框里，去掉批注后属于字迹、带批注后明显变亮的像素。
 
@@ -948,6 +1075,7 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
     掩码用去掉批注后的局部底色和字迹色的中点。多出或少掉的前景达到小数量就拒绝。
     高于中点的底色如果变暗达到这段对比度的两成，累计到同样的小数量也拒绝。
     高于中点的纸面如果变暗达到固定的浅色加笔门槛，哪怕不够两成，累计到同样的小数量也拒绝。
+    更浅的一条不靠把这个门槛再降低。这个字的纸面大半一起变暗时当作高亮整片；纸面大多没变、只有连成一条的变暗，也拒绝。字间半个字宽里的条同样算。
     低于中点、接近最暗像素、或比底色环暗过对比度下限的字迹如果变亮达到同样的两成，累计到同样的小数量也拒绝。
     新前景贴着旧字迹、或消失的笔画贴着新出现的字迹，一两像素的挪动不计。
     消失的笔画贴着本来就在的字迹时，只有轻度变亮不计；涂白擦笔要计入。
@@ -956,6 +1084,7 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
     对比度太低、底色或字迹色估不出，也拒绝。骑在边界上的字按选区外计算。
     任何一个选区外的字不达标，或者任一渲染器看到足够的差异，整条批注就不放行。
     """
+    glyph_boxes = [_to_pixel_box(rect, page, covered) for _text, rect in _each_glyph(baseline_page, area)]
     for _text, rect in _each_glyph(baseline_page, area):
         box = _to_pixel_box(rect, page, covered)
         reason = _occlusion_reason(
@@ -981,11 +1110,15 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
         right_pale = _light_stroke_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1])
         left_bright = _ink_brighten_count(base, covered, grown, left_level[0], left_level[1])
         right_bright = _ink_brighten_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1])
+        search = _stroke_search_box(grown, box, glyph_boxes, covered.width)
+        left_stroke = _sparse_stroke_count(base, covered, grown, search, left_level[0], left_level[1])
+        right_stroke = _sparse_stroke_count(mupdf_base, mupdf_covered, grown, search, right_level[0], right_level[1])
         if (
             left is None or right is None
             or left_dark is None or right_dark is None
             or left_pale is None or right_pale is None
             or left_bright is None or right_bright is None
+            or left_stroke is None or right_stroke is None
         ):
             return 'invalid', grown or box
         if (
@@ -993,8 +1126,9 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
             or left_dark >= _MASK_DIFF_MIN or right_dark >= _MASK_DIFF_MIN
             or left_pale >= _MASK_DIFF_MIN or right_pale >= _MASK_DIFF_MIN
             or left_bright >= _MASK_DIFF_MIN or right_bright >= _MASK_DIFF_MIN
+            or left_stroke >= _MASK_DIFF_MIN or right_stroke >= _MASK_DIFF_MIN
         ):
-            return 'tamper', grown
+            return 'tamper', search or grown
     return '', None
 
 
