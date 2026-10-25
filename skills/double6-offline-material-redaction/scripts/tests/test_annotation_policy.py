@@ -573,6 +573,90 @@ class DefaultOfficeTests(unittest.TestCase):
         message = self._assert_quiet_refusal(raw, box, PHONE)
         self.assertIn("没法确认", message)
 
+    def _paint_font_hex(self, doc, page, annot, font_name, payload):
+        resources = doc.xref_object(int(doc.xref_get_key(page.xref, "Resources")[1].split()[0]))
+        font = int(resources.split("/" + font_name)[1].split()[0])
+        form = self._form_xref(doc, annot)
+        stream = f"q\nBT\n1 0 0 1 8 40 Tm\n/{font_name} 12 Tf <{payload}> Tj\nET\nQ\n".encode("ascii")
+        doc.xref_set_key(form, "Resources", f"<</Font <</{font_name} {font} 0 R>>>>")
+        doc.update_stream(form, stream)
+
+    def test_null_inside_fake_bom_number_is_not_left_in_the_copy(self):
+        body = PHONE.encode("ascii")
+        body = body[:4] + b"\x00" + body[4:]
+        payload = "FEFF" + body.hex()
+        for font_name in ("china-s", "helv"):
+            fitz, doc, page = _new_page()
+            square = self._margin_square(page)
+            self._paint_font_hex(doc, page, square, font_name, payload)
+            raw, box = _pack(doc, page, PHONE)
+            with pdf.backend().open(stream=raw, filetype="pdf") as opened:
+                kept = opened[0]
+                annot = kept.first_annot
+                blob, bad = pdf.annotation_text(opened, annot.xref, annot)
+            self.assertFalse(bad, font_name)
+            self.assertIn(PHONE, blob, font_name)
+            out = self._assert_default_copy_has_no_secret(raw, box, PHONE, WORD)
+            self.assertNotIn(payload.lower().encode("ascii"), out.lower(), font_name)
+            with pdf.backend().open(stream=out, filetype="pdf") as opened:
+                self.assertIsNone(opened[0].first_annot, font_name)
+
+    def test_image_values_and_name_streams_do_not_keep_the_number(self):
+        fitz, doc, page = _new_page()
+        image = Image.new("RGB", (40, 40), (180, 20, 20))
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", quality=90)
+        page.insert_image(fitz.Rect(300, 40, 360, 100), stream=buffer.getvalue())
+        xref = page.get_image_info(xrefs=True)[0]["xref"]
+        doc.xref_set_key(xref, "ID", "(" + PHONE + ")")
+        raw, box = _pack(doc, page, PHONE)
+        out = self._assert_default_copy_has_no_secret(raw, box, PHONE, WORD)
+        with pdf.backend().open(stream=out, filetype="pdf") as opened:
+            self.assertTrue(opened[0].get_images())
+
+        for key, value in (
+            ("Intent", "(" + PHONE + ")"),
+            ("DecodeParms", "<< /Columns (" + PHONE + ") >>"),
+        ):
+            fitz, doc, page = _new_page()
+            image = Image.new("RGB", (40, 40), (180, 20, 20))
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=90)
+            page.insert_image(fitz.Rect(300, 40, 360, 100), stream=buffer.getvalue())
+            xref = page.get_image_info(xrefs=True)[0]["xref"]
+            doc.xref_set_key(xref, key, value)
+            raw, box = _pack(doc, page, PHONE)
+            message = self._assert_quiet_refusal(raw, box, PHONE)
+            self.assertIn("已停止", message)
+
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        stream = doc.get_new_xref()
+        doc.update_object(stream, "<< /Length 11 >>")
+        doc.update_stream(stream, PHONE.encode("ascii"))
+        doc.xref_set_key(self._form_xref(doc, square), "Name", str(stream) + " 0 R")
+        raw, box = _pack(doc, page, PHONE)
+        self._assert_default_copy_has_no_secret(raw, box, PHONE, WORD)
+
+    def test_unused_tounicode_mapping_is_not_delivered(self):
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        mapping = PHONE.encode("utf-16-be").hex().encode("ascii")
+        cmap = b"1 begincodespacerange\n<00> <FF>\nendcodespacerange\n2 beginbfchar\n<41> <0041>\n<42> <" + mapping + b">\nendbfchar\n"
+        unicode_map = doc.get_new_xref()
+        doc.update_object(unicode_map, "<< /Length 1 >>")
+        doc.update_stream(unicode_map, cmap)
+        font = doc.get_new_xref()
+        doc.update_object(font, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /ToUnicode " + str(unicode_map) + " 0 R >>")
+        doc.xref_set_key(self._form_xref(doc, square), "Resources", "<< /Font << /F " + str(font) + " 0 R >> >>")
+        doc.update_stream(self._form_xref(doc, square), b"q BT /F 12 Tf 8 40 Td (A) Tj ET Q")
+        raw, box = _pack(doc, page, PHONE)
+        with pdf.backend().open(stream=raw, filetype="pdf") as opened:
+            streams = [opened.xref_stream(xref) or b"" for xref in range(1, opened.xref_length()) if opened.xref_is_stream(xref)]
+        self.assertTrue(any(mapping.lower() in stream.lower() for stream in streams))
+        message = self._assert_quiet_refusal(raw, box, PHONE)
+        self.assertIn("字体编码", message)
+
 
 class ClearPathTests(unittest.TestCase):
     def test_gray_and_thin_covers_do_not_leak_when_clearing_is_explicit(self):

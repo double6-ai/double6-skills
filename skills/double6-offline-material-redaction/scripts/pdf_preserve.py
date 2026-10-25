@@ -535,7 +535,8 @@ def _decode_pdf_bytes(raw):
 def _join_views(raw):
     """解码后的文字，再加上原始字节。
 
-    以 FE FF 开头却后面直接跟单字节明文时，按 UTF-16 会解成别的字。原始字节里的明文仍要参与命中，不能当成已经读过且没命中。
+    以 FE FF 开头却后面直接跟单字节明文时，按 UTF-16 会解成别的字。原始字节里的明文仍要参与命中。
+    明文中间再插一个空字节时，UTF-16 和整段原始字节都对不上补选词，去掉空字节后的字节也要参与命中。
     """
     try:
         text = _decode_pdf_bytes(raw)
@@ -548,9 +549,13 @@ def _join_views(raw):
     if raw.startswith((b'\xfe\xff', b'\xff\xfe')) and len(raw) > 2:
         pieces.append(raw[2:])
     for piece in pieces:
-        plain = piece.decode('latin-1')
-        if plain and plain not in views:
-            views.append(plain)
+        variants = [piece]
+        if b'\x00' in piece:
+            variants.append(piece.replace(b'\x00', b''))
+        for variant in variants:
+            plain = variant.decode('latin-1')
+            if plain and plain not in views:
+                views.append(plain)
     return '\n'.join(views), True
 
 
@@ -692,12 +697,116 @@ def _parse_pdf_dict(data, index, doc, seen, depth, in_ap):
         texts.extend(found)
 
 
-def _xref_carrier_text(doc, xref, seen, depth):
-    """批注能带到副本里的文字：键名、字符串、名称值，以及外观旁的间接对象和流字典里的 /Name。
+def _stream_is_binary(doc, xref):
+    """图片、字库和 ICC 是二进制。读不成文字不算失败，但字符串值仍由字典解析负责。"""
+    subtype = doc.xref_get_key(xref, 'Subtype')[1]
+    if subtype in {'/Image', '/FontFile', '/FontFile2', '/FontFile3'}:
+        return True
+    for key in ('Length1', 'Length2', 'Length3'):
+        if doc.xref_get_key(xref, key)[0] != 'null':
+            return True
+    if doc.xref_get_key(xref, 'N')[0] != 'null' and doc.xref_get_key(xref, 'Alternate')[0] != 'null':
+        return True
+    _kind, filt = doc.xref_get_key(xref, 'Filter')
+    return any(name in filt for name in ('DCTDecode', 'JPXDecode', 'CCITTFaxDecode', 'JBIG2Decode'))
 
-    流的绘制字节不在这里当正文读，外观算子另走。读不完就视为无法确认。
+
+def _without_pdf_comments(data):
+    """去掉字符串外面的 % 注释。注释里的字不参与命中，保存时也会被清掉。"""
+    out = bytearray()
+    index = 0
+    size = len(data)
+    while index < size:
+        char = data[index]
+        if char == ord('('):
+            start = index
+            _text, index, ok = _parse_literal(data, index)
+            if not ok:
+                out.append(char)
+                index = start + 1
+                continue
+            out.extend(data[start:index])
+            continue
+        if char == ord('%'):
+            while index < size and data[index] not in b'\r\n':
+                index += 1
+            continue
+        out.append(char)
+        index += 1
+    return bytes(out)
+
+
+def _collect_embedded_strings(data):
+    """流里的字面串和十六进制串。解不出的短码（例如 ToUnicode 的 <00>）跳过，不把整段 cmap 当成读不全。"""
+    texts = []
+    index = 0
+    size = len(data)
+    while index < size:
+        char = data[index]
+        if char in b' \t\r\n\x00':
+            index += 1
+            continue
+        if char == ord('%'):
+            while index < size and data[index] not in b'\r\n':
+                index += 1
+            continue
+        if char == ord('('):
+            text, new_index, ok = _parse_literal(data, index)
+            if not ok:
+                index += 1
+                continue
+            if text:
+                texts.append(text)
+            index = new_index
+            continue
+        if char == ord('<'):
+            if index + 1 < size and data[index + 1] == ord('<'):
+                index += 2
+                continue
+            text, new_index, ok = _parse_hex_string(data, index)
+            if not ok:
+                index += 1
+                continue
+            if text:
+                texts.append(text)
+            index = new_index
+            continue
+        index += 1
+    return texts
+
+
+def _stream_content_texts(doc, xref):
+    """间接流里的正文。图片、字库和外观/页面 Form 的绘制流不在这里当隐藏文字读。
+
+    Form 里画出来的字由外观算子或正文涂黑负责。ToUnicode 和只含明文的数据流仍要读。
     """
-    if xref <= 0 or depth > 16:
+    if doc.xref_get_key(xref, 'Subtype')[1] == '/Form' or _stream_is_binary(doc, xref):
+        return [], False
+    try:
+        raw = doc.xref_stream(xref) or b''
+    except Exception:
+        return [], True
+    if not raw:
+        return [], False
+    texts = []
+    visible = _without_pdf_comments(raw)
+    joined, ok = _join_views(visible)
+    if ok and joined:
+        texts.append(joined)
+    elif b'\x00' in visible:
+        stripped = visible.replace(b'\x00', b'')
+        if stripped and all(byte < 128 for byte in stripped):
+            texts.append(stripped.decode('ascii'))
+    texts.extend(_collect_embedded_strings(visible))
+    return texts, False
+
+
+def _xref_carrier_text(doc, xref, seen, depth):
+    """批注能带到副本里的文字：键名、字符串、名称值、外观旁的间接对象，以及这些对象指向的流内容。
+
+    图片、字库、ICC 的二进制不当作文字。ToUnicode 里没用到的映射也算。读不完就视为无法确认。
+    """
+    if xref <= 0 or depth > 32:
         return [], True
     if xref in seen:
         return [], False
@@ -714,6 +823,15 @@ def _xref_carrier_text(doc, xref, seen, depth):
     texts, index, bad = _parse_pdf_value(data, 0, doc, seen, depth, False, '')
     if bad or _skip_pdf(data, index) != len(data):
         return [], True
+    try:
+        is_stream = doc.xref_is_stream(xref)
+    except Exception:
+        return [], True
+    if is_stream:
+        extra, bad = _stream_content_texts(doc, xref)
+        if bad:
+            return [], True
+        texts.extend(extra)
     return texts, False
 
 
@@ -752,26 +870,47 @@ def _key_views(doc, xref, wanted):
             return '', True
 
 
+# /Name 和 /ID 不参与绘制，命中就去掉。/Intent、/DecodeParms 会改变画面，命中就整份停止。
+_STRIP_STREAM_KEYS = {'Name', 'ID'}
+_CHECK_STREAM_KEYS = _STRIP_STREAM_KEYS | {'Intent', 'DecodeParms'}
+_FONT_SUBTYPES = {'/Type0', '/Type1', '/MMType1', '/TrueType', '/CIDFontType0', '/CIDFontType2', '/Type3'}
+
+
 def _drop_stream_names(doc, terms):
-    """Form 和图片上的 /Name 会进副本。里面有补选词就去掉这个名字；读不全就整份停止。"""
+    """图片和外观 Form 上能留下明文的键，以及字体 ToUnicode（含没用到的映射）。
+
+    /Name、/ID 命中就去掉。其它列入的键命中，或值读不全，整份停止。
+    """
     if not terms:
         return
     for xref in range(1, doc.xref_length()):
         try:
-            if not doc.xref_is_stream(xref):
-                continue
+            is_stream = doc.xref_is_stream(xref)
         except Exception:
-            raise engine.Rejected('PDF对象名称读不全，没法确认有没有要隐去的内容，已停止。') from None
+            raise engine.Rejected('PDF对象读不全，没法确认有没有要隐去的内容，已停止。') from None
         subtype = doc.xref_get_key(xref, 'Subtype')[1]
-        if subtype not in {'/Form', '/Image'}:
+        if is_stream and subtype in {'/Form', '/Image'}:
+            for key in _CHECK_STREAM_KEYS:
+                if doc.xref_get_key(xref, key)[0] == 'null':
+                    continue
+                text, bad = _key_views(doc, xref, key)
+                if bad:
+                    raise engine.Rejected('PDF对象读不全，没法确认有没有要隐去的内容，已停止。')
+                if not _text_hits(text, terms):
+                    continue
+                if key in _STRIP_STREAM_KEYS:
+                    doc.xref_set_key(xref, key, 'null')
+                    continue
+                raise engine.Rejected('PDF对象里有这次要隐去的内容，没法只删掉这段明文，已停止。')
+        if subtype not in _FONT_SUBTYPES:
             continue
-        if doc.xref_get_key(xref, 'Name')[0] == 'null':
+        if doc.xref_get_key(xref, 'ToUnicode')[0] == 'null':
             continue
-        text, bad = _key_views(doc, xref, 'Name')
+        text, bad = _key_views(doc, xref, 'ToUnicode')
         if bad:
-            raise engine.Rejected('PDF对象名称读不全，没法确认有没有要隐去的内容，已停止。')
+            raise engine.Rejected('PDF字体编码读不全，没法确认有没有要隐去的内容，已停止。')
         if _text_hits(text, terms):
-            doc.xref_set_key(xref, 'Name', 'null')
+            raise engine.Rejected('PDF字体编码里有这次要隐去的内容，没法确认能安全留下，已停止。')
 
 
 def _parse_literal(data, index):
