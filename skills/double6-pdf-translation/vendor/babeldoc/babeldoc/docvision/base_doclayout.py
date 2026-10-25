@@ -1,5 +1,6 @@
 import abc
 import logging
+import os
 from collections.abc import Generator
 
 import pymupdf
@@ -7,6 +8,9 @@ import pymupdf
 from babeldoc.format.pdf.document_il.il_version_1 import Page
 
 logger = logging.getLogger(__name__)
+
+# 长文档共用翻译进程时，版面模型只加载一次。单份翻译不设置该变量，每次仍重新加载。
+_reused_layout_model = None
 
 
 class YoloResult:
@@ -48,7 +52,14 @@ class DocLayoutModel(abc.ABC):
 
     @staticmethod
     def load_available():
-        return DocLayoutModel.load_onnx()
+        global _reused_layout_model
+        if os.environ.get("PDF_TRANSLATION_REUSE_LAYOUT") == "1" and _reused_layout_model is not None:
+            logger.info("Reusing loaded ONNX layout model")
+            return _reused_layout_model
+        model = DocLayoutModel.load_onnx()
+        if os.environ.get("PDF_TRANSLATION_REUSE_LAYOUT") == "1":
+            _reused_layout_model = model
+        return model
 
     @property
     @abc.abstractmethod
