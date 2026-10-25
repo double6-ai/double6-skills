@@ -10,7 +10,7 @@
 
 | Skill | 适合做什么 | 运行要求 | 公开状态 |
 |---|---|---|---|
-| [`double6-pdf-translation`](skills/double6-pdf-translation/) | 将英文 PDF/可信 LaTeX 或有限清晰单栏扫描译为简体中文，保留完整审校并生成单语与双语 PDF | macOS/Linux、Python 3.12、随包维护后端和显式配置的模型服务 | [2.0.0-rc.2](https://github.com/double6-ai/double6-skills/releases/tag/double6-pdf-translation-v2.0.0-rc.2)，111 开工合同 |
+| [`double6-pdf-translation`](skills/double6-pdf-translation/) | 将英文 PDF/可信 LaTeX 或有限清晰单栏扫描译为简体中文，保留完整审校并生成单语与双语 PDF | macOS/Linux、Python 3.12、随包维护后端；未指定时用智谱 glm-5.3-flash，也可显式指定模型 | [2.0.1](https://github.com/double6-ai/double6-skills/releases/tag/double6-pdf-translation-v2.0.1) |
 | [`double6-deep-research`](skills/double6-deep-research/) | 研究开放性问题、比较多个对象、形成有证据的决策建议，并交付可核验的完整报告 | 宿主 agent 已提供并允许使用搜索、网页或材料读取能力；Python 3.10+ 仅用于可选的交付校验 | 可公开使用 |
 | [`double6-workbench-builder`](skills/double6-workbench-builder/) | 把反复要做的真实事情（学习台、备考台、任务面板、内容/社媒运营台、阅读与研究追踪、记录与复盘等）构建为离线优先、严格单文件的本地个人工作台，个人数据只留在当前设备 | Python 3.10+（仅标准库）；浏览器验收可选 Playwright + Chromium | 可公开使用（实验性） |
 | [`double6-ppt-cli`](skills/double6-ppt-cli/) | 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX，覆盖 Markdown/结构化材料创作、模板对象级填充，以及已有 PPTX 的质检与受限修复 | Python 3、OfficeCLI 1.x（bootstrap 固定安装 pin `1.0.157`，运行时接受 ≥ 1.0.144 的 1.x）；**portable 档不需要 macOS**；native 档需要 macOS + Microsoft PowerPoint + `osascript` | 可公开使用；完整 native 闭环建议本机 PowerPoint，portable 档交付为 `pass_with_warnings` |
@@ -77,9 +77,9 @@ bash scripts/setup_venv.sh /absolute/new/venv
 /absolute/new/venv/bin/python scripts/paper_translation_workflow.py --help
 ```
 
-适用 macOS/Linux、Python 3.12。电子 PDF 与可信 LaTeX 主入口限完整 1–5 页；扫描预检默认最多 2 页，随后须具名确认完整源组和角色。新翻译必须明确模型、服务与凭据；冻结重建可离线运行。模型、字体、TeX、论文和缓存不随包分发。维护后端源码保留其 AGPL v3 与内嵌组件许可。
+适用 macOS/Linux、Python 3.12。电子 PDF 与可信 LaTeX 主入口限完整 1–5 页；扫描预检默认最多 2 页，随后须具名确认完整源组和角色。未写模型和地址时用智谱 `glm-5.3-flash`，写了就用指定的；远端仍要凭据。冻结重建可离线运行。模型、字体、TeX、论文和缓存不随包分发。维护后端源码保留其 AGPL v3 与内嵌组件许可。
 
-当前正式版本为 [`2.0.0`](https://github.com/double6-ai/double6-skills/releases/tag/double6-pdf-translation-v2.0.0)，变更见 [CHANGELOG](skills/double6-pdf-translation/CHANGELOG.md)。上一版 `2.0.0-rc.2` 已按精确冻结包[公开发布](https://github.com/double6-ai/double6-skills/releases/tag/double6-pdf-translation-v2.0.0-rc.2)，下载包 SHA256 为 `cf3cb6a3e0780459f1c9b0625e376f373edfbf9e0e8a37cc5c1a4043a79eace6`。它保留候选版本标识和包内冻结时的状态元数据；每份 PDF 的技术核验、用户接受和严格交付仍分别登记。
+当前正式版本为 [`2.0.1`](https://github.com/double6-ai/double6-skills/releases/tag/double6-pdf-translation-v2.0.1)，变更见 [CHANGELOG](skills/double6-pdf-translation/CHANGELOG.md)。上一版 [`2.0.0`](https://github.com/double6-ai/double6-skills/releases/tag/double6-pdf-translation-v2.0.0) 仍可下载。每份 PDF 的技术核验、用户接受和严格交付仍分别登记。
 
 已知限制：复杂表格的像素级/结构级完美、多栏与栏溢出的像素级保真、脚注/引用标点几何细缝不在 2.0 承诺范围，检到时稳定拒绝或标为 `unverified`，见 [技能 README](skills/double6-pdf-translation/README.md)。
 

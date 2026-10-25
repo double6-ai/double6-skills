@@ -40,6 +40,36 @@ from babeldoc.utils.priority_thread_pool_executor import PriorityThreadPoolExecu
 logger = logging.getLogger(__name__)
 
 
+def _load_batch_policy():
+    """一批的额度定义在 scripts/translation_cost_ledger.py。按文件位置加载，不依赖进程启动时的路径。"""
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    loaded = sys.modules.get("translation_cost_ledger")
+    if loaded is None:
+        for parent in Path(__file__).resolve().parents:
+            candidate = parent / "scripts" / "translation_cost_ledger.py"
+            if not candidate.is_file():
+                continue
+            spec = importlib.util.spec_from_file_location("translation_cost_ledger", candidate)
+            loaded = importlib.util.module_from_spec(spec)
+            sys.modules["translation_cost_ledger"] = loaded
+            spec.loader.exec_module(loaded)
+            break
+    if loaded is None:
+        token_limit, paragraph_limit = 1000, 24
+
+        def batch_is_full(token_count: int, paragraph_count: int) -> bool:
+            return token_count > token_limit or paragraph_count > paragraph_limit
+
+        return token_limit, paragraph_limit, batch_is_full
+    return loaded.PAGE_BATCH_TOKEN_LIMIT, loaded.PAGE_BATCH_PARAGRAPH_LIMIT, loaded.batch_is_full
+
+
+PAGE_BATCH_TOKEN_LIMIT, PAGE_BATCH_PARAGRAPH_LIMIT, batch_is_full = _load_batch_policy()
+
+
 def user_facing_page_number(page: Page | None) -> int | None:
     page_number = getattr(page, "page_number", None)
     if isinstance(page_number, int):
@@ -47,7 +77,17 @@ def user_facing_page_number(page: Page | None) -> int | None:
     return page_number
 
 
-PROMPT_TEMPLATE = Template(
+# 术语用法说明每次都放进固定前缀。某一批没有命中的词时，表放在后面、可以为空，规则本身不能时有时无。
+GLOSSARY_USAGE_RULES = (
+    "## Glossary\n"
+    "If a glossary is provided:\n"
+    "- Always use the exact target term.\n"
+    "- Apply glossary items even inside tags or when broken by hyphens/line breaks.\n"
+    "- If glossary does NOT include a term, translate it naturally.\n\n"
+)
+
+# 固定前缀到示例为止。标题、本批术语表和正文接在后面，服务商才能复用这段开头。
+STABLE_PROMPT = Template(
     """$role_block
 
 ## Structure Rules
@@ -95,7 +135,11 @@ Output:
     }
 ]
 
-$contextual_hints_block
+"""
+)
+
+VARIABLE_PROMPT = Template(
+    """$contextual_hints_block
 
 $glossary_tables_block
 
@@ -115,6 +159,28 @@ class BatchParagraph:
         self.paragraphs = paragraphs
         self.pages = pages
         self.trackers = [page_tracker.new_paragraph() for _ in paragraphs]
+
+
+# 与「译文和原文相同才再译」同一档。更短的原文，token 比例会因取整落到 3 倍外面。
+SHORT_SOURCE_TOKEN_LIMIT = 10
+
+
+def length_ratio_needs_retry(input_token_count: int, output_token_count: int) -> bool:
+    """长段落译文过长或过短时再译一次。短句沿用本批结果，除非译文是空的或长过短句上限的 3 倍。"""
+    if input_token_count <= 0:
+        return True
+    if input_token_count <= SHORT_SOURCE_TOKEN_LIMIT:
+        return output_token_count <= 0 or output_token_count > SHORT_SOURCE_TOKEN_LIMIT * 3
+    return not (0.3 < output_token_count / input_token_count < 3)
+
+
+def sliced_batch(batch: BatchParagraph, indexes: list[int]) -> BatchParagraph:
+    """复用原批次的段落和跟踪记录，只取其中一段下标。"""
+    part = BatchParagraph.__new__(BatchParagraph)
+    part.paragraphs = [batch.paragraphs[index] for index in indexes]
+    part.pages = [batch.pages[index] for index in indexes]
+    part.trackers = [batch.trackers[index] for index in indexes]
+    return part
 
 
 class ILTranslatorLLMOnly:
@@ -158,6 +224,7 @@ class ILTranslatorLLMOnly:
 
         self.ok_count = 0
         self.fallback_count = 0
+        self.batch_split_count = 0
         self.total_count = 0
 
     def calc_token_count(self, text: str) -> int:
@@ -269,8 +336,16 @@ class ILTranslatorLLMOnly:
             logger.debug(f"save translate tracking to {path}")
             with Path(path).open("w", encoding="utf-8") as f:
                 f.write(tracker.to_json())
+        shared = self.translation_config.shared_context_cross_split_part
+        stats = getattr(shared, "double6_batch_stats", None)
+        if not isinstance(stats, dict):
+            stats = {"single_paragraph_retries": 0, "batch_splits": 0}
+            shared.double6_batch_stats = stats
+        stats["single_paragraph_retries"] = int(stats.get("single_paragraph_retries") or 0) + self.fallback_count
+        stats["batch_splits"] = int(stats.get("batch_splits") or 0) + self.batch_split_count
         logger.info(
-            f"Translation completed. Total: {self.total_count}, Successful: {self.ok_count}, Fallback: {self.fallback_count}"
+            f"Translation completed. Total: {self.total_count}, Successful: {self.ok_count}, "
+            f"Fallback: {self.fallback_count}, Batch splits: {self.batch_split_count}"
         )
 
     def _is_body_text_paragraph(self, paragraph: PdfParagraph) -> bool:
@@ -610,7 +685,7 @@ class ILTranslatorLLMOnly:
                     copy.deepcopy(paragraph)
                 )
 
-            if total_token_count > 200 or len(paragraphs) > 5:
+            if batch_is_full(total_token_count, len(paragraphs)):
                 self.mid += 1
                 executor.submit(
                     self.translate_paragraph,
@@ -644,6 +719,67 @@ class ILTranslatorLLMOnly:
                 mp_id=self.mid,
             )
 
+    def _retry_failed_batch(
+        self,
+        batch_paragraph: BatchParagraph,
+        indexes: list[int],
+        pbar: tqdm | None,
+        page_font_map: dict[str, PdfFont] | None,
+        xobj_font_map: dict[int, dict[str, PdfFont]] | None,
+        title_paragraph: PdfParagraph | None,
+        local_title_paragraph: PdfParagraph | None,
+        executor: PriorityThreadPoolExecutor | None,
+    ) -> None:
+        """整批失败：两段及以上对半再请求；只剩一段才交给逐段翻译。"""
+        if len(indexes) >= 2:
+            self.batch_split_count += 1
+            midpoint = len(indexes) // 2
+            self.translate_paragraph(
+                sliced_batch(batch_paragraph, indexes[:midpoint]),
+                pbar,
+                page_font_map,
+                xobj_font_map,
+                title_paragraph,
+                local_title_paragraph,
+                executor,
+            )
+            self.translate_paragraph(
+                sliced_batch(batch_paragraph, indexes[midpoint:]),
+                pbar,
+                page_font_map,
+                xobj_font_map,
+                title_paragraph,
+                local_title_paragraph,
+                executor,
+            )
+            return
+        if len(indexes) != 1:
+            return
+        index = indexes[0]
+        paragraph = batch_paragraph.paragraphs[index]
+        tracker = batch_paragraph.trackers[index]
+        if getattr(paragraph, "debug_id", None) is None:
+            return
+        self.fallback_count += 1
+        self.total_count += 1
+        last_tracker = tracker.last_llm_translate_tracker() if hasattr(tracker, "last_llm_translate_tracker") else None
+        if last_tracker is not None:
+            last_tracker.set_fallback_to_translate()
+        token_count = self.calc_token_count(paragraph.unicode or "")
+        executor.submit(
+            self.il_translator.translate_paragraph,
+            paragraph,
+            batch_paragraph.pages[index],
+            pbar,
+            tracker,
+            page_font_map,
+            xobj_font_map,
+            priority=1048576 - token_count,
+            paragraph_token_count=token_count,
+            title_paragraph=title_paragraph,
+            local_title_paragraph=local_title_paragraph,
+        )
+
     def translate_paragraph(
         self,
         batch_paragraph: BatchParagraph,
@@ -659,9 +795,9 @@ class ILTranslatorLLMOnly:
         """Translate a paragraph using pre and post processing functions."""
         self.translation_config.raise_if_cancelled()
         should_translate_paragraph = []
+        inputs = []
+        llm_translate_trackers = []
         try:
-            inputs = []
-            llm_translate_trackers = []
             paragraph_unicodes = []
             for i in range(len(batch_paragraph.paragraphs)):
                 paragraph = batch_paragraph.paragraphs[i]
@@ -729,7 +865,7 @@ class ILTranslatorLLMOnly:
                 item.get("input", "") for item in json_format_input
             )
 
-            final_input = self._build_llm_prompt(
+            final_input, prompt_prefix = self._build_llm_prompt(
                 json_input_str=json_format_input_str,
                 title_paragraph=title_paragraph,
                 local_title_paragraph=local_title_paragraph,
@@ -743,6 +879,7 @@ class ILTranslatorLLMOnly:
                 rate_limit_params={
                     "paragraph_token_count": paragraph_token_count,
                     "request_json_mode": True,
+                    "prompt_prefix": prompt_prefix,
                 },
             )
             for llm_translate_tracker in llm_translate_trackers:
@@ -798,7 +935,7 @@ class ILTranslatorLLMOnly:
                     output_token_count = self.calc_token_count(output_unicode)
 
                     same_as_input = trimed_input == output_unicode
-                    if same_as_input and input_token_count > 10:
+                    if same_as_input and input_token_count > SHORT_SOURCE_TOKEN_LIMIT:
                         same_class = il_translator.classify_same_as_input_result(
                             input_unicode,
                             getattr(self.translation_config, "lang_in", None),
@@ -820,7 +957,7 @@ class ILTranslatorLLMOnly:
                             )
                             continue
 
-                    if not (0.3 < output_token_count / input_token_count < 3):
+                    if length_ratio_needs_retry(input_token_count, output_token_count):
                         llm_translate_tracker.set_error_message(
                             f"Translation result is too long or too short. Input: {input_token_count}, Output: {output_token_count}"
                         )
@@ -895,38 +1032,28 @@ class ILTranslatorLLMOnly:
                         self.ok_count += 1
 
         except Exception as e:
-            error_message = f"Error {e} during translation. try fallback"
+            # 整批失败时对半再试。只有剩一段时才退回逐段翻译，避免一次失败就把每段各付一次。
+            error_message = f"Error {e} during translation. try split"
             logger.warning(error_message)
             for llm_translate_tracker in llm_translate_trackers:
                 llm_translate_tracker.set_error_message(error_message)
-                llm_translate_tracker.set_fallback_to_translate()
-            self.total_count += len(llm_translate_trackers)
-            self.fallback_count += len(llm_translate_trackers)
-            for input_ in inputs:
-                input_[2].unicode = input_[5]
+            for index, saved_input in enumerate(inputs):
+                saved = saved_input[5]
+                if isinstance(saved, list) and index < len(saved) and isinstance(saved[index], str):
+                    saved_input[2].unicode = saved[index]
             if not should_translate_paragraph:
-                should_translate_paragraph = list(
-                    range(len(batch_paragraph.paragraphs))
-                )
-            for i in should_translate_paragraph:
-                paragraph = batch_paragraph.paragraphs[i]
-                tracker = batch_paragraph.trackers[i]
-                if paragraph.debug_id is None:
-                    continue
-                paragraph_token_count = self.calc_token_count(paragraph.unicode)
-                executor.submit(
-                    self.il_translator.translate_paragraph,
-                    paragraph,
-                    batch_paragraph.pages[i],
-                    pbar,
-                    tracker,
-                    page_font_map,
-                    xobj_font_map,
-                    priority=1048576 - paragraph_token_count,
-                    paragraph_token_count=paragraph_token_count,
-                    title_paragraph=title_paragraph,
-                    local_title_paragraph=local_title_paragraph,
-                )
+                should_translate_paragraph = list(range(len(batch_paragraph.paragraphs)))
+            pending = sliced_batch(batch_paragraph, should_translate_paragraph)
+            self._retry_failed_batch(
+                pending,
+                list(range(len(pending.paragraphs))),
+                pbar,
+                page_font_map,
+                xobj_font_map,
+                title_paragraph,
+                local_title_paragraph,
+                executor,
+            )
 
     def _build_llm_prompt(
         self,
@@ -934,8 +1061,11 @@ class ILTranslatorLLMOnly:
         title_paragraph: PdfParagraph | None,
         local_title_paragraph: PdfParagraph | None,
         batch_text_for_glossary_matching: str,
-    ) -> str:
-        """Build LLM prompt using a single template for easier maintenance."""
+    ) -> tuple[str, str]:
+        """返回完整提示词，以及其中逐字不变的前缀。
+
+        前缀含角色、结构规则、术语用法、输出格式和示例。标题、本批术语表和正文在前缀之后。
+        """
         # Build role block, honoring custom_system_prompt if provided.
         custom_prompt = getattr(self.translation_config, "custom_system_prompt", None)
         if custom_prompt:
@@ -980,8 +1110,7 @@ class ILTranslatorLLMOnly:
         else:
             contextual_hints_block = ""
 
-        # Build glossary usage rules and glossary tables.
-        glossary_usage_rules_block = ""
+        # 术语表只列本批用到的词，放在前缀之后。用法说明始终用同一段文字。
         glossary_tables_block = ""
         glossary_entries_per_glossary: dict[str, list[tuple[str, str]]] = {}
 
@@ -996,14 +1125,6 @@ class ILTranslatorLLMOnly:
                     )
 
         if glossary_entries_per_glossary:
-            glossary_usage_rules_block = (
-                "## Glossary\n"
-                "If a glossary is provided:\n"
-                "- Always use the exact target term.\n"
-                "- Apply glossary items even inside tags or when broken by hyphens/line breaks.\n"
-                "- If glossary does NOT include a term, translate it naturally.\n\n"
-            )
-
             glossary_table_lines: list[str] = ["## Glossary Tables", ""]
             for glossary_name, entries in glossary_entries_per_glossary.items():
                 glossary_table_lines.append(f"### Glossary: {glossary_name}")
@@ -1018,14 +1139,17 @@ class ILTranslatorLLMOnly:
                 glossary_table_lines.append("")
             glossary_tables_block = "\n".join(glossary_table_lines)
 
-        return PROMPT_TEMPLATE.substitute(
+        prefix = STABLE_PROMPT.substitute(
             role_block=role_block,
-            glossary_usage_rules_block=glossary_usage_rules_block,
+            glossary_usage_rules_block=GLOSSARY_USAGE_RULES,
+            lang_out=self.translation_config.lang_out,
+        )
+        suffix = VARIABLE_PROMPT.substitute(
             contextual_hints_block=contextual_hints_block,
             json_input_str=json_input_str,
             glossary_tables_block=glossary_tables_block,
-            lang_out=self.translation_config.lang_out,
         )
+        return prefix + suffix, prefix
 
     def _clean_json_output(self, llm_output: str) -> str:
         # Clean up JSON output by removing common wrapper tags

@@ -30,6 +30,8 @@ def run_scanned_translation(
     mineru_runner: MinerURunner = parse_with_mineru,
     translator: Translator = _default_translate,
 ) -> dict[str, Any]:
+    from .checkpoint import enable_default_scanned_reuse
+    enable_default_scanned_reuse(args)
     parse_root = getattr(args, 'scanned_parse_checkpoint_dir', None)
     if not parse_root or bool(getattr(args, 'ignore_translation_cache', False)):
         return _run_with_response_checkpoint(input_pdf, output_dir, route_manifest, args,

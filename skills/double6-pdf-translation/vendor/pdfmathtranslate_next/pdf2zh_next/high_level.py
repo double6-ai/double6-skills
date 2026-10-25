@@ -7,6 +7,7 @@ import multiprocessing.connection
 import multiprocessing.queues
 import os
 import queue
+import sys
 import threading
 import traceback
 from collections.abc import AsyncGenerator
@@ -109,6 +110,44 @@ class SubprocessCrashError(TranslationError):
 
 
 logger = logging.getLogger(__name__)
+
+
+def _skill_scripts_on_path() -> None:
+    """账本模块在 skill 的 scripts 目录。按本文件位置找，子进程不依赖启动时的搜索路径。"""
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        scripts = parent / "scripts"
+        if (scripts / "translation_cost_ledger.py").is_file():
+            folder = str(scripts)
+            if folder not in sys.path:
+                sys.path.insert(0, folder)
+            return
+
+
+def attach_cost_ledger(event: dict, config) -> None:
+    """把本次后端计数放进完成事件。记账失败不影响翻译本身。"""
+    if event.get("type") != "finish" or event.get("cost_ledger"):
+        return
+    try:
+        _skill_scripts_on_path()
+        from translation_cost_ledger import collect_from_babeldoc_config
+
+        event["cost_ledger"] = collect_from_babeldoc_config(config)
+    except Exception as exc:
+        logger.warning("translation cost ledger unavailable: %s", exc)
+
+
+def write_cost_ledger_file(settings: SettingsModel, file: Path, ledger: dict | None) -> None:
+    working = getattr(getattr(settings, "translation", None), "working_dir", None)
+    if not working or not isinstance(ledger, dict):
+        return
+    try:
+        _skill_scripts_on_path()
+        from translation_cost_ledger import backend_ledger_path, write_ledger
+
+        write_ledger(backend_ledger_path(Path(working), Path(file).stem), ledger)
+    except Exception as exc:
+        logger.warning("translation cost ledger was not written: %s", exc)
 
 
 def _translate_wrapper(
@@ -246,6 +285,7 @@ def _translate_wrapper(
                             ]
 
                         event["token_usage"] = token_usage
+                        attach_cost_ledger(event, config)
                         pipe_progress_send.send(event)
                         break
                     pipe_progress_send.send(event)
@@ -623,6 +663,16 @@ def create_babeldoc_config(settings: SettingsModel, file: Path) -> BabelDOCConfi
     return babeldoc_config
 
 
+def translate_in_process(settings) -> bool:
+    """当前进程直接翻译，而不是再套一层子进程。"""
+    debug = bool(getattr(getattr(settings, "basic", None), "debug", False))
+    bounded_cache = (
+        os.environ.get("PAPER_TRANSLATION_SOURCE_CACHE_MODE") in {"collect", "read"}
+        and bool(os.environ.get("PAPER_TRANSLATION_BOUNDED_OWNERS"))
+    )
+    return debug or bounded_cache or os.environ.get("PDF_TRANSLATION_REUSE_LAYOUT") == "1"
+
+
 async def do_translate_async_stream(
     settings: SettingsModel, file: Path | str
 ) -> AsyncGenerator[dict, None]:
@@ -643,13 +693,16 @@ async def do_translate_async_stream(
     # 开始翻译
     translate_func = partial(_translate_in_subprocess, settings, file)
 
-    # 外层已按nonce监督整棵进程树时，冻结缓存作业复用当前后端进程。
-    # 非缓存作业和未声明外层监督的调用继续使用原来的子进程隔离。
-    bounded_cache = (os.environ.get('PAPER_TRANSLATION_SOURCE_CACHE_MODE') in {'collect', 'read'}
-                     and bool(os.environ.get('PAPER_TRANSLATION_BOUNDED_OWNERS')))
-    if settings.basic.debug or bounded_cache:
+    # 外层已按 nonce 监督整棵进程树时，冻结缓存作业复用当前后端进程。
+    # 长文档分块设置 PDF_TRANSLATION_REUSE_LAYOUT=1 时也留在当前进程，版面模型才不会每块重载。
+    # 其它作业继续使用原来的子进程隔离。
+    babeldoc_config = None
+    if translate_in_process(settings):
         babeldoc_config = create_babeldoc_config(settings, file)
-        logger.debug("debug mode, translate in main process")
+        if os.environ.get("PDF_TRANSLATION_REUSE_LAYOUT") == "1":
+            logger.info("translate in current process; layout model stays loaded")
+        else:
+            logger.debug("debug mode, translate in main process")
         translate_func = partial(babeldoc_translate, translation_config=babeldoc_config)
     else:
         logger.info("translate in subprocess")
@@ -657,6 +710,8 @@ async def do_translate_async_stream(
     try:
         async with aclosing(translate_func()) as events:
             async for event in events:
+                if event.get("type") == "finish" and babeldoc_config is not None:
+                    attach_cost_ledger(event, babeldoc_config)
                 yield event
                 if settings.basic.debug:
                     logger.debug(event)
@@ -721,6 +776,7 @@ async def do_translate_file_async(
                             logger.info(f"  Mono PDF: {result.mono_pdf_path or 'None'}")
                             logger.info(f"  Dual PDF: {result.dual_pdf_path or 'None'}")
 
+                            write_cost_ledger_file(settings, file, event.get("cost_ledger"))
                             token_usage = event.get("token_usage", {})
                             if token_usage:
                                 logger.info("Token Usage:")

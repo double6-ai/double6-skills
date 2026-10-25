@@ -1,4 +1,4 @@
-"""Deterministic RapidOCR -> MinerU Basic -> Standard escalation policy."""
+"""轻量识别先看整页。清晰单栏留在 RapidOCR；版面困难再升级 MinerU。"""
 from __future__ import annotations
 
 import math
@@ -14,6 +14,13 @@ from .constants import (
 )
 
 FORMULA_RE = re.compile(r"(?:[=∑∫√±×÷]|\b(?:sin|cos|log|lim)\b|[A-Za-z]\s*[₀-₉²³^])")
+
+# 单栏页上只有置信度偏低时，轻量识别已经够用，不再为此升级版面模型。
+# 没读出字、旋转、双栏、阅读顺序、表格、公式和已有质量失败仍要升级。
+CONFIDENCE_ONLY_REASONS = frozenset({
+    "region_confidence_below_0.75",
+    "median_confidence_below_0.90",
+})
 
 
 def _is_two_column(regions: list[dict[str, Any]], page_width: float) -> bool:
@@ -157,9 +164,12 @@ def assess_rapidocr_page(
         reasons.append("formula_candidate")
     if existing_gate_failed:
         reasons.append("rapidocr_quality_gate_failed")
+    reasons = sorted(set(reasons))
+    escalation_reasons = [reason for reason in reasons if reason not in CONFIDENCE_ONLY_REASONS]
     return {
-        "escalate": bool(reasons),
-        "reasons": sorted(set(reasons)),
+        "escalate": bool(escalation_reasons),
+        "reasons": reasons,
+        "escalation_reasons": escalation_reasons,
         "region_count": len(text_regions),
         "minimum_confidence": min(confidences) if confidences else None,
         "median_confidence": statistics.median(confidences) if confidences else None,

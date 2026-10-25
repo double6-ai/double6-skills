@@ -1,36 +1,24 @@
-annotated-doc==0.0.4 \
-    --hash=sha256:571ac1dc6991c450b25a9c2d84a3705e2ae7a53467b5d111c24fa8baabbed320 \
-    --hash=sha256:fbcda96e87e9c92ad167c2e53839e57503ecfda18804ea28102353485033faa4
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   typer
+# 由 requirements-runtime.in 锁定。Python 3.12，macOS/Linux。
+# 不含 PyPI babeldoc、rapidocr（另见 requirements-rapidocr.lock）、带界面的 opencv-python、
+# huggingface-hub、uharfbuzz、lxml、ruff、xsdata 命令行附加项，以及 scikit-image。
 annotated-types==0.7.0 \
     --hash=sha256:1f02e8b43a8fbbc3f3e0d4f0f4bfc8131bcb4eebe8849b8e5c773f3a1c582a53 \
     --hash=sha256:aff07c09a53a08bc8cfccb9c85b05f1aa9a2a6f23728d790723543408344ce89
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   pydantic
 anyio==4.13.0 \
     --hash=sha256:08b310f9e24a9594186fd75b4f73f4a4152069e3853f1ed8bfbf58369f4ad708 \
     --hash=sha256:334b70e641fd2221c1505b3890c69882fe4a2df910cba14d97019b90b24439dc
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   httpx
     #   openai
 attrs==26.1.0 \
     --hash=sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309 \
     --hash=sha256:d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   jsonschema
     #   referencing
-babeldoc==0.5.24 \
-    --hash=sha256:3f4278c1beeebf8e8fe87782cc196db4b72ffd338b55bf644a2bafe9ec21e1de \
-    --hash=sha256:8810b9d8faecbe9b3f3e41f7af1f5d83cbee060ac16c9f17aa2a81abb149c6f2
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-backports-zstd==1.5.0 \
+backports-zstd==1.5.0 ; python_full_version < '3.14' \
     --hash=sha256:0075195c79c0508bc7313a3402b187bd9d27d4f9a376e8e2caac0fc2baeacbdf \
     --hash=sha256:012d88a9ae08f331e1adc03dfbda4ff2ae7f76ea62455975827b215677a11aec \
     --hash=sha256:02a57ee8598dd863c0b11c7af00042ce6bc045bf6f4249fa4c322c62614ca1fd \
@@ -118,7 +106,6 @@ backports-zstd==1.5.0 \
     --hash=sha256:f7de15f3871d21d6e761c5a309618b069fee5f225e64e4406956ac0209dc6917 \
     --hash=sha256:fbaa5502617dc4f04327c7a2951f0fcdca7aaef93ddf32c15dc8b620208174fa
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   pyzstd
 bitarray==3.8.1 \
     --hash=sha256:0256d57e294414bfe4fec4f852fd1d9ae361228c71b082332bf81c8b8fc69f80 \
@@ -226,23 +213,20 @@ bitarray==3.8.1 \
     --hash=sha256:fe989bbed9d6f332c1e24d333936f3fa1375f380cd8028da0b985dcdefa6015a \
     --hash=sha256:ff2ca039a161d49a8c713f5380def315c6f793df5fe348b94782b1dbee37a644
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   bitstring
 bitstring==4.4.0 \
     --hash=sha256:e682ac522bb63e041d16cbc9d0ca86a4f00194db16d0847c7efe066f836b2e37 \
     --hash=sha256:feac49524fcf3ef27e6081e86f02b10d2adf6c3773bf22fbe0e7eea9534bc737
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
+    #   -r requirements-runtime.in
 certifi==2026.5.20 \
     --hash=sha256:3c52e209ba0a4ad7aebe60436a4ab349c39e1e602e8c134221e546902ad25897 \
     --hash=sha256:69dea482ab64caa7b9f6aba1c6bf48bb6a5448d1c0f1b17ab42ad8c763a5344d
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   httpcore
     #   httpx
     #   requests
-cffi==2.0.0 \
+cffi==2.0.0 ; platform_python_implementation != 'PyPy' \
     --hash=sha256:00bdf7acc5f795150faa6957054fbbca2439db2f775ce831222b66f192f03beb \
     --hash=sha256:07b271772c100085dd28b74fa0cd81c8fb1a3ba18b21e03d7c27f3436a10606b \
     --hash=sha256:087067fa8953339c723661eda6b54bc98c5625757ea62e95eb4898ad5e776e9f \
@@ -328,7 +312,6 @@ cffi==2.0.0 \
     --hash=sha256:fc7de24befaeae77ba923797c7c87834c73648a05a4bde34b3b7e5588973a453 \
     --hash=sha256:fe562eb1a64e67dd297ccc4f5addea2501664954f2692b69a76449ec7913ecbf
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   cryptography
 chardet==7.4.3 \
     --hash=sha256:0ac3bf11c645734a1701a3804e43eabd98851838192267d08c353a834ab79fea \
@@ -368,9 +351,7 @@ chardet==7.4.3 \
     --hash=sha256:dc50f28bad067393cce0af9091052c3b8df7a23115afd8ba7b2e0947f0cef1f8 \
     --hash=sha256:e1b98790c284ff813f18f7cf7de5f05ea2435a080030c7f1a8318f3a4f80b131
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   babeldoc
+    #   -r requirements-runtime.in
 charset-normalizer==3.4.7 \
     --hash=sha256:007d05ec7321d12a40227aae9e2bc6dca73f3cb21058999a1df9e193555a9dcc \
     --hash=sha256:03853ed82eeebbce3c2abfdbc98c96dc205f32a79627688ac9a27370ea61a49c \
@@ -502,23 +483,18 @@ charset-normalizer==3.4.7 \
     --hash=sha256:fbccdc05410c9ee21bbf16a35f4c1d16123dcdeb8a1d38f33654fa21d0234f79 \
     --hash=sha256:fea24543955a6a729c45a73fe90e08c743f0b3334bbf3201e6c4bc1b0c7fa464
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
     #   reportlab
     #   requests
-click==8.4.1 \
-    --hash=sha256:482be17c6991b8c19c5429a1e995d9b0efdbb63172824c41f99965dc0ade8ec2 \
-    --hash=sha256:918b5633eddf6b41c32d4f454bf0de810065c74e3f7dbf8ee5452f8be88d3e96
+colorama==0.4.6 ; sys_platform == 'win32' \
+    --hash=sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44 \
+    --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   typer
-    #   xsdata
+    #   tqdm
 configargparse==1.7.5 \
     --hash=sha256:1e63fdffedf94da9cd435fc13a1cd24777e76879dd2343912c1f871d4ac8c592 \
     --hash=sha256:e3f9a7bb6be34d66b2e3c4a2f58e3045f8dfae47b0dc039f87bcfaa0f193fb0f
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
+    #   -r requirements-runtime.in
 cryptography==48.0.0 \
     --hash=sha256:0890f502ddf7d9c6426129c3f49f5c0a39278ed7cd6322c8755ffca6ee675a13 \
     --hash=sha256:0c558d2cdffd8f4bbb30fc7134c74d2ca9a476f830bb053074498fbc86f41ed6 \
@@ -570,24 +546,15 @@ cryptography==48.0.0 \
     --hash=sha256:f5333311663ea94f75dd408665686aaf426563556bb5283554a3539177e03b8c \
     --hash=sha256:fdfef35d751d510fcef5252703621574364fec16418c4a1e5e1055248401054b
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
+    #   -r requirements-runtime.in
 distro==1.9.0 \
     --hash=sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed \
     --hash=sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   openai
-filelock==3.29.0 \
-    --hash=sha256:69974355e960702e789734cb4871f884ea6fe50bd8404051a3530bc07809cf90 \
-    --hash=sha256:96f5f6344709aa1572bbf631c640e4ebeeb519e08da902c39a001882f30ac258
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   huggingface-hub
 flatbuffers==25.12.19 \
     --hash=sha256:7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   onnxruntime
 fonttools==4.63.0 \
     --hash=sha256:032038247a96c1690f9f31e377c389383c902531b085aa4e4dabd6f57f870e69 \
@@ -641,8 +608,7 @@ fonttools==4.63.0 \
     --hash=sha256:ef3048ef05dbb552b89817713d9cac912e00d0fde4a3105c00d29e52e10c89af \
     --hash=sha256:fd1e3094f42d806d3d7c79162fc59e5910fcbe3a7360c385b8da969bc4493745
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
+    #   -r requirements-runtime.in
 freetype-py==2.5.1 \
     --hash=sha256:0b7f8e0342779f65ca13ef8bc103938366fecade23e6bb37cb671c2b8ad7f124 \
     --hash=sha256:289b443547e03a4f85302e3ac91376838e0d11636050166662a4f75e3087ed0b \
@@ -652,71 +618,23 @@ freetype-py==2.5.1 \
     --hash=sha256:cfe2686a174d0dd3d71a9d8ee9bf6a2c23f5872385cf8ce9f24af83d076e2fbd \
     --hash=sha256:d01ded2557694f06aa0413f3400c0c0b2b5ebcaabeef7aaf3d756be44f51e90b
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   babeldoc
-fsspec==2026.4.0 \
-    --hash=sha256:11ef7bb35dab8a394fde6e608221d5cf3e8499401c249bebaeaad760a1a8dec2 \
-    --hash=sha256:301d8ac70ae90ef3ad05dcf94d6c3754a097f9b5fe4667d2787aa359ec7df7e4
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   huggingface-hub
+    #   -r requirements-runtime.in
 h11==0.16.0 \
     --hash=sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1 \
     --hash=sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   httpcore
-hf-xet==1.5.0 \
-    --hash=sha256:1e60df5a42e9bed8628b6416af2cba4cba57ae9f02de226a06b020d98e1aab18 \
-    --hash=sha256:2806c7c17b4d23f8d88f7c4814f838c3b6150773fe339c20af23e1cfaf2797e4 \
-    --hash=sha256:2baea1b0b989e5c152fe81425f7745ddc8901280ba3d97c98d8cdece7b706c60 \
-    --hash=sha256:3531b1823a0e6d77d80f9ed15ca0e00f0d115094f8ac033d5cae88f4564cc949 \
-    --hash=sha256:4b35549ce62601b84da4ff9b24d970032ace3d4430f52d91bcbb26c901d6c690 \
-    --hash=sha256:526345b3ed45f374f6317349df489167606736c876241ba984105afe7fd4839d \
-    --hash=sha256:5906bf7718d3636dc13402914736abe723492cb730f744834f5f5b67d3a12702 \
-    --hash=sha256:5f3dc2248fc01cc0a00cd392ab497f1ca373fcbc7e3f2da1f452480b384e839e \
-    --hash=sha256:73a0dae8c71de3b0633a45c73f4a4a5ed09e94b43441d82981a781d4f12baa42 \
-    --hash=sha256:786d28e2eb8315d5035544b9d137b4a842d600c434bb91bf7d0d953cce906ad4 \
-    --hash=sha256:7d70fe2ce97b9db73b9c9b9c81fe3693640aec83416a966c446afea54acfae3c \
-    --hash=sha256:872d5601e6deea30d15865ede55d29eac6daf5a534ab417b99b6ef6b076dd96c \
-    --hash=sha256:8dbcbab554c9ef158ef2c991545c3e970ddd8cc7acdcd0a78c5a41095dab4ded \
-    --hash=sha256:9929561f5abf4581c8ea79587881dfef6b8abb2a0d8a51915936fc2a614f4e73 \
-    --hash=sha256:9a0ee58cd18d5ea799f7ed11290bbccbe56bdd8b1d97ca74b9cc49a3945d7a3b \
-    --hash=sha256:a60290ec57e9b71767fba7c3645ddafdd0759974b540441510c629c6db6db24a \
-    --hash=sha256:b285cea1b5bab46b758772716ba8d6854a1a0310fed1c249d678a8b38601e5a0 \
-    --hash=sha256:b6c9df403040248c76d808d3e047d64db2d923bae593eb244c41e425cf6cd7be \
-    --hash=sha256:c799d49f1a5544a0ef7591c0ee75e0d6b93d6f56dc7a4979f59f7518d2872216 \
-    --hash=sha256:cf7b2dc6f31a4ea754bb50f74cde482dcf5d366d184076d8530b9872787f3761 \
-    --hash=sha256:dad0dc84e941b8ba3c860659fe1fdc35c049d47cce293f003287757e971a8f56 \
-    --hash=sha256:e0fb0a34d9f406eed88233e829a67ec016bec5af19e480eac65a233ea289a948 \
-    --hash=sha256:e5de0f6deada0dada870bb376a11bcd1f08abf3a968a6d118f33e72d1b1eb480 \
-    --hash=sha256:f7b7bbae318e583a86fb21e5a4a175d6721d628a2874f4bd022d0e660c32a682 \
-    --hash=sha256:fd6e5a9b0fdac4ed03ed45ef79254a655b1aaab514a02202617fbf643f5fdf7a
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   huggingface-hub
 httpcore==1.0.9 \
     --hash=sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55 \
     --hash=sha256:6e34463af53fd2ab5d807f399a9b45ea31c3dfa2276f15a2c3f00afff6e176e8
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   httpx
 httpx==0.28.1 \
     --hash=sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc \
     --hash=sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   babeldoc
-    #   huggingface-hub
+    #   -r requirements-runtime.in
     #   openai
-huggingface-hub==1.16.1 \
-    --hash=sha256:64340de934b9ce37857ef85a82de72f5629e8a270f9119eabb12bf495eb53c22 \
-    --hash=sha256:7f1dc4c5ec21aed69be630ad0c3378616be16f3de1a47b141c0e812965d9c832
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
 hyperscan==0.8.2 \
     --hash=sha256:087bd427d35d21c813977cb3f4b053cac7627f4189c99ebf07c58f2c24a9f4f6 \
     --hash=sha256:0c0af5d882bd6afb61e2b9a13c0d39fcbcee49c62f392096d6303bd34452813f \
@@ -764,28 +682,14 @@ hyperscan==0.8.2 \
     --hash=sha256:f786cce45929f6e89b65c51491cf0220a2c0aa3986a4de59add1544c35a4eed8 \
     --hash=sha256:f8698b77fe8107a693401bb34dac24fcfbf8e2b566cfba910550b71836c7492c
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
+    #   -r requirements-runtime.in
 idna==3.16 \
     --hash=sha256:cc246e3a3f89580c3a951b5ad298ca4638078b2cdd4f115654332b5c26daded5 \
     --hash=sha256:d7a6da03db833450fca25d2358ac9ff06cd624577a4aea3a596d5c0f77b8e03d
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   anyio
     #   httpx
     #   requests
-imageio==2.37.3 \
-    --hash=sha256:46f5bb8522cd421c0f5ae104d8268f569d856b29eb1a13b92829d1970f32c9f0 \
-    --hash=sha256:bbb37efbfc4c400fcd534b367b91fcd66d5da639aaa138034431a1c5e0a41451
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   scikit-image
-jinja2==3.1.6 \
-    --hash=sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d \
-    --hash=sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   xsdata
 jiter==0.15.0 \
     --hash=sha256:01a8222cf05ab1128e239421156c207949808acaaea2bdfd33130ae666786e86 \
     --hash=sha256:032396229564bca02440396bd327710719f724f5e7b7e9f7a8eb3faa4a2c2281 \
@@ -897,32 +801,22 @@ jiter==0.15.0 \
     --hash=sha256:f3d37768fce7f88dd2a8c6091f2325dea27d30d30d5c6e7a1c0f0af77723b708 \
     --hash=sha256:fa248c9eb220197d363f688818dac2fd4b2f0cd7d843ca7105d652034823427d
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   openai
 joblib==1.5.3 \
     --hash=sha256:5fc3c5039fc5ca8c0276333a188bbd59d6b7ab37fe6632daa76bc7f9ec18e713 \
     --hash=sha256:8561a3269e6801106863fd0d6d84bb737be9e7631e33aaed3fb9ce5953688da3
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   scikit-learn
 jsonschema==4.26.0 \
     --hash=sha256:0c26707e2efad8aa1bfc5b7ce170f3fccc2e4918ff85989ba9ffa9facb2be326 \
     --hash=sha256:d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
+    #   -r requirements-runtime.in
 jsonschema-specifications==2025.9.1 \
     --hash=sha256:98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe \
     --hash=sha256:b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   jsonschema
-lazy-loader==0.5 \
-    --hash=sha256:717f9179a0dbed357012ddad50a5ad3d5e4d9a0b8712680d4e687f5e6e6ed9b3 \
-    --hash=sha256:ab0ea149e9c554d4ffeeb21105ac60bed7f3b4fd69b1d2360a4add51b170b005
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   scikit-image
 levenshtein==0.27.3 \
     --hash=sha256:027b3d142cc8ea2ab4e60444d7175f65a94dde22a54382b2f7b47cc24936eb53 \
     --hash=sha256:03eba8fda9f3f2b4b0760263fa20b20a90ab00cbeeab4d0d9d899b4f77912b0a \
@@ -1008,221 +902,16 @@ levenshtein==0.27.3 \
     --hash=sha256:fc975465a51b1c5889eadee1a583b81fba46372b4b22df28973e49e8ddb8f54a \
     --hash=sha256:ffdca6989368cc64f347f0423c528520f12775b812e170a0eb0c10e4c9b0f3ff
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
-lxml==6.1.1 \
-    --hash=sha256:05a82eb6e1530a64f26225b55cbd178113bd0b5af1c2b625f25e5296742c26d2 \
-    --hash=sha256:07a4a68e286ee7a1ed7dfb8af83e615757c0ccfe9f18c6b4ea6771388d9ba8c9 \
-    --hash=sha256:09dd5b7075dc2f7709654a46543ba1ea3c2e217b2ed8fbd413a8a945a0f40f60 \
-    --hash=sha256:0b7e8a14c8634bf6f7a568634cb395305a6d964aeb5b7ee32248094bed3a7e2c \
-    --hash=sha256:104c09bda8d2a562824c0e319d0768ce26a779b7601e0931d33b09b53c392ef7 \
-    --hash=sha256:126c93f7f56f0eda92f6d8c619edc463a4f23d9252f1c9d0405a76f25fa9f11a \
-    --hash=sha256:162af1091cd785f2f27e62d3547ae9bc58ec5c86dd314d67021fd02463708d83 \
-    --hash=sha256:17e0e18d4ad8adbd0399291bc44845b69d9dd68439a3cdebdf35ff902ec05072 \
-    --hash=sha256:18b73c339ae29b90fd2d06e58ebd555a751bde9cd6bbd36cc0281b9a2c94e9d8 \
-    --hash=sha256:19607c6bbff2a44cf3fe8250abccd20942d3462473e0a721d01d379ed017e462 \
-    --hash=sha256:19b7ab10b210b0b3ad7985d9ac4eb66ab09a90b20fe6e2f7ba55d01a234345d0 \
-    --hash=sha256:1d4962d4c66bf830a7e59ed6cfc17d148149898a3aefa8ec6e59763e6e3ed085 \
-    --hash=sha256:1db753c9115ec7100d073b744d17e25e88a8f90f5c39b2f5dd878149af59671f \
-    --hash=sha256:1dde6131244bba38a17c745836ba190bc753fd73c9291666287fd0a3fa3dcf30 \
-    --hash=sha256:25c6997a9a534e016695a0ba06b2f07945de682731ff01065b6d5a4474179da1 \
-    --hash=sha256:26e6eda8d38c1fcab1090dd196ee87cbd13788e531937610e2589085de074e77 \
-    --hash=sha256:27acc820660aaffa4f7c087f29120e12980f7779d56d8492d263170111284740 \
-    --hash=sha256:2a0217714657e023ef4293500f65aa20fce6164c8fd6b08fa5bd4a859fb14b9b \
-    --hash=sha256:2c8daa471358dc2d6fcf02165e80ec68f77871a286df95bc5cc3816153b0fd2c \
-    --hash=sha256:30a89d3ac8faec007453fb541f3f46807eeec88edd5826f6e3fe001752a2c621 \
-    --hash=sha256:31033dc34636ea6b7d5cc11b1ddbda78a14de858ba9d3e1ed4b69a3085bc521e \
-    --hash=sha256:32ab449a5486f6c758e849bb86710d0e45edc24a04e250c01555f8f5653958f8 \
-    --hash=sha256:3483644525531e1d5762b0c44a8e18b6efba321b6dcf8a8952de10b037618bca \
-    --hash=sha256:34c2d737beabfe35baada43941ed519251e9a12e779031496bcd5d539fcfd730 \
-    --hash=sha256:3779def59032b81e44a5f70096ef6bf2082f8d901937dca354474ba09782e245 \
-    --hash=sha256:37a58976370f36d9329d118ad0b953c5aeb9119ac9c6a4e258942a225d0573a1 \
-    --hash=sha256:3893c14c4b6ac5b2d54ba8cf03e99fe5104e592de491f19bd6b82756c09f8004 \
-    --hash=sha256:3a12689be69a28ddaa0ab99a5a1137da2afd5f8f16df7b5680b66f616d3eda1d \
-    --hash=sha256:3ab541146f1f6968c462d6c2ac495148e8cdba2f8347700b2141b6ec5a75bf52 \
-    --hash=sha256:3abf332af33a74288675d936fe861fd4344da0dd6622193fbc4f2bfbb35536b5 \
-    --hash=sha256:3fd9728a2735fda14f4e8235830c86b539e9661e849665bf926d3f867943b4bf \
-    --hash=sha256:424aa57aca0897eb922aef34395bd1289b3b6f04e6bae20ea123c0c7e333cffc \
-    --hash=sha256:441dd227fa0690eb9fc81edabc63cdcefc212bba99b906dcf6e32cc1a9d3e533 \
-    --hash=sha256:469e3618338bd7ab5beb412d2439825479fcf0dab99e394ca563dbc4eaf6c834 \
-    --hash=sha256:47402e62c52ff5988c1e8c6c63177f5708bccf48e366dea4e3dcf1e645e04947 \
-    --hash=sha256:4f0dd2f01f9f8a89f565d000e03abcf0a13d692a346c8d22f628d49af098777a \
-    --hash=sha256:53b7d2b7a10b1c35c0a5e21e9224accf60c1bbfba523990732e521b2b73adef2 \
-    --hash=sha256:53c909b62a0532183542fed00c5a7218258c56292d409bc789886fe1cb04c438 \
-    --hash=sha256:54a7f95e4de5fb94e2f9f4b9055c6ba33bf3d628fd77a1d647c5923caa2cdcdc \
-    --hash=sha256:556e94a63c9b04716f8e4de2abb65775061f846e89331b6c5be79183a24f98ea \
-    --hash=sha256:55b03549819867ea141c0202242c4816c82e52ec36e7e648db9d8da5a3dc3ed6 \
-    --hash=sha256:581d4c8ae690a6609e64862dd6b7c2489635c2d13907fc2b20f2bc200ff1d21e \
-    --hash=sha256:58bb955caba94e467d2a96da17660d2d704e0675894cba21ab8a775b8621fd1c \
-    --hash=sha256:5b7328b46d49fc9477d91ae8f6d55340347d827b7734ba3ea33faae0efef1383 \
-    --hash=sha256:5ba186ad207446c65d3bb3d3e0412b032b1d9f595e59861e2354798c5703d955 \
-    --hash=sha256:5bec7d03d78d853597d6107854c2310ce3f761fd218fe9fe91d5101fcf6c2efe \
-    --hash=sha256:5c6bf403fbb3b3e348a561a5f4f0b9961835657981c802a1df03653eef8a9074 \
-    --hash=sha256:5f6994074ebae6ffb04447268e37dc16edc304f9859cf91acb86e0af6c1b395c \
-    --hash=sha256:62aeb7e85b5d60320b9d77eef2e773994e2c0ce10121b277e0a19804e1654a5a \
-    --hash=sha256:63876be28efefa04a1df615b46770e82042cce445cfdce55160522f57b231ccb \
-    --hash=sha256:639f6c857d91d9be29bd7502348d6736dab168b54b5158cd899abf11684dc186 \
-    --hash=sha256:640f97d43d867bcb9c75b3af013b64850756b746cb6bce8ace83b70da3abba9d \
-    --hash=sha256:649dda677cf3bd6ac9ae14007ba0c824ded8ce5808b53fc7431d9140399118c1 \
-    --hash=sha256:6540377fbd53fe1b629172288c464fb18db11ce1fa7dc15891da10aa9dcc3e7f \
-    --hash=sha256:6689e828a94eee4f139408c337bb198e014724bb8a8c26d3cfac49d119ed69a6 \
-    --hash=sha256:68a9198d0fc122d14bb76837de9aa80cf84caed990b5b237f532ed87d3706736 \
-    --hash=sha256:6b1761fbf9ec984e2e9d9c589ef5f5fd684b7c19f92aadd567a26c5224958db6 \
-    --hash=sha256:70cdfd80589d59e43e18005dd7244e8895e93db8ab6a620b7e23df5445a4e3d2 \
-    --hash=sha256:70ef8a7e102a1508f8121aae5b0867abd663f72c14f0a9c937e6554cb4587b7b \
-    --hash=sha256:73bc2086f141224ebddb7fc5c6a36ca58b31b94b561e1dfe8e073e3270fad1e7 \
-    --hash=sha256:74a9717fd0d82effef5c2854f0d917231d5324b5a3eb7275c43ac9fa32f97a14 \
-    --hash=sha256:752d3bbfe874715ccd0aec7f88d7fc623c0f1fd7aa7b3238a084e017bad2a009 \
-    --hash=sha256:762ff394d5bd56da0cf034a23dcce4e13923f15321a2adfa2ac00201dc6d3fca \
-    --hash=sha256:76447f65250ed2501ead1a1552f5ce8edff159a86f308348e6a9c4acb5e1f1b4 \
-    --hash=sha256:766b010012d59470072c1816b5b6c69f1d243e5db36ea5968e94accf430a4635 \
-    --hash=sha256:787b2496d0dbe8cd180984e8d29e3a6f76e7ea34db781cb3bd55e4ba1ef8b4ee \
-    --hash=sha256:793033d6c5cdf33a573f910d9bea14ef8f5771820411d118da8e1182edb53d5e \
-    --hash=sha256:7d47866cb32fb503450b6edc9df355d10dc49836af2e89901bd6ac6b0896d9d9 \
-    --hash=sha256:7f7a92e8583f06b1fd49d01158143b8461cfcd135dcb10ec807270a3051bd603 \
-    --hash=sha256:80c2dfadb855da477cf73373ad29a333535dedb9b12bad02c9814c8e2b43bf08 \
-    --hash=sha256:83b6b30eb131da7a75b601f28c5d6971e6ed3e887919bf6b6a1ad3c2df289080 \
-    --hash=sha256:86281fbdd6a8162756f8d603f37e3435bfa38043adb79c6dc6a2dfee065e7525 \
-    --hash=sha256:86c89b9d55ebf820ad7c90bc533410f0d098054f293351f10603c0c46ff598f5 \
-    --hash=sha256:876e1ff5930ed8bf295ec5ef9a8155e9b6b1876bbf1deed8b3a8069311875a8f \
-    --hash=sha256:88136950da4d13c318bde414ce10219931937851327f44328f2df4d2c4614067 \
-    --hash=sha256:88d8cb75b9d82858497a5393e3c63cfbf03035225e4b35a49ed7ccb151e4dc0e \
-    --hash=sha256:8be8ad51249698103d24b0571df35a10990fbe93dd043b6c024172189485f5e3 \
-    --hash=sha256:8d43ca737b20e106e4aebc42b2f3ae19f00ba63d7eb731698ee083d72d15646f \
-    --hash=sha256:8dadbe5b217ff35b6a8d16610dd710219b59b76d13f0e3f0d9f36786206e4485 \
-    --hash=sha256:9395002973c827b3ed67db77e6ec09f092919a587022174554096a269378fb13 \
-    --hash=sha256:96f2ec43df44b1f76249ee0a615334f9b5b060e1c8bd90e706dad2d14d02f383 \
-    --hash=sha256:98fc784c2c1440667aeedf8465bdfe10208acf0ead656a2c68627299f546b315 \
-    --hash=sha256:9e36f163528fc50cbef305f02a5fd66d404edf7049cdaff211dbc2cba5a7013e \
-    --hash=sha256:9eb9b5a968f6e0f6d640092a567e14529ff8cea2e29d00da6f78a79fa49f013c \
-    --hash=sha256:9f76acfb5f68ba982635a53fd985a8044be98a35b43232c2a1ee235ffab3e1dd \
-    --hash=sha256:a088f287f7d8275a33c07f2cac6c50b9319309a0200a39e7e75d80c707723099 \
-    --hash=sha256:a10bd2fd62e8ce916ececb342f348f190724a098c1faa056fdfb2a22ad5e8660 \
-    --hash=sha256:a4bbea04c97f6d78a48e3fbc1cb9116d2780b1b39e03a23f6eb9b603fd61f510 \
-    --hash=sha256:aa366a1e55b8ebfe8ca8ddc3cfe75c8ebade181aeb0f661d0cb05986b647f72a \
-    --hash=sha256:aa49e06d94aba782c6a02eecb7e507969e7e7a41b267f1b359bb35585f295d5b \
-    --hash=sha256:aad9aa39483ed8ec44d6d2e59e5b98a0d80676ef0d92f44bfc374836111f62f5 \
-    --hash=sha256:aae97dfdb60715c164419ac2532a76d013c3918a665eb6cb7288098b5f349aaf \
-    --hash=sha256:abbefa31eee84842140f67acef1c828e28bba8bbf0c3bc6e5492a9af88152c28 \
-    --hash=sha256:ac931cdc9442c1763b8a8f6cd62c0c938737eafc5be75eff88df55fc73bc0d00 \
-    --hash=sha256:acd7d70b64c0aae0c7922cca83d288a16f5f6da523637697872253415269baef \
-    --hash=sha256:add8cf6ddf9a65116119a28ece0f7886e30af27ba724a7594305f1d1b58a92a1 \
-    --hash=sha256:aee395f5d0927f947758b4ec119fd5fc8ec71f07a1c5c52077b30b04c0fa6955 \
-    --hash=sha256:b1b963fd8f5caa68e99dfae060d54de1fe9cba899b8718b44a00cdca53c3e590 \
-    --hash=sha256:b2d444f2e66624d68e9c6b211e28a76e22fff5fcabcfff4deac18b529b7d4137 \
-    --hash=sha256:b8d812c6011c08b8111a15e54dd990b8923692d80adf35488bee34026c35accf \
-    --hash=sha256:ba96ae44888e0185281e937633a743ea90d5a196c6000f82565ebb0580012d40 \
-    --hash=sha256:bdebcc8a75d38c7598dfb2c9ed852d7a9eb4a10d6e2d0764b919b802bf32ac88 \
-    --hash=sha256:c07da4cebf6889f03ebac8d238f62318e29f495de0aa18a51ea14e61ae907e2e \
-    --hash=sha256:c08e5c694306507275f2290073350c4f32e383db15213b2c69e7ff39c1193840 \
-    --hash=sha256:c4f469aebd783bb741c2ecb2a681008fd26bfe5c16a9a72ed5467f834e810df2 \
-    --hash=sha256:c5d7152ec39ca7c402d8fb9bad86140a15b9503bd0c54484e3f1bbe3dd37ceca \
-    --hash=sha256:c674693f055fa2495de12292cb45e9944199d8eaef5a2dec45175c7c61cb73e3 \
-    --hash=sha256:c6ed5141a5c7507cf3ee76bd363b0d6f801e3321adc35b5d825a23115faa5465 \
-    --hash=sha256:c921ba5c51e4e9f63b8b00267d06566e1f63407408a0496da2d1d0bfc819c7fc \
-    --hash=sha256:c9a4b821dc7055bf9e05ff5719e18ec501f75c0f0bbfabd573b277559780833d \
-    --hash=sha256:c9f79d5325907f13e1be0b3e4dacc1049d1dffc4aeee3c995284bea5fe0fab7d \
-    --hash=sha256:cd312b9692e831d2ffcad61eab31d91d4b4655a962e61de8fb410472cbcd37aa \
-    --hash=sha256:cea3f4c1af79af13cdb2da0c028111d8f8522d4f22a000c82385535f24e5cf3a \
-    --hash=sha256:cecdd5dfdc87b1fd87dbf81d4b037a544f47f4c744200a67013771682d67686a \
-    --hash=sha256:cf9d57306d848218f3601fee7601fab1a327c942d56e2e97610583cb4dd74206 \
-    --hash=sha256:d34bbf07dbc7ca5970671b1512e928991fb5e9d95365636c9b2d8b4f53af405e \
-    --hash=sha256:d49514be2f28d895c38cf9d2b72d7b9a07d00314519f456c0b50b53cfcf4c785 \
-    --hash=sha256:d680fbcb768404c601ecb43519ecd8461f6954cb11c06a78962f666832ccfca8 \
-    --hash=sha256:db1d75f6617a49c1c01bc7023713e0ff59ab32c9579ae62a7674c0e34f3b0b0a \
-    --hash=sha256:dcb292aa7fe485ceff7af4f92e46c5af397daec5dff64871a528f0fc47a3cc5b \
-    --hash=sha256:e07c65f443c887bbcf31cc1771d932ecc192a5273943589b3c7572b749f1ffb2 \
-    --hash=sha256:e902da4b04e6b52e5893900d4b8ab46068f75f3561f01bf1080957f9fd932ed6 \
-    --hash=sha256:e9308ff8241c532df3f3e570f9a5aeed6c853f888512ba4b75638d7c11c95ef6 \
-    --hash=sha256:eb7c9811bfaa8b1ed5ed319f5d370dfbcaa59d52ea64be2a5a85e18195930354 \
-    --hash=sha256:ebe6af670449830d6d9b752c256a983291c766a1365ba5d5460048f9e33a7818 \
-    --hash=sha256:ed21202aec73cda4d55d1ce57b389aadb90ffb044e6cd1080b8347efe1b1ec84 \
-    --hash=sha256:efe0374196335f93b53269acd811b944f2e6bdc88e8894f214bd636455484909 \
-    --hash=sha256:f64ec5397ea6a41fc1b4af0380d79b44a755b5531dcaccd9940fb260dca93038 \
-    --hash=sha256:f6ac4ef4d82dff54670227a69c67782ae0b811b5cf6b17954f1e8f7502fc0d1d \
-    --hash=sha256:f6f0ce10945fab9c4c06ce14e22af9059d1a87493a9af4501a5b0b9187e21cf2 \
-    --hash=sha256:f8844cd288697c6425c9beba919302241e3278871dc6519515e72b04e987abcf \
-    --hash=sha256:fe0306bd29505a9177aac19f1877174b0e7422c222a59f70b2cd41633448c3dc \
-    --hash=sha256:ff3f333630ab480244a1bff72043e511a91eb22e7595dead8653ee5612dd8f3d \
-    --hash=sha256:ffecec8eb889b58ba9be5b95fb1cc78e22ea8eedea38e8736a1568fe1979250e
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   xsdata
+    #   -r requirements-runtime.in
 markdown-it-py==4.2.0 \
     --hash=sha256:04a21681d6fbb623de53f6f364d352309d4094dd4194040a10fd51833e418d49 \
     --hash=sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   rich
-markupsafe==2.1.5 \
-    --hash=sha256:00e046b6dd71aa03a41079792f8473dc494d564611a8f89bbbd7cb93295ebdcf \
-    --hash=sha256:075202fa5b72c86ad32dc7d0b56024ebdbcf2048c0ba09f1cde31bfdd57bcfff \
-    --hash=sha256:0e397ac966fdf721b2c528cf028494e86172b4feba51d65f81ffd65c63798f3f \
-    --hash=sha256:17b950fccb810b3293638215058e432159d2b71005c74371d784862b7e4683f3 \
-    --hash=sha256:1f3fbcb7ef1f16e48246f704ab79d79da8a46891e2da03f8783a5b6fa41a9532 \
-    --hash=sha256:2174c595a0d73a3080ca3257b40096db99799265e1c27cc5a610743acd86d62f \
-    --hash=sha256:2b7c57a4dfc4f16f7142221afe5ba4e093e09e728ca65c51f5620c9aaeb9a617 \
-    --hash=sha256:2d2d793e36e230fd32babe143b04cec8a8b3eb8a3122d2aceb4a371e6b09b8df \
-    --hash=sha256:30b600cf0a7ac9234b2638fbc0fb6158ba5bdcdf46aeb631ead21248b9affbc4 \
-    --hash=sha256:397081c1a0bfb5124355710fe79478cdbeb39626492b15d399526ae53422b906 \
-    --hash=sha256:3a57fdd7ce31c7ff06cdfbf31dafa96cc533c21e443d57f5b1ecc6cdc668ec7f \
-    --hash=sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4 \
-    --hash=sha256:3e53af139f8579a6d5f7b76549125f0d94d7e630761a2111bc431fd820e163b8 \
-    --hash=sha256:4096e9de5c6fdf43fb4f04c26fb114f61ef0bf2e5604b6ee3019d51b69e8c371 \
-    --hash=sha256:4275d846e41ecefa46e2015117a9f491e57a71ddd59bbead77e904dc02b1bed2 \
-    --hash=sha256:4c31f53cdae6ecfa91a77820e8b151dba54ab528ba65dfd235c80b086d68a465 \
-    --hash=sha256:4f11aa001c540f62c6166c7726f71f7573b52c68c31f014c25cc7901deea0b52 \
-    --hash=sha256:5049256f536511ee3f7e1b3f87d1d1209d327e818e6ae1365e8653d7e3abb6a6 \
-    --hash=sha256:58c98fee265677f63a4385256a6d7683ab1832f3ddd1e66fe948d5880c21a169 \
-    --hash=sha256:598e3276b64aff0e7b3451b72e94fa3c238d452e7ddcd893c3ab324717456bad \
-    --hash=sha256:5b7b716f97b52c5a14bffdf688f971b2d5ef4029127f1ad7a513973cfd818df2 \
-    --hash=sha256:5dedb4db619ba5a2787a94d877bc8ffc0566f92a01c0ef214865e54ecc9ee5e0 \
-    --hash=sha256:619bc166c4f2de5caa5a633b8b7326fbe98e0ccbfacabd87268a2b15ff73a029 \
-    --hash=sha256:629ddd2ca402ae6dbedfceeba9c46d5f7b2a61d9749597d4307f943ef198fc1f \
-    --hash=sha256:656f7526c69fac7f600bd1f400991cc282b417d17539a1b228617081106feb4a \
-    --hash=sha256:6ec585f69cec0aa07d945b20805be741395e28ac1627333b1c5b0105962ffced \
-    --hash=sha256:72b6be590cc35924b02c78ef34b467da4ba07e4e0f0454a2c5907f473fc50ce5 \
-    --hash=sha256:7502934a33b54030eaf1194c21c692a534196063db72176b0c4028e140f8f32c \
-    --hash=sha256:7a68b554d356a91cce1236aa7682dc01df0edba8d043fd1ce607c49dd3c1edcf \
-    --hash=sha256:7b2e5a267c855eea6b4283940daa6e88a285f5f2a67f2220203786dfa59b37e9 \
-    --hash=sha256:823b65d8706e32ad2df51ed89496147a42a2a6e01c13cfb6ffb8b1e92bc910bb \
-    --hash=sha256:8590b4ae07a35970728874632fed7bd57b26b0102df2d2b233b6d9d82f6c62ad \
-    --hash=sha256:8dd717634f5a044f860435c1d8c16a270ddf0ef8588d4887037c5028b859b0c3 \
-    --hash=sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1 \
-    --hash=sha256:97cafb1f3cbcd3fd2b6fbfb99ae11cdb14deea0736fc2b0952ee177f2b813a46 \
-    --hash=sha256:a17a92de5231666cfbe003f0e4b9b3a7ae3afb1ec2845aadc2bacc93ff85febc \
-    --hash=sha256:a549b9c31bec33820e885335b451286e2969a2d9e24879f83fe904a5ce59d70a \
-    --hash=sha256:ac07bad82163452a6884fe8fa0963fb98c2346ba78d779ec06bd7a6262132aee \
-    --hash=sha256:ae2ad8ae6ebee9d2d94b17fb62763125f3f374c25618198f40cbb8b525411900 \
-    --hash=sha256:b91c037585eba9095565a3556f611e3cbfaa42ca1e865f7b8015fe5c7336d5a5 \
-    --hash=sha256:bc1667f8b83f48511b94671e0e441401371dfd0f0a795c7daa4a3cd1dde55bea \
-    --hash=sha256:bec0a414d016ac1a18862a519e54b2fd0fc8bbfd6890376898a6c0891dd82e9f \
-    --hash=sha256:bf50cd79a75d181c9181df03572cdce0fbb75cc353bc350712073108cba98de5 \
-    --hash=sha256:bff1b4290a66b490a2f4719358c0cdcd9bafb6b8f061e45c7a2460866bf50c2e \
-    --hash=sha256:c061bb86a71b42465156a3ee7bd58c8c2ceacdbeb95d05a99893e08b8467359a \
-    --hash=sha256:c8b29db45f8fe46ad280a7294f5c3ec36dbac9491f2d1c17345be8e69cc5928f \
-    --hash=sha256:ce409136744f6521e39fd8e2a24c53fa18ad67aa5bc7c2cf83645cce5b5c4e50 \
-    --hash=sha256:d050b3361367a06d752db6ead6e7edeb0009be66bc3bae0ee9d97fb326badc2a \
-    --hash=sha256:d283d37a890ba4c1ae73ffadf8046435c76e7bc2247bbb63c00bd1a709c6544b \
-    --hash=sha256:d9fad5155d72433c921b782e58892377c44bd6252b5af2f67f16b194987338a4 \
-    --hash=sha256:daa4ee5a243f0f20d528d939d06670a298dd39b1ad5f8a72a4275124a7819eff \
-    --hash=sha256:db0b55e0f3cc0be60c1f19efdde9a637c32740486004f20d1cff53c3c0ece4d2 \
-    --hash=sha256:e61659ba32cf2cf1481e575d0462554625196a1f2fc06a1c777d3f48e8865d46 \
-    --hash=sha256:ea3d8a3d18833cf4304cd2fc9cbb1efe188ca9b5efef2bdac7adc20594a0e46b \
-    --hash=sha256:ec6a563cff360b50eed26f13adc43e61bc0c04d94b8be985e6fb24b81f6dcfdf \
-    --hash=sha256:f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5 \
-    --hash=sha256:fa173ec60341d6bb97a89f5ea19c85c5643c1e7dedebc22f5181eb73573142c5 \
-    --hash=sha256:fa9db3f79de01457b03d4f01b34cf91bc0048eb2c3846ff26f66687c2f6d16ab \
-    --hash=sha256:fce659a462a1be54d2ffcacea5e3ba2d74daa74f30f5f143fe0c58636e355fdd \
-    --hash=sha256:ffee1f21e5ef0d712f9033568f8344d5da8cc2869dbd08d87c84656e6a2d2f68
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   jinja2
 mdurl==0.1.2 \
     --hash=sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8 \
     --hash=sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   markdown-it-py
 ml-dtypes==0.5.4 \
     --hash=sha256:0d2ffd05a2575b1519dc928c0b93c06339eb67173ff53acb00724502cda231cf \
@@ -1265,7 +954,6 @@ ml-dtypes==0.5.4 \
     --hash=sha256:d81fdb088defa30eb37bf390bb7dde35d3a83ec112ac8e33d75ab28cc29dd8b0 \
     --hash=sha256:f21c9219ef48ca5ee78402d5cc831bd58ea27ce89beda894428bc67a52da5328
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   onnx
 msgpack==1.1.2 \
     --hash=sha256:0051fffef5a37ca2cd16978ae4f0aef92f164df86823871b5162812bebecd8e2 \
@@ -1331,14 +1019,7 @@ msgpack==1.1.2 \
     --hash=sha256:fac4be746328f90caa3cd4bc67e6fe36ca2bf61d5c6eb6d895b6527e3f05071e \
     --hash=sha256:fffee09044073e69f2bad787071aeec727183e7580443dfeb8556cbf1978d162
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
-networkx==3.6.1 \
-    --hash=sha256:26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509 \
-    --hash=sha256:d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   scikit-image
+    #   -r requirements-runtime.in
 numpy==2.4.6 \
     --hash=sha256:001fbb8e08d942dd57599e781f2472269ee7f2755fae407b4f67b2f0b17da3f1 \
     --hash=sha256:0280e0356c0829a18d9de1cb7eee50ec22ca639878d7240307ca0943d73cd2c4 \
@@ -1413,21 +1094,14 @@ numpy==2.4.6 \
     --hash=sha256:f407cb6b8e9d6d8c626bc73c945db1706035af8fd632295547bf1c9e46d092d6 \
     --hash=sha256:f74a575920ab21fe304421a3fc28793d82e299cae9eccb37084e9fc7f3617c20
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   babeldoc
-    #   imageio
+    #   -r requirements-runtime.in
     #   ml-dtypes
     #   onnx
     #   onnxruntime
-    #   opencv-python
     #   opencv-python-headless
-    #   rapidocr-onnxruntime
-    #   scikit-image
     #   scikit-learn
     #   scipy
     #   shapely
-    #   tifffile
 onnx==1.21.0 \
     --hash=sha256:10c3185a232089335581fabb98fba4e86d3e8246b8140f2e406082438100ebda \
     --hash=sha256:19d9971a3e52a12968ae6c70fd0f86c349536de0b0c33922ecdbe52d1972fe60 \
@@ -1458,8 +1132,7 @@ onnx==1.21.0 \
     --hash=sha256:f53b3c15a3b539c16b99655c43c365622046d68c49b680c48eba4da2a4fb6f27 \
     --hash=sha256:fc2635400fe39ff37ebc4e75342cc54450eadadf39c540ff132c319bf4960095
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
+    #   -r requirements-runtime.in
 onnxruntime==1.26.0 \
     --hash=sha256:01498e80ba8988428d08c2d51b1338f89e3de2a93e6ffe555f79c68f26a5c06b \
     --hash=sha256:05b028781b322ad74b57ce5b50aa5280bb1fe96ceec334628ade681e0b24c1ac \
@@ -1486,28 +1159,12 @@ onnxruntime==1.26.0 \
     --hash=sha256:ee1109ef4ef27cad90e823399e61e03b3c6c7bfe0fb820b4baf3678c15be8b3c \
     --hash=sha256:f5fc48a91a046a6a5c9b147f83fb41d65d24d24923373b222cdd248f0f4f4aac
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
-    #   rapidocr-onnxruntime
+    #   -r requirements-runtime.in
 openai==2.38.0 \
     --hash=sha256:798694c6cf74145541fda94325b6f8f72d8e1fd0262cc137c8d728177a6a4ce3 \
     --hash=sha256:ec6661c57b2dcc47414a767e6e3335c7ed3d19c9696999283a3c82e95c756a3c
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   babeldoc
-opencv-python==4.13.0.92 \
-    --hash=sha256:0bc2596e68f972ca452d80f444bc404e08807d021fbba40df26b61b18e01838a \
-    --hash=sha256:372fe164a3148ac1ca51e5f3ad0541a4a276452273f503441d718fab9c5e5f59 \
-    --hash=sha256:402033cddf9d294693094de5ef532339f14ce821da3ad7df7c9f6e8316da32cf \
-    --hash=sha256:423d934c9fafb91aad38edf26efb46da91ffbc05f3f59c4b0c72e699720706f5 \
-    --hash=sha256:5868a8c028a0b37561579bfb8ac1875babdc69546d236249fff296a8c010ccf9 \
-    --hash=sha256:620d602b8f7d8b8dab5f4b99c6eb353e78d3fb8b0f53db1bd258bb1aa001c1d5 \
-    --hash=sha256:bccaabf9eb7f897ca61880ce2869dcd9b25b72129c28478e7f2a5e8dee945616 \
-    --hash=sha256:caf60c071ec391ba51ed00a4a920f996d0b64e3e46068aac1f646b5de0326a19
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   rapidocr-onnxruntime
+    #   -r requirements-runtime.in
 opencv-python-headless==4.13.0.92 \
     --hash=sha256:0525a3d2c0b46c611e2130b5fdebc94cf404845d8fa64d2f3a3b679572a5bd22 \
     --hash=sha256:0bd48544f77c68b2941392fcdf9bcd2b9cdf00e98cb8c29b2455d194763cf99e \
@@ -1518,8 +1175,7 @@ opencv-python-headless==4.13.0.92 \
     --hash=sha256:a7cf08e5b191f4ebb530791acc0825a7986e0d0dee2a3c491184bd8599848a4b \
     --hash=sha256:eb60e36b237b1ebd40a912da5384b348df8ed534f6f644d8e0b4f103e272ba7d
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
+    #   -r requirements-runtime.in
 orjson==3.11.9 \
     --hash=sha256:011382e2a60fda9d46f1cdee31068cfc52ffe952b587d683ec0463002802a0f4 \
     --hash=sha256:03db380e3780fa0015ed776a90f20e8e20bb11dde13b216ce19e5718e3dfba62 \
@@ -1596,24 +1252,17 @@ orjson==3.11.9 \
     --hash=sha256:f5d89a2ed90731df3be64bab0aa44f78bff39fdc9d71c291f4a8023aa46425b7 \
     --hash=sha256:ffe02797b5e9f3a9d8292ddcd289b474ad13e81ad83cd1891a240811f1d2cb81
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
+    #   -r requirements-runtime.in
 packaging==26.2 \
     --hash=sha256:5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e \
     --hash=sha256:ff452ff5a3e828ce110190feff1178bb1f2ea2281fa2075aadb987c2fb221661
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   huggingface-hub
-    #   lazy-loader
     #   onnxruntime
-    #   scikit-image
 peewee==4.0.6 \
     --hash=sha256:5fa665913c410f0b5faef1469ed0aa9eceb9fef262665ebbb6f29408f826eeeb \
     --hash=sha256:ea2f78f24ff9e3660281dc5b0be8bc00d9a9514bdc40c98e416fcd042b66ac6a
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   babeldoc
+    #   -r requirements-runtime.in
 pillow==12.3.0 \
     --hash=sha256:00808c5e14ef63ac5161091d242999076604ff74b883423a11e5d7bbb38bf756 \
     --hash=sha256:04f01d28a6aaff387bf842a13be313df23ba0597a44f1a976c9feb3c6ff4711a \
@@ -1703,12 +1352,8 @@ pillow==12.3.0 \
     --hash=sha256:fe3cca2e4e8a592be0f269a1ca4835c25199d9f3ce815c8491048f785b0a0198 \
     --hash=sha256:ffd0c5368496f41b0944be820fcb7a838aa6e623d250b01acf2643939c3f99d7
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   imageio
-    #   rapidocr-onnxruntime
+    #   -r requirements-runtime.in
     #   reportlab
-    #   scikit-image
 protobuf==7.35.0 \
     --hash=sha256:4c4617b83ade0e279d1d2bfe04025a1adb87f9ed657de038620dc0ff959357f6 \
     --hash=sha256:4cbf5cc286130e06a6c9bbefac442431173906dfcc979712183d4adcc01b37ee \
@@ -1719,7 +1364,6 @@ protobuf==7.35.0 \
     --hash=sha256:f05bcadf9a2a6b8dda047007075135fb7d08c73d9177aabc067e1be46881a201 \
     --hash=sha256:fcbe42a4ac09d3ec9c987ddfcd956afd0b15f1ff613bd8371bde9405ffd5c8e5
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   onnx
     #   onnxruntime
 psutil==7.2.2 \
@@ -1745,9 +1389,7 @@ psutil==7.2.2 \
     --hash=sha256:eed63d3b4d62449571547b60578c5b2c4bcccc5387148db46e0c2313dad0ee00 \
     --hash=sha256:fd04ef36b4a6d599bbdb225dd1d3f51e00105f6d48a28f006da7f9822f2606d8
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   babeldoc
+    #   -r requirements-runtime.in
 pyclipper==1.4.0 \
     --hash=sha256:0a4d2736fb3c42e8eb1d38bf27a720d1015526c11e476bded55138a977c17d9d \
     --hash=sha256:0b74a9dd44b22a7fd35d65fb1ceeba57f3817f34a97a28c3255556362e491447 \
@@ -1786,21 +1428,17 @@ pyclipper==1.4.0 \
     --hash=sha256:f3672dbafbb458f1b96e1ee3e610d174acb5ace5bd2ed5d1252603bb797f2fc6 \
     --hash=sha256:fd24849d2b94ec749ceac7c34c9f01010d23b6e9d9216cf2238b8481160e703d
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   rapidocr-onnxruntime
-pycparser==3.0 \
+    #   -r requirements-runtime.in
+pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy' \
     --hash=sha256:600f49d217304a5902ac3c37e1281c9fe94e4d0489de643a9504c5cdfdfc6b29 \
     --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   cffi
 pydantic==2.13.5 \
     --hash=sha256:346a034f080da3755d8e9cb5e00e8b07de1d39e4f6e2c87d8ab7cafa0b269a73 \
     --hash=sha256:51a9c5f7b2f8e636f04c6cada605d9b6a3bf1348fdf945a3d8869b19bba0ee08
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   babeldoc
+    #   -r requirements-runtime.in
     #   openai
     #   pydantic-settings
 pydantic-core==2.46.5 \
@@ -1925,19 +1563,16 @@ pydantic-core==2.46.5 \
     --hash=sha256:fc8515076c11f3cfdf4fb142dcca0fe384b1230a3b5415458ac84f3e0903ec13 \
     --hash=sha256:ff218293c9c806138dca139765e3b067621be52bcd93cdc14c7711be7ddc90a9
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   pydantic
 pydantic-settings==2.14.1 \
     --hash=sha256:6e3c7edfd8277687cdc598f56e5cff0e9bfff0910a3749deaa8d4401c3a2b9de \
     --hash=sha256:e874d3bec7e787b0c9958277956ed9b4dd5de6a80e162188fdaff7c5e26fd5fa
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
+    #   -r requirements-runtime.in
 pygments==2.20.0 \
     --hash=sha256:6757cd03768053ff99f3039c1a36d6c0aa0b263438fcab17520b30a303a82b5f \
     --hash=sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   rich
 pymupdf==1.25.2 \
     --hash=sha256:1b4ca6f5780d319a08dff885a5a0e3585c5d7af04dcfa063c535b88371fd91c1 \
@@ -1949,20 +1584,16 @@ pymupdf==1.25.2 \
     --hash=sha256:e8b8a874497cd0deee89a6a4fb76a3a08173c8d39e88fc7cf715764ec5a243e9 \
     --hash=sha256:f61e5cdb25b86eb28d34aa3557b49ecf9e361d5f5cd3b1660406f8f0bf813af7
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   babeldoc
+    #   -r requirements-runtime.in
 pypdf==6.13.2 \
     --hash=sha256:5a96a17dbdfbf9c2ab24c0a13fa0aba182be22ba6f283098712c16fc242f509f \
     --hash=sha256:6eeb9e57693f29d41bd01255d02660cbbb41fd7fc818a982677389a35e4f2083
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
+    #   -r requirements-runtime.in
 python-dotenv==1.2.2 \
     --hash=sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a \
     --hash=sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   pydantic-settings
 pyyaml==6.0.3 \
     --hash=sha256:00c4bdeba853cc34e7dd471f16b4114f4162dc03e6b7afcc2128711f0eca823c \
@@ -2039,16 +1670,12 @@ pyyaml==6.0.3 \
     --hash=sha256:fa160448684b4e94d80416c0fa4aac48967a969efe22931448d853ada8baf926 \
     --hash=sha256:fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   huggingface-hub
-    #   rapidocr-onnxruntime
+    #   -r requirements-runtime.in
 pyzstd==0.19.1 \
     --hash=sha256:267e2eb0de0291dfcb7ccfebc4ffe75b2f9d84e7007ac38844f6ccafc6dce081 \
     --hash=sha256:36723d3c915b3981de9198d0a2c82b2f5fe3eaa36e4d8d586937830a8afc7d72
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
+    #   -r requirements-runtime.in
 rapidfuzz==3.14.5 \
     --hash=sha256:0084b687b02b4e569b46d8d6d4ad25659528e6081cd6d067ca453a69035f07e4 \
     --hash=sha256:01550fe5f60fd176aa66b7611289d46dc4aa4b1b904874c7b6d1d54e581c5ec1 \
@@ -2134,19 +1761,11 @@ rapidfuzz==3.14.5 \
     --hash=sha256:fbf1b8bb2695415b347f3727da1addca2acb82c9b97ac86bebf8b1bead1eb12d \
     --hash=sha256:feedf219672eef83ea6be6f3bb093bba396a8560fc75be85ba225f082903df0a
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   levenshtein
-rapidocr-onnxruntime==1.4.4 \
-    --hash=sha256:971d7d5f223a7a808662229df1ef69893809d8457d834e6373d3854bc1782cbf
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   babeldoc
 referencing==0.37.0 \
     --hash=sha256:381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231 \
     --hash=sha256:44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   jsonschema
     #   jsonschema-specifications
 regex==2026.5.9 \
@@ -2265,30 +1884,24 @@ regex==2026.5.9 \
     --hash=sha256:fd190e88a895a8901325fad284a3f74ea52b1da8525b76cc811fa9b1edf0ce2b \
     --hash=sha256:ff8d372ac2acdc048d1c19916f27ee61bc5722728458ba6ca5052f2c72d51763
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
+    #   -r requirements-runtime.in
     #   tiktoken
 reportlab==4.5.1 \
     --hash=sha256:06fce8cb56c83307cfa4909cdf4e6a2ddbb44e5d6ef4d2edca896d7e9769f091 \
     --hash=sha256:9fdf68f4de9171ec66acb4a5feed8f8ca2af43479e707a6fbb0daa75d88e5494
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
+    #   -r requirements-runtime.in
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0 \
     --hash=sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
+    #   -r requirements-runtime.in
     #   tiktoken
-    #   xsdata
 rich==15.0.0 \
     --hash=sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb \
     --hash=sha256:edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   babeldoc
-    #   typer
+    #   -r requirements-runtime.in
 rpds-py==2026.6.3 \
     --hash=sha256:0be972be84cfcaf46c8c6edf690ca0f154ac17babf1f6a955a51579b34ad2dc5 \
     --hash=sha256:127565fead0a10943b282957bd5447804ff3160ad79f2ad2635e6d249e380680 \
@@ -2407,7 +2020,6 @@ rpds-py==2026.6.3 \
     --hash=sha256:f90938e92afda60266da758ee7d363447f7f0138c9559f9e1811629580582d90 \
     --hash=sha256:faa679d19a6696fd54259ad321251ad77a13e70e03dd834daa762a44fb6196ef
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   jsonschema
     #   referencing
 rtree==1.4.1 \
@@ -2421,83 +2033,7 @@ rtree==1.4.1 \
     --hash=sha256:efe125f416fd27150197ab8521158662943a40f87acab8028a1aac4ad667a489 \
     --hash=sha256:f155bc8d6bac9dcd383481dee8c130947a4866db1d16cb6dff442329a038a0dc
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
-ruff==0.15.14 \
-    --hash=sha256:049b5326e53ed80978f2fc041a280603f69dd6b0c95464342a2bb4572d9d9e2f \
-    --hash=sha256:48d5909d7d06276ce7dde6d32bfa4b0d4cb2651145cd8ee4b440722cbc77832f \
-    --hash=sha256:48e866b165be4a9bdbf310f7d3c9a07edef2fe8cd63ffeb4e00bb590506ebf9f \
-    --hash=sha256:49072d36abdbe97a8dd7f480afe9c675699c0c495d4c84076e2c1203c4550581 \
-    --hash=sha256:6d0c1ad2a0ab718d39b6d8fd2217981ce4d625cd96a720095f798fb47d8b13e6 \
-    --hash=sha256:715c543cf450c4888251f91c52f1942a800541d9bddd7ac060aa4e6b77ae7cba \
-    --hash=sha256:72ebab6013ec887d439d8b7593737a0a4ffb06d45d209d4e4bf2e92813082d3f \
-    --hash=sha256:802342981e056db3851a7836e5b070f8f15f67d4a685ae2a6160939d364b2902 \
-    --hash=sha256:8a24a4f7605d7003a6674d4387651effd939dead3fddd0f36561eb77a9a2e542 \
-    --hash=sha256:8dd2db9416e487c8d4b01fa7056bb02c4d05969d4f8d17a08c229c2f4ff3c108 \
-    --hash=sha256:958522aee105068640c2c2ceae08f413ae44d922f52a1374ac13d6a96032fc93 \
-    --hash=sha256:9a6bbc0333f1ab053423bcbf6226477d266ca7cec7738c4c8e3f55647803f3c4 \
-    --hash=sha256:bb01d645694e3ec0102105d07ef2d53703970407d59c04e59d3ba0b7a1d53553 \
-    --hash=sha256:be4ff55af755bd71a00ab3dc6bd7ffc467bd76e0df6881e286c2e3d23e8fb43b \
-    --hash=sha256:ca8cbfa94c4f90984a67561978602746d4cd27103568f745fa90eee3f0d4107d \
-    --hash=sha256:d4ed42e6696c8dfa5f06728e6441993901f548eb92d73bc472cb5a38d1395fbf \
-    --hash=sha256:f3707da619a143a2e8830e2abab8224478d69ace2d28cb6c20543ae97c36bf61 \
-    --hash=sha256:ff47b90a9ef6a40c9e2f3b479c1fb78531adf055b94c1eba0a7ba04b31951826
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   xsdata
-scikit-image==0.26.0 \
-    --hash=sha256:0608aa4a9ec39e0843de10d60edb2785a30c1c47819b67866dd223ebd149acaf \
-    --hash=sha256:0660b83968c15293fd9135e8d860053ee19500d52bf55ca4fb09de595a1af650 \
-    --hash=sha256:09bad6a5d5949c7896c8347424c4cca899f1d11668030e5548813ab9c2865dcb \
-    --hash=sha256:0baa0108d2d027f34d748e84e592b78acc23e965a5de0e4bb03cf371de5c0581 \
-    --hash=sha256:163e9afb5b879562b9aeda0dd45208a35316f26cc7a3aed54fd601604e5cf46f \
-    --hash=sha256:20ef4a155e2e78b8ab973998e04d8a361d49d719e65412405f4dadd9155a61d9 \
-    --hash=sha256:21a818ee6ca2f2131b9e04d8eb7637b5c18773ebe7b399ad23dcc5afaa226d2d \
-    --hash=sha256:27d58bc8b2acd351f972c6508c1b557cfed80299826080a4d803dd29c51b707e \
-    --hash=sha256:2c1e7bd342f43e7a97e571b3f03ba4c1293ea1a35c3f13f41efdc8a81c1dc8f2 \
-    --hash=sha256:3268f13310e6857508bd87202620df996199a016a1d281b309441d227c822394 \
-    --hash=sha256:3409e89d66eff5734cd2b672d1c48d2759360057e714e1d92a11df82c87cba37 \
-    --hash=sha256:3f5bf622d7c0435884e1e141ebbe4b2804e16b2dd23ae4c6183e2ea99233be70 \
-    --hash=sha256:4c717490cec9e276afb0438dd165b7c3072d6c416709cc0f9f5a4c1070d23a44 \
-    --hash=sha256:4d57e39ef67a95d26860c8caf9b14b8fb130f83b34c6656a77f191fa6d1d04d8 \
-    --hash=sha256:52c496f75a7e45844d951557f13c08c81487c6a1da2e3c9c8a39fcde958e02cc \
-    --hash=sha256:6381edf972b32e4f54085449afde64365a57316637496c1325a736987083e2ab \
-    --hash=sha256:63af3d3a26125f796f01052052f86806da5b5e54c6abef152edb752683075a9c \
-    --hash=sha256:6caec76e16c970c528d15d1c757363334d5cb3069f9cea93d2bead31820511f3 \
-    --hash=sha256:724f79fd9b6cb6f4a37864fe09f81f9f5d5b9646b6868109e1b100d1a7019e59 \
-    --hash=sha256:74aa5518ccea28121f57a95374581d3b979839adc25bb03f289b1bc9b99c58af \
-    --hash=sha256:7af7aa331c6846bd03fa28b164c18d0c3fd419dbb888fb05e958ac4257a78fdd \
-    --hash=sha256:7df650e79031634ac90b11e64a9eedaf5a5e06fcd09bcd03a34be01745744466 \
-    --hash=sha256:915bb3ba66455cf8adac00dc8fdf18a4cd29656aec7ddd38cb4dda90289a6f21 \
-    --hash=sha256:92242351bccf391fc5df2d1529d15470019496d2498d615beb68da85fe7fdf37 \
-    --hash=sha256:9490360c8d3f9a7e85c8de87daf7c0c66507960cf4947bb9610d1751928721c7 \
-    --hash=sha256:98329aab3bc87db352b9887f64ce8cdb8e75f7c2daa19927f2e121b797b678d5 \
-    --hash=sha256:9ea6207d9e9d21c3f464efe733121c0504e494dbdc7728649ff3e23c3c5a4953 \
-    --hash=sha256:9eefb4adad066da408a7601c4c24b07af3b472d90e08c3e7483d4e9e829d8c49 \
-    --hash=sha256:a07200fe09b9d99fcdab959859fe0f7db8df6333d6204344425d476850ce3604 \
-    --hash=sha256:a2d211bc355f59725efdcae699b93b30348a19416cc9e017f7b2fb599faf7219 \
-    --hash=sha256:a2e852eccf41d2d322b8e60144e124802873a92b8d43a6f96331aa42888491c7 \
-    --hash=sha256:abed017474593cd3056ae0fe948d07d0747b27a085e92df5474f4955dd65aec0 \
-    --hash=sha256:ac529eb9dbd5954f9aaa2e3fe9a3fd9661bfe24e134c688587d811a0233127f1 \
-    --hash=sha256:aeb14db1ed09ad4bee4ceb9e635547a8d5f3549be67fc6c768c7f923e027e6cd \
-    --hash=sha256:b1ede33a0fb3731457eaf53af6361e73dd510f449dac437ab54573b26788baf0 \
-    --hash=sha256:b36ab5e778bf50af5ff386c3ac508027dc3aaeccf2161bdf96bde6848f44d21b \
-    --hash=sha256:b702c3bb115e1dcf4abf5297429b5c90f2189655888cbed14921f3d26f81d3a4 \
-    --hash=sha256:b8d14d3181c21c11170477a42542c1addc7072a90b986675a71266ad17abc37f \
-    --hash=sha256:c6624a76c6085218248154cc7e1500e6b488edcd9499004dd0d35040607d7505 \
-    --hash=sha256:c9087cf7d0e7f33ab5c46d2068d86d785e70b05400a891f73a13400f1e1faf6a \
-    --hash=sha256:cde0bbd57e6795eba83cb10f71a677f7239271121dc950bc060482834a668ad1 \
-    --hash=sha256:ce00600cd70d4562ed59f80523e18cdcc1fae0e10676498a01f73c255774aefd \
-    --hash=sha256:cefd85033e66d4ea35b525bb0937d7f42d4cdcfed2d1888e1570d5ce450d3932 \
-    --hash=sha256:d454b93a6fa770ac5ae2d33570f8e7a321bb80d29511ce4b6b78058ebe176e8c \
-    --hash=sha256:d5c244656de905e195a904e36dbc18585e06ecf67d90f0482cbde63d7f9ad59d \
-    --hash=sha256:ede4d6d255cc5da9faeb2f9ba7fedbc990abbc652db429f40a16b22e770bb578 \
-    --hash=sha256:f5f970ab04efad85c24714321fcc91613fcb64ef2a892a13167df2f3e59199fa \
-    --hash=sha256:f775f0e420faac9c2aa6757135f4eb468fb7b70e0b67fa77a5e79be3c30ee331 \
-    --hash=sha256:fac96a1f9b06cd771cbbb3cd96c5332f36d4efd839b1d8b053f79e5887acde62
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
+    #   -r requirements-runtime.in
 scikit-learn==1.8.0 \
     --hash=sha256:00d6f1d66fbcf4eba6e356e1420d33cc06c70a45bb1363cd6f6a8e4ebbbdece2 \
     --hash=sha256:0d6ae97234d5d7079dc0040990a6f7aeb97cb7fa7e8945f1999a429b23569e0a \
@@ -2537,8 +2073,7 @@ scikit-learn==1.8.0 \
     --hash=sha256:fb65db5d7531bccf3a4f6bec3462223bea71384e2cda41da0f10b7c292b9e7c4 \
     --hash=sha256:fe1c011a640a9f0791146011dfd3c7d9669785f9fed2b2a5f9e207536cf5c2fd
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
+    #   -r requirements-runtime.in
 scipy==1.17.1 \
     --hash=sha256:010f4333c96c9bb1a4516269e33cb5917b08ef2166d5556ca2fd9f082a9e6ea0 \
     --hash=sha256:02ae3b274fde71c5e92ac4d54bc06c42d80e399fec704383dcd99b301df37458 \
@@ -2602,9 +2137,6 @@ scipy==1.17.1 \
     --hash=sha256:f8885db0bc2bffa59d5c1b72fad7a6a92d3e80e7257f967dd81abb553a90d293 \
     --hash=sha256:fcb310ddb270a06114bb64bbe53c94926b943f5b7f0842194d585c65eb4edd76
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
-    #   scikit-image
     #   scikit-learn
 shapely==2.1.2 \
     --hash=sha256:0036ac886e0923417932c2e6369b6c52e38e0ff5d9120b90eef5cd9a5fc5cae9 \
@@ -2665,44 +2197,26 @@ shapely==2.1.2 \
     --hash=sha256:fe7b77dc63d707c09726b7908f575fc04ff1d1ad0f3fb92aec212396bc6cfe5e \
     --hash=sha256:fe9627c39c59e553c90f5bc3128252cb85dc3b3be8189710666d2f8bc3a5503e
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   rapidocr-onnxruntime
-shellingham==1.5.4 \
-    --hash=sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686 \
-    --hash=sha256:8dbca0739d487e5bd35ab3ca4b36e11c4078f3a234bfce294b0a0291363404de
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   typer
-six==1.17.0 \
-    --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274 \
-    --hash=sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   rapidocr-onnxruntime
+    #   -r requirements-runtime.in
 sniffio==1.3.1 \
     --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
     --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   openai
 socksio==1.0.0 \
     --hash=sha256:95dc1f15f9b34e8d7b16f06d74b8ccf48f609af32ab33c608d08761c5dcbb1f3 \
     --hash=sha256:f88beb3da5b5c38b9890469de67d0cb0f9d494b78b106ca1845f96c10b91c4ac
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   httpx
 tenacity==9.1.4 \
     --hash=sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55 \
     --hash=sha256:adb31d4c263f2bd041081ab33b498309a57c77f9acf2db65aadf0898179cf93a
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   babeldoc
+    #   -r requirements-runtime.in
 threadpoolctl==3.6.0 \
     --hash=sha256:43a0b8fd5a2928500110039e43a5eed8480b918967083ea48dc3ab9f13c4a7fb \
     --hash=sha256:8ab8b4aa3491d812b623328249fab5302a68d2d71745c8a4c719a2fcaba9f44e
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   scikit-learn
 tibs==0.5.7 \
     --hash=sha256:01ea5258bdf942d21560dc07d532082cd04f07cfef65fedd58ae84f7d0d2562a \
@@ -2737,14 +2251,7 @@ tibs==0.5.7 \
     --hash=sha256:f5eea45851c960628a2bd29847765d55e19a687c5374456ad2c8cf6410eb1efa \
     --hash=sha256:f70bd250769381c73110d6f24feaf8b6fcd44f680b3cb28a20ea06db3d04fb6f
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   bitstring
-tifffile==2026.5.15 \
-    --hash=sha256:6715515a53cabc0cefc5c9f13a0ae2c250e63e2ca784ce02d0b6c333810c2a17 \
-    --hash=sha256:ee4f3e07ee0d8ff4745a8c735ac2b72caa3173c7d6059b00fdc3ff492a0b635b
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   scikit-image
 tiktoken==0.13.0 \
     --hash=sha256:059c8ecf554eb5b41e6e054ba467b871b03277d267dee7244380aca4359747d4 \
     --hash=sha256:115c4f26ffa11caac8b54eea35c2ad38c612c20a48d35dd15d70a02ac6f51f58 \
@@ -2804,43 +2311,23 @@ tiktoken==0.13.0 \
     --hash=sha256:ed5a30027cb4d8c7ca8b273d4766f3db3cf58fad9e9f3b1a68a351ffb54873d5 \
     --hash=sha256:fc1c44cd37b43fc46bae593129164f4f281e82ea116b57a85aa81bda57eafc94
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
-toml==0.10.2 \
-    --hash=sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b \
-    --hash=sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f
+    #   -r requirements-runtime.in
+tomlkit==0.12.0 \
+    --hash=sha256:01f0477981119c7d8ee0f67ebe0297a7c95b14cf9f4b102b45486deb77018716 \
+    --hash=sha256:926f1f37a1587c7a4f6c7484dae538f1345d96d793d9adab5d3675957b1d0766
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
-toposort==1.10 \
-    --hash=sha256:bfbb479c53d0a696ea7402601f4e693c97b0367837c8898bc6471adfca37a6bd \
-    --hash=sha256:cbdbc0d0bee4d2695ab2ceec97fe0679e9c10eab4b2a87a9372b929e70563a87
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   xsdata
+    #   -r requirements-runtime.in
 tqdm==4.67.3 \
     --hash=sha256:7d825f03f89244ef73f1d4ce193cb1774a8179fd96f31d7e1dcde62092b960bb \
     --hash=sha256:ee1e4c0e59148062281c49d80b25b67771a127c85fc9676d3be5f243206826bf
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   -r skills/double6-pdf-translation/requirements-runtime.in
-    #   babeldoc
-    #   huggingface-hub
+    #   -r requirements-runtime.in
     #   openai
-    #   rapidocr-onnxruntime
-typer==0.25.1 \
-    --hash=sha256:75caa44ed46a03fb2dab8808753ffacdbfea88495e74c85a28c5eefcf5f39c89 \
-    --hash=sha256:9616eb8853a09ffeabab1698952f33c6f29ffdbceb4eaeecf571880e8d7664cc
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   huggingface-hub
 typing-extensions==4.15.0 \
     --hash=sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466 \
     --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   anyio
-    #   huggingface-hub
     #   onnx
     #   openai
     #   pydantic
@@ -2853,35 +2340,15 @@ typing-inspection==0.4.2 \
     --hash=sha256:4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7 \
     --hash=sha256:ba561c48a67c5958007083d386c3295464928b01faa735ab8547c5692e87f464
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   pydantic
     #   pydantic-settings
-uharfbuzz==0.54.1 \
-    --hash=sha256:1059de9a7764611c214bff4fd0ed81526dbde024b11dc697dfca0bc590ebaf15 \
-    --hash=sha256:55342a09f8a0bfbf570e4765cd3b02b1a999822127f891d944cbb0c26dc2090a \
-    --hash=sha256:5863c255a380e860cbc2a35d6ac8a26b518de42210f6186010e6277afdf4b5ce \
-    --hash=sha256:8c81285dabaa2150a34f18062cdb13eb443a8db0a1e59b261be8644fd1732301 \
-    --hash=sha256:918ebca8fecc89d0e9f9df71e9e5ef5cede5f2bc571a9e82a3e932f4189ac432 \
-    --hash=sha256:94dc73f45d8943ddeaae3336cd40c0f398397ca915db1fc96dd5566107dbb6f2 \
-    --hash=sha256:9c44559b52899dbbf3db3d49ac0372db78255ae5b2cbc2b1d2eb50fdb197f28c \
-    --hash=sha256:9d859baa4df2bba238458c47d5dd58a66b16d135777457d05d4f447e15670d70 \
-    --hash=sha256:bca97e4a5b288297473128869cbd1bb0f6e4619caa8a248f66986da3e21c1773 \
-    --hash=sha256:d3fee855690c6059fb9b5fc64a3ea0e367b5f71095b2e62e18ce144e9e782b47 \
-    --hash=sha256:ddc0ef83d51985c63f50f11781ca2f36c0bc8b9f9d6bd6bb00f4860ae0814700 \
-    --hash=sha256:ded760c284c686f1f17f5c4bf44527857ef488b7f0aebceae4c1ef1903ddddb3 \
-    --hash=sha256:fe6b06bfc6f223cbee6a42018ede4161e0c1020f2b8e22b245530b77bcbd9cd7
-    # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
 urllib3==2.7.0 \
     --hash=sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c \
     --hash=sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
     #   requests
 xsdata==26.2 \
     --hash=sha256:85a591a4405d903416afbd4a917e8dda8ea44641a3e66d72134bc2a31b3c16b0 \
     --hash=sha256:c631af71aaa75734f8ce92a08fcf8389d905dee2aab0b5032c9032e9071009a6
     # via
-    #   -c reports/pdf-translation-110-prepublish/source-constraints.txt
-    #   babeldoc
+    #   -r requirements-runtime.in

@@ -127,5 +127,5 @@
     "execution_entry": "scripts/paper_translation_workflow.py",
     "selection": "read this config, classify source/task, invoke existing action directly"
   },
-  "candidate_version": "2.0.0"
+  "candidate_version": "2.0.1"
 }

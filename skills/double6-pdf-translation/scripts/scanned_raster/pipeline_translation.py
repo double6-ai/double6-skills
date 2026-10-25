@@ -116,8 +116,8 @@ def _normalize_inline_math_for_text_layer(text: str) -> str:
     normalized = re.sub(r"\{\s*([^{}]{1,8})\s*\}", r"\1", normalized)
     return re.sub(r"[ \t]+", " ", normalized).strip()
 
-def _normalize_structured_field_translation(source: str, translation: str) -> str:
-    """Keep identifiers and named parties intact in common formal-document fields."""
+def _fixed_structured_field_translation(source: str) -> str | None:
+    """栏位和固定抬头能确定译法时直接给出；对不上返回 None，留给模型。"""
     normalized_source = " ".join(source.split())
     normalized_source = re.sub(r"^[\"'‘’“”|]+\s*", "", normalized_source)
     normalized_source = re.sub(r"^[iI]\s+(?=Examiner\s*:)", "", normalized_source)
@@ -153,7 +153,20 @@ def _normalize_structured_field_translation(source: str, translation: str) -> st
         return f"审查员：{examiner_name}　技术组：{art_unit}"
     if normalized_source.casefold() == "sir:":
         return "先生："
-    return translation
+    return None
+
+
+def _fixed_scan_translation(text: str) -> str | None:
+    """整段就是固定短句或栏位时返回确定译文，否则返回 None。"""
+    compact = COMPACT_CONNECTIVE_TRANSLATIONS.get(" ".join(text.split()).casefold())
+    if compact:
+        return compact
+    return _fixed_structured_field_translation(text)
+
+
+def _normalize_structured_field_translation(source: str, translation: str) -> str:
+    """Keep identifiers and named parties intact in common formal-document fields."""
+    return _fixed_structured_field_translation(source) or translation
 
 def _clip_rect_against_protected(rect: Any, protected_rects: list[Any]) -> tuple[Any, list[list[float]]]:
     """Keep the largest axis-aligned part of a text region outside protected content."""
@@ -199,10 +212,15 @@ def _translate_regions(regions: list[dict[str, Any]], args: Any, translator: Tra
         scientific_name = region.get("structured_name_column") == "scientific"
         if text and role in SEARCH_LAYER_PROTECTED_ROLES:
             region["search_layer_required"] = True
+            fixed_search = _fixed_scan_translation(text)
             try:
-                search_translation = _normalize_inline_math_for_text_layer(
-                    translator(text, args).strip()
-                )
+                if fixed_search is not None:
+                    search_translation = _normalize_inline_math_for_text_layer(fixed_search)
+                    region["search_layer_source"] = "fixed_phrase"
+                else:
+                    search_translation = _normalize_inline_math_for_text_layer(
+                        translator(text, args).strip()
+                    )
             except Exception as exc:  # noqa: BLE001
                 search_translation = ""
                 region.update(search_layer_status="failed", search_layer_error=str(exc))
@@ -240,25 +258,31 @@ def _translate_regions(regions: list[dict[str, Any]], args: Any, translator: Tra
 
     for grouped_regions in pending_groups.values():
         text = _join_ocr_group_text(grouped_regions)
-        try:
-            translation = translator(text, args).strip()
-        except Exception as exc:  # noqa: BLE001
+        fixed = _fixed_scan_translation(text)
+        if fixed is not None:
+            raw_translation = fixed
+            translation = _normalize_inline_math_for_text_layer(fixed)
             for region in grouped_regions:
-                region.update(status="failed", skip_reason=f"translation_failed:{exc}", in_destroke_mask=False)
-                failures.append(str(region.get("region_id")))
-            continue
-        if not translation:
-            for region in grouped_regions:
-                region.update(status="failed", skip_reason="translation_empty", in_destroke_mask=False)
-                failures.append(str(region.get("region_id")))
-            continue
-        compact = COMPACT_CONNECTIVE_TRANSLATIONS.get(" ".join(text.split()).casefold())
-        raw_translation = translation
-        translation = compact or _normalize_inline_math_for_text_layer(translation)
-        translation = _normalize_structured_field_translation(text, translation)
-        # Structured-field rewrites and future translator adapters must never
-        # reintroduce TeX markup into the plain searchable PDF text layer.
-        translation = _normalize_inline_math_for_text_layer(translation)
+                region["translation_source"] = "fixed_phrase"
+        else:
+            try:
+                translation = translator(text, args).strip()
+            except Exception as exc:  # noqa: BLE001
+                for region in grouped_regions:
+                    region.update(status="failed", skip_reason=f"translation_failed:{exc}", in_destroke_mask=False)
+                    failures.append(str(region.get("region_id")))
+                continue
+            if not translation:
+                for region in grouped_regions:
+                    region.update(status="failed", skip_reason="translation_empty", in_destroke_mask=False)
+                    failures.append(str(region.get("region_id")))
+                continue
+            raw_translation = translation
+            translation = _normalize_inline_math_for_text_layer(translation)
+            translation = _normalize_structured_field_translation(text, translation)
+            # Structured-field rewrites and future translator adapters must never
+            # reintroduce TeX markup into the plain searchable PDF text layer.
+            translation = _normalize_inline_math_for_text_layer(translation)
         translation = resolve_translation_alternatives(text, translation)
         integrity_findings = scientific_integrity_findings(text, translation)
         if integrity_findings:

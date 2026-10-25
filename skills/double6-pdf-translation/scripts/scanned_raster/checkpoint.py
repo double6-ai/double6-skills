@@ -26,11 +26,55 @@ def implementation_digest(scripts: Path) -> str:
     return digest(encode(files))
 
 
+def derived_model_fingerprint(args) -> str:
+    """没有单独的模型证据时，用模型、地址、提示词和采样参数确定一份译文记录。"""
+    payload = {
+        'model': getattr(args, 'model', None),
+        'base_url': getattr(args, 'base_url', None),
+        'system_prompt': getattr(args, 'custom_system_prompt', None) or getattr(args, 'system_prompt', None),
+        'target_language': getattr(args, 'target_language', None),
+        'temperature': getattr(args, 'temperature', None),
+        'reasoning_effort': getattr(args, 'reasoning_effort', None) or getattr(args, 'openai_reasoning_effort', None),
+    }
+    return digest(encode(payload))
+
+
+def derived_parser_fingerprint(args) -> str:
+    """没有单独的识别器证据时，用解析器和版面档位确定一份识别记录。"""
+    from .constants import MINERU_VERSION
+    payload = {
+        'mineru_version': MINERU_VERSION,
+        'scanned_parser': getattr(args, 'scanned_parser', None),
+        'mineru_tier': getattr(args, 'mineru_tier', None),
+        'mineru_runtime': getattr(args, 'mineru_runtime', None),
+    }
+    return digest(encode(payload))
+
+
+def enable_default_scanned_reuse(args) -> None:
+    """同一份扫描件再跑时复用识别结果和模型原文。显式目录或指纹优先；要求忽略缓存时不记。"""
+    if bool(getattr(args, 'ignore_translation_cache', False)):
+        return
+    from runtime_paths import workspace_root
+    root = workspace_root() / '.cache' / 'paper-translation' / 'scanned-reuse'
+    if not getattr(args, 'scanned_checkpoint_dir', None):
+        args.scanned_checkpoint_dir = str(root / 'responses')
+    if not getattr(args, 'scanned_parse_checkpoint_dir', None):
+        args.scanned_parse_checkpoint_dir = str(root / 'parse')
+    if not re.fullmatch(r'[a-f0-9]{64}', str(getattr(args, 'scanned_model_fingerprint', '') or '')):
+        args.scanned_model_fingerprint = derived_model_fingerprint(args)
+    if not re.fullmatch(r'[a-f0-9]{64}', str(getattr(args, 'scanned_parser_fingerprint', '') or '')):
+        args.scanned_parser_fingerprint = derived_parser_fingerprint(args)
+
+
 def execution_identity(input_sha256: str, args, implementation_sha256: str) -> dict:
     model_fingerprint = str(getattr(args, 'scanned_model_fingerprint', '') or '')
     if not re.fullmatch('[a-f0-9]{64}', model_fingerprint):
         raise CheckpointError('checkpoint requires a SHA-256 fingerprint of the frozen model/provider revision')
-    excluded = {'output_dir', 'scanned_checkpoint_dir', 'ignore_translation_cache', 'scanned_max_pages', 'pages'}
+    excluded = {
+        'output_dir', 'scanned_checkpoint_dir', 'scanned_parse_checkpoint_dir',
+        'ignore_translation_cache', 'scanned_max_pages', 'pages', 'api_key',
+    }
     config = {k:v for k,v in vars(args).items() if k not in excluded}
     # 不把配置原值落盘；本地术语/上下文文件变化也必须使缓存失效。
     inputs = {}
