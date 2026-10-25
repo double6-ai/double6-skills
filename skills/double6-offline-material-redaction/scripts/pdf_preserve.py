@@ -505,13 +505,185 @@ def _text_hits(blob, terms):
 
 
 def _decode_pdf_bytes(raw):
-    if raw.startswith(b'\xfe\xff'):
-        return raw[2:].decode('utf-16-be')
-    if raw.startswith(b'\xff\xfe'):
-        return raw[2:].decode('utf-16-le')
-    if any(byte >= 128 for byte in raw):
+    """PDF 字符串。UTF-16 带 BOM、或无 BOM 的 UTF-16BE/LE（中文字体画字母和数字时常见 00 31 这种）都要还原。
+
+    空字节对不上这两种，或夹着无法确认的高位字节，就视为读不全，不能当成普通 ASCII。
+    """
+    if raw.startswith((b'\xfe\xff', b'\xff\xfe')):
+        body = raw[2:]
+        if len(body) % 2:
+            raise ValueError('外观文字编码无法确认')
+        coding = 'utf-16-be' if raw.startswith(b'\xfe\xff') else 'utf-16-le'
+        return body.decode(coding)
+    if len(raw) >= 2 and len(raw) % 2 == 0 and b'\x00' in raw:
+        # 奇数位全是字、偶数位全是 0，才是无 BOM 的 UTF-16BE。反过来是 UTF-16LE。
+        # 出现 00 00 这类对不上的空字节（例如 UTF-32）不猜测，交给调用方整份拒绝。
+        high_zero = all(raw[i] == 0 for i in range(0, len(raw), 2))
+        low_zero = all(raw[i] == 0 for i in range(1, len(raw), 2))
+        high_text = all(raw[i] != 0 for i in range(0, len(raw), 2))
+        low_text = all(raw[i] != 0 for i in range(1, len(raw), 2))
+        if high_zero and low_text:
+            return raw.decode('utf-16-be')
+        if low_zero and high_text:
+            return raw.decode('utf-16-le')
+        raise ValueError('外观文字编码无法确认')
+    if b'\x00' in raw or any(byte >= 128 for byte in raw):
         raise ValueError('外观文字编码无法确认')
     return raw.decode('ascii')
+
+
+def _skip_pdf(data, index):
+    while index < len(data):
+        if data[index] in b' \t\r\n\x00':
+            index += 1
+            continue
+        if data[index] != ord('%'):
+            break
+        while index < len(data) and data[index] not in b'\r\n':
+            index += 1
+    return index
+
+
+def _pdf_name_text(raw):
+    out = bytearray()
+    index = 0
+    while index < len(raw):
+        if raw[index] == ord('#'):
+            if index + 2 >= len(raw):
+                raise ValueError('外观文字编码无法确认')
+            out.append(int(raw[index + 1:index + 3], 16))
+            index += 3
+            continue
+        out.append(raw[index])
+        index += 1
+    return _decode_pdf_bytes(bytes(out))
+
+
+def _parse_pdf_name(data, index):
+    index += 1
+    start = index
+    while index < len(data) and data[index] not in b' \t\r\n\x00()<>[]{}/%':
+        index += 1
+    return data[start:index], index
+
+
+def _keyword_at(data, index, word):
+    if not data.startswith(word, index):
+        return None
+    end = index + len(word)
+    if end < len(data) and data[end] not in b' \t\r\n\x00><][(){}/%':
+        return None
+    return end
+
+
+# 这些引用指向另一页或另一条批注。页面内容流和对方批注不在这里展开；对方批注会单独判定。
+_SKIP_FOLLOW_KEYS = {'P', 'Popup', 'Parent', 'IRT'}
+
+
+def _parse_pdf_value(data, index, doc, seen, depth, in_ap, follow_key):
+    index = _skip_pdf(data, index)
+    if index >= len(data):
+        return [], index, True
+    if depth > 8:
+        return [], index, True
+    if data.startswith(b'<<', index):
+        return _parse_pdf_dict(data, index, doc, seen, depth + 1, in_ap)
+    if data[index] == ord('['):
+        return _parse_pdf_array(data, index, doc, seen, depth + 1, in_ap)
+    if data[index] == ord('('):
+        text, index, ok = _parse_literal(data, index)
+        if not ok:
+            return [], index, True
+        return ([text] if text else []), index, False
+    if data[index] == ord('<'):
+        text, index, ok = _parse_hex_string(data, index)
+        if not ok:
+            return [], index, True
+        return ([text] if text else []), index, False
+    if data[index] == ord('/'):
+        raw, index = _parse_pdf_name(data, index)
+        try:
+            text = _pdf_name_text(raw)
+        except (UnicodeDecodeError, ValueError):
+            return [], index, True
+        return ([text] if text else []), index, False
+    if data[index] in b'+-.0123456789':
+        ref = re.match(br'(\d+)\s+(\d+)\s+R(?![A-Za-z0-9])', data[index:])
+        if ref and data[index] in b'0123456789':
+            xref = int(ref.group(1))
+            index += ref.end()
+            if in_ap or follow_key in _SKIP_FOLLOW_KEYS:
+                return [], index, False
+            texts, bad = _xref_carrier_text(doc, xref, seen, depth + 1)
+            return texts, index, bad
+        number = re.match(br'[+-]?(?:\d+\.\d+|\d+|\.\d+)', data[index:])
+        if not number:
+            return [], index, True
+        return [], index + number.end(), False
+    for word in (b'null', b'true', b'false'):
+        end = _keyword_at(data, index, word)
+        if end is not None:
+            return [], end, False
+    return [], index, True
+
+
+def _parse_pdf_array(data, index, doc, seen, depth, in_ap):
+    index += 1
+    texts = []
+    while True:
+        index = _skip_pdf(data, index)
+        if index >= len(data):
+            return [], index, True
+        if data[index] == ord(']'):
+            return texts, index + 1, False
+        found, index, bad = _parse_pdf_value(data, index, doc, seen, depth, in_ap, '')
+        if bad:
+            return [], index, True
+        texts.extend(found)
+
+
+def _parse_pdf_dict(data, index, doc, seen, depth, in_ap):
+    index += 2
+    texts = []
+    while True:
+        index = _skip_pdf(data, index)
+        if index >= len(data):
+            return [], index, True
+        if data.startswith(b'>>', index):
+            return texts, index + 2, False
+        if data[index] != ord('/'):
+            return [], index, True
+        raw_key, index = _parse_pdf_name(data, index)
+        try:
+            key = _pdf_name_text(raw_key)
+        except (UnicodeDecodeError, ValueError):
+            return [], index, True
+        found, index, bad = _parse_pdf_value(data, index, doc, seen, depth, in_ap or key == 'AP', key)
+        if bad:
+            return [], index, True
+        texts.extend(found)
+
+
+def _xref_carrier_text(doc, xref, seen, depth):
+    """批注字典里所有字符串和名称值。读不完就视为无法确认，避免只扫 Contents 时把明文留在 /NM 等键里。"""
+    if xref <= 0 or depth > 6 or xref in seen:
+        return [], True
+    try:
+        if doc.xref_is_stream(xref):
+            return [], True
+        raw = doc.xref_object(xref, compressed=True)
+        data = raw.encode('latin1')
+    except (UnicodeEncodeError, ValueError, RuntimeError):
+        return [], True
+    except Exception:
+        return [], True
+    if not data.strip():
+        return [], True
+    seen.add(xref)
+    texts, index, bad = _parse_pdf_value(data, 0, doc, seen, depth, False, '')
+    if bad or _skip_pdf(data, index) != len(data):
+        return [], True
+    return texts, False
 
 
 def _parse_literal(data, index):
@@ -854,7 +1026,10 @@ def annotation_text(doc, xref, annot):
     file_kind, _file_value = doc.xref_get_key(xref, 'FS')
     if file_kind != 'null':
         return '', True
-    parts = []
+    parts, bad = _xref_carrier_text(doc, xref, set(), 0)
+    if bad:
+        return '', True
+    parts = list(parts)
     for key in ('Contents', 'Subj', 'T'):
         text, bad = _dict_string(doc, xref, key)
         if bad:
@@ -1204,7 +1379,10 @@ def verify(data, plan, source):
                         raise engine.Rejected('PDF页面尺寸或旋转发生变化。')
                     pixel_boxes = selected.get(index + 1, [])
                     boxes = [_to_page_rect(b, original, sizes[index]) for b in pixel_boxes]
-                    if word_rows(original, boxes) != word_rows(page, boxes):
+                    # 框外正文的位置跟「已经按计划去掉命中批注」的基准比。
+                    # 页边外观里画出的字会随那条批注一起消失，不能当成正文被挪走。
+                    baseline = stripped[index] if stripped is not None else original
+                    if word_rows(baseline, boxes) != word_rows(page, boxes):
                         checks['outside_text_positions_preserved'] = False
                     for span in page.get_texttrace():
                         for char in span['chars']:
