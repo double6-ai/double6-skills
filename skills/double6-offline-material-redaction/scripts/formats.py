@@ -37,7 +37,7 @@ NOTICES = {
  'tsv':'保留行列和文字值，输出UTF-8 TSV。普通负数保持原样；等号、加号、at，或减号后面不是普通数字的文本会加单引号。保留项按完整单元格核对。',
  'excel':'仅重建可见工作表、可见行列中的值；移除隐藏表/行/列、公式、图表、图片、批注、链接、宏和原属性，工作表改名。公式仅采用文件缓存值，不重新计算；缺少缓存即停止。',
  'slides':'仅重建显示幻灯片的文字与表格，按阅读顺序重排；图片、图表、动画、备注、批注、隐藏页、母版和原属性不带入，不能保留原设计。',
- 'pdf':'默认原生删改PDF，保留框外文字和页面。原属性、附件、链接与批注清理；复杂隐藏层/表单会停止。只有明确选择图像化才重建扫描式PDF。无OCR，需逐页核对。',
+ 'pdf':'默认只删除框选的正文，高亮、下划线、便签等批注会留下来。批注里若能确认写着这次要隐去的内容，就只删这一条；读不出来，或删掉会露出还没框选的文字、线条、图片，整份停止，错误里不写出原文。只有勾选「一并清除批注」才去掉全部批注，并按严格像素规则检查。不会自动把批注烧进页面。图像化须另外明确选择。无OCR，需逐页核对。',
 }
 
 
@@ -233,7 +233,18 @@ def inspect(data,category,encoding=None):
     return {'preview':preview,'notice':NOTICES[category],'removed':removed,'suggestions':engine.suggest_terms(preview)}
 
 
+def _reject_raster_clear(plan):
+    """图像化会把看见的页面画成图，不能拿来代替「一并清除批注」。"""
+    if plan.get('pdf_mode', 'preserve') == 'preserve':
+        return
+    import pdf_preserve
+    if pdf_preserve.wants_clear_annotations(plan):
+        raise Rejected('图像化不能当作清除批注。要清批注，请用保留文字的方式，并明确打开「一并清除批注」。')
+
+
 def export(data,category,plan):
+    if category=='pdf':
+        _reject_raster_clear(plan)
     if category=='pdf' and plan.get('pdf_mode','preserve')=='preserve':
         import pdf_preserve
         return pdf_preserve.export(data,plan)
@@ -394,6 +405,7 @@ def cells_preserve_keep(source_rows, output_rows, keep):
 
 def verify(data,category,plan,source=None):
     if category=='pdf':
+        _reject_raster_clear(plan)
         if plan.get('pdf_mode','preserve')=='preserve':
             import pdf_preserve
             return pdf_preserve.verify(data,plan,source)

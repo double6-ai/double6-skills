@@ -6,9 +6,9 @@ const checkNames = {neutral_output_filename:'下载使用中性新文件名，�
 function status(message='') { $('status').textContent=message; }
 function setBusy(value) {
   busy=value;
-  for(const id of ['stop','file','clear','undo','terms','keep','clean-only','loss','reviewed','add-selection','export','encoding','pdf-page','pdf-loss','pdf-mode','pdf-keep','output-format'])$(id).disabled=value;
+  for(const id of ['stop','file','clear','undo','terms','keep','clean-only','loss','reviewed','add-selection','export','encoding','pdf-page','pdf-loss','pdf-mode','pdf-keep','clear-annotations','output-format'])$(id).disabled=value;
   for(const button of $('suggestions').querySelectorAll('button'))button.disabled=value;
-  if(!value)$('pdf-keep').disabled=$('pdf-mode').value==='rasterize';
+  if(!value){const raster=$('pdf-mode').value==='rasterize';$('pdf-keep').disabled=raster;$('clear-annotations').disabled=raster;}
 }
 function invalidate() { const had=$('download').hasAttribute('href'),id=job?.id;$('download').removeAttribute('href');$('result').hidden=true; $('reviewed').checked=false;if(had&&id){revoking=request('api/invalidate',JSON.stringify({id}),{'Content-Type':'application/json'});revoking.catch(()=>status('旧下载撤销未确认，请先清空会话。'));} }
 async function request(path, body, headers={}) {
@@ -52,9 +52,9 @@ canvas.addEventListener('pointerup',async e=>{
 canvas.addEventListener('pointercancel',()=>{start=null;draw();});
 $('undo').onclick=()=>{boxes.pop();invalidate();draw();};
 $('terms').oninput=invalidate;$('keep').oninput=invalidate;
-$('loss').onchange=invalidate;$('clean-only').onchange=invalidate;$('pdf-loss').onchange=invalidate;$('pdf-keep').oninput=invalidate;
+$('loss').onchange=invalidate;$('clean-only').onchange=invalidate;$('pdf-loss').onchange=invalidate;$('pdf-keep').oninput=invalidate;$('clear-annotations').onchange=invalidate;
 $('output-format').onchange=()=>{invalidate();$('format-notice').textContent=$('output-format').value===job?.input_extension?'保持原格式，生成新文件。':'已明确选择格式转换，将生成新文件。';};
-$('pdf-mode').onchange=()=>{invalidate();const raster=$('pdf-mode').value==='rasterize';$('pdf-loss-label').hidden=!raster;$('pdf-keep').disabled=raster;if(raster)$('pdf-keep').value='';};
+$('pdf-mode').onchange=()=>{invalidate();const raster=$('pdf-mode').value==='rasterize';$('pdf-loss-label').hidden=!raster;$('pdf-keep').disabled=raster;$('clear-annotations').disabled=raster;if(raster){$('pdf-keep').value='';$('clear-annotations').checked=false;}};
 async function loadPdfPage(number){pdfBoxes[currentPage]=boxes;currentPage=number;boxes=pdfBoxes[number]||[];picture=new Image();picture.src=`file/${job.id}/page/${number}`;await picture.decode();canvas.width=picture.width;canvas.height=picture.height;visited.add(number);draw();invalidate();}
 $('pdf-page').onchange=async()=>{if(busy||!job)return;setBusy(true);try{await loadPdfPage(Number($('pdf-page').value));}catch(e){status(e.message);}finally{setBusy(false);}};
 $('encoding').onchange=()=>{resetWorkspace();status('编码已改变，请重新选择原文件。');};
@@ -72,7 +72,7 @@ $('file').onchange=async()=>{
     $('output-format').replaceChildren(...job.output_options.map(ext=>{const o=document.createElement('option');o.value=ext;o.textContent=ext===job.input_extension?'保持原格式 '+ext:'明确转换为 '+ext;return o;}));
     if(conversion)$('output-format').value=conversion;
     $('format-notice').textContent=conversion?'已明确选择转换，原件保持不变。':job.original_format_supported?'默认保持原格式，生成新文件。':'此旧格式暂不能安全原格式导出；只有明确选择转换格式才会导出。';
-    $('pdf-mode').value='preserve';$('pdf-keep').value='';$('pdf-keep').disabled=false;boxes=[];$('terms').value='';$('keep').value='';$('loss').checked=false;$('clean-only').checked=false;$('pdf-loss').checked=false;pdfBoxes={};visited=new Set();currentPage=1;
+    $('pdf-mode').value='preserve';$('pdf-keep').value='';$('pdf-keep').disabled=false;$('clear-annotations').checked=false;$('clear-annotations').disabled=false;boxes=[];$('terms').value='';$('keep').value='';$('loss').checked=false;$('clean-only').checked=false;$('pdf-loss').checked=false;pdfBoxes={};visited=new Set();currentPage=1;
     $('image-work').hidden=!['image','pdf'].includes(kind);$('word-work').hidden=['image','pdf'].includes(kind);$('pdf-controls').hidden=kind!=='pdf';$('pdf-loss-label').hidden=true;
     if(kind==='pdf'){
       $('pdf-page').replaceChildren(...job.pages.map(p=>{const o=document.createElement('option');o.value=p.page;o.textContent=`第${p.page}页`;return o;}));$('image-work').querySelector('p').textContent=job.notice;await loadPdfPage(1);
@@ -95,7 +95,7 @@ $('export').onclick=async()=>{
   try{
     await revoking;
     if(job.kind==='pdf'){pdfBoxes[currentPage]=boxes;if(visited.size!==job.pages.length)throw new Error('请先逐页查看全部PDF，再导出。');}
-    const data=await request('api/export',JSON.stringify({id:job.id,output_format:$('output-format').value,pdf_mode:$('pdf-mode').value,rectangles:boxes,terms:decodeTerms($('terms').value),keep:(job.kind==='pdf'?$('pdf-keep'):$('keep')).value.split('\n').map(x=>x.trim()).filter(Boolean),reviewed:$('reviewed').checked,acknowledge_loss:job.kind==='pdf'?$('pdf-loss').checked:$('loss').checked,pages:Object.entries(pdfBoxes).filter(([,v])=>v.length).map(([page,rectangles])=>({page:Number(page),rectangles})),reviewed_pages:[...visited],clean_only:$('clean-only').checked}),{'Content-Type':'application/json'});
+    const data=await request('api/export',JSON.stringify({id:job.id,output_format:$('output-format').value,pdf_mode:$('pdf-mode').value,clear_annotations:job.kind==='pdf'&&$('clear-annotations').checked,rectangles:boxes,terms:decodeTerms($('terms').value),keep:(job.kind==='pdf'?$('pdf-keep'):$('keep')).value.split('\n').map(x=>x.trim()).filter(Boolean),reviewed:$('reviewed').checked,acknowledge_loss:job.kind==='pdf'?$('pdf-loss').checked:$('loss').checked,pages:Object.entries(pdfBoxes).filter(([,v])=>v.length).map(([page,rectangles])=>({page:Number(page),rectangles})),reviewed_pages:[...visited],clean_only:$('clean-only').checked}),{'Content-Type':'application/json'});
     $('report-scope').textContent=data.report.scope;$('checks').replaceChildren();
     for(const [key,ok] of Object.entries(data.report.checks)){const li=document.createElement('li');li.textContent=(ok?'✓ ':'× ')+(checkNames[key]||key);$('checks').append(li);}
     for(const key of data.report.not_checked||[]){const li=document.createElement('li');li.textContent='未检查：'+(key==='keep_phrases_preserved'?'未声明关键保留项，请打开副本核对业务内容':key);$('checks').append(li);}
@@ -103,7 +103,7 @@ $('export').onclick=async()=>{
   }catch(e){status(e.message);}finally{setBusy(false);}
 };
 function resetWorkspace(){
-  job=null;revoking=Promise.resolve();picture=null;boxes=[];start=null;pdfBoxes={};visited=new Set();currentPage=1;$('pdf-page').replaceChildren();$('pdf-progress').textContent='';$('pdf-loss').checked=false;$('pdf-mode').value='preserve';$('pdf-keep').value='';$('output-format').replaceChildren();$('format-notice').textContent='';canvas.width=1;canvas.height=1;
+  job=null;revoking=Promise.resolve();picture=null;boxes=[];start=null;pdfBoxes={};visited=new Set();currentPage=1;$('pdf-page').replaceChildren();$('pdf-progress').textContent='';$('pdf-loss').checked=false;$('pdf-mode').value='preserve';$('pdf-keep').value='';$('clear-annotations').checked=false;$('clear-annotations').disabled=false;$('output-format').replaceChildren();$('format-notice').textContent='';canvas.width=1;canvas.height=1;
   $('file').value='';$('filename').textContent='';$('terms').value='';$('keep').value='';$('word-preview').textContent='';$('suggestions').replaceChildren();$('word-notice').textContent='';$('word-counts').textContent='';$('loss').checked=false;$('clean-only').checked=false;$('reviewed').checked=false;$('download').removeAttribute('href');$('work').hidden=true;$('result').hidden=true;
 }
 $('clear').onclick=async()=>{if(busy)return;setBusy(true);try{await request('api/clear','{}',{'Content-Type':'application/json'});resetWorkspace();status('会话已清空。');}catch(e){status(e.message);}finally{setBusy(false);}};
