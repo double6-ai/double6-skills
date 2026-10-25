@@ -35,12 +35,14 @@ def _page(note=True):
 
 
 def _pdf_plan(box):
+    """这些回归固定走「一并清除批注」，用来守住严格像素规则。默认保留批注另见 test_annotation_policy。"""
     return {
         "version": 1,
         "kind": "pdf",
         "reviewed": True,
         "reviewed_pages": [1],
         "keep": [KEEP],
+        "clear_annotations": True,
         "pages": [{"page": 1, "rectangles": [box]}],
     }
 
@@ -353,6 +355,7 @@ class CoveredAnnotationTests(unittest.TestCase):
             "reviewed_pages": [1],
             "pages": [{"page": 1, "rectangles": [box]}],
             "terms": [],
+            "clear_annotations": True,
         }
 
     def test_white_square_covering_text_is_refused(self):

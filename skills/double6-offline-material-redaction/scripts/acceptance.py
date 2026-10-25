@@ -65,6 +65,14 @@ def rejected(fn, part):
     return False
 
 
+def rejected_without(fn, part, hidden):
+    try:fn()
+    except engine.Rejected as exc:
+        message=str(exc)
+        return part in message and hidden not in message
+    return False
+
+
 def run():
     cases=[]
     def case(name,kind,fn):
@@ -95,6 +103,42 @@ def run():
             assert KEEP in d[0].get_text() and SECRET not in d[0].get_text() and not d.embfile_count()
         return ext=='.pdf' and r['checks']['pdf_not_rasterized']
     case('PDF保留可搜索业务文字','positive',native_pdf)
+    def kept_markup():
+        f=__import__('pdf_preserve').backend();d=f.open();p=d.new_page(width=300,height=200)
+        p.insert_text((20,40),KEEP);p.insert_text((20,100),SECRET)
+        p.add_highlight_annot(p.search_for(KEEP)[0]).update();p.add_text_annot(f.Point(220,40),'页边便签甲乙丙').update()
+        found=p.search_for(SECRET)[0];raw=d.tobytes();d.close()
+        box=[(found.x0-1)*2,(found.y0-1)*2,(found.x1+1)*2,(found.y1+1)*2]
+        plan={'reviewed_pages':[1],'pages':[{'page':1,'rectangles':[box]}],'keep':[KEEP]}
+        out,r,ext=policy.export(raw,'.pdf',plan)
+        with f.open(stream=out,filetype='pdf') as doc:
+            notes=[(a.info or {}).get('content') or '' for a in (doc[0].annots() or [])]
+            return ext=='.pdf' and SECRET not in doc[0].get_text() and KEEP in doc[0].get_text() and any('页边便签甲乙丙' in note for note in notes) and '默认保留批注' in r['scope']
+    case('PDF默认保留高亮和便签','positive',kept_markup)
+    def unreadable_attachment():
+        f=__import__('pdf_preserve').backend();d=f.open();p=d.new_page(width=300,height=200)
+        p.insert_text((20,40),KEEP);p.insert_text((20,100),SECRET)
+        p.add_file_annot(f.Point(220,40),SECRET.encode(),'note.txt')
+        found=p.search_for(SECRET)[0];raw=d.tobytes();d.close()
+        box=[(found.x0-1)*2,(found.y0-1)*2,(found.x1+1)*2,(found.y1+1)*2]
+        plan={'reviewed_pages':[1],'pages':[{'page':1,'rectangles':[box]}],'keep':[KEEP]}
+        return rejected_without(lambda:policy.export(raw,'.pdf',plan),'没法确认',SECRET)
+    case('反例PDF附件批注读不全','negative',unreadable_attachment)
+    def clear_cover(stroke_only):
+        f=__import__('pdf_preserve').backend();d=f.open();p=d.new_page(width=320,height=220)
+        p.insert_text((20,40),KEEP);p.insert_text((20,100),SECRET);p.insert_text((20,160),'13800006661')
+        phone=p.search_for('13800006661')[0]
+        annot=p.add_rect_annot(f.Rect(phone.x0-3,phone.y0-3,phone.x1+3,phone.y1+3))
+        if stroke_only:annot.set_colors(stroke=(0.3,0.3,0.3))
+        else:annot.set_colors(stroke=(1,1,1),fill=(0.45,0.45,0.45))
+        annot.set_border(width=3);annot.set_opacity(0.4 if not stroke_only else 1);annot.update()
+        found=p.search_for(SECRET)[0];raw=d.tobytes();d.close()
+        box=[(found.x0-1)*2,(found.y0-1)*2,(found.x1+1)*2,(found.y1+1)*2]
+        plan={'reviewed_pages':[1],'pages':[{'page':1,'rectangles':[box]}],'keep':[KEEP],'clear_annotations':True}
+        return rejected_without(lambda:policy.export(raw,'.pdf',plan),'去掉',SECRET) and rejected_without(lambda:policy.export(raw,'.pdf',plan),'去掉','13800006661')
+    case('反例PDF明确清批注时灰盖停止','negative',lambda:clear_cover(False))
+    case('反例PDF明确清批注时描边停止','negative',lambda:clear_cover(True))
+    case('反例图像化不能代替清批注','negative',lambda:rejected(lambda:policy.export(pdf(),'.pdf',{**pdf_plan(),'pdf_mode':'rasterize','acknowledge_loss':True,'keep':[],'clear_annotations':True}),'图像化'))
     def raster():
         p=pdf_plan();p.update(pdf_mode='rasterize',acknowledge_loss=True,keep=[])
         out,r,ext=policy.export(pdf(),'.pdf',p)
