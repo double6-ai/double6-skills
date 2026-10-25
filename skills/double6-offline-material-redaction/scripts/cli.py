@@ -47,10 +47,12 @@ def load_plan(path, expected):
     try: plan = json.loads(load_file(path, 256 * 1024).decode('utf-8-sig'))
     except (ValueError, UnicodeError, RecursionError): raise Failure('计划文件不是有效UTF-8 JSON。')
     common = {'version', 'kind', 'reviewed', 'keep', 'output_format', 'pdf_mode'}
-    allowed = common | ({'terms', 'acknowledge_loss', 'clean_only'} if expected == 'word' else {'rectangles'} if expected == 'image' else {'pages','reviewed_pages','acknowledge_loss','snap_to_text'} if expected == 'pdf' else {'terms','acknowledge_loss','clean_only','input_encoding'})
+    allowed = common | ({'terms', 'acknowledge_loss', 'clean_only'} if expected == 'word' else {'rectangles'} if expected == 'image' else {'pages','reviewed_pages','acknowledge_loss','snap_to_text','clear_annotations'} if expected == 'pdf' else {'terms','acknowledge_loss','clean_only','input_encoding'})
     if not isinstance(plan, dict) or set(plan) - allowed or type(plan.get('version')) is not int or plan.get('version') != 1 or plan.get('kind') != expected or plan.get('reviewed') is not True:
         raise Failure('计划需声明version=1、对应kind与reviewed=true，且不能有未知字段。')
     plan['keep'] = engine.keep_checked(plan.get('keep', []))
+    if expected == 'pdf' and 'clear_annotations' in plan and plan['clear_annotations'] is not True and plan['clear_annotations'] is not False:
+        raise Failure('「一并清除批注」只能选择打开或关闭。')
     if expected not in {'image','pdf'}:
         plan['terms'] = engine.terms_checked(plan.get('terms'))
         if expected in {'word','csv','tsv','excel','slides'} and plan.get('acknowledge_loss') is not True:
@@ -111,6 +113,16 @@ def selftest():
     from pptx.util import Inches
     prs=Presentation();slide=prs.slides.add_slide(prs.slide_layouts[6]);slide.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(2)).text=marker+' '+keep;b=io.BytesIO();prs.save(b);out=formats.export(b.getvalue(),'slides',common);checks['slides_roundtrip']=all(formats.verify(out,'slides',common)['checks'].values())
     source=formats.make_pdf([Image.new('RGB',(80,80),'white')]);plan={'reviewed_pages':[1],'pages':[{'page':1,'rectangles':[[0,0,20,20]]}],'acknowledge_loss':True};out=formats.export(source,'pdf',plan);checks['pdf_native_render_roundtrip']=all(formats.verify(out,'pdf',plan,source)['checks'].values())
+    fitz=__import__('pdf_preserve').backend();doc=fitz.open();page=doc.new_page(width=300,height=200)
+    page.insert_text((20,40),'保留这句业务内容',fontname='china-s',fontsize=12);page.insert_text((20,100),'示例姓名',fontname='china-s',fontsize=12)
+    page.add_highlight_annot(page.search_for('保留这句业务内容')[0]).update();page.add_text_annot(fitz.Point(220,40),'页边便签甲乙丙').update()
+    found=page.search_for('示例姓名')[0];raw=doc.tobytes();doc.close()
+    box=[(found.x0-1)*2,(found.y0-1)*2,(found.x1+1)*2,(found.y1+1)*2]
+    kept_plan={'reviewed_pages':[1],'pages':[{'page':1,'rectangles':[box]}],'keep':['保留这句业务内容']}
+    kept=formats.export(raw,'pdf',kept_plan);kept_report=formats.verify(kept,'pdf',kept_plan,raw)
+    with fitz.open(stream=kept,filetype='pdf') as opened:
+        notes=[(a.info or {}).get('content') or '' for a in (opened[0].annots() or [])]
+        checks['pdf_default_keeps_annotations']=all(kept_report['checks'].values()) and any('页边便签甲乙丙' in note for note in notes) and '示例姓名' not in opened[0].get_text() and '默认保留批注' in kept_report['scope']
     checks.update(compat.selftest())
     if not all(checks.values()): raise Failure('自检未通过，请停止处理材料。', 4)
     return {'version': engine.VERSION, 'checks': checks, 'synthetic_only': True, 'native_office_tested': False, 'legacy_converter_tested':False}
@@ -142,6 +154,7 @@ def main():
     sub.add_parser('doctor');sub.add_parser('selftest')
     inspect_p = sub.add_parser('inspect');inspect_p.add_argument('--input', required=True);inspect_p.add_argument('--show-preview', action='store_true');inspect_p.add_argument('--encoding',choices=['utf-8','utf-16','gb18030']);inspect_p.add_argument('--allow-conversion',action='store_true')
     redact_p = sub.add_parser('redact');redact_p.add_argument('--input', required=True);redact_p.add_argument('--plan', required=True);redact_p.add_argument('--output', required=True);redact_p.add_argument('--output-format',help='仅显式指定才转换，例如.png/.docx');redact_p.add_argument('--pdf-mode',choices=['preserve','rasterize'])
+    redact_p.add_argument('--clear-annotations', action='store_true', help='仅 PDF，默认关闭。打开后一并清除批注，并按严格像素规则检查：删除前后，外接矩形里任何像素变化都停止；矩形里还有没框选的文字、线条或图片也停止。请先去掉遮盖类批注。不打开时只删除框选正文，批注保留。')
     verify_p = sub.add_parser('verify');verify_p.add_argument('--input', required=True);verify_p.add_argument('--plan', required=True);verify_p.add_argument('--source')
     gui_p = sub.add_parser('gui');gui_p.add_argument('--no-browser', action='store_true');gui_p.add_argument('--session-file')
     args = p.parse_args()
@@ -169,6 +182,10 @@ def main():
                 im = engine.image_source(data);result = {'kind': category, 'display_width': im.width, 'display_height': im.height, 'manual_rectangles_required': True}
         elif args.command == 'redact':
             category = kind(args.input);raw = load_file(args.input);plan = load_plan(args.plan, category)
+            if args.clear_annotations:
+                if category != 'pdf':
+                    raise Failure('「一并清除批注」只适用于 PDF。')
+                plan['clear_annotations'] = True
             if args.pdf_mode:plan['pdf_mode']=args.pdf_mode
             if Path(args.output).resolve() in {Path(args.input).resolve(), Path(args.plan).resolve()}:raise Failure('输出不能覆盖输入或计划文件。')
             ext=Path(args.input).suffix.lower();requested=args.output_format or plan.get('output_format')
