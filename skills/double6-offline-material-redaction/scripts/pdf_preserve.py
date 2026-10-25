@@ -1,7 +1,9 @@
 """PDF原生删改：保留未选区域的文字和页面；使用外部AGPL-3.0 PyMuPDF引擎。"""
 import io
 import math
+import re
 from collections import Counter
+from xml.etree import ElementTree as ET
 
 from PIL import ImageChops
 import engine
@@ -72,7 +74,7 @@ def _annots_array(page):
 
 def _xref_numbers(value):
     numbers = []
-    tokens = value.replace('[', ' ').replace(']', ' ').split()
+    tokens = value.replace('[', ' ').replace(']', ' ').replace('<', ' ').replace('>', ' ').split()
     index = 0
     while index < len(tokens):
         token = tokens[index]
@@ -350,7 +352,7 @@ def _visual_bound(annot):
 
 
 def _areas_to_judge(page):
-    """每条会被删掉的批注，含 PyMuPDF 不列出的 /Annots。返回 (文字坐标矩形或 None, 报错用的称呼)。"""
+    """每条批注，含 PyMuPDF 不列出的 /Annots。返回 (文字坐标矩形或 None, 报错用的称呼, xref 或 None)。"""
     seen = set()
     areas = []
     for annot in page.annots() or []:
@@ -361,13 +363,13 @@ def _areas_to_judge(page):
         if delta:
             pad = max(pad, max(abs(float(value)) for value in delta))
         area = _grow_area(_annot_area_from_bound(_visual_bound(annot), page), pad)
-        areas.append((area, _annot_label(annot.type[1])))
+        areas.append((area, _annot_label(annot.type[1]), annot.xref))
     raw = _annots_array(page)
     if not raw:
         return areas
     refs = _xref_numbers(raw)
     if not refs:
-        areas.append((None, '批注'))
+        areas.append((None, '批注', None))
         return areas
     doc = page.parent
     for xref in refs:
@@ -378,10 +380,10 @@ def _areas_to_judge(page):
         rect_kind, rect_value = doc.xref_get_key(xref, 'Rect')
         pdf_rect = _pdf_rect_values(rect_value) if rect_kind == 'array' else None
         if pdf_rect is None:
-            areas.append((None, label))
+            areas.append((None, label, xref))
             continue
         bound = _bound_from_pdf_rect(page, pdf_rect)
-        areas.append((_grow_area(_annot_area_from_bound(bound, page), _xref_pad(doc, xref)), label))
+        areas.append((_grow_area(_annot_area_from_bound(bound, page), _xref_pad(doc, xref)), label, xref))
     return areas
 
 
@@ -422,7 +424,7 @@ def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, b
     diff = ImageChops.difference(original_image, baseline_image)
     problems = []
     claimed = []
-    for area, label in areas:
+    for area, label, _xref in areas:
         box = None
         if area is not None and not area.is_empty and not area.is_infinite:
             box = _grow_pixel_box(_to_pixel_box(area, page, original_image), original_image)
@@ -448,6 +450,1035 @@ def annotation_change_reason(page, baseline_page, pixel_boxes, original_image, b
     return problems[0] + '同一页还有别处批注同样要先去掉。'
 
 
+_UNREADABLE_SUBTYPES = {'FileAttachment', 'Sound', 'Movie', 'Screen', 'RichMedia', '3D', 'TrapNet'}
+
+
+def wants_clear_annotations(plan):
+    """一并清除批注。缺省或 false 都表示保留批注。"""
+    if 'clear_annotations' not in plan:
+        return False
+    value = plan.get('clear_annotations')
+    if value is True or value is False:
+        return value
+    raise engine.Rejected('「一并清除批注」只能选择打开或关闭。')
+
+
+def selected_terms(page, boxes):
+    """框选范围内的正文，按出现顺序收成补选词。框外的字不算。"""
+    if not boxes:
+        return []
+    fitz = backend()
+    terms = []
+    seen = set()
+    for span in page.get_texttrace():
+        chars = []
+        for char in span['chars']:
+            glyph = fitz.Rect(char[3])
+            if chr(char[0]).strip() and any(glyph.intersects(box) for box in boxes):
+                chars.append(chr(char[0]))
+                continue
+            if chars:
+                term = ''.join(chars).strip()
+                if term and term not in seen:
+                    seen.add(term)
+                    terms.append(term)
+                chars = []
+        if chars:
+            term = ''.join(chars).strip()
+            if term and term not in seen:
+                seen.add(term)
+                terms.append(term)
+    return terms
+
+
+def _text_hits(blob, terms):
+    """补选词只要出现在批注文字里就算命中。数字的另一种写法和大小写都算，避免漏掉。"""
+    if not blob or not terms:
+        return False
+    folded = blob.casefold()
+    for term in terms:
+        if engine.term_remains(blob, term):
+            return True
+        if term.casefold() in folded:
+            return True
+    return False
+
+
+def _decode_pdf_bytes(raw):
+    """PDF 字符串。UTF-16 带 BOM、或无 BOM 的 UTF-16BE/LE（中文字体画字母和数字时常见 00 31 这种）都要还原。
+
+    空字节对不上这两种，或夹着无法确认的高位字节，就视为读不全，不能当成普通 ASCII。
+    """
+    if raw.startswith((b'\xfe\xff', b'\xff\xfe')):
+        body = raw[2:]
+        if len(body) % 2:
+            raise ValueError('外观文字编码无法确认')
+        coding = 'utf-16-be' if raw.startswith(b'\xfe\xff') else 'utf-16-le'
+        return body.decode(coding)
+    if len(raw) >= 2 and len(raw) % 2 == 0 and b'\x00' in raw:
+        # 奇数位全是字、偶数位全是 0，才是无 BOM 的 UTF-16BE。反过来是 UTF-16LE。
+        # 出现 00 00 这类对不上的空字节（例如 UTF-32）不猜测，交给调用方整份拒绝。
+        high_zero = all(raw[i] == 0 for i in range(0, len(raw), 2))
+        low_zero = all(raw[i] == 0 for i in range(1, len(raw), 2))
+        high_text = all(raw[i] != 0 for i in range(0, len(raw), 2))
+        low_text = all(raw[i] != 0 for i in range(1, len(raw), 2))
+        if high_zero and low_text:
+            return raw.decode('utf-16-be')
+        if low_zero and high_text:
+            return raw.decode('utf-16-le')
+        raise ValueError('外观文字编码无法确认')
+    if b'\x00' in raw or any(byte >= 128 for byte in raw):
+        raise ValueError('外观文字编码无法确认')
+    return raw.decode('ascii')
+
+
+def _join_views(raw):
+    """解码后的文字，再加上原始字节。
+
+    以 FE FF 开头却后面直接跟单字节明文时，按 UTF-16 会解成别的字。原始字节里的明文仍要参与命中。
+    明文中间再插一个空字节时，UTF-16 和整段原始字节都对不上补选词，去掉空字节后的字节也要参与命中。
+    """
+    try:
+        text = _decode_pdf_bytes(raw)
+    except (UnicodeDecodeError, ValueError):
+        return '', False
+    views = []
+    if text:
+        views.append(text)
+    pieces = [raw]
+    if raw.startswith((b'\xfe\xff', b'\xff\xfe')) and len(raw) > 2:
+        pieces.append(raw[2:])
+    for piece in pieces:
+        variants = [piece]
+        if b'\x00' in piece:
+            variants.append(piece.replace(b'\x00', b''))
+        for variant in variants:
+            plain = variant.decode('latin-1')
+            if plain and plain not in views:
+                views.append(plain)
+    return '\n'.join(views), True
+
+
+def _skip_pdf(data, index):
+    while index < len(data):
+        if data[index] in b' \t\r\n\x00':
+            index += 1
+            continue
+        if data[index] != ord('%'):
+            break
+        while index < len(data) and data[index] not in b'\r\n':
+            index += 1
+    return index
+
+
+def _pdf_name_text(raw):
+    out = bytearray()
+    index = 0
+    while index < len(raw):
+        if raw[index] == ord('#'):
+            if index + 2 >= len(raw):
+                raise ValueError('外观文字编码无法确认')
+            out.append(int(raw[index + 1:index + 3], 16))
+            index += 3
+            continue
+        out.append(raw[index])
+        index += 1
+    return _decode_pdf_bytes(bytes(out))
+
+
+def _parse_pdf_name(data, index):
+    index += 1
+    start = index
+    while index < len(data) and data[index] not in b' \t\r\n\x00()<>[]{}/%':
+        index += 1
+    return data[start:index], index
+
+
+def _keyword_at(data, index, word):
+    if not data.startswith(word, index):
+        return None
+    end = index + len(word)
+    if end < len(data) and data[end] not in b' \t\r\n\x00><][(){}/%':
+        return None
+    return end
+
+
+# 这些引用指向另一页或另一条批注。页面内容流和对方批注不在这里展开；对方批注会单独判定。
+_SKIP_FOLLOW_KEYS = {'P', 'Popup', 'Parent', 'IRT'}
+
+
+def _parse_pdf_value(data, index, doc, seen, depth, in_ap, follow_key):
+    index = _skip_pdf(data, index)
+    if index >= len(data):
+        return [], index, True
+    # 外观会连到字体：Form → Resources → Font → Descendant → Descriptor。
+    # 这条链超过 8 层时不能当成读不全，否则普通中文外观会被整份拒绝。
+    if depth > 32:
+        return [], index, True
+    if data.startswith(b'<<', index):
+        return _parse_pdf_dict(data, index, doc, seen, depth + 1, in_ap)
+    if data[index] == ord('['):
+        return _parse_pdf_array(data, index, doc, seen, depth + 1, in_ap)
+    if data[index] == ord('('):
+        text, index, ok = _parse_literal(data, index)
+        if not ok:
+            return [], index, True
+        return ([text] if text else []), index, False
+    if data[index] == ord('<'):
+        text, index, ok = _parse_hex_string(data, index)
+        if not ok:
+            return [], index, True
+        return ([text] if text else []), index, False
+    if data[index] == ord('/'):
+        raw, index = _parse_pdf_name(data, index)
+        try:
+            text = _pdf_name_text(raw)
+        except (UnicodeDecodeError, ValueError):
+            return [], index, True
+        return ([text] if text else []), index, False
+    if data[index] in b'+-.0123456789':
+        ref = re.match(br'(\d+)\s+(\d+)\s+R(?![A-Za-z0-9])', data[index:])
+        if ref and data[index] in b'0123456789':
+            xref = int(ref.group(1))
+            index += ref.end()
+            # 页面和另一条批注不在这里展开。外观字典里的间接对象要读：字符串和 /Name 都不能跳过。
+            if follow_key in _SKIP_FOLLOW_KEYS:
+                return [], index, False
+            texts, bad = _xref_carrier_text(doc, xref, seen, depth + 1)
+            return texts, index, bad
+        number = re.match(br'[+-]?(?:\d+\.\d+|\d+|\.\d+)', data[index:])
+        if not number:
+            return [], index, True
+        return [], index + number.end(), False
+    for word in (b'null', b'true', b'false'):
+        end = _keyword_at(data, index, word)
+        if end is not None:
+            return [], end, False
+    return [], index, True
+
+
+def _parse_pdf_array(data, index, doc, seen, depth, in_ap):
+    index += 1
+    texts = []
+    while True:
+        index = _skip_pdf(data, index)
+        if index >= len(data):
+            return [], index, True
+        if data[index] == ord(']'):
+            return texts, index + 1, False
+        found, index, bad = _parse_pdf_value(data, index, doc, seen, depth, in_ap, '')
+        if bad:
+            return [], index, True
+        texts.extend(found)
+
+
+def _parse_pdf_dict(data, index, doc, seen, depth, in_ap):
+    index += 2
+    texts = []
+    while True:
+        index = _skip_pdf(data, index)
+        if index >= len(data):
+            return [], index, True
+        if data.startswith(b'>>', index):
+            return texts, index + 2, False
+        if data[index] != ord('/'):
+            return [], index, True
+        raw_key, index = _parse_pdf_name(data, index)
+        try:
+            key = _pdf_name_text(raw_key)
+        except (UnicodeDecodeError, ValueError):
+            return [], index, True
+        # 键名本身可以写成补选词或 # 转义。值是 true/数字时也不能把键漏掉。
+        if key:
+            texts.append(key)
+        found, index, bad = _parse_pdf_value(data, index, doc, seen, depth, in_ap or key == 'AP', key)
+        if bad:
+            return [], index, True
+        texts.extend(found)
+
+
+def _stream_is_binary(doc, xref):
+    """图片、字库和 ICC 是二进制。读不成文字不算失败，但字符串值仍由字典解析负责。"""
+    subtype = doc.xref_get_key(xref, 'Subtype')[1]
+    if subtype in {'/Image', '/FontFile', '/FontFile2', '/FontFile3'}:
+        return True
+    for key in ('Length1', 'Length2', 'Length3'):
+        if doc.xref_get_key(xref, key)[0] != 'null':
+            return True
+    if doc.xref_get_key(xref, 'N')[0] != 'null' and doc.xref_get_key(xref, 'Alternate')[0] != 'null':
+        return True
+    _kind, filt = doc.xref_get_key(xref, 'Filter')
+    return any(name in filt for name in ('DCTDecode', 'JPXDecode', 'CCITTFaxDecode', 'JBIG2Decode'))
+
+
+def _without_pdf_comments(data):
+    """去掉字符串外面的 % 注释。注释里的字不参与命中，保存时也会被清掉。"""
+    out = bytearray()
+    index = 0
+    size = len(data)
+    while index < size:
+        char = data[index]
+        if char == ord('('):
+            start = index
+            _text, index, ok = _parse_literal(data, index)
+            if not ok:
+                out.append(char)
+                index = start + 1
+                continue
+            out.extend(data[start:index])
+            continue
+        if char == ord('%'):
+            while index < size and data[index] not in b'\r\n':
+                index += 1
+            continue
+        out.append(char)
+        index += 1
+    return bytes(out)
+
+
+def _collect_embedded_strings(data):
+    """流里的字面串和十六进制串。解不出的短码（例如 ToUnicode 的 <00>）跳过，不把整段 cmap 当成读不全。"""
+    texts = []
+    index = 0
+    size = len(data)
+    while index < size:
+        char = data[index]
+        if char in b' \t\r\n\x00':
+            index += 1
+            continue
+        if char == ord('%'):
+            while index < size and data[index] not in b'\r\n':
+                index += 1
+            continue
+        if char == ord('('):
+            text, new_index, ok = _parse_literal(data, index)
+            if not ok:
+                index += 1
+                continue
+            if text:
+                texts.append(text)
+            index = new_index
+            continue
+        if char == ord('<'):
+            if index + 1 < size and data[index + 1] == ord('<'):
+                index += 2
+                continue
+            text, new_index, ok = _parse_hex_string(data, index)
+            if not ok:
+                index += 1
+                continue
+            if text:
+                texts.append(text)
+            index = new_index
+            continue
+        index += 1
+    return texts
+
+
+def _stream_content_texts(doc, xref):
+    """间接流里的正文。图片、字库和外观/页面 Form 的绘制流不在这里当隐藏文字读。
+
+    Form 里画出来的字由外观算子或正文涂黑负责。ToUnicode 和只含明文的数据流仍要读。
+    """
+    if doc.xref_get_key(xref, 'Subtype')[1] == '/Form' or _stream_is_binary(doc, xref):
+        return [], False
+    try:
+        raw = doc.xref_stream(xref) or b''
+    except Exception:
+        return [], True
+    if not raw:
+        return [], False
+    texts = []
+    visible = _without_pdf_comments(raw)
+    joined, ok = _join_views(visible)
+    if ok and joined:
+        texts.append(joined)
+    elif b'\x00' in visible:
+        stripped = visible.replace(b'\x00', b'')
+        if stripped and all(byte < 128 for byte in stripped):
+            texts.append(stripped.decode('ascii'))
+    texts.extend(_collect_embedded_strings(visible))
+    return texts, False
+
+
+def _xref_carrier_text(doc, xref, seen, depth):
+    """批注能带到副本里的文字：键名、字符串、名称值、外观旁的间接对象，以及这些对象指向的流内容。
+
+    图片、字库、ICC 的二进制不当作文字。ToUnicode 里没用到的映射也算。读不完就视为无法确认。
+    """
+    if xref <= 0 or depth > 32:
+        return [], True
+    if xref in seen:
+        return [], False
+    seen.add(xref)
+    try:
+        raw = doc.xref_object(xref, compressed=True)
+        data = raw.encode('latin1')
+    except (UnicodeEncodeError, ValueError, RuntimeError):
+        return [], True
+    except Exception:
+        return [], True
+    if not data.strip():
+        return [], True
+    texts, index, bad = _parse_pdf_value(data, 0, doc, seen, depth, False, '')
+    if bad or _skip_pdf(data, index) != len(data):
+        return [], True
+    try:
+        is_stream = doc.xref_is_stream(xref)
+    except Exception:
+        return [], True
+    if is_stream:
+        extra, bad = _stream_content_texts(doc, xref)
+        if bad:
+            return [], True
+        texts.extend(extra)
+    return texts, False
+
+
+def _key_views(doc, xref, wanted):
+    """某个字典键的值。没有这个键不算失败；值读不全则失败。"""
+    try:
+        data = doc.xref_object(xref, compressed=True).encode('latin1')
+    except (UnicodeEncodeError, ValueError, RuntimeError):
+        return '', True
+    except Exception:
+        return '', True
+    index = _skip_pdf(data, 0)
+    if not data.startswith(b'<<', index):
+        return '', True
+    index += 2
+    while True:
+        index = _skip_pdf(data, index)
+        if index >= len(data):
+            return '', True
+        if data.startswith(b'>>', index):
+            return '', False
+        if data[index] != ord('/'):
+            return '', True
+        raw_key, index = _parse_pdf_name(data, index)
+        try:
+            key = _pdf_name_text(raw_key)
+        except (UnicodeDecodeError, ValueError):
+            return '', True
+        if key == wanted:
+            found, _index, bad = _parse_pdf_value(data, index, doc, set(), 0, False, key)
+            if bad:
+                return '', True
+            return '\n'.join(found), False
+        _found, index, bad = _parse_pdf_value(data, index, doc, set(), 0, False, key)
+        if bad:
+            return '', True
+
+
+# /Name 和 /ID 不参与绘制，命中就去掉。/Intent、/DecodeParms 会改变画面，命中就整份停止。
+_STRIP_STREAM_KEYS = {'Name', 'ID'}
+_CHECK_STREAM_KEYS = _STRIP_STREAM_KEYS | {'Intent', 'DecodeParms'}
+_FONT_SUBTYPES = {'/Type0', '/Type1', '/MMType1', '/TrueType', '/CIDFontType0', '/CIDFontType2', '/Type3'}
+
+
+def _drop_stream_names(doc, terms):
+    """图片和外观 Form 上能留下明文的键，以及字体 ToUnicode（含没用到的映射）。
+
+    /Name、/ID 命中就去掉。其它列入的键命中，或值读不全，整份停止。
+    """
+    if not terms:
+        return
+    for xref in range(1, doc.xref_length()):
+        try:
+            is_stream = doc.xref_is_stream(xref)
+        except Exception:
+            raise engine.Rejected('PDF对象读不全，没法确认有没有要隐去的内容，已停止。') from None
+        subtype = doc.xref_get_key(xref, 'Subtype')[1]
+        if is_stream and subtype in {'/Form', '/Image'}:
+            for key in _CHECK_STREAM_KEYS:
+                if doc.xref_get_key(xref, key)[0] == 'null':
+                    continue
+                text, bad = _key_views(doc, xref, key)
+                if bad:
+                    raise engine.Rejected('PDF对象读不全，没法确认有没有要隐去的内容，已停止。')
+                if not _text_hits(text, terms):
+                    continue
+                if key in _STRIP_STREAM_KEYS:
+                    doc.xref_set_key(xref, key, 'null')
+                    continue
+                raise engine.Rejected('PDF对象里有这次要隐去的内容，没法只删掉这段明文，已停止。')
+        if subtype not in _FONT_SUBTYPES:
+            continue
+        if doc.xref_get_key(xref, 'ToUnicode')[0] == 'null':
+            continue
+        text, bad = _key_views(doc, xref, 'ToUnicode')
+        if bad:
+            raise engine.Rejected('PDF字体编码读不全，没法确认有没有要隐去的内容，已停止。')
+        if _text_hits(text, terms):
+            raise engine.Rejected('PDF字体编码里有这次要隐去的内容，没法确认能安全留下，已停止。')
+
+
+def _parse_literal(data, index):
+    if index >= len(data) or data[index] != ord('('):
+        return '', index, False
+    index += 1
+    out = bytearray()
+    depth = 1
+    mapping = {ord('n'): b'\n', ord('r'): b'\r', ord('t'): b'\t', ord('b'): b'\b', ord('f'): b'\f', ord('('): b'(', ord(')'): b')', ord('\\'): b'\\'}
+    while index < len(data) and depth:
+        char = data[index]
+        if char == ord('\\'):
+            if index + 1 >= len(data):
+                return '', index, False
+            nxt = data[index + 1]
+            if nxt in mapping:
+                out.extend(mapping[nxt])
+                index += 2
+                continue
+            if nxt in b'\r\n':
+                index += 2
+                if nxt == ord('\r') and index < len(data) and data[index] == ord('\n'):
+                    index += 1
+                continue
+            octal = bytearray()
+            cursor = index + 1
+            while cursor < len(data) and len(octal) < 3 and data[cursor] in b'01234567':
+                octal.append(data[cursor])
+                cursor += 1
+            if not octal:
+                return '', index, False
+            out.append(int(octal, 8) & 0xFF)
+            index = cursor
+            continue
+        if char == ord('('):
+            depth += 1
+            out.append(char)
+            index += 1
+            continue
+        if char == ord(')'):
+            depth -= 1
+            if depth:
+                out.append(char)
+            index += 1
+            continue
+        out.append(char)
+        index += 1
+    if depth:
+        return '', index, False
+    text, ok = _join_views(bytes(out))
+    if not ok:
+        return '', index, False
+    return text, index, True
+
+
+def _parse_hex_string(data, index):
+    end = data.find(b'>', index + 1)
+    if end < 0:
+        return '', index, False
+    body = re.sub(br'\s+', b'', data[index + 1:end])
+    if not re.fullmatch(br'[0-9A-Fa-f]*', body):
+        return '', index, False
+    if len(body) % 2:
+        body += b'0'
+    try:
+        raw = bytes.fromhex(body.decode('ascii'))
+    except ValueError:
+        return '', end + 1, False
+    text, ok = _join_views(raw)
+    if not ok:
+        return '', end + 1, False
+    return text, end + 1, True
+
+
+def _parse_string_array(data, index):
+    index += 1
+    strings = []
+    while index < len(data):
+        while index < len(data) and data[index] in b' \t\r\n':
+            index += 1
+        if index >= len(data):
+            return [], index, False
+        if data[index] == ord(']'):
+            return strings, index + 1, True
+        if data[index] == ord('('):
+            text, index, ok = _parse_literal(data, index)
+            if not ok:
+                return [], index, False
+            strings.append(text)
+            continue
+        if data[index] == ord('<'):
+            text, index, ok = _parse_hex_string(data, index)
+            if not ok:
+                return [], index, False
+            strings.append(text)
+            continue
+        if data[index] in b'+-.0123456789':
+            while index < len(data) and data[index] in b'+-.0123456789':
+                index += 1
+            continue
+        return [], index, False
+    return [], index, False
+
+
+def _scan_text_ops(data):
+    """只取出真正画出来的文字。路径坐标不算批注内容。读不完整就视为无法确认。"""
+    index = 0
+    texts = []
+    pending = []
+    do_names = []
+    last_name = None
+    while index < len(data):
+        char = data[index]
+        if char in b' \t\r\n\x00':
+            index += 1
+            continue
+        if char == ord('%'):
+            while index < len(data) and data[index] not in b'\r\n':
+                index += 1
+            continue
+        if char == ord('('):
+            text, index, ok = _parse_literal(data, index)
+            if not ok:
+                return '', [], True
+            pending.append(text)
+            continue
+        if char == ord('<'):
+            if index + 1 < len(data) and data[index + 1] == ord('<'):
+                return '', [], True
+            text, index, ok = _parse_hex_string(data, index)
+            if not ok:
+                return '', [], True
+            pending.append(text)
+            continue
+        if char == ord('['):
+            strings, index, ok = _parse_string_array(data, index)
+            if not ok:
+                return '', [], True
+            pending.append(strings)
+            continue
+        if char == ord('/'):
+            index += 1
+            start = index
+            while index < len(data) and data[index] not in b' \t\r\n()<>[]{}/%':
+                index += 1
+            last_name = data[start:index].decode('ascii', 'replace')
+            continue
+        start = index
+        while index < len(data) and data[index] not in b' \t\r\n()<>[]{}/%':
+            index += 1
+        token = data[start:index]
+        if token in (b'Tj', b"'"):
+            if not pending or isinstance(pending[-1], list):
+                return '', [], True
+            texts.append(pending[-1])
+            pending.clear()
+            continue
+        if token == b'"':
+            if not pending or isinstance(pending[-1], list):
+                return '', [], True
+            texts.append(pending[-1])
+            pending.clear()
+            continue
+        if token == b'TJ':
+            if not pending or not isinstance(pending[-1], list):
+                return '', [], True
+            texts.extend(pending[-1])
+            pending.clear()
+            continue
+        if token == b'Do':
+            if not last_name:
+                return '', [], True
+            do_names.append(last_name)
+            last_name = None
+            pending.clear()
+            continue
+        # 行内图片和无法辨认的字典都可能藏着文字，不能当成空白批注。
+        if token in (b'BI', b'ID', b'EI'):
+            return '', [], True
+        pending.clear()
+    return ''.join(texts), do_names, False
+
+
+def _balanced_dict(text, key):
+    token = '/' + key
+    start = text.find(token)
+    if start < 0:
+        return None
+    rest = text[start + len(token):].lstrip()
+    if rest.startswith('<<'):
+        depth = 0
+        for index, char in enumerate(rest):
+            if rest.startswith('<<', index):
+                depth += 1
+            elif rest.startswith('>>', index):
+                depth -= 1
+                if depth == 0:
+                    return rest[:index + 2]
+        return None
+    return rest.split('>>', 1)[0].strip()
+
+
+def _xobject_map(doc, xref):
+    kind, resources = doc.xref_get_key(xref, 'Resources')
+    block = None
+    if kind == 'xref':
+        resource_xref = int(resources.split()[0])
+        xkind, block = doc.xref_get_key(resource_xref, 'XObject')
+        if xkind == 'null':
+            return {}
+        if xkind == 'xref':
+            block = doc.xref_object(int(block.split()[0]))
+        elif xkind != 'dict':
+            return None
+    elif kind == 'dict':
+        block = _balanced_dict(resources, 'XObject')
+        if block is None:
+            return {}
+    elif kind == 'null':
+        return {}
+    else:
+        return None
+    if block is None:
+        return None
+    names = re.findall(r'/([^\s/<>\[\]()]+)\s+(\d+)\s+\d+\s+R', block)
+    return {name: int(number) for name, number in names}
+
+
+def _appearance_text(doc, xref, seen):
+    if xref in seen:
+        return '', True
+    seen.add(xref)
+    kind, subtype = doc.xref_get_key(xref, 'Subtype')
+    if kind == 'name' and subtype in {'/Image', 'Image'}:
+        return '', True
+    try:
+        stream = doc.xref_stream(xref) or b''
+    except Exception:
+        return '', True
+    text, do_names, bad = _scan_text_ops(stream) if stream else ('', [], False)
+    if bad:
+        return '', True
+    if not do_names:
+        return text, False
+    mapping = _xobject_map(doc, xref)
+    if mapping is None:
+        return '', True
+    parts = [text]
+    for name in do_names:
+        child = mapping.get(name)
+        if child is None:
+            return '', True
+        child_text, child_bad = _appearance_text(doc, child, seen)
+        if child_bad:
+            return '', True
+        parts.append(child_text)
+    return ''.join(parts), False
+
+
+def _rich_text(value):
+    try:
+        root = ET.fromstring(value)
+    except ET.ParseError:
+        return '', False
+    parts = []
+    for element in root.iter():
+        if element.text:
+            parts.append(element.text)
+        if element.tail:
+            parts.append(element.tail)
+        parts.extend(element.attrib.values())
+    return ''.join(parts), True
+
+
+def _object_text(doc, xref):
+    """间接对象里的文字。是字符串就读字符串，是流就读流；两种都不是就视为无法确认。"""
+    try:
+        raw = doc.xref_object(xref, compressed=True).strip()
+    except Exception:
+        return '', True
+    try:
+        raw_bytes = raw.encode('latin1')
+    except UnicodeEncodeError:
+        return '', True
+    if raw_bytes.startswith(b'('):
+        text, _index, ok = _parse_literal(raw_bytes, 0)
+        return (text, False) if ok else ('', True)
+    if raw_bytes.startswith(b'<'):
+        text, _index, ok = _parse_hex_string(raw_bytes, 0)
+        return (text, False) if ok else ('', True)
+    length_kind, _length = doc.xref_get_key(xref, 'Length')
+    if length_kind == 'null':
+        return '', True
+    try:
+        stream = doc.xref_stream(xref) or b''
+    except Exception:
+        return '', True
+    try:
+        return _decode_pdf_bytes(stream), False
+    except (UnicodeDecodeError, ValueError):
+        return '', True
+
+
+def _dict_string(doc, xref, key):
+    kind, value = doc.xref_get_key(xref, key)
+    if kind == 'null':
+        return '', False
+    if kind == 'string':
+        return value, False
+    if kind == 'xref':
+        return _object_text(doc, int(value.split()[0]))
+    return '', True
+
+
+def _action_uri(doc, xref):
+    kind, value = doc.xref_get_key(xref, 'A')
+    if kind == 'null':
+        direct, bad = _dict_string(doc, xref, 'URI')
+        return direct, bad
+    if kind == 'xref':
+        return _dict_string(doc, int(value.split()[0]), 'URI')
+    if kind != 'dict':
+        return '', True
+    match = re.search(r'/URI\s*(\((?:\\.|[^\\)])*\)|<[^>]*>)', value)
+    if not match:
+        if '/URI' in value or '/S /JavaScript' in value or '/JS' in value:
+            return '', True
+        return '', False
+    token = match.group(1)
+    if token.startswith('('):
+        text, _index, ok = _parse_literal(token, 0)
+        return (text, False) if ok else ('', True)
+    text, _index, ok = _parse_hex_string(token, 0)
+    return (text, False) if ok else ('', True)
+
+
+def annotation_text(doc, xref, annot):
+    """能完整读出的批注文字。读不完时第二项为 True，调用方应整份拒绝。"""
+    kind, subtype = doc.xref_get_key(xref, 'Subtype')
+    name = subtype[1:] if kind == 'name' and subtype.startswith('/') else ''
+    if kind != 'name' or name in _UNREADABLE_SUBTYPES:
+        return '', True
+    file_kind, _file_value = doc.xref_get_key(xref, 'FS')
+    if file_kind != 'null':
+        return '', True
+    parts, bad = _xref_carrier_text(doc, xref, set(), 0)
+    if bad:
+        return '', True
+    parts = list(parts)
+    for key in ('Contents', 'Subj', 'T'):
+        text, bad = _dict_string(doc, xref, key)
+        if bad:
+            return '', True
+        if text:
+            parts.append(text)
+    rich_kind, rich_value = doc.xref_get_key(xref, 'RC')
+    if rich_kind != 'null':
+        if rich_kind == 'xref':
+            rich_value, bad = _object_text(doc, int(rich_value.split()[0]))
+            if bad:
+                return '', True
+        elif rich_kind != 'string':
+            return '', True
+        rich_text, ok = _rich_text(rich_value)
+        if not ok:
+            return '', True
+        parts.append(rich_text)
+    uri, bad = _action_uri(doc, xref)
+    if bad:
+        return '', True
+    if uri:
+        parts.append(uri)
+    if annot is not None:
+        try:
+            shown = annot.get_text('text') or ''
+        except Exception:
+            return '', True
+        if shown:
+            parts.append(shown)
+        link_uri = getattr(annot, 'uri', None)
+        if link_uri:
+            parts.append(str(link_uri))
+    ap_kind, ap_value = doc.xref_get_key(xref, 'AP')
+    if ap_kind == 'null':
+        return '\n'.join(parts), False
+    if ap_kind == 'xref':
+        targets = [int(ap_value.split()[0])]
+    elif ap_kind == 'dict':
+        targets = _xref_numbers(ap_value)
+        if not targets:
+            return '', True
+    else:
+        return '', True
+    seen = set()
+    for target in targets:
+        text, bad = _appearance_text(doc, target, seen)
+        if bad:
+            return '', True
+        if text:
+            parts.append(text)
+    return '\n'.join(parts), False
+
+
+def _popup_xref(doc, xref):
+    kind, value = doc.xref_get_key(xref, 'Popup')
+    if kind != 'xref':
+        return None
+    return int(value.split()[0])
+
+
+def _uncertain_message(page_number, label, more):
+    message = f'第{page_number}页有一处{label}。没法确认里面的文字有没有这次要隐去的内容，已停止。请先处理这条批注。'
+    if more:
+        message += '同一页还有别处批注同样没法确认。'
+    return message
+
+
+def _unsafe_hit_message(page_number, label, more):
+    message = f'第{page_number}页有一处{label}。它的文字里有这次要隐去的内容，去掉之后会露出还没框选的文字、线条或图片。请先去掉这块批注。'
+    if more:
+        message += '同一页还有别处批注同样要先去掉。'
+    return message
+
+
+def _open_content_page(page):
+    """同一页的正文副本，不含批注外观。
+
+    批注图标自己的笔画不能算成「底下的内容」，高亮也不能被当成把正文盖住的后绘图。
+    """
+    fitz = backend()
+    scratch = fitz.open()
+    scratch.insert_pdf(page.parent, from_page=page.number, to_page=page.number, annots=False, links=False, widgets=False)
+    return scratch
+
+
+def _content_image(data, index):
+    """去掉批注后再渲染。用来确认框内已经涂实，不被留在上面的删除线、高亮干扰。"""
+    import formats
+    fitz = backend()
+    with fitz.open(stream=data, filetype='pdf') as doc:
+        page = doc[index]
+        if not (list(page.annots() or []) or _annots_array(page)):
+            return None
+        scratch = fitz.open()
+        try:
+            scratch.insert_pdf(doc, from_page=index, to_page=index, annots=False, links=False, widgets=False)
+            raw = scratch.tobytes(garbage=1, deflate=True, no_new_id=True)
+        finally:
+            scratch.close()
+    return formats.pdf_image(raw, 0)
+
+
+def _content_hides_text(page):
+    """正文流里后画的图形或图片盖住了文字。只看正文，不把批注外观算进去。"""
+    fitz = backend()
+    scratch = _open_content_page(page)
+    try:
+        content = scratch[0]
+        covers = [(seq, fitz.Rect(rect)) for seq, (kind, rect) in enumerate(content.get_bboxlog()) if kind in {'fill-path', 'stroke-path', 'fill-image'}]
+        for span in content.get_texttrace():
+            for char in span['chars']:
+                if chr(char[0]).strip() and any(seq > span.get('seqno', -1) and rect.intersects(fitz.Rect(char[3])) for seq, rect in covers):
+                    return True
+        return False
+    finally:
+        scratch.close()
+
+
+def annotations_to_drop(page, boxes, page_number, terms):
+    """默认路径：命中补选词且删掉不会揭开未框选对象的批注。读不准则拒绝。
+
+    terms 是整份材料里全部框选正文，不限于本页。某一页的便签写着另一页框选的词，同样算命中。
+    是否会揭开内容，只看正文里的文字、线条和图片，不把批注图标自己的笔画算进去。
+    """
+    listed = {annot.xref: annot for annot in page.annots() or []}
+    uncertain = []
+    unsafe = []
+    drop = set()
+    scratch = _open_content_page(page)
+    try:
+        content = scratch[0]
+        for area, label, xref in _areas_to_judge(page):
+            if xref is None:
+                uncertain.append(label or '批注')
+                continue
+            blob, bad = annotation_text(page.parent, xref, listed.get(xref))
+            if bad:
+                uncertain.append(label or '批注')
+                continue
+            if not _text_hits(blob, terms):
+                continue
+            covered = area is None or area.is_empty or area.is_infinite or _objects_under(content, area, boxes)
+            if covered:
+                unsafe.append(label or '批注')
+                continue
+            drop.add(xref)
+            popup = _popup_xref(page.parent, xref)
+            if popup:
+                drop.add(popup)
+    finally:
+        scratch.close()
+    if uncertain:
+        raise engine.Rejected(_uncertain_message(page_number, uncertain[0], len(uncertain) > 1))
+    if unsafe:
+        raise engine.Rejected(_unsafe_hit_message(page_number, unsafe[0], len(unsafe) > 1))
+    return drop
+
+
+def _drop_xrefs(page, xrefs):
+    if not xrefs:
+        return
+    for annot in list(page.annots() or []):
+        if annot.xref in xrefs:
+            page.delete_annot(annot)
+    for link in list(page.get_links()):
+        if link.get('xref') in xrefs:
+            page.delete_link(link)
+    raw = _annots_array(page)
+    if not raw:
+        return
+    numbers = _xref_numbers(raw)
+    remain = [number for number in numbers if number not in xrefs]
+    if len(remain) == len(numbers):
+        return
+    if not remain:
+        page.parent.xref_set_key(page.xref, 'Annots', 'null')
+        return
+    page.parent.xref_set_key(page.xref, 'Annots', '[' + ' '.join(f'{number} 0 R' for number in remain) + ']')
+
+
+def without_dropped_annotations(data, drops):
+    """只去掉计划中点名的批注，留下其余批注，供默认路径做框外像素基准。"""
+    if not drops or not any(drops.values()):
+        return None
+    fitz = backend()
+    with open_pdf(data) as doc:
+        for index, page in enumerate(doc):
+            _drop_xrefs(page, drops.get(index) or set())
+        fresh = fitz.open()
+        fresh.insert_pdf(doc, links=True, annots=True, widgets=False)
+        fresh.set_metadata({})
+        output = fresh.tobytes(garbage=4, clean=True, deflate=True, no_new_id=True)
+        fresh.close()
+        return output
+
+
+def kept_annotation_problem(page, terms, page_number):
+    """副本里留下的批注仍然带着补选词，或文字读不全，就不能交付。"""
+    listed = {annot.xref: annot for annot in page.annots() or []}
+    uncertain = []
+    hits = []
+    for _area, label, xref in _areas_to_judge(page):
+        if xref is None:
+            uncertain.append(label or '批注')
+            continue
+        blob, bad = annotation_text(page.parent, xref, listed.get(xref))
+        if bad:
+            uncertain.append(label or '批注')
+            continue
+        if _text_hits(blob, terms):
+            hits.append(label or '批注')
+    if uncertain:
+        return _uncertain_message(page_number, uncertain[0], len(uncertain) > 1)
+    if hits:
+        return _unsafe_hit_message(page_number, hits[0], len(hits) > 1)
+    return ''
+
+
 def word_rows(page, boxes):
     fitz = backend()
     result = []
@@ -464,21 +1495,42 @@ def export(data, plan, _verify=True):
     import pdf_visibility
     fitz = backend()
     plan=effective_plan(data,plan)
+    clearing = wants_clear_annotations(plan)
     sizes = formats.pdf_info(data)
     selected = areas(plan, sizes)
     try:
         with open_pdf(data) as doc:
             pdf_visibility.check_object_carriers(doc,clean=True)
+            page_boxes = {}
+            all_terms = []
+            seen_terms = set()
+            for index, page in enumerate(doc):
+                boxes = [_to_page_rect(box, page, sizes[index]) for box in selected.get(index + 1, [])]
+                page_boxes[index] = boxes
+                if any(a.type[0] == fitz.PDF_ANNOT_REDACT for a in page.annots() or []):
+                    raise engine.Rejected('PDF已有未应用的涂黑标记，请先在原软件完成或移除后再检查。')
+                for term in selected_terms(page, boxes):
+                    if term not in seen_terms:
+                        seen_terms.add(term)
+                        all_terms.append(term)
+            # 图片和外观 Form 的 /Name 不在批注字典里。先去掉命中的名字，避免默认交付后明文还在。
+            _drop_stream_names(doc, all_terms)
+            planned_drops = {}
+            if not clearing:
+                for index, page in enumerate(doc):
+                    planned_drops[index] = annotations_to_drop(page, page_boxes[index], index + 1, all_terms)
             for index, page in enumerate(doc):
                 # 注释中的附件/原词不移入正文；已存在的待应用涂黑标记不能直接删除。
-                annotations = list(page.annots() or [])
-                if any(a.type[0] == fitz.PDF_ANNOT_REDACT for a in annotations):
-                    raise engine.Rejected('PDF已有未应用的涂黑标记，请先在原软件完成或移除后再检查。')
-                for annot in annotations:
-                    page.delete_annot(annot)
-                for link in page.get_links():
-                    page.delete_link(link)
-                boxes = [_to_page_rect(box, page, sizes[index]) for box in selected.get(index + 1, [])]
+                boxes = page_boxes[index]
+                if clearing:
+                    for annot in list(page.annots() or []):
+                        page.delete_annot(annot)
+                    for link in page.get_links():
+                        page.delete_link(link)
+                    if _annots_array(page):
+                        page.parent.xref_set_key(page.xref, 'Annots', 'null')
+                else:
+                    _drop_xrefs(page, planned_drops[index])
                 # 对不可见/半透明文字停止，避免把隐藏层变成普通可搜索正文。
                 visible_bounds=_content_bounds(page)
                 for span in page.get_texttrace():
@@ -486,19 +1538,17 @@ def export(data, plan, _verify=True):
                         raise engine.Rejected('PDF文字超出可见页面或裁剪边界，存在隐藏原文，原生路线停止。')
                     if span.get('type') == 3 or span.get('opacity', 1) < .999 or span.get('size',1)<.5 or (isinstance(span.get('color'),tuple) and all(c>=.99 for c in span['color']) and not pdf_visibility.white_text_visible(page,span)):
                         raise engine.Rejected('PDF含不可见或半透明文字，原生路线无法保证隐藏层清理，已停止。')
-                covers=[(seq,fitz.Rect(rect))for seq,(kind,rect)in enumerate(page.get_bboxlog())if kind in {'fill-path','stroke-path','fill-image'}]
-                for span in page.get_texttrace():
-                    for char in span['chars']:
-                        if chr(char[0]).strip() and any(seq>span.get('seqno',-1) and rect.intersects(fitz.Rect(char[3])) for seq,rect in covers):
-                            raise engine.Rejected('PDF文字被后绘制的图形/图片遮住，存在可恢复的隐藏内容；原生路线停止。')
+                if _content_hides_text(page):
+                    raise engine.Rejected('PDF文字被后绘制的图形/图片遮住，存在可恢复的隐藏内容；原生路线停止。')
                 pdf_visibility.redaction_graphics(page,boxes)
                 for box in boxes:
                     page.add_redact_annot(box, fill=(0, 0, 0), cross_out=False)
                 if boxes:
                     page.apply_redactions(images=2, graphics=1, text=0)
-            # 新建容器，不保存增量历史，不导入链接、注释、书签和文档级脚本。
+            # 新建容器，不保存增量历史，不导入表单、书签和文档级脚本。
+            # 默认保留批注和链接。只有明确选择一并清除批注时才不导入它们。
             fresh = fitz.open()
-            fresh.insert_pdf(doc, links=False, annots=False, widgets=False)
+            fresh.insert_pdf(doc, links=not clearing, annots=not clearing, widgets=False)
             fresh.set_metadata({})
             output = fresh.tobytes(garbage=4, clean=True, deflate=True, no_new_id=True)
             fresh.close()
@@ -516,9 +1566,30 @@ def verify(data, plan, source):
     if source is None:
         raise engine.Rejected('PDF复检需要原件，才能检查框外页面及文字。')
     plan=effective_plan(source,plan)
+    clearing = wants_clear_annotations(plan)
     sizes = formats.pdf_info(source)
     selected = areas(plan, sizes)
-    pixel_source = without_annotation_appearance(source) or source
+    all_terms = []
+    if clearing:
+        pixel_source = without_annotation_appearance(source) or source
+    else:
+        drops = {}
+        with open_pdf(source) as doc:
+            page_boxes = {}
+            seen_terms = set()
+            for index, page in enumerate(doc):
+                boxes = [_to_page_rect(box, page, sizes[index]) for box in selected.get(index + 1, [])]
+                page_boxes[index] = boxes
+                for term in selected_terms(page, boxes):
+                    if term not in seen_terms:
+                        seen_terms.add(term)
+                        all_terms.append(term)
+            # 和导出一样，先按命中去掉图片 / 外观 Form 的 /Name，再决定删哪些批注。
+            # 否则基准仍把这条外观当成命中而删掉，正式副本只清了名字，框外像素对不上。
+            _drop_stream_names(doc, all_terms)
+            for index, page in enumerate(doc):
+                drops[index] = annotations_to_drop(page, page_boxes[index], index + 1, all_terms)
+        pixel_source = without_dropped_annotations(source, drops) or source
     expected=export(source,plan,_verify=False)
     if data != expected:
         raise engine.Rejected('PDF实际副本与本工具按同一原件和计划重新生成的结果不一致，未接受外部覆盖或额外载体。')
@@ -542,7 +1613,10 @@ def verify(data, plan, source):
                         raise engine.Rejected('PDF页面尺寸或旋转发生变化。')
                     pixel_boxes = selected.get(index + 1, [])
                     boxes = [_to_page_rect(b, original, sizes[index]) for b in pixel_boxes]
-                    if word_rows(original, boxes) != word_rows(page, boxes):
+                    # 框外正文的位置跟「已经按计划去掉命中批注」的基准比。
+                    # 页边外观里画出的字会随那条批注一起消失，不能当成正文被挪走。
+                    baseline = stripped[index] if stripped is not None else original
+                    if word_rows(baseline, boxes) != word_rows(page, boxes):
                         checks['outside_text_positions_preserved'] = False
                     for span in page.get_texttrace():
                         for char in span['chars']:
@@ -551,24 +1625,35 @@ def verify(data, plan, source):
                     used_images={image['xref']for image in page.get_image_info(xrefs=True)}
                     if any(row[0]not in used_images for row in page.get_images(full=True)):
                         checks['pdf_hidden_objects_absent'] = False
-                    if page.first_annot or page.first_widget or page.get_links():
+                    if page.first_widget or (clearing and (page.first_annot or page.get_links() or _annots_array(page))):
                         checks['pdf_hidden_objects_absent'] = False
-                    # 有批注时，基准仍是去掉批注、尚未涂黑的页面，用来看涂黑有没有切到框外字形。
+                    # 明确清除批注时，基准仍是去掉批注、尚未涂黑的页面，用来看涂黑有没有切到框外字形。
+                    # 默认保留批注时，基准就是原页面（只提前去掉因命中补选词而删除的那几条）。
                     old = formats.pdf_image(pixel_source, index)
                     new = formats.pdf_image(data, index)
+                    # 默认留下的删除线、高亮画在涂黑上面。框内是否涂实，要看拿掉这些批注后的正文。
+                    solid = _content_image(data, index) if not clearing else None
+                    if solid is not None and solid.size != new.size:
+                        checks['selected_regions_solid'] = False
+                        solid = new
+                    if solid is None:
+                        solid = new
                     delta = ImageChops.difference(old, new)
                     for box in pixel_boxes:
                         # 仅容许涂黑边缘的两像素抗锯齿差异；切到字形时框外变化会明确失败。批注自身不走这份额外容差。
                         x0,y0,x1,y1=box
                         delta.paste((0,0,0),(max(0,x0-2),max(0,y0-2),min(new.width,x1+2),min(new.height,y1+2)))
                         inner=(x0+2,y0+2,x1-2,y1-2)
-                        if inner[0] >= inner[2] or inner[1] >= inner[3] or new.crop(inner).getbbox() is not None:
+                        if inner[0] >= inner[2] or inner[1] >= inner[3] or solid.crop(inner).getbbox() is not None:
                             checks['selected_regions_solid'] = False
                     if delta.getbbox() is not None:
                         checks['outside_page_pixels_preserved'] = False
-                    source_image = formats.pdf_image(source, index)
-                    baseline_page = stripped[index] if stripped is not None else None
-                    detail = annotation_change_reason(original, baseline_page, pixel_boxes, source_image, old, page_number=index + 1)
+                    if clearing:
+                        source_image = formats.pdf_image(source, index)
+                        baseline_page = stripped[index] if stripped is not None else None
+                        detail = annotation_change_reason(original, baseline_page, pixel_boxes, source_image, old, page_number=index + 1)
+                    else:
+                        detail = kept_annotation_problem(page, all_terms, index + 1)
                     if detail:
                         checks['outside_page_pixels_preserved'] = False
                         checks['covered_text_not_revealed'] = False
@@ -585,8 +1670,9 @@ def verify(data, plan, source):
                     if cover_reason:
                         raise engine.Rejected('PDF原生复检未通过：' + cover_reason)
                     raise engine.Rejected('PDF原生复检未通过：可能切到字形、影响框外内容或存在隐藏对象；请扩大框选或检查格式，不自动图像化。')
+                scope = 'PDF原生删改；默认保留批注，只删除框选正文。' if not clearing else 'PDF原生删改；已按明确选择清除批注，并做了严格像素复检。'
                 return {'checks': checks, 'not_checked': [] if keep else ['keep_phrases_preserved'],
-                        'effective_pages':plan.get('pages',[]),'output_sha256': engine.digest(data), 'scope': 'PDF原生删改；保留框外可搜索文字、位置和页面。仅核对已选区域及支持的隐藏载体。'}
+                        'effective_pages':plan.get('pages',[]),'output_sha256': engine.digest(data), 'scope': scope + '保留框外可搜索文字、位置和页面。仅核对已选区域及支持的隐藏载体。'}
         finally:
             if stripped is not None:
                 stripped.close()
