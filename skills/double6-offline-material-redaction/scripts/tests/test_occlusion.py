@@ -27,6 +27,7 @@ from generators.author_cases import base_page
 from generators.glyph_attacks import anchor_cases
 from generators.glyph_attacks import attack_cases
 from generators.glyph_attacks import contrast_page
+from generators.glyph_attacks import cyan_stem_cases
 from generators.glyph_attacks import small_seal_cases
 from generators.glyph_attacks import whiteout_cases
 from generators.glyph_attacks import strikeout_cut_through_glyph
@@ -604,6 +605,7 @@ class AddedInkAttackTests(unittest.TestCase):
         self.assertEqual(pdf._MASK_SHIFT_RADIUS, 2)
         self.assertEqual(pdf._DARKEN_NUM, 1)
         self.assertEqual(pdf._DARKEN_DEN, 5)
+        self.assertEqual(pdf._LIGHT_STROKE_MIN, 36)
         self.assertFalse(hasattr(pdf, "_ADDED_INK_BRIGHT"))
 
     def _paper_darken_count(self, drop, ink):
@@ -629,6 +631,13 @@ class AddedInkAttackTests(unittest.TestCase):
             light.putpixel((3, y), 255 - 29)
         self.assertGreaterEqual(pdf._background_darken_count(base, deep, (0, 0, side, side), 255, 200), 6)
         self.assertEqual(pdf._background_darken_count(base, light, (0, 0, side, side), 255, 200), 0)
+        # 浅色加笔暗 39，不够两成，但达到 36 这一档。高亮那种暗 29 仍不计。
+        pale = base.copy()
+        for y in range(4, 15):
+            pale.putpixel((3, y), 255 - 39)
+        self.assertEqual(pdf._background_darken_count(base, pale, (0, 0, side, side), 255, 200), 0)
+        self.assertEqual(pdf._light_stroke_count(base, light, (0, 0, side, side), 255, 200), 0)
+        self.assertGreaterEqual(pdf._light_stroke_count(base, pale, (0, 0, side, side), 255, 200), 6)
         # 前景掩码仍忽略贴着旧字迹一两像素的挪动，离得更远的新墨要计。
         stroke = Image.new("L", (side, side), 255)
         for y in range(6, 14):
@@ -700,6 +709,8 @@ class AddedInkAttackTests(unittest.TestCase):
                     pdf._mask_change_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1]),
                     pdf._ink_brighten_count(base, source, grown, left_level[0], left_level[1]),
                     pdf._ink_brighten_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1]),
+                    pdf._light_stroke_count(base, source, grown, left_level[0], left_level[1]),
+                    pdf._light_stroke_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1]),
                 ))
         return rows
 
@@ -709,7 +720,7 @@ class AddedInkAttackTests(unittest.TestCase):
             raw, box = contrast_page(gray=0, opacity=opacity, blend=True)
             counted = [row for row in self._darken_on(raw, glyph="3")]
             self.assertTrue(counted, opacity)
-            for text, left, right, left_mask, right_mask, _left_bright, _right_bright in counted:
+            for text, left, right, left_mask, right_mask, _left_bright, _right_bright, _left_pale, _right_pale in counted:
                 self.assertGreaterEqual(
                     left,
                     6,
@@ -730,11 +741,13 @@ class AddedInkAttackTests(unittest.TestCase):
         samples = {item["name"]: item for item in office_samples()}
         for name in ("正常-黄色高亮在保留句", "正常-黄色高亮压在号码上"):
             sample = samples[name]
-            for text, left, right, left_mask, right_mask, left_bright, right_bright in self._darken_on(sample["raw"]):
+            for text, left, right, left_mask, right_mask, left_bright, right_bright, left_pale, right_pale in self._darken_on(sample["raw"]):
                 self.assertLess(left, 6, (name, text, left, right, left_mask, right_mask, left_bright, right_bright))
                 self.assertLess(right, 6, (name, text, left, right, left_mask, right_mask, left_bright, right_bright))
                 self.assertLess(left_bright, 6, (name, text, left, right, left_bright, right_bright))
                 self.assertLess(right_bright, 6, (name, text, left, right, left_bright, right_bright))
+                self.assertLess(left_pale, 6, (name, text, left_pale, right_pale))
+                self.assertLess(right_pale, 6, (name, text, left_pale, right_pale))
             out, _report, _ext = policy.export(sample["raw"], ".pdf", _pdf_plan(sample["box"], [sample["keep"]]))
             self.assertIn(sample["keep"], _page_text(out))
         self.assertEqual(self._paper_darken_count(drop=29, ink=120), 0)
@@ -745,16 +758,18 @@ class AddedInkAttackTests(unittest.TestCase):
         highlight_box = [(other.x0 - 1) * 2, (other.y0 - 1) * 2, (other.x1 + 1) * 2, (other.y1 + 1) * 2]
         doc.close()
         digits = {
-            text: (left, right, left_bright, right_bright)
-            for text, left, right, _left_mask, _right_mask, left_bright, right_bright in self._darken_on(highlight)
+            text: (left, right, left_bright, right_bright, left_pale, right_pale)
+            for text, left, right, _left_mask, _right_mask, left_bright, right_bright, left_pale, right_pale in self._darken_on(highlight)
             if text in ("1", "2")
         }
         self.assertEqual(set(digits), {"1", "2"})
-        for text, (left, right, left_bright, right_bright) in digits.items():
+        for text, (left, right, left_bright, right_bright, left_pale, right_pale) in digits.items():
             self.assertLess(left, 6, (text, left, right, left_bright, right_bright))
             self.assertLess(right, 6, (text, left, right, left_bright, right_bright))
             self.assertLess(left_bright, 6, (text, left, right, left_bright, right_bright))
             self.assertLess(right_bright, 6, (text, left, right, left_bright, right_bright))
+            self.assertLess(left_pale, 6, (text, left_pale, right_pale))
+            self.assertLess(right_pale, 6, (text, left_pale, right_pale))
         out, _report, _ext = policy.export(highlight, ".pdf", _pdf_plan(highlight_box, [AUTHOR_KEEP]))
         self.assertIn(AUTHOR_KEEP, _page_text(out))
         strike_raw, strike_box = strikeout_on_selected_word()
@@ -762,6 +777,24 @@ class AddedInkAttackTests(unittest.TestCase):
         text = _page_text(out)
         self.assertIn(REVIEW_KEEP, text)
         self.assertNotIn("DELETEME", text)
+
+    def test_pale_cyan_stem_beside_a_black_digit_is_refused(self):
+        """浅青竖线只把白纸压暗约 39，不够两成，也不够暗过底色环 40。仍要拒绝。"""
+        rows = cyan_stem_cases()
+        self.assertEqual([row["name"] for row in rows], ["青线封3-48"])
+        row = rows[0]
+        counted = [item for item in self._darken_on(row["raw"], glyph="3")]
+        self.assertTrue(counted)
+        for text, left, right, left_mask, right_mask, left_bright, right_bright, left_pale, right_pale in counted:
+            self.assertLess(left, 6, (text, left, right))
+            self.assertLess(right, 6, (text, left, right))
+            self.assertLess(left_mask, 6, (text, left_mask, right_mask))
+            self.assertLess(right_mask, 6, (text, left_mask, right_mask))
+            self.assertLess(left_bright, 6, (text, left_bright, right_bright))
+            self.assertLess(right_bright, 6, (text, left_bright, right_bright))
+            self.assertGreaterEqual(left_pale, 6, (text, left_pale, right_pale))
+            self.assertGreaterEqual(right_pale, 6, (text, left_pale, right_pale))
+        self._check(row)
 
     def test_small_opening_seals_count_even_beside_the_stroke(self):
         """6/8/9 pt 复审封口，以及 5–12 pt 细线和多段短线。贴边的深色也要数到 6。"""
@@ -777,7 +810,7 @@ class AddedInkAttackTests(unittest.TestCase):
             with self.subTest(name=row["name"]):
                 counted = [item for item in self._darken_on(row["raw"], glyph="3")]
                 self.assertTrue(counted, row["name"])
-                for text, left, right, left_mask, right_mask, _left_bright, _right_bright in counted:
+                for text, left, right, left_mask, right_mask, _left_bright, _right_bright, _left_pale, _right_pale in counted:
                     self.assertGreaterEqual(left, 6, (row["name"], text, left, right, left_mask, right_mask))
                     self.assertGreaterEqual(right, 6, (row["name"], text, left, right, left_mask, right_mask))
                 self._check(row)
@@ -811,7 +844,7 @@ class AddedInkAttackTests(unittest.TestCase):
                 glyph = row["params"]["char"]
                 counted = [item for item in self._darken_on(row["raw"], glyph=glyph)]
                 self.assertTrue(counted, row["name"])
-                for text, _left, _right, left_mask, right_mask, left_bright, right_bright in counted:
+                for text, _left, _right, left_mask, right_mask, left_bright, right_bright, _left_pale, _right_pale in counted:
                     self.assertGreaterEqual(
                         left_bright,
                         6,
@@ -851,7 +884,7 @@ class AddedInkAttackTests(unittest.TestCase):
                 if kind not in ("vector", "image") and row["expect"] != "transparent":
                     counted = [item for item in self._darken_on(row["raw"], glyph="8")]
                     self.assertTrue(counted, row["name"])
-                    for text, _left, _right, left_mask, right_mask, left_bright, right_bright in counted:
+                    for text, _left, _right, left_mask, right_mask, left_bright, right_bright, _left_pale, _right_pale in counted:
                         self.assertTrue(
                             left_mask >= 6 or left_bright >= 6,
                             (row["name"], text, left_mask, left_bright),

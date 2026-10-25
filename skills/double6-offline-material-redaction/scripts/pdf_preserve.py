@@ -634,12 +634,17 @@ _CONTRAST_MOVE_DEN = 5
 # 两成能接住黑墨 0.25（白纸上大约暗 63）。办公高亮大约只暗 29，不到两成。再收到 25% 会放走 0.25。
 _DARKEN_NUM = 1
 _DARKEN_DEN = 5
+# 浅色加笔常常够不着两成：黑笔画把这块最暗压到 0 时，两成大约是 51。
+# 它也常常暗不过底色环 40，所以掩码和变亮都看不到。纸面变暗达到 36 级仍算新笔画。
+# 36 落在黄色高亮的 29 和复审青线的 39 之间。不把两成改小，免得高亮在对比度被估小时过线。
+# 这一档不按贴边跳过。青线就贴在黑色字的左缘上。
+_LIGHT_STROKE_MIN = 36
 # 细线也能凑满 6 个预览像素。一两粒抗锯齿不算改字。
 _MASK_DIFF_MIN = 6
 _GLYPH_INK_MARGIN = 2
 # 前景掩码只把「贴着新出现的字迹」当成一两像素挪动。消失的笔画如果贴着本来就在的字迹，
 # 贴边忽略只放过轻度变亮。接近字迹深度的涂白，哪怕整段都落在剩下那一弯的两像素里，也要计入。
-# 变暗、变亮计数都不用这圈。
+# 变暗、变亮和浅色加笔都不按这圈跳过。
 _MASK_SHIFT_RADIUS = 2
 
 
@@ -836,6 +841,41 @@ def _background_darken_count(base_img, covered_img, box, background, ink):
     return count
 
 
+def _light_stroke_count(base_img, covered_img, box, background, ink):
+    """外扩框里，高于中点的纸面被涂暗到固定一档的像素。
+
+    和两成变暗并列，不取代它。两成用底色和这块最暗像素的比例。框里有黑笔画时，
+    最暗是 0，两成大约要暗 51。浅色竖线只把白纸压暗大约 39，比例不够，
+    也不比底色环暗过 40，前景掩码和变亮都是 0。这里改看绝对亮度差，达到 36 级才计入。
+    黄色高亮在两个渲染器上都只暗 29，不到这一档。不按贴边跳过：新笔画可以贴着原字。
+    两张图对不齐就返回 None。
+    """
+    if box is None or background is None or ink is None or base_img.size != covered_img.size:
+        return None
+    x0, y0, x1, y1 = box
+    if x1 <= x0 or y1 <= y0 or x0 < 0 or y0 < 0 or x1 > base_img.width or y1 > base_img.height:
+        return None
+    before = base_img.crop(box).tobytes()
+    after = covered_img.crop(box).tobytes()
+    if len(before) != len(after) or not before:
+        return None
+    if background - min(before) < _CONTRAST_MIN:
+        return None
+    midpoint = background + ink
+    width = x1 - x0
+    height = y1 - y0
+    if len(before) != width * height:
+        return None
+    count = 0
+    for origin, painted in zip(before, after):
+        if origin * 2 <= midpoint or origin <= painted:
+            continue
+        if origin - painted < _LIGHT_STROKE_MIN:
+            continue
+        count += 1
+    return count
+
+
 def _ink_brighten_count(base_img, covered_img, box, background, ink):
     """外扩框里，去掉批注后属于字迹、带批注后明显变亮的像素。
 
@@ -907,6 +947,7 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
     取样只取这个字形自己的矩形，再向外加 2 个预览像素，不和整块矩形做平均或面积加权。
     掩码用去掉批注后的局部底色和字迹色的中点。多出或少掉的前景达到小数量就拒绝。
     高于中点的底色如果变暗达到这段对比度的两成，累计到同样的小数量也拒绝。
+    高于中点的纸面如果变暗达到固定的浅色加笔门槛，哪怕不够两成，累计到同样的小数量也拒绝。
     低于中点、接近最暗像素、或比底色环暗过对比度下限的字迹如果变亮达到同样的两成，累计到同样的小数量也拒绝。
     新前景贴着旧字迹、或消失的笔画贴着新出现的字迹，一两像素的挪动不计。
     消失的笔画贴着本来就在的字迹时，只有轻度变亮不计；涂白擦笔要计入。
@@ -936,17 +977,21 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
         right = _mask_change_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1])
         left_dark = _background_darken_count(base, covered, grown, left_level[0], left_level[1])
         right_dark = _background_darken_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1])
+        left_pale = _light_stroke_count(base, covered, grown, left_level[0], left_level[1])
+        right_pale = _light_stroke_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1])
         left_bright = _ink_brighten_count(base, covered, grown, left_level[0], left_level[1])
         right_bright = _ink_brighten_count(mupdf_base, mupdf_covered, grown, right_level[0], right_level[1])
         if (
             left is None or right is None
             or left_dark is None or right_dark is None
+            or left_pale is None or right_pale is None
             or left_bright is None or right_bright is None
         ):
             return 'invalid', grown or box
         if (
             left >= _MASK_DIFF_MIN or right >= _MASK_DIFF_MIN
             or left_dark >= _MASK_DIFF_MIN or right_dark >= _MASK_DIFF_MIN
+            or left_pale >= _MASK_DIFF_MIN or right_pale >= _MASK_DIFF_MIN
             or left_bright >= _MASK_DIFF_MIN or right_bright >= _MASK_DIFF_MIN
         ):
             return 'tamper', grown

@@ -1037,6 +1037,35 @@ def anchor_whiteout(
     return raw, box
 
 
+def cyan_stem_page(size=48):
+    """黑色「3」左侧加一条浅青竖线。几何和复审漏脱一致。"""
+    rgb = (125 / 255.0, 1, 1)
+    doc, page = _fresh(640, 360)
+    pairs = _page_chrome(page, 250, size)
+    target = next(rect for text, rect in pairs if text == "3")
+    bar = fitz.Rect(
+        target.x0 + target.width * (-0.04),
+        target.y0 + target.height * 0.18,
+        target.x0 + target.width * 0.04,
+        target.y1 - target.height * 0.18,
+    )
+    raw, box = _annot_bars(doc, page, pairs, [bar], rgb, 1, False)
+    doc.close()
+    return raw, box
+
+
+def cyan_stem_cases():
+    raw, box = cyan_stem_page()
+    return [_row(
+        "青线封3-48",
+        "light-stroke",
+        raw,
+        box,
+        {"size": 48, "rgb": [125, 255, 255], "x0": -0.04, "x1": 0.04, "char": "3"},
+        "tamper",
+    )]
+
+
 def anchor_cases():
     """灰字加更深锚点后再涂白。文字锚必须靠字迹估计拒绝，矢量或图片可以报线条或图片。"""
     rows = []
