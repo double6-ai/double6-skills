@@ -612,6 +612,12 @@ class AddedInkAttackTests(unittest.TestCase):
         self.assertEqual(pdf._STROKE_MARK_MIN, 18)
         self.assertEqual(pdf._STROKE_WASH_NUM, 1)
         self.assertEqual(pdf._STROKE_WASH_DEN, 2)
+        self.assertEqual(pdf._SHEET_FLOOR, 8)
+        self.assertEqual(pdf._SHEET_SPAN_NUM, 1)
+        self.assertEqual(pdf._SHEET_SPAN_DEN, 2)
+        self.assertEqual(pdf._SHEET_FILL_NUM, 1)
+        self.assertEqual(pdf._SHEET_FILL_DEN, 3)
+        self.assertEqual(pdf._SHEET_MIN_PIXELS, 8)
         self.assertFalse(hasattr(pdf, "_ADDED_INK_BRIGHT"))
 
     def _paper_darken_count(self, drop, ink):
@@ -654,6 +660,24 @@ class AddedInkAttackTests(unittest.TestCase):
         self.assertEqual(pdf._sparse_stroke_count(base, sheet, (0, 0, side, side), (0, 0, side, side), 255, 0), 0)
         self.assertGreaterEqual(
             pdf._sparse_stroke_count(base, thin, (0, 0, side, side), (0, 0, side, side), 255, 0),
+            6,
+        )
+        # 整片只暗 16，够不到过半的 18，边上再有一列到 22。仍是铺开的高亮，不计。
+        shallow = Image.new("L", (side, side), 255 - 16)
+        for y in range(side):
+            shallow.putpixel((2, y), 0)
+            shallow.putpixel((side - 2, y), 255 - 22)
+        self.assertEqual(
+            pdf._sparse_stroke_count(base, shallow, (0, 0, side, side), (0, 0, side, side), 255, 0),
+            0,
+        )
+        # 斜着的一条两个方向都碰到，但填不满外框，仍计入。
+        diagonal = base.copy()
+        for i in range(4, 16):
+            diagonal.putpixel((i, i), 255 - 22)
+            diagonal.putpixel((i, min(side - 1, i + 1)), 255 - 22)
+        self.assertGreaterEqual(
+            pdf._sparse_stroke_count(base, diagonal, (0, 0, side, side), (0, 0, side, side), 255, 0),
             6,
         )
         # 前景掩码仍忽略贴着旧字迹一两像素的挪动，离得更远的新墨要计。
@@ -838,6 +862,10 @@ class AddedInkAttackTests(unittest.TestCase):
         for row in rows:
             with self.subTest(name=row["name"]):
                 self._check(row)
+        raw, box = contrast_page(bg=160, paint="highlight")
+        self._check({"raw": raw, "box": box, "keep": [REVIEW_KEEP], "expect": "light", "name": "灰底160上的高亮"})
+
+    def test_small_opening_seals_count_even_beside_the_stroke(self):
         """6/8/9 pt 复审封口，以及 5–12 pt 细线和多段短线。贴边的深色也要数到 6。"""
         rows = small_seal_cases()
         names = [row["name"] for row in rows]

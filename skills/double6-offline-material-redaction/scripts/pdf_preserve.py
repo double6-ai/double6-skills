@@ -641,11 +641,19 @@ _DARKEN_DEN = 5
 _LIGHT_STROKE_MIN = 36
 # 36 挡不住更浅的细条。黄线只暗 35，半透明青线只暗 22，灰纸上的浅黑条只暗 24。
 # 不把 36 改成 30：普通高亮只暗 29，再往下收一档，更浅的一条又能绕过。
-# 改看这一笔占了多少纸面。大半张纸一起变暗是高亮那种整片；纸面大多没变、只暗了一条，才是新笔画。
-# 18 低于高亮的 29，也低于上面那些浅条。整片高亮靠覆盖面排除，不靠把这个数抬高。
+# 细条只沿一个方向连着。高亮把这个字的宽和高一起铺暗。灰纸上的高亮只暗 18 上下，
+# 渲染差一级就不够「过半达到 18」，边上仍有几粒过 18，不能靠再抬这个数来认整片。
 _STROKE_MARK_MIN = 18
 _STROKE_WASH_NUM = 1
 _STROKE_WASH_DEN = 2
+# 铺开的整片从 8 级起认。8 低于灰纸高亮，也低于要拒绝的浅条。
+# 外框要同时盖过这块宽和高的一半，并且填满自己外框的三分之一。斜线盖得过两边，但填不满。
+_SHEET_FLOOR = 8
+_SHEET_SPAN_NUM = 1
+_SHEET_SPAN_DEN = 2
+_SHEET_FILL_NUM = 1
+_SHEET_FILL_DEN = 3
+_SHEET_MIN_PIXELS = 8
 # 细线也能凑满 6 个预览像素。一两粒抗锯齿不算改字。
 _MASK_DIFF_MIN = 6
 _GLYPH_INK_MARGIN = 2
@@ -910,10 +918,53 @@ def _stroke_search_box(grown, self_box, neighbors, image_width):
     return (left, y0, right, y1)
 
 
-def _sparse_stroke_count(base_img, covered_img, tight, search, background, ink):
-    """纸面大多没变时，连成一条的浅色变暗。整片一起变暗则返回 0。
+def _broad_sheet(base_img, covered_img, box, background, ink):
+    """变暗是否同时铺过这块的宽和高。对不齐返回 None。
 
-    高亮把这个字里大半张纸压暗大约 29，覆盖面过半，不当成新笔画。
+    高亮是一整片。灰纸上可能只暗十几级，过半达不到 18，边上仍有几粒过 18。
+    细条只占宽或高里的一边。斜线两个方向都碰到，但填不满自己的外框，仍算笔画。
+    """
+    crop = _aligned_pair(base_img, covered_img, box)
+    if crop is None:
+        return None
+    before, after, width, height = crop
+    count = 0
+    min_x = width
+    max_x = -1
+    min_y = height
+    max_y = -1
+    for index, (origin, painted) in enumerate(zip(before, after)):
+        if origin * 2 <= background + ink or origin - painted < _SHEET_FLOOR:
+            continue
+        x = index % width
+        y = index // width
+        count += 1
+        if x < min_x:
+            min_x = x
+        if x > max_x:
+            max_x = x
+        if y < min_y:
+            min_y = y
+        if y > max_y:
+            max_y = y
+    if count < _SHEET_MIN_PIXELS or max_x < min_x:
+        return False
+    span_w = max_x - min_x + 1
+    span_h = max_y - min_y + 1
+    if span_w * _SHEET_SPAN_DEN < width * _SHEET_SPAN_NUM:
+        return False
+    if span_h * _SHEET_SPAN_DEN < height * _SHEET_SPAN_NUM:
+        return False
+    if count * _SHEET_FILL_DEN < span_w * span_h * _SHEET_FILL_NUM:
+        return False
+    return True
+
+
+def _sparse_stroke_count(base_img, covered_img, tight, search, background, ink):
+    """纸面大多没变时，连成一条的浅色变暗。铺开的整片则返回 0。
+
+    高亮把这个字的宽和高一起压暗。白纸上大约暗 29，过半达到 18。
+    灰纸上常常只暗 18 上下，过半那条会漏，改看是不是铺过宽和高。
     细条只碰到一小部分纸，暗差可以只有 22，连成 6 个预览像素就计入。
     查找范围比字形框再宽半个字，用来接住落在字间的条。两张图对不齐就返回 None。
     """
@@ -925,7 +976,12 @@ def _sparse_stroke_count(base_img, covered_img, tight, search, background, ink):
     wash = _paper_darken_fraction(base_img, covered_img, tight, background, ink)
     if wash is None:
         return None
-    if wash[0] >= 8 and wash[1] * _STROKE_WASH_DEN >= wash[0] * _STROKE_WASH_NUM:
+    if wash[0] >= _SHEET_MIN_PIXELS and wash[1] * _STROKE_WASH_DEN >= wash[0] * _STROKE_WASH_NUM:
+        return 0
+    sheet = _broad_sheet(base_img, covered_img, tight, background, ink)
+    if sheet is None:
+        return None
+    if sheet:
         return 0
     return _largest_marked_run(base_img, covered_img, search, background, ink)
 
@@ -1075,7 +1131,7 @@ def _glyph_cover_reason(baseline_page, page, area, base, covered, mupdf_base, mu
     掩码用去掉批注后的局部底色和字迹色的中点。多出或少掉的前景达到小数量就拒绝。
     高于中点的底色如果变暗达到这段对比度的两成，累计到同样的小数量也拒绝。
     高于中点的纸面如果变暗达到固定的浅色加笔门槛，哪怕不够两成，累计到同样的小数量也拒绝。
-    更浅的一条不靠把这个门槛再降低。这个字的纸面大半一起变暗时当作高亮整片；纸面大多没变、只有连成一条的变暗，也拒绝。字间半个字宽里的条同样算。
+    更浅的一条不靠把这个门槛再降低。变暗如果同时铺过这个字的宽和高，当作高亮整片；只沿一个方向连成一条的变暗，也拒绝。灰纸上的整片从 8 级起认，不要求先过 18。字间半个字宽里的条同样算。
     低于中点、接近最暗像素、或比底色环暗过对比度下限的字迹如果变亮达到同样的两成，累计到同样的小数量也拒绝。
     新前景贴着旧字迹、或消失的笔画贴着新出现的字迹，一两像素的挪动不计。
     消失的笔画贴着本来就在的字迹时，只有轻度变亮不计；涂白擦笔要计入。
