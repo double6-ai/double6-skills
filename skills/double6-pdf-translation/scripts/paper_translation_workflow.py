@@ -17,6 +17,8 @@ import time
 import urllib.request
 
 from bounded_execution import run_bounded, snapshot
+from model_profiles import apply_model_profile, request_concurrency_from_env
+from translation_cost_ledger import PROTOCOL as COST_LEDGER_PROTOCOL
 import failure_root_cause
 from cutover.scoped import check_scoped_preflight, sha
 from pdf_input_preflight import DIGITAL_MAX_PAGES, SUPPORTED_TARGETS, PreflightError, blocked_result, finding, inspect_pdf
@@ -231,11 +233,19 @@ def job_limits(args):
     return limits if limits else resolve_limits()
 
 
+def model_request_concurrency(args) -> str:
+    """编排入口同时发给模型的路数。档案或参数写明的用那个数；都没写则保持 1。"""
+    value = getattr(args, "local_max_concurrency", None)
+    if value is None:
+        return "1"
+    return str(int(value))
+
+
 def candidate_command(args, freeze, input_pdf=None):
     timeouts = backend_timeouts(job_limits(args)['per_job_seconds'])
     command = [sys.executable, str(SCRIPT_DIR / 'run_pdf_translation.py'), str(Path(input_pdf or args.input).resolve()),
                '--output-dir', str(args.output.resolve()), '--model', args.model, '--base-url', args.base_url,
-               '--local-max-concurrency', '1', '--timeout', str(timeouts['timeout']), '--openai-timeout', str(timeouts['openai_timeout']),
+               '--local-max-concurrency', model_request_concurrency(args), '--timeout', str(timeouts['timeout']), '--openai-timeout', str(timeouts['openai_timeout']),
                '--latex-render-timeout', str(timeouts['timeout']), '--latex-translate-timeout', str(timeouts['openai_timeout']),
                '--latex-compile-timeout', '45', '--hymt-compat-proxy', 'auto', '--strict-delivery-gates']
     target_language = getattr(args, 'target_language', 'zh')
@@ -409,6 +419,9 @@ def quality_verdict(output_dir, manifest=None):
     structure = quality.get('formula_structure_check')
     if isinstance(structure, dict) and structure.get('status'):
         verdict['formula_structure'] = {k: structure.get(k) for k in ('status', 'severity', 'lost', 'flagged_pages')}
+    ledger = manifest.get('cost_ledger')
+    if isinstance(ledger, dict) and ledger.get('protocol') == COST_LEDGER_PROTOCOL:
+        verdict['cost_ledger'] = ledger
     readable = quality.get('readable_output')
     if isinstance(readable, dict) and readable.get('status'):
         verdict['readable_output'] = {k: readable.get(k) for k in ('status', 'reason_code', 'vector_pages')}
@@ -886,8 +899,8 @@ def main(argv=None):
     reviewed.add_argument('--receipts', type=Path, required=True)
     reviewed.add_argument('--lock-path', type=Path, default=PROJECT/'logs/paper_translation_workflow.lock')
     d = sub.add_parser('doctor')
-    d.add_argument('--base-url', required=True)
-    d.add_argument('--model', required=True)
+    d.add_argument('--base-url', default=None)
+    d.add_argument('--model', default=None)
     d.add_argument('--output', type=Path)
     continuation = sub.add_parser('continue-digital', help='仅续验同一已完成backend的原render，不重新生成')
     continuation.add_argument('--contract', type=Path, required=True)
@@ -934,8 +947,10 @@ def main(argv=None):
     for name in ('input', 'freeze', 'output', 'receipts', 'previous-result'):
         resumed.add_argument('--'+name, type=Path, required=True)
     resumed.add_argument('--previous-result-sha256', required=True)
-    resumed.add_argument('--model', required=True)
-    resumed.add_argument('--base-url', required=True)
+    resumed.add_argument('--model', default=None)
+    resumed.add_argument('--base-url', default=None)
+    resumed.add_argument('--local-max-concurrency', type=int, default=request_concurrency_from_env(),
+                         help='同时发给模型的请求数。不写时，智谱档案用 8，其它模型保持 1。')
     resumed.add_argument('--cjk-font', default='Songti SC')
     resumed.add_argument('--lock-path', type=Path, default=PROJECT/'logs/paper_translation_workflow.lock')
     resumed.add_argument('--smoke', action='store_true', help=argparse.SUPPRESS)
@@ -948,8 +963,10 @@ def main(argv=None):
         if action in ('candidate','collect'):
             p.add_argument('--freeze', type=Path, required=True)
             p.add_argument('--route', choices=list(ROUTES), required=True)
-            p.add_argument('--model', required=True)
-            p.add_argument('--base-url', required=True)
+            p.add_argument('--model', default=None)
+            p.add_argument('--base-url', default=None)
+            p.add_argument('--local-max-concurrency', type=int, default=request_concurrency_from_env(),
+                           help='同时发给模型的请求数。不写时，智谱档案用 8，其它模型保持 1。')
             p.add_argument('--smoke', action='store_true')
             p.add_argument('--cjk-font', default='Songti SC')
             p.add_argument('--target-language', choices=('zh', 'en'), default='zh',
@@ -965,8 +982,10 @@ def main(argv=None):
     chunked.add_argument('--freeze', type=Path, required=True)
     chunked.add_argument('--route', choices=list(CHUNK_ROUTES), required=True,
                          help='digital_pdf / scanned_ocr：全部块同一路线；per_chunk：原生文字页走 digital_pdf，扫描页走 scanned_ocr')
-    chunked.add_argument('--model', required=True)
-    chunked.add_argument('--base-url', required=True)
+    chunked.add_argument('--model', default=None)
+    chunked.add_argument('--base-url', default=None)
+    chunked.add_argument('--local-max-concurrency', type=int, default=request_concurrency_from_env(),
+                         help='同时发给模型的请求数。不写时，智谱档案用 8，其它模型保持 1。')
     chunked.add_argument('--target-language', choices=('zh', 'en'), default='zh')
     chunked.add_argument('--cjk-font', default='Songti SC')
     chunked.add_argument('--resume', action='store_true', help='在同一 --output/--receipts 续跑：已完成块逐 sha 核对后复用，未完成块重跑')
@@ -989,6 +1008,8 @@ def main(argv=None):
         group.add_argument('--memory-metric', choices=('rss', 'pss'), default=None,
                            help='内存计量口径；也可用 PAPER_TRANSLATION_MEMORY_METRIC。默认 macOS rss、Linux pss')
     args = parser.parse_args(argv)
+    if args.action in {'doctor', 'candidate', 'collect', 'resume-latex', 'chunked-candidate'}:
+        apply_model_profile(args)
     try:
         result = dispatch(args)
     except (PreflightError, ResourceLimitError, ValueError, OSError, RuntimeError) as exc:

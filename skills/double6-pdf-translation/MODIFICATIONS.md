@@ -240,3 +240,18 @@
 ## 2.0.0 正式发行（2026-10-25）
 
 同步版本、发行状态和公开范围说明；PR #25 的执行逻辑保持，仅 `scanned_raster/constants.py` 的版本输出常量由 rc.9 改为 2.0.0。保留历史变更、上游许可证及 A+C 已知限制。
+
+
+## 2.0.1 正式发行（2026-10-25）
+
+在已发布的 2.0.0 上增加速度、成本和扫描留原图改动。发行状态仍是正式版。版本号写入 `SKILL.md`、`configs/default-routes.json`、`scripts/scanned_raster/constants.py` 与仓库 README。
+
+- 2026-10-25：收紧运行安装。`requirements-runtime.in` 不再重复罗列，也不再安装 PyPI babeldoc。`requirements-rapidocr.lock` 以 `--no-deps` 安装 RapidOCR，避免 `opencv-python`。运行锁只保留 `opencv-python-headless`。去掉 `huggingface-hub`、`hf-xet`、`fsspec`、`filelock`、`lxml`、`uharfbuzz`、`toml`、`ruff` 以及 xsdata 命令行附加项（`click`、`jinja2`、`toposort`、`typer`、`shellingham`）。`tomlkit` 写入运行锁。`setup_venv.sh` 在装完 PDFMathTranslate 后卸掉 `hatchling`、`editables`、`pathspec`、`pluggy`、`trove-classifiers`、`setuptools`。`detect_scanned_file` 只在真正比较页面时导入 `scikit-image`，运行锁不再安装它，以及只被它带进来的 `networkx`、`imageio`、`tifffile`、`lazy-loader`。
+- 2026-10-25：智谱档案增加 `max_concurrency`（8）。`apply_model_profile` 只在 `local_max_concurrency` 为 None 时写入；显式参数和环境变量 `LOCAL_MODEL_MAX_CONCURRENCY` 不改。`paper_translation_workflow.candidate_command` 改用 `model_request_concurrency`：没写路数且不是这份档案时仍传 `1`。直接翻译入口没写路数时仍由 `effective_local_max_concurrency` 落到 3，再交给 `--qps` 和 `--pool-max-workers`。`chunked_workflow.run_chunk_candidate` 把这个数带到每一块。一次只跑一个重任务、120 秒和内存上限未改。数值库线程仍是 1。
+- 2026-10-25：`il_translator_llm_only.length_ratio_needs_retry`。原文 token 数不超过 `SHORT_SOURCE_TOKEN_LIMIT`（10，与「译文和原文相同」的再译门槛相同）时，不再因 0.3–3 倍比例退回逐段翻译；译文为空或超过 30 个 token 仍退回。更长段落的判定不变。
+- 2026-10-25：批译提示词拆成固定前缀和本批变化部分。`il_translator_llm_only.py` 的 `STABLE_PROMPT` 含角色、结构规则、始终相同的术语用法、输出格式和示例；标题、本批术语表和输入 JSON 在 `VARIABLE_PROMPT`。`_build_llm_prompt` 返回完整字符串和前缀。`openai.llm_messages` 在前缀确实是整段开头时拆成 system 与 user；对不上则仍发一条 user。逐段重译的另一套提示词未改。质量门、批次大小和思考档未改。
+- 2026-10-25：长文档电子块共用翻译进程。新增 `scripts/backend_session.py`。`chunked_workflow.run` 在非纯扫描路线于块循环前启动该进程，每块执行前 `ensure`，`finally` 里关掉。渲染发现 `PDF_TRANSLATION_BACKEND_SESSION` 且命令是内置 `pdf2zh_next_vendor.py` 时，把这一块发到该进程，不再另起子进程；套接字不在则照旧冷启动。进程内设置 `PDF_TRANSLATION_REUSE_LAYOUT=1`：`high_level.translate_in_process` 走进程内翻译，`DocLayoutModel.load_available` 复用已加载的 ONNX 模型。块超时断开连接后该进程退出，下一块重新加载一次。不把启动 nonce 和凭据写进会话日志或命令行。单份 `candidate` 与纯扫描不走这条路径。质量门、页数上限和资源合同未改。
+- 2026-10-25：新增 `configs/model-profiles.json` 与 `scripts/model_profiles.py`。默认档案为智谱 coding plan 的 `glm-5.3-flash`（端点 `/api/coding/paas/v4`，不使用 vendor 里智谱预设的 `/api/paas/v4`）。`paper_translation_workflow.py` 的 `doctor` / `candidate` / `collect` / `resume-latex` / `chunked-candidate` 与 `pdf_translation_runtime.py` 在模型或端点留空时套用该档案；显式参数不改。凭据仍只经 `LOCAL_TRANSLATION_API_KEY`，为空时从 `GLM_API_KEY` 抄入进程环境。未改思考参数时按 `thinking_floors` 取该模型最低档：GLM-5.3 系列为 `thinking.type=enabled` 与 `reasoning_effort=low`，GLM-5.2 为 `minimal`，更早模型为 `thinking.type=disabled`。渲染进程用 `PDF_TRANSLATION_THINKING` 把这一档交给后端，vendored `openai.py` 写入请求体并计入缓存身份。`--no-openai-send-reasoning-effort` 或显式更高的 reasoning 不改写。
+- 2026-10-25：`parser_policy.assess_rapidocr_page` 的 `escalate` 不再因单栏置信度偏低而成立；旋转、双栏、表格、公式、空页和已有质量失败仍升级。`checkpoint.enable_default_scanned_reuse` 在未忽略缓存时为扫描路线补上默认断点目录，并用模型/提示词、解析档位推导指纹。`execution_identity` 不再把接口密钥和断点目录算进配置指纹。
+- 2026-10-25：`scanned_raster/pipeline_translation.py` 在调用模型前查固定短句和栏位译法（`_fixed_scan_translation`）。整段命中则不再请求；表格搜索层同样命中则跳过该次请求。未命中的请求、后处理和失败处理不变。
+- 2026-10-25：新增 `scripts/translation_cost_ledger.py`。后端在完成事件里附上本次请求、字数和阶段耗时，并写入工作目录的 `translation_cost_ledger.json`；渲染清单、候选回执和分块结果带同一份 `cost_ledger`。`il_translator_llm_only.py` 的一批额度改为源文 1000 token 或 24 段；整批失败对半再试，只剩一段才逐段重译。质量门未改。

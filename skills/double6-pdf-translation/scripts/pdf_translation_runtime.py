@@ -4,6 +4,8 @@
 from __future__ import annotations
 from run_pdf_translation_context import *
 
+from model_profiles import apply_model_profile
+
 def bind_final_group_artifact(args, output_dir, manifest, invocation_ref):
     """最后保存后的实际身份；复用写时门证据，rawgraph/physical未知分开保留。"""
     import fitz
@@ -55,6 +57,7 @@ def bind_final_group_artifact(args, output_dir, manifest, invocation_ref):
     manifest['final_artifact_identity_ref']=file_ref(path)
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    apply_model_profile(args)
     from pdf_translation_paths import default_output_dir
     from pdf_translation_render import _run_render
     review = getattr(args, "quality_review", None)
@@ -94,16 +97,19 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             raise ValueError("source-only result failed no-generation/no-PDF boundary")
         return manifest
     from qa_pipeline import attach_pipeline_quality
+    from translation_cost_ledger import fold_quality_check
     source = Path(args.input_pdf).expanduser().resolve()
     output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else default_output_dir(source).resolve()
     from pdf_translation_render import load_document_term_context
     # 分块翻译：块从整份文档的参考文献区中间开始时，带入区状态（上下文文件已按 SHA-256 绑定）。
     chunk_context = load_document_term_context(args) or {}
+    quality_started = time.perf_counter()
     result=attach_pipeline_quality(manifest, source=source, output_dir=output_dir,
         review_ref={"path": str(Path(review).resolve()), "sha256": digest} if review else None,
         target_language=getattr(args, "target_language", "zh") or "zh",
         region_open_at_start=chunk_context.get("reference_region_open_at_start") is True,
         chunk_mode=isinstance(chunk_context.get("chunk"), dict))
+    result["cost_ledger"] = fold_quality_check(output_dir, extra_seconds=time.perf_counter() - quality_started, input_pdf=source)
     if invocation_ref:bind_final_group_artifact(args,output_dir,result,invocation_ref)
     return result
 

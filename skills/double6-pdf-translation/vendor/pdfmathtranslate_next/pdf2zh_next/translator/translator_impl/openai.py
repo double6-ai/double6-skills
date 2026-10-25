@@ -1,4 +1,5 @@
 import logging
+import os
 
 import httpx
 import openai
@@ -13,6 +14,26 @@ from tenacity import stop_after_attempt
 from tenacity import wait_exponential
 
 logger = logging.getLogger(__name__)
+
+
+def llm_messages(text: str, rate_limit_params: dict | None = None) -> list[dict[str, str]]:
+    """固定说明放进 system，本批才会变的标题、术语和正文放进 user。
+
+    智谱按请求开头是否逐字相同来复用上下文。前缀对不上整段文字时，仍发一条 user，避免把说明拆坏。
+    """
+    prefix = ""
+    if rate_limit_params:
+        raw = rate_limit_params.get("prompt_prefix")
+        if isinstance(raw, str):
+            prefix = raw
+    if prefix and text.startswith(prefix):
+        suffix = text[len(prefix):].lstrip("\n")
+        if suffix:
+            return [
+                {"role": "system", "content": prefix},
+                {"role": "user", "content": suffix},
+            ]
+    return [{"role": "user", "content": text}]
 
 
 class OpenAITranslator(BaseTranslator):
@@ -88,6 +109,15 @@ class OpenAITranslator(BaseTranslator):
         )
         if self.enable_json_mode:
             self.add_cache_impact_parameters("enable_json_mode", self.enable_json_mode)
+        # Double6 Skills 维护，2026-10-25：按模型最低思考档附加 thinking.type，并计入缓存身份。
+        self.thinking_mode = os.environ.get("PDF_TRANSLATION_THINKING") or None
+        if self.thinking_mode:
+            self.add_cache_impact_parameters("thinking", self.thinking_mode)
+
+    def _thinking_body(self) -> dict:
+        if self.thinking_mode in {"enabled", "disabled"}:
+            return {"extra_body": {"thinking": {"type": self.thinking_mode}}}
+        return {}
 
     def _verify_double6_upstream_identity(self, response) -> None:
         """响应声明的上游身份与缓存身份不一致（代理重启/端口换到另一上游）：失败关闭，不写缓存。"""
@@ -117,6 +147,7 @@ class OpenAITranslator(BaseTranslator):
             model=self.model,
             **options,
             messages=self.prompt(text),
+            **self._thinking_body(),
         )
         try:
             if hasattr(response, "usage") and response.usage:
@@ -136,6 +167,7 @@ class OpenAITranslator(BaseTranslator):
                     self.cache_hit_prompt_token_count.inc(
                         response.usage.prompt_tokens_details.cached_tokens
                     )
+                self.note_usage_reported()
         except Exception as e:
             logger.error(f"Error getting token usage: {e}")
             pass
@@ -163,12 +195,8 @@ class OpenAITranslator(BaseTranslator):
         response = self.client.chat.completions.create(
             model=self.model,
             **options,
-            messages=[
-                {
-                    "role": "user",
-                    "content": text,
-                },
-            ],
+            messages=llm_messages(text, rate_limit_params),
+            **self._thinking_body(),
         )
         try:
             if hasattr(response, "usage") and response.usage:
@@ -188,6 +216,7 @@ class OpenAITranslator(BaseTranslator):
                     self.cache_hit_prompt_token_count.inc(
                         response.usage.prompt_tokens_details.cached_tokens
                     )
+                self.note_usage_reported()
         except Exception as e:
             logger.error(f"Error getting token usage: {e}")
             pass

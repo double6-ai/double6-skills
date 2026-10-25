@@ -7,6 +7,8 @@
 * 每块：派生块级 FREEZE（块 PDF 身份、页数 1..k、作用域证据指向 parent FREEZE 与计划、块路线及其
   既有路由合同、整份术语上下文绑定），以 ``candidate`` 动作原样执行——单份 candidate 的全部门
   （预检、路由、OCR 守门、质量门、拥有式计量与回收）逐块生效，单块单任务预算即 FREEZE 资源合同。
+  电子块的翻译后端整份共用一个已经加载版面模型的进程；某块碰到时间上限后该进程退出，下一块重新加载一次。
+  纯扫描不启动这个进程。不超过 5 页的单份 ``candidate`` 仍是每份单独启动。
 * 资源停止（超时/超内存）的块二分到单页；单页仍超限即失败关闭并记录实测。瞬时失败重试一次；
   预检拦截与质量 fail 不重试（结果确定）。PDF 后端未产出候选时，根因取本尝试自己写出、身份核对一致的
   结构化回执（``failure_root_cause``）：确定性根因（排版上限、可读下限溢出、子任务自身的合同/输入拒绝）
@@ -29,6 +31,9 @@ import os
 from pathlib import Path
 import time
 from typing import Any
+
+from backend_session import open_document_backend
+from translation_cost_ledger import sum_ledgers
 
 STATE_NAME = 'CHUNKED_RUN_STATE.json'
 RECEIPT_NAME = 'WORKFLOW_CHUNKED_CANDIDATE.json'
@@ -264,7 +269,8 @@ def run_chunk_candidate(wf, args: argparse.Namespace, freeze_path: Path, chunk: 
     """块 = 一次普通 candidate（同一进程内调用 dispatch；其重任务仍是独立的有界子进程树）。"""
     ns = argparse.Namespace(action='candidate', input=Path(chunk['source_ref']['path']), output=attempt / 'out',
                             receipts=attempt / 'receipts', lock_path=args.lock_path, freeze=freeze_path,
-                            route=chunk['route'], model=args.model, base_url=args.base_url, smoke=False,
+                            route=chunk['route'], model=args.model, base_url=args.base_url,
+                            local_max_concurrency=getattr(args, 'local_max_concurrency', None), smoke=False,
                             cjk_font=args.cjk_font, target_language=args.target_language,
                             source_cache_context=None, source_cache_context_sha256=None,
                             task_memory_mib=args.task_memory_mib, job_timeout_seconds=args.job_timeout_seconds,
@@ -429,9 +435,12 @@ def chunk_outputs(wf, attempt: Path) -> dict[str, Any] | None:
     result = wf.read_json(receipt)
     ocr = result.get('ocr') or {}
     backend_input = ocr.get('reconstructed_source_ref')
-    return {'outputs': refs, 'quality_ref': wf.ref(quality_path), 'render_manifest_ref': wf.ref(manifest_path),
+    completed = {'outputs': refs, 'quality_ref': wf.ref(quality_path), 'render_manifest_ref': wf.ref(manifest_path),
             'receipt_ref': wf.ref(receipt), 'backend_input': backend_input,
             'quality_status': result.get('quality_status'), 'quality_reasons': quality_reasons(result)}
+    if isinstance(result.get('cost_ledger'), dict):
+        completed['cost_ledger'] = result['cost_ledger']
+    return completed
 
 
 def quality_reasons(result: dict[str, Any]) -> dict[str, Any]:
@@ -610,213 +619,224 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
         table, order = state['chunk_table'], state['order']
         reused, executed, not_reexecuted = [], [], []
         index = 0
-        while index < len(order):
-            cid = order[index]
-            entry = table[cid]
-            if wf.sha(entry['source_ref']['path']) != entry['source_ref']['sha256']:
-                raise ValueError(f'chunk source {cid} changed after planning')
-            if entry['status'] == 'completed':
-                problems = verify_completed(entry)
-                if not problems:
-                    if entry['completed']['invocation'] != invocation:
-                        reused.append(cid)
+        session = open_document_backend(inv_dir, args.route)
+        try:
+            while index < len(order):
+                cid = order[index]
+                entry = table[cid]
+                if wf.sha(entry['source_ref']['path']) != entry['source_ref']['sha256']:
+                    raise ValueError(f'chunk source {cid} changed after planning')
+                if entry['status'] == 'completed':
+                    problems = verify_completed(entry)
+                    if not problems:
+                        if entry['completed']['invocation'] != invocation:
+                            reused.append(cid)
+                        index += 1
+                        continue
+                    entry.update(status='invalidated', invalidated={'invocation': invocation, 'changed': problems})
+                elif entry['status'] in ('failed', 'blocked') and entry.get('final_invocation') == invocation:
                     index += 1
                     continue
-                entry.update(status='invalidated', invalidated={'invocation': invocation, 'changed': problems})
-            elif entry['status'] in ('failed', 'blocked') and entry.get('final_invocation') == invocation:
-                index += 1
-                continue
-            elif entry['status'] == 'blocked' and (entry.get('failure') or {}).get('deterministic') is True:
-                recorded = entry['failure'].get('identity')
-                current = failure_identity(wf, entry, state, entry['attempts'][-1]['freeze_ref']) if entry['attempts'] else None
-                if recorded and current == recorded:
-                    # 同一输入与配置下登记过的确定性失败：不重跑，保留首个根因与全部尝试记录。
-                    entry.setdefault('not_reexecuted_by_invocations', []).append(invocation)
-                    not_reexecuted.append(cid)
-                    index += 1
-                    continue
-                entry['failure']['identity_changed_at_invocation'] = invocation
-            transient_retries = sum(1 for a in entry['attempts'] if a.get('classification') == 'transient'
-                                    and a.get('invocation') == invocation)
-            number = len(entry['attempts']) + 1
-            attempt_dir = output / 'chunks' / cid / f'attempt-{number}'
-            (attempt_dir / 'freeze').mkdir(parents=True, exist_ok=False)
-            entry_context = chunk_context(wf, context_path, context_ref, entry, attempt_dir / 'freeze')
-            freeze_path = chunk_freeze(wf, freeze, parent_ref, plan_ref, entry, wf.ref(entry_context), attempt_dir / 'freeze')
-            record = {'number': number, 'invocation': invocation, 'status': 'started', 'dir': str(attempt_dir),
-                      'freeze_ref': wf.ref(freeze_path), 'started_at': wf.datetime.now(wf.timezone.utc).isoformat()}
-            entry['attempts'].append(record)
-            entry['status'] = 'running'
-            save_state(state_path, state)
-            started = time.monotonic()
-            result = CHUNK_RUNNER(wf, args, freeze_path, entry, attempt_dir, entry_context)
-            kind = classify(result, CHUNKING_CONTRACT, attempt_dir)
-            cause = failure_root_cause(result, attempt_dir) if kind != 'completed' else None
-            record.update(status='finished', classification=kind, wall_seconds=round(time.monotonic() - started, 3),
-                          measurements=_measure(result), error_code=result.get('error_code'))
-            if kind != 'completed':
-                from failure_root_cause import unavailable
-                record['root_cause'] = with_document_pages(cause, entry) if cause else unavailable(
-                    'no_structured_cause_in_result', status=result.get('status'), error_code=result.get('error_code'),
-                    failure_code=(result.get('command') or {}).get('failure_code'))
-            if effective_stop_reason(result, attempt_dir) == 'backend_timeout':
-                record['stop_reason'] = 'backend_timeout'
-            wf.write_new(attempt_dir / 'CHUNK_RESULT.json', result)
-            guard = post_attempt_guard(attempt_dir)
-            record['post_attempt_guard'] = {k: guard[k] for k in ('live_after_attempt', 'confirmed', 'reason_codes')}
-            if guard['live_after_attempt'] or guard['reclaim'].get('reclaimed') or not guard['confirmed']:
-                wf.write_new(attempt_dir / 'POST_ATTEMPT_GUARD.json', guard)
-            if not guard['confirmed']:
-                kind = record['classification'] = 'cleanup_unconfirmed'
-            record['pruned_bytes'] = prune_temporaries(wf, attempt_dir, CHUNKING_CONTRACT['prune_backend_temporaries'])['bytes']
-            executed.append(cid)
-            if kind == 'completed':
-                produced = chunk_outputs(wf, attempt_dir)
-                if produced is None:
-                    kind = record['classification'] = 'missing_outputs'
-                else:
-                    entry.update(status='completed', completed=dict(produced, freeze_ref=record['freeze_ref'],
-                                                                    context_ref=wf.ref(entry_context),
-                                                                    attempt=number, invocation=invocation))
-                    save_state(state_path, state)
-                    index += 1
-                    continue
-            if kind == 'resource_stop':
-                if entry['pages'] > 1:
-                    children = split_range(entry)
-                    entry['status'] = 'split'
-                    entry['split_into'] = [c['id'] for c in children]
-                    from chunked_translation import write_chunk_pdf
-                    import fitz
-                    with fitz.open(args.input) as source:
-                        for child in children:
-                            child['source_ref'] = write_chunk_pdf(source, child,
-                                                                  output / 'chunks' / f"{child['id']}.pdf")
-                            child['page_kinds'] = entry['page_kinds'][child['start'] - entry['start']:
-                                                                      child['end'] - entry['start'] + 1]
-                            opened = plan.get('reference_region_open_at_page_start') or []
-                            child['reference_region_open_at_start'] = (opened[child['start'] - 1]
-                                                                       if len(opened) >= child['start'] else False)
-                            table[child['id']] = dict(child, status='pending', attempts=[], split_from=cid)
-                    order[index:index + 1] = [c['id'] for c in children]
-                    save_state(state_path, state)
-                    continue
-                stop = effective_stop_reason(result, attempt_dir)
-                entry.update(status='failed', final_invocation=invocation, failure={
-                    'error_code': 'chunk_page_exceeds_task_budget', 'stop_reason': stop,
-                    'measurements': record['measurements'],
-                    'message': '单页仍超出冻结的单任务资源预算；不放宽限制，整份失败关闭。',
-                    'root_cause': {'code': 'chunk_page_exceeds_task_budget', 'retry': 'resource', 'stage': 'bounded_task',
-                                   'verified': True, 'details': {'stop_reason': stop, 'pages': [entry['start'], entry['end']]}},
-                    'attempt': number, 'invocation': invocation})
-            elif kind == 'transient' and transient_retries < CHUNKING_CONTRACT['retry_transient_failures']:
+                elif entry['status'] == 'blocked' and (entry.get('failure') or {}).get('deterministic') is True:
+                    recorded = entry['failure'].get('identity')
+                    current = failure_identity(wf, entry, state, entry['attempts'][-1]['freeze_ref']) if entry['attempts'] else None
+                    if recorded and current == recorded:
+                        # 同一输入与配置下登记过的确定性失败：不重跑，保留首个根因与全部尝试记录。
+                        entry.setdefault('not_reexecuted_by_invocations', []).append(invocation)
+                        not_reexecuted.append(cid)
+                        index += 1
+                        continue
+                    entry['failure']['identity_changed_at_invocation'] = invocation
+                transient_retries = sum(1 for a in entry['attempts'] if a.get('classification') == 'transient'
+                                        and a.get('invocation') == invocation)
+                number = len(entry['attempts']) + 1
+                attempt_dir = output / 'chunks' / cid / f'attempt-{number}'
+                (attempt_dir / 'freeze').mkdir(parents=True, exist_ok=False)
+                entry_context = chunk_context(wf, context_path, context_ref, entry, attempt_dir / 'freeze')
+                freeze_path = chunk_freeze(wf, freeze, parent_ref, plan_ref, entry, wf.ref(entry_context), attempt_dir / 'freeze')
+                record = {'number': number, 'invocation': invocation, 'status': 'started', 'dir': str(attempt_dir),
+                          'freeze_ref': wf.ref(freeze_path), 'started_at': wf.datetime.now(wf.timezone.utc).isoformat()}
+                entry['attempts'].append(record)
+                entry['status'] = 'running'
                 save_state(state_path, state)
-                continue
-            else:
-                root = record.get('root_cause') or {}
-                first = next((a['root_cause'] for a in entry['attempts'] if a.get('root_cause')), root)
-                deterministic = kind == 'blocked' and root.get('retry') == 'deterministic' and root.get('verified') is True
-                if kind == 'cleanup_unconfirmed':
-                    code = 'chunk_cleanup_unconfirmed'
-                elif root.get('code') and root['code'] != 'root_cause_unavailable':
-                    code = root['code']
-                else:
-                    code = result.get('error_code') or root.get('code') or kind
-                failure = {'error_code': code,
-                           'classification': kind, 'findings': result.get('findings', [])[:5],
-                           'root_cause': root, 'first_root_cause': first, 'attempt': number, 'invocation': invocation,
-                           'deterministic': deterministic}
-                if deterministic:
-                    failure['identity'] = failure_identity(wf, entry, state, record['freeze_ref'])
-                entry.update(status='blocked' if kind == 'blocked' else 'failed', final_invocation=invocation, failure=failure)
-                if kind == 'cleanup_unconfirmed':
-                    # 本块进程树无法核实已回收：不再启动任何块（重任务并发 1），整份失败关闭。
+                started = time.monotonic()
+                if session is not None and entry.get('route') != 'scanned_ocr':
+                    session.ensure()
+                result = CHUNK_RUNNER(wf, args, freeze_path, entry, attempt_dir, entry_context)
+                kind = classify(result, CHUNKING_CONTRACT, attempt_dir)
+                cause = failure_root_cause(result, attempt_dir) if kind != 'completed' else None
+                record.update(status='finished', classification=kind, wall_seconds=round(time.monotonic() - started, 3),
+                              measurements=_measure(result), error_code=result.get('error_code'))
+                if kind != 'completed':
+                    from failure_root_cause import unavailable
+                    record['root_cause'] = with_document_pages(cause, entry) if cause else unavailable(
+                        'no_structured_cause_in_result', status=result.get('status'), error_code=result.get('error_code'),
+                        failure_code=(result.get('command') or {}).get('failure_code'))
+                if effective_stop_reason(result, attempt_dir) == 'backend_timeout':
+                    record['stop_reason'] = 'backend_timeout'
+                wf.write_new(attempt_dir / 'CHUNK_RESULT.json', result)
+                guard = post_attempt_guard(attempt_dir)
+                record['post_attempt_guard'] = {k: guard[k] for k in ('live_after_attempt', 'confirmed', 'reason_codes')}
+                if guard['live_after_attempt'] or guard['reclaim'].get('reclaimed') or not guard['confirmed']:
+                    wf.write_new(attempt_dir / 'POST_ATTEMPT_GUARD.json', guard)
+                if not guard['confirmed']:
+                    kind = record['classification'] = 'cleanup_unconfirmed'
+                record['pruned_bytes'] = prune_temporaries(wf, attempt_dir, CHUNKING_CONTRACT['prune_backend_temporaries'])['bytes']
+                executed.append(cid)
+                if kind == 'completed':
+                    produced = chunk_outputs(wf, attempt_dir)
+                    if produced is None:
+                        kind = record['classification'] = 'missing_outputs'
+                    else:
+                        entry.update(status='completed', completed=dict(produced, freeze_ref=record['freeze_ref'],
+                                                                        context_ref=wf.ref(entry_context),
+                                                                        attempt=number, invocation=invocation))
+                        save_state(state_path, state)
+                        index += 1
+                        continue
+                if kind == 'resource_stop':
+                    if entry['pages'] > 1:
+                        children = split_range(entry)
+                        entry['status'] = 'split'
+                        entry['split_into'] = [c['id'] for c in children]
+                        from chunked_translation import write_chunk_pdf
+                        import fitz
+                        with fitz.open(args.input) as source:
+                            for child in children:
+                                child['source_ref'] = write_chunk_pdf(source, child,
+                                                                      output / 'chunks' / f"{child['id']}.pdf")
+                                child['page_kinds'] = entry['page_kinds'][child['start'] - entry['start']:
+                                                                          child['end'] - entry['start'] + 1]
+                                opened = plan.get('reference_region_open_at_page_start') or []
+                                child['reference_region_open_at_start'] = (opened[child['start'] - 1]
+                                                                           if len(opened) >= child['start'] else False)
+                                table[child['id']] = dict(child, status='pending', attempts=[], split_from=cid)
+                        order[index:index + 1] = [c['id'] for c in children]
+                        save_state(state_path, state)
+                        continue
+                    stop = effective_stop_reason(result, attempt_dir)
+                    entry.update(status='failed', final_invocation=invocation, failure={
+                        'error_code': 'chunk_page_exceeds_task_budget', 'stop_reason': stop,
+                        'measurements': record['measurements'],
+                        'message': '单页仍超出冻结的单任务资源预算；不放宽限制，整份失败关闭。',
+                        'root_cause': {'code': 'chunk_page_exceeds_task_budget', 'retry': 'resource', 'stage': 'bounded_task',
+                                       'verified': True, 'details': {'stop_reason': stop, 'pages': [entry['start'], entry['end']]}},
+                        'attempt': number, 'invocation': invocation})
+                elif kind == 'transient' and transient_retries < CHUNKING_CONTRACT['retry_transient_failures']:
                     save_state(state_path, state)
-                    break
-            save_state(state_path, state)
-            index += 1
-        chunks = [table[cid] for cid in order]
-        summary = [{'id': c['id'], 'pages': [c['start'], c['end']], 'route': c['route'], 'status': c['status'],
-                    'attempts': len(c['attempts']),
-                    'last_attempt': ({k: c['attempts'][-1].get(k) for k in ('number', 'invocation', 'classification',
-                                                                            'wall_seconds', 'measurements', 'error_code',
-                                                                            'root_cause')}
-                                     if c['attempts'] else None),
-                    'quality_status': (c.get('completed') or {}).get('quality_status'),
-                    **({'quality_reasons': c['completed']['quality_reasons']}
-                       if (c.get('completed') or {}).get('quality_reasons') else {}),
-                    **({'error_code': c['failure'].get('error_code'), 'root_cause': c['failure'].get('root_cause')}
-                       if c['status'] != 'completed' and c.get('failure') else {})} for c in chunks]
-        base = {'action': 'chunked-candidate', 'freeze_ref': parent_ref, 'input_ref': wf.ref(args.input),
-                'route': args.route, 'declared_pages': pages, 'plan_ref': plan_ref, 'chunk_count': len(chunks),
-                'chunks': summary, 'reused_chunks': reused, 'executed_chunks': executed, 'invocation': invocation,
-                'deterministic_failures_not_reexecuted': not_reexecuted,
-                'human_accepted': False, 'strict_delivery': False, 'heavy_task_concurrency': 1,
-                'resource_contract_frozen': freeze.get('resource_contract'), 'chunking_contract': CHUNKING_CONTRACT,
-                'input_preflight': {k: report.get(k) for k in ('status', 'warnings', 'source_language', 'page_count')},
-                'stage': 'chunked_candidate', 'schema_version': 1}
-        failed = [c for c in chunks if c['status'] != 'completed']
-        if failed:
-            result = dict(wf.blocked_result([wf.finding('chunk_failed',
-                          f"{len(failed)} 块未产出可合并的结果；整份失败关闭，不合并、不交付部分结果。",
-                          chunks=[{'id': c['id'], 'pages': [c['start'], c['end']], 'status': c['status'],
-                                   **(c.get('failure') or {})} for c in failed])]), **base)
-            # 整份回执：保留稳定的 chunk_failed，另上浮按页序第一块的根因与全部失败块的根因（含块、页、尝试）。
-            from failure_root_cause import unavailable
-            causes = [dict((c.get('failure') or {}).get('root_cause') or unavailable('chunk_not_executed', status=c['status']),
-                           chunk=c['id'], chunk_pages=[c['start'], c['end']],
-                           attempt=(c.get('failure') or {}).get('attempt'), invocation=(c.get('failure') or {}).get('invocation'))
-                      for c in failed]
-            result.update(error_code='chunk_failed', merged=False, root_cause=causes[0], root_causes=causes)
-        else:
-            rows = [{'chunk': {k: c[k] for k in ('id', 'start', 'end', 'pages', 'route', 'source_ref')},
-                     'outputs': c['completed']['outputs'], 'quality_ref': c['completed']['quality_ref'],
-                     'quality_status': c['completed']['quality_status'],
-                     'backend_input': c['completed'].get('backend_input')} for c in chunks]
-            results_path = inv_dir / 'MERGE_INPUT.json'
-            wf.write_new(results_path, rows)
-            merged_dir = output / f'merged-{invocation}'
-            job = wf.run_job(job_args, [wf.sys.executable, str(wf.SCRIPT_DIR / 'chunked_translation.py'), 'merge',
-                                        '--plan', plan_ref['path'], '--plan-sha256', plan_ref['sha256'],
-                                        '--results', str(results_path.resolve()), '--results-sha256', wf.sha(results_path),
-                                        '--input', str(args.input.resolve()), '--target-language', args.target_language,
-                                        '--output', str(merged_dir.resolve())], 'chunk-merge')
-            inv['merge_job'] = _measure(job)
-            manifest_path = merged_dir / 'MERGE_MANIFEST.json'
-            if job.get('status') != 'succeeded' or not manifest_path.is_file():
-                result = dict(wf.blocked_result([wf.finding('chunk_merge_failed', '有界合并任务未完成；不交付。',
-                              stop_reason=job.get('stop_reason'), status=job.get('status'))]), **base)
-                result.update(error_code='chunk_merge_failed', merged=False, merge_job=_measure(job))
-            else:
-                manifest = wf.read_json(manifest_path)
-                merged_quality_path = merged_dir / 'comprehensive_quality.json'
-                merged_quality = wf.read_json(merged_quality_path) if merged_quality_path.is_file() else {}
-                blocking = [i for i in merged_quality.get('issues', []) if isinstance(i, dict) and i.get('id') in
-                            ('overflow_source_fallback_cap_exceeded', 'overflow_source_fallback_receipt_incomplete')]
-                if blocking:
-                    code = blocking[0]['id']
-                    result = dict(wf.blocked_result([wf.finding(code, '原文保留降级的整份文档上限未满足或无法核对；整份失败关闭，不交付合并结果。',
-                                  document_cap=merged_quality.get('overflow_source_fallback_document_cap'))]), **base)
-                    result.update(error_code=code, merged=False, merge_job=_measure(job), quality_status='fail',
-                                  merge_manifest_ref=wf.ref(manifest_path),
-                                  overflow_source_fallback_document_cap=merged_quality.get('overflow_source_fallback_document_cap'))
+                    continue
                 else:
-                    result = dict(base, status='candidate', merged=True, merge_job=_measure(job),
-                                  merged_output_dir=str(merged_dir), merge_manifest_ref=wf.ref(manifest_path),
-                                  outputs=manifest['outputs'], merge_issues=manifest['issues'], links=manifest['links'],
-                                  toc_entries=manifest['toc_entries'], page_labels=manifest['page_labels'])
-                    result.update(wf.quality_verdict(merged_dir))
-                    result['overflow_source_fallback_document_cap'] = merged_quality.get('overflow_source_fallback_document_cap')
-                    worst = max((c['completed']['quality_status'] or 'fail' for c in chunks),
-                                key=lambda s: {'pass': 0, 'unverified': 1}.get(s, 2))
-                    order_rank = {'pass': 0, 'unverified': 1, 'fail': 2}
-                    if order_rank.get(result.get('quality_status'), 2) < order_rank.get(worst, 2):
-                        raise AssertionError('merged quality better than the worst chunk')
-        inv['finished_at'] = wf.datetime.now(wf.timezone.utc).isoformat()
-        inv['status'] = result.get('status')
-        save_state(state_path, state)
-        receipt = receipts / (RECEIPT_NAME if invocation == 1 else f'WORKFLOW_CHUNKED_CANDIDATE.invocation-{invocation}.json')
-        result['state_ref'] = wf.ref(state_path)
-        wf.write_new(receipt, result)
-        result['receipt'] = str(receipt)
-        return result
+                    root = record.get('root_cause') or {}
+                    first = next((a['root_cause'] for a in entry['attempts'] if a.get('root_cause')), root)
+                    deterministic = kind == 'blocked' and root.get('retry') == 'deterministic' and root.get('verified') is True
+                    if kind == 'cleanup_unconfirmed':
+                        code = 'chunk_cleanup_unconfirmed'
+                    elif root.get('code') and root['code'] != 'root_cause_unavailable':
+                        code = root['code']
+                    else:
+                        code = result.get('error_code') or root.get('code') or kind
+                    failure = {'error_code': code,
+                               'classification': kind, 'findings': result.get('findings', [])[:5],
+                               'root_cause': root, 'first_root_cause': first, 'attempt': number, 'invocation': invocation,
+                               'deterministic': deterministic}
+                    if deterministic:
+                        failure['identity'] = failure_identity(wf, entry, state, record['freeze_ref'])
+                    entry.update(status='blocked' if kind == 'blocked' else 'failed', final_invocation=invocation, failure=failure)
+                    if kind == 'cleanup_unconfirmed':
+                        # 本块进程树无法核实已回收：不再启动任何块（重任务并发 1），整份失败关闭。
+                        save_state(state_path, state)
+                        break
+                save_state(state_path, state)
+                index += 1
+            chunks = [table[cid] for cid in order]
+            summary = [{'id': c['id'], 'pages': [c['start'], c['end']], 'route': c['route'], 'status': c['status'],
+                        'attempts': len(c['attempts']),
+                        'last_attempt': ({k: c['attempts'][-1].get(k) for k in ('number', 'invocation', 'classification',
+                                                                                'wall_seconds', 'measurements', 'error_code',
+                                                                                'root_cause')}
+                                         if c['attempts'] else None),
+                        'quality_status': (c.get('completed') or {}).get('quality_status'),
+                        **({'quality_reasons': c['completed']['quality_reasons']}
+                           if (c.get('completed') or {}).get('quality_reasons') else {}),
+                        **({'cost_ledger': c['completed']['cost_ledger']}
+                           if isinstance((c.get('completed') or {}).get('cost_ledger'), dict) else {}),
+                        **({'error_code': c['failure'].get('error_code'), 'root_cause': c['failure'].get('root_cause')}
+                           if c['status'] != 'completed' and c.get('failure') else {})} for c in chunks]
+            base = {'action': 'chunked-candidate', 'freeze_ref': parent_ref, 'input_ref': wf.ref(args.input),
+                    'route': args.route, 'declared_pages': pages, 'plan_ref': plan_ref, 'chunk_count': len(chunks),
+                    'chunks': summary, 'reused_chunks': reused, 'executed_chunks': executed, 'invocation': invocation,
+                    'deterministic_failures_not_reexecuted': not_reexecuted,
+                    'human_accepted': False, 'strict_delivery': False, 'heavy_task_concurrency': 1,
+                    'backend_process': 'shared' if session is not None else 'per_chunk',
+                    'resource_contract_frozen': freeze.get('resource_contract'), 'chunking_contract': CHUNKING_CONTRACT,
+                    'input_preflight': {k: report.get(k) for k in ('status', 'warnings', 'source_language', 'page_count')},
+                    'stage': 'chunked_candidate', 'schema_version': 1}
+            failed = [c for c in chunks if c['status'] != 'completed']
+            if failed:
+                result = dict(wf.blocked_result([wf.finding('chunk_failed',
+                              f"{len(failed)} 块未产出可合并的结果；整份失败关闭，不合并、不交付部分结果。",
+                              chunks=[{'id': c['id'], 'pages': [c['start'], c['end']], 'status': c['status'],
+                                       **(c.get('failure') or {})} for c in failed])]), **base)
+                # 整份回执：保留稳定的 chunk_failed，另上浮按页序第一块的根因与全部失败块的根因（含块、页、尝试）。
+                from failure_root_cause import unavailable
+                causes = [dict((c.get('failure') or {}).get('root_cause') or unavailable('chunk_not_executed', status=c['status']),
+                               chunk=c['id'], chunk_pages=[c['start'], c['end']],
+                               attempt=(c.get('failure') or {}).get('attempt'), invocation=(c.get('failure') or {}).get('invocation'))
+                          for c in failed]
+                result.update(error_code='chunk_failed', merged=False, root_cause=causes[0], root_causes=causes)
+            else:
+                rows = [{'chunk': {k: c[k] for k in ('id', 'start', 'end', 'pages', 'route', 'source_ref')},
+                         'outputs': c['completed']['outputs'], 'quality_ref': c['completed']['quality_ref'],
+                         'quality_status': c['completed']['quality_status'],
+                         'backend_input': c['completed'].get('backend_input')} for c in chunks]
+                results_path = inv_dir / 'MERGE_INPUT.json'
+                wf.write_new(results_path, rows)
+                merged_dir = output / f'merged-{invocation}'
+                job = wf.run_job(job_args, [wf.sys.executable, str(wf.SCRIPT_DIR / 'chunked_translation.py'), 'merge',
+                                            '--plan', plan_ref['path'], '--plan-sha256', plan_ref['sha256'],
+                                            '--results', str(results_path.resolve()), '--results-sha256', wf.sha(results_path),
+                                            '--input', str(args.input.resolve()), '--target-language', args.target_language,
+                                            '--output', str(merged_dir.resolve())], 'chunk-merge')
+                inv['merge_job'] = _measure(job)
+                manifest_path = merged_dir / 'MERGE_MANIFEST.json'
+                if job.get('status') != 'succeeded' or not manifest_path.is_file():
+                    result = dict(wf.blocked_result([wf.finding('chunk_merge_failed', '有界合并任务未完成；不交付。',
+                                  stop_reason=job.get('stop_reason'), status=job.get('status'))]), **base)
+                    result.update(error_code='chunk_merge_failed', merged=False, merge_job=_measure(job))
+                else:
+                    manifest = wf.read_json(manifest_path)
+                    merged_quality_path = merged_dir / 'comprehensive_quality.json'
+                    merged_quality = wf.read_json(merged_quality_path) if merged_quality_path.is_file() else {}
+                    blocking = [i for i in merged_quality.get('issues', []) if isinstance(i, dict) and i.get('id') in
+                                ('overflow_source_fallback_cap_exceeded', 'overflow_source_fallback_receipt_incomplete')]
+                    if blocking:
+                        code = blocking[0]['id']
+                        result = dict(wf.blocked_result([wf.finding(code, '原文保留降级的整份文档上限未满足或无法核对；整份失败关闭，不交付合并结果。',
+                                      document_cap=merged_quality.get('overflow_source_fallback_document_cap'))]), **base)
+                        result.update(error_code=code, merged=False, merge_job=_measure(job), quality_status='fail',
+                                      merge_manifest_ref=wf.ref(manifest_path),
+                                      overflow_source_fallback_document_cap=merged_quality.get('overflow_source_fallback_document_cap'))
+                    else:
+                        result = dict(base, status='candidate', merged=True, merge_job=_measure(job),
+                                      merged_output_dir=str(merged_dir), merge_manifest_ref=wf.ref(manifest_path),
+                                      outputs=manifest['outputs'], merge_issues=manifest['issues'], links=manifest['links'],
+                                      toc_entries=manifest['toc_entries'], page_labels=manifest['page_labels'])
+                        result.update(wf.quality_verdict(merged_dir))
+                        result['cost_ledger'] = sum_ledgers([(c.get('completed') or {}).get('cost_ledger') for c in chunks])
+                        result['overflow_source_fallback_document_cap'] = merged_quality.get('overflow_source_fallback_document_cap')
+                        worst = max((c['completed']['quality_status'] or 'fail' for c in chunks),
+                                    key=lambda s: {'pass': 0, 'unverified': 1}.get(s, 2))
+                        order_rank = {'pass': 0, 'unverified': 1, 'fail': 2}
+                        if order_rank.get(result.get('quality_status'), 2) < order_rank.get(worst, 2):
+                            raise AssertionError('merged quality better than the worst chunk')
+            inv['finished_at'] = wf.datetime.now(wf.timezone.utc).isoformat()
+            inv['status'] = result.get('status')
+            save_state(state_path, state)
+            receipt = receipts / (RECEIPT_NAME if invocation == 1 else f'WORKFLOW_CHUNKED_CANDIDATE.invocation-{invocation}.json')
+            result['state_ref'] = wf.ref(state_path)
+            wf.write_new(receipt, result)
+            result['receipt'] = str(receipt)
+            return result
+        finally:
+            if session is not None:
+                session.close()

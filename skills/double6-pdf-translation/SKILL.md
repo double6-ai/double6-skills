@@ -2,7 +2,7 @@
 name: double6-pdf-translation
 description: 论文和PDF英译中执行。先读 configs/default-routes.json，按源证据直接调用已有命令。清晰单栏扫描先预检和源图确认；审过再准备用单配置；冻住了只重出PDF。电子PDF和已核过的LaTeX走原路线。全文、实际PDF、复制和冷重建必须保留。旧的整篇强翻译流水线不是当前入口。
 metadata:
-  version: "2.0.0"
+  version: "2.0.1"
   development_revision: "110-unpublished"
   source_contract_revision: "111-20261017"
   release_status: "stable"
@@ -27,7 +27,7 @@ metadata:
 | 已经核过的 LaTeX | `candidate`，固定参数 `--route latex_verified` |
 | 中文电子 PDF 译成英文 | `candidate --route digital_pdf --target-language en`；方向准入见[路线明细](references/release-quickstart.md#方向扫描和长文档路线明细) |
 | 扫描/电子混合 PDF（1–5 页、横排正文） | `candidate --route scanned_ocr`；Tesseract 识别、全部质量门、最高 `unverified`，复杂/不可靠页拒绝。先读 [OCR 准入](references/ocr-route.md) |
-| 长文档（最多 500 页） | `chunked-candidate --route digital_pdf\|scanned_ocr\|per_chunk`；电子块 ≤4 页、扫描块 ≤2 页，原资源与质量门；任何块失败不交付部分结果。`--resume` 先回收和逐 SHA 核验，见[分块合同](references/chunked-translation.md) |
+| 长文档（最多 500 页） | `chunked-candidate --route digital_pdf\|scanned_ocr\|per_chunk`；电子块 ≤4 页、扫描块 ≤2 页，原资源与质量门；电子长文档各块共用一个已加载的翻译进程，某块超时后这个进程退出、下一块重新加载；任何块失败不交付部分结果。`--resume` 先回收和逐 SHA 核验，见[分块合同](references/chunked-translation.md) |
 
 扫描这条不能套到所有 PDF。隐藏文字层要单独决定走不走，不能悄悄换模型，也不能悄悄改页面尺寸。
 
@@ -83,7 +83,7 @@ metadata:
 
 使用 macOS/Linux、Python 3.12。从 skill 目录执行 `bash scripts/setup_venv.sh /absolute/new/venv`，随后用该环境的 Python 运行 `scripts/paper_translation_workflow.py`。详见 [运行依赖](references/runtime-dependencies.md)。
 
-新翻译必须显式提供 `--base-url`、`--model` 及所需凭据（只经环境变量 `LOCAL_TRANSLATION_API_KEY` 提供，不进入子进程命令行；回环地址未提供时用 `local-no-auth` 占位，远端未提供即在启动任何子进程前报 `remote_backend_requires_explicit_api_key`；详见[运行依赖](references/runtime-dependencies.md#翻译服务凭据)）；不自动选本机服务或替换模型。库存预检需显式给定 `--catalog-url`（不给则不探测库存，`inspect-input` 照常输出事实）。运行目录可通过 `PAPER_TRANSLATION_WORKSPACE` 指定；输入、输出及回执用绝对路径，输出选全新目录。联网获取源码、字体或模型须明确授权并记录来源。
+未写 `--model` 和 `--base-url` 时，用 `configs/model-profiles.json` 的默认档案：智谱 coding plan 的 `glm-5.3-flash`，端点 `https://open.bigmodel.cn/api/coding/paas/v4`。显式传入的模型、端点、温度和 reasoning 仍优先，不会改成别的模型，也不会改选本机服务。思考强度默认用该模型自己的最低档，不升到服务商默认的最高档。`glm-5.3-flash` 不能关闭思考，最低档是轻量推理 `low`。没有单独档案的模型仍发送 `reasoning_effort=none`。没写 `--local-max-concurrency`、也没设置 `LOCAL_MODEL_MAX_CONCURRENCY` 时，这份档案一次向模型发 8 路；写了数就用那个数。其它模型保持原样：直接翻译是 3 路，从工作流进去是 1 路。这缩短的是等待，字数账单不变。服务商限流时会排队重试。一页只有两三批请求时，快不了多少。一次只跑一个任务，单块时间和内存上限不变。凭据只经环境变量 `LOCAL_TRANSLATION_API_KEY` 提供，不进入子进程命令行；该变量为空且环境里已有 `GLM_API_KEY` 时，先抄入前者再交给原有通道。回环地址未提供时用 `local-no-auth` 占位，远端未提供即在启动任何子进程前报 `remote_backend_requires_explicit_api_key`；详见[运行依赖](references/runtime-dependencies.md#翻译服务凭据)。库存预检需显式给定 `--catalog-url`（不给则不探测库存，`inspect-input` 照常输出事实）。运行目录可通过 `PAPER_TRANSLATION_WORKSPACE` 指定；输入、输出及回执用绝对路径，输出选全新目录。联网获取源码、字体或模型须明确授权并记录来源。
 
 主入口电子 PDF 与可信 LaTeX 的完整输入限 1–5 页。LaTeX 保护拒绝后的完整单元修订和断点恢复见 [恢复说明](references/latex-recovery.md)。`preflight` / `deliver` 仍使用严格门；有限交付只适用于具名接受的精确 PDF 及披露的限制。缺少语义、视觉、阅读器或重建证据时保留未验证。
 

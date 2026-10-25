@@ -49,6 +49,7 @@ class ProgressMonitor:
         logger.debug(f"report_interval: {self.report_interval}")
         self.last_report_time = 0
         self.finish_stage_count = 0
+        self.stage_seconds: dict[str, float] = {}
         self.finish_event = finish_event
         self.cancel_event = cancel_event
         self.loop = loop
@@ -211,6 +212,12 @@ class ProgressMonitor:
         # Otherwise return the standard progress
         return progress
 
+    def record_stage_seconds(self, name: str, seconds: float) -> None:
+        """本阶段墙钟。分块进度监视器把同一段时间加到父级，根上就是整份文档的合计。"""
+        self.stage_seconds[name] = self.stage_seconds.get(name, 0.0) + float(seconds)
+        if self.parent_monitor is not None:
+            self.parent_monitor.record_stage_seconds(name, seconds)
+
     def stage_update(self, stage, n: int):
         if self.disable or self.parent_monitor and self.parent_monitor.disable:
             return
@@ -276,11 +283,17 @@ class TranslationStage:
         self.run_time = 0
         self.weight = weight
         self.lock = lock
+        self._entered_at: float | None = None
 
     def __enter__(self):
+        self._entered_at = time.perf_counter()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        entered = self._entered_at
+        self._entered_at = None
+        if entered is not None:
+            self.pm.record_stage_seconds(self.name, time.perf_counter() - entered)
         with self.lock:
             diff = self.total - self.current
             if diff > 0:

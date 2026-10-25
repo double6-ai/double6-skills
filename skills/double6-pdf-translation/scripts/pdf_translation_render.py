@@ -4,6 +4,8 @@
 from __future__ import annotations
 from run_pdf_translation_context import *
 
+from backend_session import SESSION_ENV, invoke_backend_session
+
 def load_document_term_context(args: argparse.Namespace) -> dict[str, Any] | None:
     """分块翻译的整份文档术语上下文：路径与 SHA-256 必须同时给出且一致；未给出时返回 None（单份翻译不变）。"""
     path = getattr(args, "document_term_context", None)
@@ -34,6 +36,7 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
     from pdf_translation_runtime import run
     from pdf_translation_text_repair import apply_pdf_direct_text_repairs
     from pdf_translation_tracking import build_dropped_text_audit_from_files, write_backend_retry_failures
+    from translation_cost_ledger import add_quality_seconds, load_backend_for_output
     started = time.monotonic()
     if getattr(args,'translation_transport','openai_compatible')=='lmstudio_native_chat_v1' and args.translator_mode!='openai':
         raise ValueError('native source-bound transport requires explicit --translator-mode openai')
@@ -221,6 +224,9 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
     # 凭据只经后端原生环境变量传递（不进 argv）；外部继承的同名变量与 PDF2ZH_DEBUG 一律先清除。
     scrub_backend_env(env)
     env.update(backend_credential_env(args, via_loopback_proxy=proxy_server is not None))
+    if getattr(args, "thinking", None) in {"enabled", "disabled"}:
+        # 智谱档案的最低思考档。值不是凭据。
+        env["PDF_TRANSLATION_THINKING"] = args.thinking
     cloud_layout = maybe_run_cloud_layout(args, output_dir)
 
     errors: list[dict[str, Any]] = []
@@ -232,7 +238,7 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
             log.write(f"MODEL: {args.model}\n")
             log.write(f"BASE_URL: {args.base_url}\n")
             log.write(f"HYMT_COMPAT_PROXY: {json.dumps(proxy_info, ensure_ascii=False)}\n")
-            log.write(f"LOCAL_MAX_CONCURRENCY: {args.local_max_concurrency}\n")
+            log.write(f"LOCAL_MAX_CONCURRENCY: {effective_local_max_concurrency(args.local_max_concurrency)}\n")
             log.write(f"OPENAI_JSON_MODE: {args.openai_json_mode}\n")
             log.write(f"PDF_LAYOUT_PROFILE: {args.resolved_pdf_layout_profile}\n")
             log.write(f"TIMEOUT_SEC: {args.timeout}\n")
@@ -242,19 +248,34 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
                 log.write("SKIPPED_PDF_BACKEND: latex direct render is required for this source case.\n")
             else:
                 try:
-                    proc = subprocess.run(
-                        command,
-                        cwd=output_dir,
-                        env=env,
-                        stdout=log,
-                        stderr=subprocess.STDOUT,
-                        timeout=args.timeout,
-                        check=False,
+                    routed = invoke_backend_session(
+                        command, cwd=output_dir, env=env, timeout=args.timeout, log=log,
                     )
-                    returncode = int(proc.returncode)
-                    if returncode != 0:
-                        status = "error"
-                        errors.append({"error_type": "nonzero_exit", "returncode": returncode})
+                    if routed is None:
+                        if os.environ.get(SESSION_ENV):
+                            log.write("BACKEND_SESSION: unavailable, cold start\n")
+                        proc = subprocess.run(
+                            command,
+                            cwd=output_dir,
+                            env=env,
+                            stdout=log,
+                            stderr=subprocess.STDOUT,
+                            timeout=args.timeout,
+                            check=False,
+                        )
+                        returncode = int(proc.returncode)
+                        if returncode != 0:
+                            status = "error"
+                            errors.append({"error_type": "nonzero_exit", "returncode": returncode})
+                    else:
+                        returncode = int(routed)
+                        if returncode == 124:
+                            status = "error"
+                            errors.append({"error_type": "timeout", "timeout_seconds": args.timeout})
+                            log.write(f"\nTIMEOUT: exceeded {args.timeout} seconds\n")
+                        elif returncode != 0:
+                            status = "error"
+                            errors.append({"error_type": "nonzero_exit", "returncode": returncode})
                 except subprocess.TimeoutExpired:
                     returncode = 124
                     status = "error"
@@ -598,7 +619,7 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
         "openai_reasoning_effort": args.openai_reasoning_effort,
         "translator_mode": "qwen-cli" if should_use_qwen_cli_adapter(args) else "openai",
         "pdf_layout_profile": getattr(args, "resolved_pdf_layout_profile", getattr(args, "pdf_layout_profile", "auto")),
-        "local_max_concurrency": args.local_max_concurrency,
+        "local_max_concurrency": effective_local_max_concurrency(args.local_max_concurrency),
         "openai_json_mode": args.openai_json_mode,
         "disable_same_text_fallback": bool(getattr(args, "disable_same_text_fallback", True)),
         "hymt_compat_proxy": proxy_info,
@@ -684,7 +705,7 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
         "model": args.model,
         "base_url": original_base_url,
         "backend_base_url": proxy_info["proxy_base_url"] or original_base_url,
-        "local_max_concurrency": args.local_max_concurrency,
+        "local_max_concurrency": effective_local_max_concurrency(args.local_max_concurrency),
         "pdf_layout_profile": getattr(args, "resolved_pdf_layout_profile", getattr(args, "pdf_layout_profile", "auto")),
         "openai_json_mode": args.openai_json_mode,
         "disable_same_text_fallback": bool(getattr(args, "disable_same_text_fallback", True)),
@@ -868,8 +889,10 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
         json.dumps(backend_manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    quality_started = time.perf_counter()
     run_quality_check(output_dir, render_manifest)
     readable_manifest = render_qa_repaired_pdf(output_dir, args, translated_pdf=(render_manifest.get("outputs") or {}).get("translated_pdf"))
+    render_manifest["cost_ledger"] = add_quality_seconds(load_backend_for_output(output_dir, input_pdf), time.perf_counter() - quality_started)
     render_manifest["outputs"]["readable_repaired_pdf"] = readable_manifest.get("output") if readable_manifest.get("status") == "ok" else None
     render_manifest["outputs"]["readable_repaired_pdf_manifest"] = readable_manifest.get("manifest_path") if readable_manifest.get("status") == "ok" else None
     render_manifest["qa_repaired_pdf"] = readable_manifest
