@@ -14,7 +14,7 @@
 | [`double6-deep-research`](skills/double6-deep-research/) | 研究开放性问题、比较多个对象、形成有证据的决策建议，并交付可核验的完整报告 | 宿主 agent 已提供并允许使用搜索、网页或材料读取能力；Python 3.10+ 仅用于可选的交付校验 | 可公开使用 |
 | [`double6-workbench-builder`](skills/double6-workbench-builder/) | 把反复要做的真实事情（学习台、备考台、任务面板、内容/社媒运营台、阅读与研究追踪、记录与复盘等）构建为离线优先、严格单文件的本地个人工作台，个人数据只留在当前设备 | Python 3.10+（仅标准库）；浏览器验收可选 Playwright + Chromium | 可公开使用（实验性） |
 | [`double6-ppt-cli`](skills/double6-ppt-cli/) | 生成、套用模板、读取、检查和闭环修复原生可编辑 PPTX，覆盖 Markdown/结构化材料创作、模板对象级填充，以及已有 PPTX 的质检与受限修复 | Python 3、OfficeCLI 1.x（bootstrap 固定安装 pin `1.0.157`，运行时接受 ≥ 1.0.144 的 1.x）；**portable 档不需要 macOS**；native 档需要 macOS + Microsoft PowerPoint + `osascript` | 可公开使用；完整 native 闭环建议本机 PowerPoint，portable 档交付为 `pass_with_warnings` |
-| [`double6-offline-material-redaction`](skills/double6-offline-material-redaction/) | 上传 AI 前，在本机补选敏感内容、清理支持的隐藏内容并生成脱敏副本，保留业务文字与数字 | Windows x64 或 Apple 芯片 macOS、Python 3.10–3.14；旧格式显式转换另需 LibreOffice | 免费开源源码；安装和验证范围见该Skill说明 |
+| [`double6-offline-material-redaction`](skills/double6-offline-material-redaction/) | 上传 AI 前，在本机补选敏感内容、清理支持的隐藏内容并生成脱敏副本，保留业务文字与数字 | Windows x64 或 Apple 芯片 macOS、Python 3.10–3.14；旧格式显式转换另需 LibreOffice | [0.7.1 正式源码版](https://github.com/double6-ai/double6-skills/releases/tag/double6-offline-material-redaction-v0.7.1)；安装和验证范围见该 Skill 说明 |
 
 这些 skill 都不会随仓库分发模型、API key、搜索服务、OfficeCLI 二进制或未声明的第三方组件。请根据任务选择安装，不必复制整个仓库。
 
