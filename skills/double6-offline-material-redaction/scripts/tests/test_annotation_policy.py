@@ -326,7 +326,7 @@ class SurfaceTests(unittest.TestCase):
         env["PYTHONPATH"] = str(SCRIPTS)
         help_text = subprocess.run(
             [sys.executable, str(SCRIPTS / "cli.py"), "redact", "--help"],
-            capture_output=True, text=True, env=env, check=False,
+            capture_output=True, text=True, encoding="utf-8", env=env, check=False,
         )
         self.assertEqual(help_text.returncode, 0, help_text.stderr)
         self.assertIn("--clear-annotations", help_text.stdout)
@@ -358,7 +358,7 @@ class SurfaceTests(unittest.TestCase):
             env["PYTHONPATH"] = str(SCRIPTS)
             result = subprocess.run(
                 [sys.executable, str(SCRIPTS / "cli.py"), "redact", "--input", str(source), "--plan", str(plan_path), "--output", str(folder / "out.txt"), "--clear-annotations"],
-                capture_output=True, text=True, env=env, check=False,
+                capture_output=True, text=True, encoding="utf-8", env=env, check=False,
             )
             payload = json.loads(result.stdout)
             self.assertFalse(payload["ok"])
