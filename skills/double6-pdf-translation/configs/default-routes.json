@@ -119,13 +119,13 @@
       "override_conflict_error": "resource_override_conflicts_with_freeze"
     }
   },
-  "software_release": false,
-  "published_distribution": "not_published",
+  "software_release": true,
+  "published_distribution": "github_release",
   "consumer": {
     "type": "skill_agent",
     "instruction_source": "SKILL.md",
     "execution_entry": "scripts/paper_translation_workflow.py",
     "selection": "read this config, classify source/task, invoke existing action directly"
   },
-  "candidate_version": "2.0.0-rc.9"
+  "candidate_version": "2.0.0"
 }
