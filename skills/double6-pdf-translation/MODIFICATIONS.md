@@ -236,3 +236,7 @@
 - 同一行普通拉丁词界（2026-10-25 第十二轮复核 P2-7）：vendored `utils/layout_helper.py` 新增 `LATIN_WORD_GAP_EM`、`_is_latin_letter`、`_is_ascii_digit`、`_latin_same_line_em`、`_latin_tracking_em`、`_is_latin_word_gap`；`get_char_unicode_string` 在原“第二小的不同正间隙”规则与换行之外，按原字形几何补判同基线、同字号拉丁字母/数字（含句末标点、左引号）之间不小于 0.15 em（扣除本串字距基线）的词间距；文件头维护日期更新为 2026-10-25。`_add_space_dummy_chars_to_list` 未改。新增 `tests/test_latin_word_boundaries.py` 与夹具 `tests/fixtures/word_boundaries/`。
 - 词界字距基线逐物理行（2026-10-25 第十三轮复核 P2）：vendored `utils/layout_helper.py` 新增 `_same_physical_line`、`_latin_line_tracking_ems`；`get_char_unicode_string` 改用每个字所在物理行的基线调用 `_is_latin_word_gap`，`_latin_tracking_em` 保留为单段计算。测试 `tests/test_latin_word_boundaries_line_tracking.py`，旧行为对照用 7112c8c 原文件 `tests/fixtures/word_boundaries/layout_helper_7112c8c.py`（不参与运行时）。
 
+
+## 2.0.0 正式发行（2026-10-25）
+
+同步版本、发行状态和公开范围说明；PR #25 的执行逻辑保持，仅 `scanned_raster/constants.py` 的版本输出常量由 rc.9 改为 2.0.0。保留历史变更、上游许可证及 A+C 已知限制。

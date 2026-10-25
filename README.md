@@ -79,7 +79,7 @@ bash scripts/setup_venv.sh /absolute/new/venv
 
 适用 macOS/Linux、Python 3.12。电子 PDF 与可信 LaTeX 主入口限完整 1–5 页；扫描预检默认最多 2 页，随后须具名确认完整源组和角色。新翻译必须明确模型、服务与凭据；冻结重建可离线运行。模型、字体、TeX、论文和缓存不随包分发。维护后端源码保留其 AGPL v3 与内嵌组件许可。
 
-当前 main 上的候选版本为 `2.0.0-rc.9`（未发布，变更见 [CHANGELOG](skills/double6-pdf-translation/CHANGELOG.md)）。上一版 `2.0.0-rc.2` 已按精确冻结包[公开发布](https://github.com/double6-ai/double6-skills/releases/tag/double6-pdf-translation-v2.0.0-rc.2)，下载包 SHA256 为 `cf3cb6a3e0780459f1c9b0625e376f373edfbf9e0e8a37cc5c1a4043a79eace6`。它保留候选版本标识和包内冻结时的状态元数据；每份 PDF 的技术核验、用户接受和严格交付仍分别登记。
+当前正式版本为 [`2.0.0`](https://github.com/double6-ai/double6-skills/releases/tag/double6-pdf-translation-v2.0.0)，变更见 [CHANGELOG](skills/double6-pdf-translation/CHANGELOG.md)。上一版 `2.0.0-rc.2` 已按精确冻结包[公开发布](https://github.com/double6-ai/double6-skills/releases/tag/double6-pdf-translation-v2.0.0-rc.2)，下载包 SHA256 为 `cf3cb6a3e0780459f1c9b0625e376f373edfbf9e0e8a37cc5c1a4043a79eace6`。它保留候选版本标识和包内冻结时的状态元数据；每份 PDF 的技术核验、用户接受和严格交付仍分别登记。
 
 已知限制：复杂表格的像素级/结构级完美、多栏与栏溢出的像素级保真、脚注/引用标点几何细缝不在 2.0 承诺范围，检到时稳定拒绝或标为 `unverified`，见 [技能 README](skills/double6-pdf-translation/README.md)。
 
