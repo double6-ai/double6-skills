@@ -15,7 +15,7 @@ from xml.etree import ElementTree as ET
 from PIL import Image, ImageChops, ImageOps
 from docx import Document
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 MAX_BYTES = 20 * 1024 * 1024
 MAX_PIXELS = 24_000_000
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
