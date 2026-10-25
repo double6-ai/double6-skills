@@ -1169,6 +1169,12 @@ class ILCreater:
                         )
                     )
 
+        # 解释器已按 w / ExtGState /LW 和 q/Q、Form 资源作用域解析的线宽及来源。
+        # 只有来源可靠（"w" 或 "ExtGState"）时写入宽度；其余（未设置/未知）只写来源。
+        width_source = getattr(curve, "linewidth_source", None) or "unset"
+        line_width = None
+        if width_source in ("w", "ExtGState"):
+            line_width = float(curve.linewidth)
         curve_obj = il_version_1.PdfCurve(
             box=bbox,
             graphic_state=gs,
@@ -1181,6 +1187,8 @@ class ILCreater:
             render_order=curve.render_order,
             ctm=list(ctm) if ctm is not None else None,
             pdf_original_path=raw_pdf_paths,
+            line_width=line_width,
+            line_width_source=width_source,
         )
         self.current_page.pdf_curve.append(curve_obj)
         pass

@@ -1,0 +1,131 @@
+{
+ "description": "PR25 评审22 原P3-5：18号实际 tracking 第1段固定输入/回答与19个公式字面（不含绝对路径）。",
+ "provenance_sha256": {
+  "frozen_inputs_json": "49d03d9fcdcb99f54ee58426226fb351a9858f3cb857c0677cabfb31fba5447c",
+  "source_pdf": "0a0c24768ce46af201ce9130d7aa4cd1fb5638233cbd31837c4ff0cf70b04679",
+  "actual_pdf_a54d9d4": "8043990113121654848d3e97c8fa7d0bc87e07f4f9e3a4297018739b3547fd5f",
+  "tracking": "8690440f3c32a52d25c0465fb3d296655ddf037fd84e8b105c2f7eaacb5b5758",
+  "answers_18": "767569d9cddba510c6c03964dcf55d7c5fc9ad5bc8357ce90b64d8b22f7bbff2"
+ },
+ "source_citation_last_glyph": ",",
+ "actual_doubled_fragment": "[12–14], , offer",
+ "model_visible_fragment": "{v9}–{v10}, offer",
+ "input": "示了二次型玻色哈密顿量中 TMS 作用诱导的等效非厄米动力学 {v1}–{v2}. 之后, 基于两体 QBS {v3}–{v4}以及 BKC {v5}–{v6}、玻色 Su-Schrieffer-Heeger(SSH) 模型 {v7}对应的多体 QBS, 人们也发现了诸多基于非厄米动力学的新奇物理效应 {v8}. 例如在两体系统和 BKC 模型中, 通过正交场算符变换得到正交非互易和相位可控的手性传输以及传输信号的缩放 {v9}–{v10}为量子线路和片上集成等量子信息技术提供了新思路; 在 BKC 模型和引入压缩项的玻色 SSH 模型中, 由近邻 TMS 诱导的非厄米动力学可用于实现双边趋肤效应 {v11}、边界敏感放大和拓扑相变 {v12}等. 进一步的, QBS 本身作为量子系统, 压缩作用的存在会诱导系统中产生量子关联等量子效应. 有别于在传统开放量子系统中基于量子轨迹等方法消除量子跳跃效应的影响构造等效非厄米哈密顿量 {v13}以及保留量子跳跃效应基于刘维尔谱来实现非厄米特性的方式 {v14}含有压缩作用的 QBS 作为无需引入耗散或增益的量子平台能够免受量子噪声或跳跃的影响, 为研究非厄米动力学与量子效应的内在联系提供了天然载体 {v15}–{v16}如近年来人们发现基于动力学 EP 诱导系统中压缩和纠缠的动力学行为突变 {v17}、增强量子 Fisher 信息上限 {v18}以及由拓扑相诱导产生稳态纠缠及相变 {v19}等. 上述进展不仅对玻色系统的非厄米动力学图像做出了极大的丰富, 也为量子传感、非互易器件、纠缠调控和拓扑量子计算等领域提供了新的思路和实验平台.",
+ "output": "showed the effective non-Hermitian dynamics induced by the TMS interaction in quadratic bosonic Hamiltonians {v1}–{v2}. Subsequently, based on two-body QBS {v3}–{v4} as well as the many-body QBS corresponding to the BKC {v5}–{v6} and the bosonic Su-Schrieffer-Heeger (SSH) model {v7}, many novel physical effects rooted in non-Hermitian dynamics have also been discovered {v8}. For example, in two-body systems and the BKC model, quadrature-nonreciprocal and phase-controllable chiral transport, as well as scaling of the transmitted signal, obtained through quadrature field-operator transformations {v9}–{v10}, offer new ideas for quantum information technologies such as quantum circuits and on-chip integration; in the BKC model and the bosonic SSH model with squeezing terms, the non-Hermitian dynamics induced by nearest-neighbor TMS can be used to realize the bipolar skin effect {v11}, boundary-sensitive amplification, and topological phase transitions {v12}, among others. Furthermore, since a QBS is itself a quantum system, the presence of squeezing induces quantum effects such as quantum correlations in the system. Unlike the approach in conventional open quantum systems of constructing an effective non-Hermitian Hamiltonian by eliminating the influence of quantum jumps with methods such as quantum trajectories {v13}, or the approach of retaining quantum jumps and realizing non-Hermitian properties via the Liouvillian spectrum {v14}, a QBS containing squeezing serves as a quantum platform that requires no dissipation or gain and is immune to quantum noise or jumps, thus providing a natural vehicle for studying the intrinsic connection between non-Hermitian dynamics and quantum effects {v15}–{v16}. For instance, in recent years it has been found that dynamical EPs induce abrupt changes in the dynamical behavior of squeezing and entanglement in the system {v17}, raise the upper bound of the quantum Fisher information {v18}, and that topological phases induce steady-state entanglement and phase transitions {v19}. These advances not only greatly enrich the picture of non-Hermitian dynamics in bosonic systems, but also provide new ideas and experimental platforms for fields such as quantum sensing, nonreciprocal devices, entanglement control, and topological quantum computing.",
+ "placeholders": [
+  {
+   "id": 1,
+   "placeholder": "{v1}",
+   "regex_pattern": "{\\s*v\\s*1\\s*}",
+   "formula_chars": "[42"
+  },
+  {
+   "id": 2,
+   "placeholder": "{v2}",
+   "regex_pattern": "{\\s*v\\s*2\\s*}",
+   "formula_chars": "46]"
+  },
+  {
+   "id": 3,
+   "placeholder": "{v3}",
+   "regex_pattern": "{\\s*v\\s*3\\s*}",
+   "formula_chars": "[12, 47"
+  },
+  {
+   "id": 4,
+   "placeholder": "{v4}",
+   "regex_pattern": "{\\s*v\\s*4\\s*}",
+   "formula_chars": "49]"
+  },
+  {
+   "id": 5,
+   "placeholder": "{v5}",
+   "regex_pattern": "{\\s*v\\s*5\\s*}",
+   "formula_chars": "[13, 14, 50"
+  },
+  {
+   "id": 6,
+   "placeholder": "{v6}",
+   "regex_pattern": "{\\s*v\\s*6\\s*}",
+   "formula_chars": "58]"
+  },
+  {
+   "id": 7,
+   "placeholder": "{v7}",
+   "regex_pattern": "{\\s*v\\s*7\\s*}",
+   "formula_chars": "[15, 59]"
+  },
+  {
+   "id": 8,
+   "placeholder": "{v8}",
+   "regex_pattern": "{\\s*v\\s*8\\s*}",
+   "formula_chars": "[12, 49, 51]"
+  },
+  {
+   "id": 9,
+   "placeholder": "{v9}",
+   "regex_pattern": "{\\s*v\\s*9\\s*}",
+   "formula_chars": "[12"
+  },
+  {
+   "id": 10,
+   "placeholder": "{v10}",
+   "regex_pattern": "{\\s*v\\s*10\\s*}",
+   "formula_chars": "14],"
+  },
+  {
+   "id": 11,
+   "placeholder": "{v11}",
+   "regex_pattern": "{\\s*v\\s*11\\s*}",
+   "formula_chars": "[13, 15, 16]"
+  },
+  {
+   "id": 12,
+   "placeholder": "{v12}",
+   "regex_pattern": "{\\s*v\\s*12\\s*}",
+   "formula_chars": "[59, 60]"
+  },
+  {
+   "id": 13,
+   "placeholder": "{v13}",
+   "regex_pattern": "{\\s*v\\s*13\\s*}",
+   "formula_chars": "[61, 62]"
+  },
+  {
+   "id": 14,
+   "placeholder": "{v14}",
+   "regex_pattern": "{\\s*v\\s*14\\s*}",
+   "formula_chars": "[63, 64],"
+  },
+  {
+   "id": 15,
+   "placeholder": "{v15}",
+   "regex_pattern": "{\\s*v\\s*15\\s*}",
+   "formula_chars": "[65"
+  },
+  {
+   "id": 16,
+   "placeholder": "{v16}",
+   "regex_pattern": "{\\s*v\\s*16\\s*}",
+   "formula_chars": "67],"
+  },
+  {
+   "id": 17,
+   "placeholder": "{v17}",
+   "regex_pattern": "{\\s*v\\s*17\\s*}",
+   "formula_chars": "[49, 68]"
+  },
+  {
+   "id": 18,
+   "placeholder": "{v18}",
+   "regex_pattern": "{\\s*v\\s*18\\s*}",
+   "formula_chars": "[69],"
+  },
+  {
+   "id": 19,
+   "placeholder": "{v19}",
+   "regex_pattern": "{\\s*v\\s*19\\s*}",
+   "formula_chars": "[70, 71]"
+  }
+ ]
+}

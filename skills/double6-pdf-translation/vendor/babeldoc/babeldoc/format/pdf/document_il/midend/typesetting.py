@@ -1046,6 +1046,8 @@ class Typesetting:
             box = self._institution_layout_box(paragraph, page, box)
             if apply_layout:
                 paragraph.box = box
+        source_box = box
+        ruled_band_box = None
         line_skip = 1.15 if label == "diagram_node" else (1.50 if self.is_cjk else 1.3)
         # 实验开关：只在显式设置时调整正文行距，用于验证后端段落重排，
         # 避免默认交付路径因为单个 case 的调参产生漂移。
@@ -1073,6 +1075,11 @@ class Typesetting:
                 )
                 if scale >= readable_floor:
                     floor_typeset_units = typeset_units
+
+                # 行带框（stage 2）还要求每个字形的实际墨迹都在两条横线之间；
+                # 拿不到字形轮廓（未知）时按放不下处理。
+                if all_units_fit and ruled_band_box is not None and not self._ink_inside_box(typeset_units, ruled_band_box):
+                    all_units_fit = False
 
                 # 如果所有单元都放得下
                 if all_units_fit:
@@ -1134,6 +1141,13 @@ class Typesetting:
                 while expanded_box is None and not self.is_cjk and latin_expand_stage < 2:
                     expanded_box = self._latin_target_expanded_box(box, page, latin_expand_stage)
                     latin_expand_stage += 1
+                if expanded_box is None and not self.is_cjk and latin_expand_stage == 2:
+                    # 右、下都用尽后：单行源文被上下两条真实横线夹住（表头/表格行）时，
+                    # 再借用本行横线之间已确认空白的上方部分。只给否则会被硬下限拒绝的段落。
+                    latin_expand_stage = 3
+                    if self._should_reject_hard_floor_overflow(paragraph):
+                        expanded_box = self._latin_ruled_row_band_box(box, source_box, page, paragraph, typesetting_units)
+                        ruled_band_box = expanded_box
                 if expanded_box is not None:
                     box = expanded_box
                     if apply_layout:
@@ -1258,6 +1272,222 @@ class Typesetting:
         except Exception:
             return None
         return None
+
+    # 行带扩框（拉丁目标语言 stage 2）的几何常数：横线粗细上限与 assign_baseline_ceilings
+    # 的细横线一致；与横线保留 1pt 间距；行带高度不超过源行字号的 3 倍（只借本行，不借整块区域）。
+    _RULED_BAND_RULE_MAX_THICKNESS = 1.5
+    _RULED_BAND_PAD = 1.0
+    _RULED_BAND_MAX_LINE_FACTOR = 3.0
+    _RULED_BAND_FIGURE_LABELS = frozenset({"diagram_node", "chart_label", "axis", "axis_label", "legend"})
+    _RULED_BAND_FIGURE_REGIONS = frozenset({"figure", "image", "picture", "chart", "isolate_formula", "formula"})
+
+    def _latin_ruled_row_band_box(self, box: Box, source_box: Box, page, paragraph, typesetting_units) -> Box | None:
+        """stage 2：单行源文上下各有一条横跨整框的真实细横线时，返回两线之间（各留 1pt）的行带框。
+
+        只在证据可靠时返回：上、下横线都存在且横跨当前框；行带内没有其它段落、未入段字符、
+        图片、Form、其它矢量路径；与行带相交的版面区域都包含本段中心且不是图/公式区域；
+        段落不是图内角色、没有源基线锚点。任一条件不满足（含未知）返回 None，沿用原拒绝。
+        横向范围沿用当前框（已被右侧阻挡物约束）；纵向为本行两条横线之间各留 1pt 的空白，
+        当前框已更低时保持当前框下边。字形墨迹另由 _ink_inside_box 逐字核对。
+        横线与阻挡物都按实际绘制范围（_ruled_band_curve_extent：路径框外扩半个变换后描边宽）判断，
+        不凭零高路径框认细线；本页任一路径的绘制范围不能确定时返回 None。
+        """
+        try:
+            label = (getattr(paragraph, "layout_label", None) or "").lower()
+            if self.is_cjk or label in self._RULED_BAND_FIGURE_LABELS or getattr(paragraph, "vertical", False):
+                return None
+            # 带源基线锚点的段落按既有基线/上限（source_baseline/source_ceiling）排版，不借此扩框。
+            if getattr(paragraph, "source_baseline", None) is not None:
+                return None
+            if not self._is_single_source_line(source_box, typesetting_units):
+                return None
+            eps = 0.5
+            # (路径框, 实际绘制范围)；任一路径绘制范围未知即不走行带（未知不当安全）。
+            painted = []
+            for c in page.pdf_curve or []:
+                if getattr(c, "box", None) is None:
+                    continue
+                extent = self._ruled_band_curve_extent(c)
+                if extent is None:
+                    return None
+                painted.append((c.box, extent))
+            rules = [(path, ext) for path, ext in painted
+                     if ext.y2 - ext.y <= self._RULED_BAND_RULE_MAX_THICKNESS
+                     and path.x <= box.x + eps and path.x2 >= box.x2 - eps]
+            # 行带边界仍为路径框外 1pt：细线实际绘制厚度 <= 1.5，半宽 <= 0.75，
+            # 所以行带与实际描边边缘至少留 0.25pt。
+            above = [path.y for path, ext in rules if path.y >= source_box.y2 - eps]
+            below = [path.y2 for path, ext in rules if path.y2 <= source_box.y + eps]
+            if not above or not below:
+                return None
+            top = min(above) - self._RULED_BAND_PAD
+            bottom = max(below) + self._RULED_BAND_PAD
+            heights = [unit.height for unit in typesetting_units if getattr(unit, "height", 0)]
+            if not heights or top - bottom > self._RULED_BAND_MAX_LINE_FACTOR * max(heights):
+                return None
+            if top <= box.y2 + 0.5 or box.y < bottom - eps:
+                return None
+            band = Box(x=box.x, y=min(box.y, bottom), x2=box.x2, y2=top)
+
+            def hits(other) -> bool:
+                # 零宽/零高的线段（竖线、横线）也算：只要进入行带内部即相交，仅贴边不算。
+                return (other is not None and other.x < band.x2 - 0.01 and other.x2 > band.x + 0.01
+                        and other.y < band.y2 - 0.01 and other.y2 > band.y + 0.01)
+
+            for other in page.pdf_paragraph or []:
+                if other is not paragraph and hits(other.box):
+                    return None
+            for item in [*(page.pdf_character or []), *(page.pdf_figure or []),
+                         *(getattr(page, "pdf_form", None) or [])]:
+                if hits(getattr(item, "box", None)):
+                    return None
+            for _path, ext in painted:
+                if hits(ext):
+                    return None
+            cx, cy = (source_box.x + source_box.x2) / 2, (source_box.y + source_box.y2) / 2
+            for region in getattr(page, "page_layout", None) or []:
+                rb = region.box
+                if rb is None:
+                    continue
+                contains = rb.x <= cx <= rb.x2 and rb.y <= cy <= rb.y2
+                if (region.class_name or "").lower() in self._RULED_BAND_FIGURE_REGIONS and contains:
+                    return None
+                if hits(rb) and not contains:
+                    return None
+            return band
+        except Exception:
+            return None
+
+    @staticmethod
+    def _ruled_band_stroke_width(instruction) -> float | None:
+        """从 graphic_state 的 passthrough 指令取当前描边宽（用户空间）；不能确定时返回 None。
+
+        frontend 按设置先后追加指令，新的 w 会替换旧的 w 并排到末尾；/名 gs 可经 ExtGState 的
+        /LW 改线宽而 IL 不含该字典，所以最后一个 w 之后出现 gs、没有 w、数值非法或为 0（设备最细线，
+        宽度取决于输出分辨率）都视为未知。
+        """
+        if not isinstance(instruction, str):
+            return None
+        tokens = instruction.split()
+        width = None
+        for i, token in enumerate(tokens):
+            if token == "w":
+                try:
+                    width = float(tokens[i - 1]) if i > 0 else None
+                except ValueError:
+                    width = None
+            elif token == "gs":
+                width = None
+        if width is None or not math.isfinite(width) or width <= 0:
+            return None
+        return width
+
+    @classmethod
+    def _ruled_band_curve_extent(cls, curve) -> Box | None:
+        """返回路径的实际绘制范围；不能可靠确定时返回 None。
+
+        - 完全没有绘制状态（graphic_state、stroke_path、fill_background 都缺）的路径只有几何框，
+          按路径框本身处理（frontend 生成的真实 IL 总带 graphic_state，不走这里）。
+        - 描边路径：路径框四周外扩 描边宽 × CTM 线性部分谱范数 / 2（任意旋转/缩放/错切下的
+          可靠上界）；描边宽或 CTM 不能确定即未知。
+        - 描边宽：frontend 写入 line_width_source 时以解释器已解析的结果为准（"w"/"ExtGState"
+          才可靠，其余来源即未知）；passthrough 指令能独立确定宽度且与之不一致视为矛盾、未知。
+          没有 line_width_source（非 frontend 生成的 IL）时只按 passthrough 指令判断。
+        - 只填充不描边：填充范围就是路径框。
+        - 带绘制状态但描边/填充标记缺失：未知。
+        """
+        b = curve.box
+        gs = getattr(curve, "graphic_state", None)
+        stroke = getattr(curve, "stroke_path", None)
+        fill = getattr(curve, "fill_background", None)
+        if gs is None and stroke is None and fill is None:
+            return b
+        if stroke is None or (not stroke and fill is None):
+            return None
+        if not stroke:
+            return b
+        parsed = cls._ruled_band_stroke_width(getattr(gs, "passthrough_per_char_instruction", None))
+        source = getattr(curve, "line_width_source", None)
+        if source is None:
+            width = parsed
+        elif source in ("w", "ExtGState"):
+            width = getattr(curve, "line_width", None)
+            if isinstance(width, bool) or not isinstance(width, int | float) or not math.isfinite(width) or width <= 0:
+                return None
+            width = float(width)
+            if parsed is not None and abs(parsed - width) > 1e-5:
+                return None
+        else:
+            return None
+        ctm = getattr(curve, "ctm", None)
+        if width is None or ctm is None or len(ctm) != 6:
+            return None
+        try:
+            a, bb, c, d = (float(v) for v in ctm[:4])
+        except (TypeError, ValueError):
+            return None
+        if not all(math.isfinite(v) for v in (a, bb, c, d)):
+            return None
+        sq = a * a + bb * bb + c * c + d * d
+        det = a * d - bb * c
+        norm = math.sqrt(max(0.0, (sq + math.sqrt(max(0.0, sq * sq - 4 * det * det))) / 2))
+        half = width * norm / 2
+        if not math.isfinite(half):
+            return None
+        return Box(x=b.x - half, y=b.y - half, x2=b.x2 + half, y2=b.y2 + half)
+
+    _INK_FONTS: dict = {}
+
+    @classmethod
+    def _glyph_ink_bounds(cls, font, ch: str):
+        """字形轮廓边界（em 比例，基线为 0）；空白字形返回 ()，未知返回 None。"""
+        try:
+            entry = cls._INK_FONTS.get(id(font))
+            if entry is None or entry[0] is not font:
+                import io
+                from fontTools.ttLib import TTFont
+                tt = TTFont(io.BytesIO(font.buffer), lazy=True)
+                entry = (font, tt, tt.getBestCmap(), tt.getGlyphSet(), float(tt["head"].unitsPerEm))
+                cls._INK_FONTS[id(font)] = entry
+            from fontTools.pens.boundsPen import BoundsPen
+            _, _, cmap, glyphs, em = entry
+            name = cmap.get(ord(ch))
+            if name is None:
+                return None
+            pen = BoundsPen(glyphs)
+            glyphs[name].draw(pen)
+            if pen.bounds is None:
+                return ()
+            x0, y0, x1, y1 = pen.bounds
+            return x0 / em, y0 / em, x1 / em, y1 / em
+        except Exception:
+            return None
+
+    def _ink_inside_box(self, units, box: Box) -> bool:
+        tol = 0.01
+        for unit in units or []:
+            text = unit.try_get_unicode()
+            if unit.unicode is not None:
+                if text is None or len(text) != 1:
+                    return False
+                if text.isspace():
+                    continue
+                bounds = self._glyph_ink_bounds(unit.font, text)
+                if bounds is None:
+                    return False
+                if bounds == ():
+                    continue
+                size = float(unit.font_size)
+                ink = (unit.box.x + bounds[0] * size, unit.box.y + bounds[1] * size,
+                       unit.box.x + bounds[2] * size, unit.box.y + bounds[3] * size)
+            else:
+                b = unit.box
+                if b is None:
+                    return False
+                ink = (b.x, b.y, b.x2, b.y2)
+            if not (box.x - tol <= ink[0] and ink[2] <= box.x2 + tol and box.y - tol <= ink[1] and ink[3] <= box.y2 + tol):
+                return False
+        return True
 
     @staticmethod
     def _latin_expansion_obstacles(page) -> tuple[list[Box], list[Box]]:

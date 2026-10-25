@@ -57,7 +57,7 @@ def build_dual_visual_report(
                                 "page": page_index + 1,
                                 "target_pdf_role": role,
                                 "delivery_blocking": delivery_blocking,
-                                "message": "双语 PDF 中文侧文本/CJK 覆盖极低，疑似中文侧空白。",
+                                "message": "双语 PDF 右侧译文页文本/字形覆盖极低，疑似译文侧空白。",
                                 "evidence": json.dumps(
                                     {
                                         "mono_text_chars": mono_full["text_chars"],
@@ -83,7 +83,7 @@ def build_dual_visual_report(
                                 "page": page_index + 1,
                                 "target_pdf_role": role,
                                 "delivery_blocking": delivery_blocking,
-                                "message": "双语 PDF 英文侧背景/像素分布与源页差异过大，可能出现背景漂移或侧栏异常。",
+                                "message": "双语 PDF 左侧原文页背景/像素分布与源页差异过大，可能出现背景漂移或侧栏异常。",
                                 "evidence": json.dumps(
                                     {
                                         "source_nonwhite_ratio": source_full["nonwhite_ratio"],
