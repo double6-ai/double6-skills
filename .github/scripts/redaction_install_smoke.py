@@ -41,6 +41,19 @@ def request(base, route, payload, headers=None):
     return opener.open(urllib.request.Request(base + route, body, headers, method='POST'), timeout=90)
 
 
+def wait_for_session(path, child, timeout=90):
+    """等启动回执写完；文件刚创建时可能仍为空或只有半段 JSON。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if child.poll() is not None:
+            raise RuntimeError('生成的启动器提前退出')
+        try:
+            return json.loads(path.read_text(encoding='utf-8'))
+        except (FileNotFoundError, json.JSONDecodeError):
+            time.sleep(.1)
+    raise TimeoutError('生成的启动器未及时写完会话回执，查看对应launch日志')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, required=True)
@@ -88,16 +101,7 @@ def main():
             started = time.monotonic()
             info = None
             try:
-                deadline = started + 90
-                while time.monotonic() < deadline:
-                    if session.exists():
-                        break
-                    if child.poll() is not None:
-                        raise RuntimeError('生成的启动器提前退出')
-                    time.sleep(.1)
-                if not session.exists():
-                    raise TimeoutError('启动器90秒内未生成会话回执，查看对应launch日志')
-                info = json.loads(session.read_text(encoding='utf-8'))
+                info = wait_for_session(session, child)
                 report.setdefault('launches', []).append({'iteration': iteration, 'pid': child.pid, 'ready_seconds': round(time.monotonic() - started, 3)})
                 save()
                 url = info['url']
