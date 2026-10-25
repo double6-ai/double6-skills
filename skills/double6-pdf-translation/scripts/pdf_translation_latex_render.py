@@ -14,7 +14,9 @@ def run_latex_direct_render(
     from pdf_translation_commands import build_latex_direct_command, ensure_tex_docker_wrappers, infer_latex_direct_failure_stage, redacted_command, select_latex_compile_runtime
     from pdf_translation_latex_audit import default_latex_baseline_pdf, write_latex_baseline_audit
     from pdf_translation_latex_quality import build_latex_direct_quality_gate, load_latex_direct_segments_for_gate, write_latex_paragraph_structure_repair_manifest, write_latex_segment_repair_plan
-    from pdf_translation_paths import should_enable_hymt_compat_proxy, vendored_pdf2zh_skill_root
+    from pdf_translation_paths import latex_direct_backend_status, should_enable_hymt_compat_proxy, vendored_pdf2zh_skill_root
+    from credential_env import LOCAL_NO_AUTH_PLACEHOLDER, resolve_credential, scrub_backend_env
+    from credential_forwarder import FORWARDER_UNAVAILABLE, start_credential_forwarder
     mode = getattr(args, "latex_render_mode", DEFAULT_LATEX_RENDER_MODE)
     manifest_path = output_dir / "direct_latex_render_manifest.json"
     manifest: dict[str, Any] = {
@@ -64,8 +66,20 @@ def run_latex_direct_render(
     latex_output_dir.mkdir(parents=True, exist_ok=True)
     log_path = output_dir / "latex_direct.log"
     original_base_url = args.base_url
+    # 远端缺凭据：任何代理/子进程启动前稳定报错（错误不含值）。
+    upstream_credential = resolve_credential(args.api_key, original_base_url)
+    backend_status = latex_direct_backend_status()
+    manifest["backend_status"] = backend_status
+    launch_error: dict[str, Any] | None = None
+    if not backend_status["available"]:
+        # 外部后端未随本仓库分发：结构化错误、不启动任何子进程/代理；真实端到端未运行（not_run）。
+        launch_error = {"error_type": "latex_direct_backend_unavailable", "module": "pdf2zh_skill",
+                        "reason": backend_status.get("reason"), "end_to_end": "not_run"}
     proxy_server = None
-    if should_enable_hymt_compat_proxy(args):
+    forwarder = None
+    child_translation_key = None
+    manifest["credential_channel"] = None
+    if launch_error is None and should_enable_hymt_compat_proxy(args):
         proxy_config = ProxyConfig(
             model=args.model,
             upstream_base_url=original_base_url.rstrip("/"),
@@ -94,8 +108,30 @@ def run_latex_direct_render(
                 "error": f"proxy_start_failed: {exc}",
                 "stats": {},
             }
-    command = build_latex_direct_command(args, input_pdf, source_tex, latex_output_dir)
-    latex_env = env.copy()
+    if launch_error is None:
+        if proxy_server is not None:
+            # 已有回环兼容代理在本进程持有上游凭据：子进程只拿占位值。
+            child_translation_key = LOCAL_NO_AUTH_PLACEHOLDER
+            manifest["credential_channel"] = {"mode": "hymt_compat_proxy", "bind_host": "127.0.0.1",
+                                              "upstream_base_url": original_base_url, "credential_recorded": False}
+        elif upstream_credential == LOCAL_NO_AUTH_PLACEHOLDER:
+            child_translation_key = LOCAL_NO_AUTH_PLACEHOLDER
+            manifest["credential_channel"] = {"mode": "local_no_auth_placeholder", "upstream_base_url": original_base_url,
+                                              "credential_recorded": False}
+        else:
+            # 后端非 argv 通道无法核实：经回环转发器保留用户显式上游 URL/模型/凭据语义，argv 只含一次性令牌。
+            try:
+                forwarder = start_credential_forwarder(original_base_url, upstream_credential,
+                                                       timeout=max(1, int(getattr(args, "latex_translate_timeout", 300) or 300)))
+            except OSError as exc:
+                launch_error = {"error_type": FORWARDER_UNAVAILABLE, "detail": type(exc).__name__}
+            else:
+                args.base_url = forwarder.base_url
+                child_translation_key = forwarder.access_token
+                manifest["credential_channel"] = forwarder.describe()
+    command = (build_latex_direct_command(args, input_pdf, source_tex, latex_output_dir, translation_api_key=child_translation_key)
+               if launch_error is None else None)
+    latex_env = scrub_backend_env(env.copy())
     vendor_root = vendored_pdf2zh_skill_root()
     existing_pythonpath = latex_env.get("PYTHONPATH", "")
     latex_env["PYTHONPATH"] = str(vendor_root) + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
@@ -108,12 +144,18 @@ def run_latex_direct_render(
         compile_runtime["wrapper_dir"] = str(wrapper_dir)
     elif compile_runtime["selected"] == "missing":
         compile_runtime["error"] = "no local LaTeX compiler and docker is not available"
-    manifest["command"] = redacted_command(command, args.api_key)
+    secret_values = (args.api_key, forwarder.access_token if forwarder is not None else None)
+    manifest["command"] = redacted_command(command, *secret_values) if command else None
 
     started = time.monotonic()
     try:
         with log_path.open("w", encoding="utf-8") as log:
-            log.write("COMMAND: " + " ".join(redacted_command(command, args.api_key)) + "\n")
+            if launch_error is not None:
+                manifest["status"] = "error"
+                manifest["errors"].append(launch_error)
+                log.write(f"LATEX_DIRECT_NOT_LAUNCHED: {launch_error['error_type']}\n")
+                raise _LatexDirectNotLaunched()
+            log.write("COMMAND: " + " ".join(redacted_command(command, *secret_values)) + "\n")
             log.write(f"MODEL: {args.model}\n")
             log.write(f"BASE_URL: {args.base_url}\n")
             log.write(f"LATEX_DIRECT_HYMT_COMPAT_PROXY: {json.dumps(manifest['hymt_compat_proxy'], ensure_ascii=False)}\n")
@@ -136,7 +178,12 @@ def run_latex_direct_render(
                 manifest["status"] = "error"
                 manifest["errors"].append({"error_type": "timeout", "timeout_seconds": args.latex_render_timeout})
                 log.write(f"\nTIMEOUT: exceeded {args.latex_render_timeout} seconds\n")
+    except _LatexDirectNotLaunched:
+        pass
     finally:
+        if forwarder is not None:
+            forwarder.stop()
+            manifest["credential_channel"] = forwarder.describe()
         if proxy_server is not None:
             stats = dict(getattr(proxy_server, "stats", {}) or {})
             manifest["latex_direct_proxy_stats"] = stats
@@ -188,6 +235,10 @@ def run_latex_direct_render(
         manifest["errors"].append({"error_type": "missing_latex_translated_pdf"})
     log_text = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
     manifest.update(infer_latex_direct_failure_stage(log_text, manifest))
+    if launch_error is not None:
+        manifest.update({"failure_stage": "backend_unavailable" if launch_error["error_type"] == "latex_direct_backend_unavailable"
+                         else "credential_channel_unavailable", "api_stage_status": "not_started",
+                         "compile_stage_status": "not_started", "child_launched": False})
     baseline_arg = Path(args.latex_baseline_pdf).expanduser().resolve() if getattr(args, "latex_baseline_pdf", None) else None
     baseline_pdf = baseline_arg if baseline_arg and baseline_arg.is_file() else default_latex_baseline_pdf(source_tex)
     current_pdf = Path(str(manifest.get("project_pdf") or manifest.get("translated_pdf") or ""))
@@ -217,6 +268,10 @@ def run_latex_direct_render(
     manifest["duration_seconds"] = round(time.monotonic() - started, 3)
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return manifest
+
+
+class _LatexDirectNotLaunched(Exception):
+    """内部控制流：未启动子进程，继续原有清单/质量门收尾。"""
 
 
 def prepare_source(input_pdf: Path, output_dir: Path, source_override: Path | None = None) -> dict[str, Any]:

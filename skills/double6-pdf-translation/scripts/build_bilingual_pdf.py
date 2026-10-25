@@ -25,6 +25,56 @@ def _load_fitz():
             raise RuntimeError(f"PyMuPDF unavailable: {exc}") from exc
 
 
+# 标准双语页合同：左页恒为源文页、右页恒为译文页（页序不随语言变化）。
+# 文件名与清单中的语言标注只取调用方已知的翻译方向；方向未知时不猜，使用中性名称。
+SUPPORTED_DIRECTIONS = {("en", "zh"), ("zh", "en")}
+LANGUAGE_LABELS = {"en": "英文", "zh": "中文"}
+NEUTRAL_LAYOUT = "source_left_translation_right"
+NEUTRAL_NAME_INFIX = "source-left.translation-right"
+
+
+def _language(value: str | None) -> str | None:
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    return "en" if text.startswith("en") else "zh" if text.startswith("zh") else text
+
+
+def bilingual_direction(source_language: str | None = None, target_language: str | None = None,
+                        *, basis: str | None = None) -> dict[str, Any]:
+    source, target = _language(source_language), _language(target_language)
+    if (source, target) in SUPPORTED_DIRECTIONS:
+        return {
+            "layout": f"{source}_left_{target}_right",
+            "name_infix": f"{source}-left.{target}-right",
+            "left_role": "source", "right_role": "translation",
+            "left_language": source, "right_language": target,
+            "left_label": f"{LANGUAGE_LABELS[source]}原文", "right_label": f"{LANGUAGE_LABELS[target]}译文",
+            "direction_basis": basis or "caller_declared",
+        }
+    return {
+        "layout": NEUTRAL_LAYOUT,
+        "name_infix": NEUTRAL_NAME_INFIX,
+        "left_role": "source", "right_role": "translation",
+        "left_language": "unknown", "right_language": "unknown",
+        "left_label": "原文", "right_label": "译文",
+        "direction_basis": "unknown",
+        **({"declared_source_language": source, "declared_target_language": target} if (source or target) else {}),
+    }
+
+
+def name_infix_for(manifest: dict[str, Any] | None) -> str:
+    """由清单已记录的左右语言重建文件名中缀；记录缺失或未知时为中性中缀。"""
+    manifest = manifest or {}
+    pair = (manifest.get("left_language"), manifest.get("right_language"))
+    return f"{pair[0]}-left.{pair[1]}-right" if pair in SUPPORTED_DIRECTIONS else NEUTRAL_NAME_INFIX
+
+
+def direction_fields(direction: dict[str, Any] | None) -> dict[str, Any]:
+    direction = direction or bilingual_direction()
+    return {key: value for key, value in direction.items() if key != "name_infix"}
+
+
 def _show_pdf_page_vector(page: Any, rect: Any, source_doc: Any, page_index: int, fitz: Any) -> None:
     page.show_pdf_page(rect, source_doc, page_index)
 
@@ -35,7 +85,9 @@ def _show_pdf_page_raster(page: Any, rect: Any, source_page: Any, fitz: Any, ras
     page.insert_image(rect, pixmap=pix, keep_proportion=False)
 
 
-def build_en_left_zh_right_pdf_pypdf(source_pdf: Path, translated_pdf: Path, output_pdf: Path) -> dict[str, Any]:
+def build_en_left_zh_right_pdf_pypdf(source_pdf: Path, translated_pdf: Path, output_pdf: Path, *,
+                                    direction: dict[str, Any] | None = None) -> dict[str, Any]:
+    """历史函数名保留；左源页、右译页。语言标注见 direction（未知时为中性）。"""
     try:
         from pypdf import PageObject, PdfReader, PdfWriter, Transformation  # type: ignore
     except Exception as exc:  # noqa: BLE001
@@ -66,7 +118,7 @@ def build_en_left_zh_right_pdf_pypdf(source_pdf: Path, translated_pdf: Path, out
     return {
         "version": 1,
         "status": "ok" if link_manifest["status"] == "ok" else "needs_review",
-        "layout": "en_left_zh_right",
+        **direction_fields(direction),
         "source_pdf": str(source_pdf),
         "translated_pdf": str(translated_pdf),
         "output_pdf": str(output_pdf),
@@ -246,9 +298,10 @@ def build_en_left_zh_right_pdf(
     *,
     mode: str = "pypdf-vector",
     raster_dpi: int = 144,
+    direction: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if mode == "pypdf-vector":
-        return build_en_left_zh_right_pdf_pypdf(source_pdf, translated_pdf, output_pdf)
+        return build_en_left_zh_right_pdf_pypdf(source_pdf, translated_pdf, output_pdf, direction=direction)
     fitz = _load_fitz()
     if mode not in {"vector", "raster", "pypdf-vector"}:
         raise ValueError(f"unsupported bilingual render mode: {mode}")
@@ -289,7 +342,7 @@ def build_en_left_zh_right_pdf(
     return {
         "version": 1,
         "status": "ok",
-        "layout": "en_left_zh_right",
+        **direction_fields(direction),
         "source_pdf": str(source_pdf),
         "translated_pdf": str(translated_pdf),
         "output_pdf": str(output_pdf),
@@ -310,14 +363,15 @@ def build_manifest(
     *,
     mode: str = "pypdf-vector",
     raster_dpi: int = 144,
+    direction: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     try:
-        return build_en_left_zh_right_pdf(source_pdf, translated_pdf, output_pdf, mode=mode, raster_dpi=raster_dpi)
+        return build_en_left_zh_right_pdf(source_pdf, translated_pdf, output_pdf, mode=mode, raster_dpi=raster_dpi, direction=direction)
     except Exception as exc:  # noqa: BLE001 - 双语后处理失败不能吞掉主 PDF
         return {
             "version": 1,
             "status": "error",
-            "layout": "en_left_zh_right",
+            **direction_fields(direction),
             "source_pdf": str(source_pdf),
             "translated_pdf": str(translated_pdf),
             "output_pdf": str(output_pdf),
@@ -328,13 +382,17 @@ def build_manifest(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build a bilingual PDF with original English on the left and Chinese translation on the right.")
+    parser = argparse.ArgumentParser(description="Build a bilingual PDF with the source page on the left and the translated page on the right.")
     parser.add_argument("--source-pdf", required=True)
     parser.add_argument("--translated-pdf", required=True)
     parser.add_argument("--output-pdf", required=True)
     parser.add_argument("--manifest")
     parser.add_argument("--mode", choices=["vector", "raster", "pypdf-vector"], default="pypdf-vector")
     parser.add_argument("--raster-dpi", type=int, default=144)
+    parser.add_argument("--source-language", choices=["en", "zh"], default=None,
+                        help="Language of the source (left) pages; omit when unknown (labels stay neutral).")
+    parser.add_argument("--target-language", choices=["en", "zh"], default=None,
+                        help="Language of the translated (right) pages; omit when unknown (labels stay neutral).")
     args = parser.parse_args(argv)
     manifest = build_manifest(
         Path(args.source_pdf),
@@ -342,6 +400,7 @@ def main(argv: list[str] | None = None) -> int:
         Path(args.output_pdf),
         mode=args.mode,
         raster_dpi=args.raster_dpi,
+        direction=bilingual_direction(args.source_language, args.target_language, basis="cli_argument"),
     )
     manifest_path = Path(args.manifest) if args.manifest else Path(args.output_pdf).with_suffix(".manifest.json")
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

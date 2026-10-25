@@ -423,6 +423,28 @@ def attach_pipeline_quality(manifest, *, source, output_dir, review_ref=None, ta
                     'evidence':residue.get('report_ref')})
         result['quality_pass']=False
         result['status']='fail'
+    structure=formula_structure_gate(source,final_pdf_from_manifest(manifest,source=source),output_dir)
+    result['formula_structure_check']={k:structure.get(k) for k in ('status','severity','reason','source_relations','lost',
+                                                                     'flagged_pages','report_ref')}
+    if structure.get('severity')=='high':
+        # 两个方向通用：源文上/下标层级在主版式成品中被压平或丢失，失败关闭（稳定规则码）。
+        result.setdefault('issues',[]).append({'id':'formula_script_structure_lost','rule':'formula_script_structure_lost',
+            'severity':'high','pages':structure.get('flagged_pages'),'lost':structure.get('lost'),
+            'message':'源文公式的上/下标层级在成品中被压平或丢失（如 V_n^max 的 max 落到基线），失败关闭',
+            'samples':[s for p in structure.get('pages',[]) for s in p.get('samples',[])][:12],
+            'evidence':structure.get('report_ref')})
+        result['quality_pass']=False;result['status']='fail'
+    # 检查本身未能执行（not_evaluated）与渲染残留门同口径：如实记录状态与原因，不伪造通过或失败。
+    readable=readable_fidelity_receipt(output_dir)
+    if readable:
+        result['readable_output']=readable
+        if readable.get('status')=='refused':
+            # 可读版在写出前已被拒绝（不交付损坏件）；主版式成品不受影响，但综合结果不能为通过。
+            result.setdefault('pending',[]).append({'id':'readable_math_fidelity_refused','rule':readable.get('reason_code'),
+                'severity':'needs_review','message':'可读版无法数学无损生成，已拒绝交付（未写出 final_readable.pdf）',
+                'refusal':readable.get('refusal'),'evidence':readable.get('manifest_ref')})
+            result['quality_pass']=False
+            if result.get('status')=='pass':result['status']='unverified'
     path=output_dir/'comprehensive_quality.json'
     path.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
     fields={'quality_status':result['status'],'quality_pass':result['quality_pass'],
@@ -468,6 +490,34 @@ def render_residue_gate(source, target, output_dir, target_language='zh', region
     path.write_text(json.dumps(residue,ensure_ascii=False,indent=2)+'\n')
     residue['report_ref']=file_ref(path)
     return residue
+
+
+def formula_structure_gate(source, target, output_dir):
+    """上/下标层级保真门（formula_structure_check）；检查本身出错时记为未评估，不伪造通过。"""
+    try:
+        from formula_structure_check import check_formula_structure
+        structure=check_formula_structure(source,target)
+    except Exception as exc:  # 解析器异常类型不固定
+        structure={'status':'not_evaluated','severity':'ok','reason':f'{type(exc).__name__}: {exc}'[:300]}
+    path=Path(output_dir)/'formula_structure_check.json'
+    path.write_text(json.dumps(structure,ensure_ascii=False,indent=2)+'\n')
+    structure['report_ref']=file_ref(path)
+    return structure
+
+
+def readable_fidelity_receipt(output_dir):
+    """可读版（final_readable.pdf）的数学保真结论：ok 或写出前拒绝（reason_code）。"""
+    path=Path(output_dir)/'final_pdf_manifest.json'
+    if not path.is_file():
+        return None
+    try:
+        data=json.loads(path.read_text(encoding='utf-8'))
+    except (OSError,ValueError):
+        return {'status':'unreadable','manifest_ref':file_ref(path)}
+    fidelity=data.get('math_fidelity') or {}
+    return {'status':data.get('status'),'reason_code':data.get('reason_code'),'refusal':data.get('refusal'),
+            'vector_pages':fidelity.get('vector_pages'),'page_modes':fidelity.get('page_modes'),
+            'manifest_ref':file_ref(path)}
 
 
 def render_residue_summary(residue):

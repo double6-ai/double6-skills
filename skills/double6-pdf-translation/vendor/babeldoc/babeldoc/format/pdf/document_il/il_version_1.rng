@@ -498,6 +498,16 @@
           </list>
         </attribute>
       </optional>
+      <optional>
+        <attribute name="lineWidth">
+          <data type="float"/>
+        </attribute>
+      </optional>
+      <optional>
+        <attribute name="lineWidthSource">
+          <data type="string"/>
+        </attribute>
+      </optional>
     </element>
   </define>
   <define name="PDFOriginalPath">

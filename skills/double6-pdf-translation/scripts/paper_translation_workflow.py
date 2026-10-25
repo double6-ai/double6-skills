@@ -17,8 +17,9 @@ import time
 import urllib.request
 
 from bounded_execution import run_bounded, snapshot
+import failure_root_cause
 from cutover.scoped import check_scoped_preflight, sha
-from pdf_input_preflight import DIGITAL_MAX_PAGES, PreflightError, blocked_result, finding, inspect_pdf
+from pdf_input_preflight import DIGITAL_MAX_PAGES, SUPPORTED_TARGETS, PreflightError, blocked_result, finding, inspect_pdf
 from resource_limits import (ResourceLimitError, backend_timeouts, limits_from_frozen_contract, recommended_contract,
                              resolve_limits, validate_resource_contract)
 
@@ -38,6 +39,14 @@ PDF_BACKEND_ROUTES = ('digital_pdf', 'scanned_ocr')
 CHUNK_ROUTES = ('digital_pdf', 'scanned_ocr', 'per_chunk')
 PER_CHUNK_ROUTING = {'selection':'per_chunk_explicit','native_text_pages':'digital_pdf','scanned_pages':'scanned_ocr',
                      'sparse_pages':'attach_to_neighbour_run','digital':DIGITAL_ROUTING,'scanned':OCR_ROUTING}
+
+
+class BackendFailure(ValueError):
+    """PDF 后端没有产出候选：携带本尝试结构化产物给出的根因（稳定原因码 + 细节）与根因回执引用。"""
+
+    def __init__(self, root_cause, receipt_ref):
+        super().__init__(root_cause.get('code') or failure_root_cause.UNAVAILABLE)
+        self.root_cause, self.receipt_ref = root_cause, receipt_ref
 
 
 def write_new(path, value):
@@ -85,9 +94,14 @@ def doctor(base_url, model=MODEL, provider_generation_required=True, include_ocr
                     for name in ('fitz', 'psutil', 'PIL', 'requests', 'pdf2zh_next', 'babeldoc')}
     blockers = [f'missing_dependency:{name}' for name, present in dependencies.items() if not present]
     models = []
-    if provider_generation_required:
+    from credential_env import CREDENTIAL_ENV, REMOTE_REQUIRES_KEY, credential_source, is_loopback_endpoint
+    # 与运行入口同一来源：只读 LOCAL_TRANSLATION_API_KEY（不再静默采用 OPENAI_API_KEY）；只报告来源，不记录值。
+    credential = credential_source(os.environ)
+    api_key = os.environ.get(CREDENTIAL_ENV) or None
+    if provider_generation_required and not api_key and not is_loopback_endpoint(base_url):
+        blockers.append(REMOTE_REQUIRES_KEY)
+    elif provider_generation_required:
         try:
-            api_key = os.environ.get('LOCAL_TRANSLATION_API_KEY') or os.environ.get('OPENAI_API_KEY')
             headers = {'Authorization': 'Bearer ' + api_key} if api_key else {}
             request = urllib.request.Request(base_url.rstrip('/') + '/models', headers=headers)
             with urllib.request.urlopen(request, timeout=5) as response:
@@ -107,6 +121,7 @@ def doctor(base_url, model=MODEL, provider_generation_required=True, include_ocr
             'model_identity': 'served model ID only; weight/provider fingerprint requires separate frozen evidence',
             'scan_dependencies_required': False, 'model_calls': 0,
             'provider_generation_required':provider_generation_required,
+            'credential': credential,
             'resources': {key: memory[key] for key in ('total', 'available', 'swap_used', 'codex')},
             'supported_routes': list(ROUTES),
             'recommended_resource_contract': recommended_contract(),
@@ -263,6 +278,22 @@ def run_job(args, command, operation, interval_seconds=2):
     if child:
         # 子任务以结构化 JSON 报告的预检/路由拒绝：上浮为 blocked，并保留错误码与发现。
         result.update(status='blocked', error_code=child.get('error_code'), findings=child.get('findings', []))
+    else:
+        attach_root_cause(result)
+    return result
+
+
+def attach_root_cause(result):
+    """PDF 后端未产出候选（子任务结构化行带 root_cause_ref）：只采信本尝试输出目录内、身份（argv 的 --output-dir /
+    --freeze、launch 回执 nonce）与 sha 逐项核对一致的根因回执；状态不变（仍是 failed），只补稳定原因码、
+    结构化细节与回执引用。核对不了 → root_cause_unavailable（verified=False）。"""
+    envelope = child_marker(result)
+    if not envelope or 'root_cause_ref' not in envelope or result.get('status') != 'failed' or result.get('error_code'):
+        return result
+    cause = failure_root_cause.verify_for_result(result, envelope['root_cause_ref'])
+    result.update(error_code=cause['code'], root_cause=cause,
+                  findings=[finding(cause['code'], failure_root_cause.message(cause), stage=cause.get('stage'),
+                                    retry=cause.get('retry'), verified=cause.get('verified'))])
     return result
 
 
@@ -374,6 +405,13 @@ def quality_verdict(output_dir, manifest=None):
     reference_exclusion = quality.get('reference_exclusion') or manifest.get('reference_exclusion')
     if reference_exclusion:
         verdict['reference_exclusion'] = reference_exclusion
+    # 公式上/下标层级门与可读版数学保真结论（拒绝时带稳定 reason_code）。
+    structure = quality.get('formula_structure_check')
+    if isinstance(structure, dict) and structure.get('status'):
+        verdict['formula_structure'] = {k: structure.get(k) for k in ('status', 'severity', 'lost', 'flagged_pages')}
+    readable = quality.get('readable_output')
+    if isinstance(readable, dict) and readable.get('status'):
+        verdict['readable_output'] = {k: readable.get(k) for k in ('status', 'reason_code', 'vector_pages')}
     if status == 'fail':
         verdict.update(quality_gate_failure(output_dir, manifest))
     return verdict
@@ -430,7 +468,8 @@ def quality_gate_failure(output_dir, manifest):
             'outputs_written': True, 'output_files': files}
 
 
-def child_structured_result(result):
+def child_marker(result):
+    """子任务 stdout 末尾的结构化结果行（有界执行只保留 stdout 末尾 2 KiB；读不出即 None）。"""
     command = result.get('command') or {}
     excerpt = ((command.get('stdout_summary') or {}).get('excerpt') or '')
     for line in reversed(excerpt.splitlines()):
@@ -439,8 +478,13 @@ def child_structured_result(result):
                 value = json.loads(line[len(CHILD_RESULT_MARKER):])
             except ValueError:
                 return None
-            return value if isinstance(value, dict) and value.get('status') == 'blocked' else None
+            return value if isinstance(value, dict) else None
     return None
+
+
+def child_structured_result(result):
+    value = child_marker(result)
+    return value if value and value.get('status') == 'blocked' else None
 
 
 def input_inspection_job(args):
@@ -615,8 +659,10 @@ def execute_digital(freeze_path, command, ocr_manifest=None):
     import fitz
     import run_pdf_translation
     from scanned_raster.route_pdf import route_pdf
+    started_at = time.time()
     freeze = read_json(freeze_path)
     args = run_pdf_translation.build_parser().parse_args(command)
+    args.attempt_started_at, args.attempt_freeze_path = started_at, freeze_path
     if ocr_manifest is None:
         if freeze.get('route')!='digital_pdf' or freeze.get('routing_contract')!=DIGITAL_ROUTING or not args.pdf_backend_only or args.latex_render_mode!='off':
             raise ValueError('explicit digital route identity missing or changed')
@@ -683,6 +729,15 @@ def finish_digital_result(freeze, args, result, context):
         if type(evidence.get('current_attempt_cache_hits')) is not int or evidence['current_attempt_cache_hits']<=0:
             raise ValueError('cache-only rendering lacked actual source boundary hits')
     target = manifest.get('outputs', {}).get('translated_pdf')
+    attempt_freeze = getattr(args, 'attempt_freeze_path', None)
+    if attempt_freeze and manifest.get('actual_render_source') == 'pdf_backend' and (not target or not Path(target).is_file()):
+        # 本次 _execute-digital 的后端失败（未产出候选）：根因只取本尝试输出目录内的结构化产物
+        # （排版回执、render_manifest），连同本尝试身份写根因回执；拿不到即 root_cause_unavailable，不猜。
+        output_dir = Path(args.output_dir)
+        started_at = getattr(args, 'attempt_started_at', None)
+        cause = failure_root_cause.derive(output_dir, manifest, expected_pages=len(freeze['pages']), started_at=started_at)
+        receipt_ref = failure_root_cause.write_receipt(output_dir, cause, freeze_path=attempt_freeze, started_at=started_at)
+        raise BackendFailure(cause, receipt_ref)
     if manifest.get('actual_render_source') != 'pdf_backend' or not target or not Path(target).is_file():
         raise ValueError('PDF backend failed or changed route; no fallback delivery')
     write_new(Path(args.output_dir)/'WORKFLOW_RENDER_RESULT.json', result)
@@ -941,6 +996,11 @@ def main(argv=None):
         print(json.dumps(result, ensure_ascii=False, indent=2))
         if args.action == '_execute-digital' and isinstance(exc, PreflightError):
             print(CHILD_RESULT_MARKER + json.dumps({k: result[k] for k in ('status', 'error_code', 'findings')}, ensure_ascii=False))
+        elif args.action == '_execute-digital' and isinstance(exc, BackendFailure):
+            # 精简结构化行（父任务据 root_cause_ref 读回执并逐项核对，不信任这一行本身的细节）。
+            print(CHILD_RESULT_MARKER + json.dumps({'status': result['status'], 'error_code': result['error_code'],
+                                                    'root_cause': failure_root_cause.compact(exc.root_cause),
+                                                    'root_cause_ref': exc.receipt_ref}, ensure_ascii=False))
         return EXIT_BLOCKED
     except Exception as exc:
         # 未预期的内部错误：仍输出结构化 JSON 与回执（不再只剩 traceback），退出码 1；不吞掉错误。
@@ -982,6 +1042,11 @@ def structured_failure(args, exc):
     if isinstance(exc, PreflightError):
         result = getattr(exc, 'result', None) or exc.to_dict()
         result = dict(result, status='blocked', error_code=exc.code)
+    elif isinstance(exc, BackendFailure):
+        cause = exc.root_cause
+        result = blocked_result([finding(cause['code'], failure_root_cause.message(cause), stage=cause.get('stage'),
+                                         retry=cause.get('retry'))])
+        result.update(status='failed', root_cause=cause, root_cause_ref=exc.receipt_ref)
     else:
         code = (getattr(exc, 'code', 'resource_limit_invalid') if isinstance(exc, ResourceLimitError) else
                 'project_lock_busy' if isinstance(exc, RuntimeError) else
@@ -1035,6 +1100,108 @@ def check_target_language_route(args):
         raise exc
 
 
+INSPECT_INPUT_MAX_PAGES = 20  # scan_input_preflight.inspect_input：--max-pages 只接受 1–20
+GUIDANCE_SCHEMA = 'input_preflight_guidance_v1'
+WORKFLOW_CLI = 'python scripts/paper_translation_workflow.py'
+
+
+def input_preflight_guidance(report, action, route, target_language='zh'):
+    """输入预检拒绝后的只读下一步提示（中文）：只依据稳定错误码与预检已核实的页数/页型。
+
+    只指向现有入口，不自动切换路线、不分块、不执行任何入口、不改变拒绝码与退出码。
+    以下情形返回 None（不给任何路线建议）：非 candidate 动作、损坏/加密/未知错误、
+    除本错误外另有 error 级发现、页数或页型未核实、目标语言未知或与预检实际使用的目标语言冲突（不猜方向）。
+    ``target_language`` 是本次 candidate 已请求并经 argparse 校验的 ``--target-language``（默认与 CLI 一致为 zh）；
+    提示里接受该参数的执行入口命令（chunked-candidate、candidate --route scanned_ocr）原样带上它，
+    不接受该参数的入口（inspect-input、prepare-scan）不加；inspect-input 固定按目标 zh 判定源语言，
+    所以中译英的长文档提示不再把它列为可运行的核对命令，扫描提示则注明这一限制。
+    """
+    if action != 'candidate' or report.get('status') != 'blocked':
+        return None
+    if target_language not in SUPPORTED_TARGETS or report.get('target_language', target_language) != target_language:
+        return None
+    lang_flag = f'--target-language {target_language}'
+    errors = [f for f in report.get('findings') or [] if f.get('severity') == 'error']
+    if len(errors) != 1:
+        return None
+    code, details = errors[0].get('code'), errors[0].get('details') or {}
+    page_count = details.get('page_count') if code == 'page_limit_exceeded' else report.get('page_count')
+    if not isinstance(page_count, int) or isinstance(page_count, bool) or page_count < 1:
+        return None
+    base = {'schema': GUIDANCE_SCHEMA, 'error_code': code, 'route': route, 'page_count': page_count,
+            'target_language': target_language, 'auto_switch': False, 'executed': False}
+    if code == 'page_limit_exceeded':
+        max_pages = details.get('max_pages')
+        if route not in PDF_BACKEND_ROUTES or max_pages != DIGITAL_MAX_PAGES or page_count <= max_pages:
+            return None
+        from chunked_translation import CHUNKING_CONTRACT
+        limit = CHUNKING_CONTRACT['max_document_pages']
+        base.update(max_pages=max_pages, chunked_document_max_pages=limit, page_kinds_verified=False)
+        if page_count > limit:
+            return dict(base, eligibility='over_chunked_document_limit', route_hint=None, next_steps=[],
+                        message=(f'PDF 共 {page_count} 页，超过现有长文档分块路线的整份上限 {limit} 页；'
+                                 '现有路线均不适用，本提示不推荐换路线，也不提高页数上限或自动拆分。'))
+        if target_language != 'zh':
+            inspect = ('先核对页型与源语言：只读入口 inspect-input 不接受 --target-language，固定按英译中（目标 zh）判定源语言，'
+                       '中文源会被它以 source_language_matches_target 拒绝，不能用于本次中译英核对；逐页页型与源语言尚未核实，'
+                       f'所列 chunked-candidate（带 {lang_flag}）会在冻结校验与任何模型调用之前对整份输入做有界预检'
+                       f'（最多 {limit} 页），digital_pdf 路线遇非原生页仍以退出码 2 拒绝。')
+        elif page_count <= INSPECT_INPUT_MAX_PAGES:
+            inspect = (f'先只读核对输入事实（不调用模型、不改 PDF）：{WORKFLOW_CLI} inspect-input --input <PDF> '
+                       f'--output <新报告.json> --receipts <新目录> --max-pages {page_count}。')
+        else:
+            inspect = (f'先核对页型：只读入口 inspect-input 最多 --max-pages {INSPECT_INPUT_MAX_PAGES}，不能覆盖本文件的 '
+                       f'{page_count} 页；逐页页型（原生/扫描/稀疏/无文字层）尚未核实，chunked-candidate 会在冻结校验与'
+                       f'任何模型调用之前对整份输入做有界预检（最多 {limit} 页），digital_pdf 路线遇非原生页仍以退出码 2 拒绝。')
+        return dict(base, eligibility='within_chunked_document_limit', route_hint='chunked-candidate',
+                    message=(f'PDF 共 {page_count} 页，超过单份 candidate 上限 {max_pages} 页，但在现有长文档分块入口 '
+                             f'chunked-candidate 的整份上限 {limit} 页之内。本提示不自动分块、不执行任何入口、'
+                             '不绕过冻结，也不提高页数上限。'),
+                    next_steps=[
+                        inspect,
+                        (f'再按整份 {page_count} 页重新冻结 parent FREEZE：pages=1..{page_count}、complete_semantic_scope 与 '
+                         'scope_evidence 覆盖完整语义范围、chunking_contract 逐字等于 chunked_translation.CHUNKING_CONTRACT、'
+                         'routing_contract 与所选路线一致（见 references/chunked-translation.md）；不能沿用当前 FREEZE。'),
+                        (f'冻结完成后才可显式运行：{WORKFLOW_CLI} chunked-candidate --input <PDF> --freeze <新 FREEZE.json> '
+                         f'--route {route} {lang_flag} --model <model> --base-url <endpoint> --output <新目录> --receipts <新目录>；'
+                         '每块仍走原路线的全部门，任何一块失败即整份失败关闭。')])
+    if code == 'non_digital_pages':
+        if route != 'digital_pdf':
+            return None
+        pages = details.get('pages')
+        if (not isinstance(pages, list) or not pages
+                or not all(isinstance(p, dict) and isinstance(p.get('page'), int) for p in pages)):
+            return None
+        kinds = sorted({p.get('kind') for p in pages}, key=str)
+        numbers = '、'.join(str(p['page']) for p in pages)
+        base.update(page_kinds=[{'page': p['page'], 'kind': p.get('kind')} for p in pages])
+        if kinds != ['scanned_image'] or page_count > DIGITAL_MAX_PAGES:
+            return dict(base, eligibility='not_scan_eligible', route_hint=None, next_steps=[],
+                        message=(f'第 {numbers} 页存在无文字层页（no_text_layer，常见于文字转曲）或无法归类的页型；'
+                                 '这类页不属于扫描 OCR 可处理的整页扫描图像，本提示不推荐换路线。'))
+        max_flag = f' --max-pages {page_count}' if page_count > 2 else ''
+        return dict(base, eligibility='scanned_image_pages_only', route_hint='scanned_ocr',
+                    message=(f'第 {numbers} 页为整页扫描图像（scanned_image），电子 PDF 路线（digital_pdf）按设计拒绝。'
+                             '现有显式扫描路线 scanned_ocr 可能适用，但须另行满足其准入条件；'
+                             '本提示不自动切换路线、不执行 OCR 或任何入口。'),
+                    next_steps=[
+                        (f'先只读核对输入事实（不调用模型、不改 PDF）：{WORKFLOW_CLI} inspect-input --input <PDF> '
+                         f'--output <新报告.json> --receipts <新目录>{max_flag}；源图是否为完整作品、打印或手写不会被自动判定，'
+                         '须人工审阅源图（准备新扫描时加 --fresh --source-review <绑定源图的审阅文件> --model <实际模型>）。'
+                         + ('' if target_language == 'zh' else
+                            'inspect-input 不接受 --target-language、固定按目标 zh 判定源语言；若含中文原生文字页会以 '
+                            'source_language_matches_target 拒绝，这不是本次中译英的结论。')),
+                        ('常规 OCR 路线：重新冻结 FREEZE（route=scanned_ocr、routing_contract 等于 OCR_ROUTING、完整语义作用域证据），'
+                         f'再显式运行 {WORKFLOW_CLI} candidate --route scanned_ocr {lang_flag} …；仍受 1–5 页上限、Tesseract 引擎'
+                         '（chi_sim/eng/osd）与版式/公式准入门约束（如 ocr_formula_unsupported、ocr_table_unsupported、'
+                         'ocr_low_confidence，见 references/ocr-route.md）；OCR 文字不作质量验收，须人工复核。'),
+                        (f'具名源组/角色的审后扫描准备沿既有入口：{WORKFLOW_CLI} prepare-scan --input <PDF> --output <新目录> '
+                         '--receipts <新目录> …，须原 OCR 及原始具名完整源组（--groups）与角色（--roles）；草案从 '
+                         '--source-plan <SEED> --draft-source-plan 开始，所有确认须人工完成'
+                         '（见 references/input-preflight-and-reviewed-run.md）。')])
+    return None
+
+
 def candidate_input_preflight(args):
     """candidate/collect 在验证 FREEZE 与启动重任务前先做轻量结构化输入预检。"""
     receipts = Path(args.receipts)
@@ -1042,6 +1209,10 @@ def candidate_input_preflight(args):
     path = receipts / 'WORKFLOW_INPUT_PREFLIGHT.json'
     report = bounded_input_preflight(args.input, receipts, require_digital=args.route == 'digital_pdf',
                                      target_language=getattr(args, 'target_language', 'zh'))
+    if report['status'] == 'blocked':
+        guidance = input_preflight_guidance(report, args.action, args.route, getattr(args, 'target_language', None))
+        if guidance is not None:
+            report['guidance'] = guidance
     if not path.exists():
         write_new(path, report)
     if report['status'] == 'blocked':

@@ -26,6 +26,9 @@ class OpenAITranslator(BaseTranslator):
     ):
         super().__init__(settings, rate_limiter)
         self.timeout = settings.translate_engine_settings.openai_timeout
+        # Double6 Skills 维护，2026-10-24：回环代理背后的真实上游身份（见 scripts/upstream_identity.py）；
+        # 先置空，任何请求前完成探测，之后每个响应都核对身份头。
+        self.double6_upstream_identity = None
         self.client = openai.OpenAI(
             base_url=settings.translate_engine_settings.openai_base_url,
             api_key=settings.translate_engine_settings.openai_api_key,
@@ -33,7 +36,8 @@ class OpenAITranslator(BaseTranslator):
             http_client=httpx.Client(
                 limits=httpx.Limits(
                     max_connections=None, max_keepalive_connections=None
-                )
+                ),
+                event_hooks={"response": [self._verify_double6_upstream_identity]},
             ),
         )
         self.options = {}
@@ -57,6 +61,22 @@ class OpenAITranslator(BaseTranslator):
 
         self.model = settings.translate_engine_settings.openai_model
         self.add_cache_impact_parameters("model", self.model)
+        # Double6 Skills 维护，2026-10-24：缓存身份加入服务端点，不同服务的译文不互相复用；凭据不入缓存身份。
+        # 端点经规范化（去 userinfo/凭据类查询参数）；回环端点若是本项目兼容代理，再绑定它声明的真实上游身份，
+        # 同一本机代理地址先后代理到不同上游时不复用译文。
+        import upstream_identity
+
+        base_url = settings.translate_engine_settings.openai_base_url
+        self.add_cache_impact_parameters(
+            "base_url", upstream_identity.normalize_endpoint(base_url)
+        )
+        self.double6_upstream_identity = upstream_identity.discover(
+            base_url, timeout=min(float(self.timeout or 3), 3.0)
+        )
+        if self.double6_upstream_identity is not None:
+            self.add_cache_impact_parameters(
+                "upstream_identity", self.double6_upstream_identity
+            )
         self.add_cache_impact_parameters("prompt", self.prompt(""))
         self.token_count = AtomicInteger()
         self.prompt_token_count = AtomicInteger()
@@ -68,6 +88,15 @@ class OpenAITranslator(BaseTranslator):
         )
         if self.enable_json_mode:
             self.add_cache_impact_parameters("enable_json_mode", self.enable_json_mode)
+
+    def _verify_double6_upstream_identity(self, response) -> None:
+        """响应声明的上游身份与缓存身份不一致（代理重启/端口换到另一上游）：失败关闭，不写缓存。"""
+        import upstream_identity
+
+        upstream_identity.verify_header(
+            self.double6_upstream_identity,
+            response.headers.get(upstream_identity.IDENTITY_HEADER),
+        )
 
     @retry(
         retry=retry_if_exception_type(openai.RateLimitError),

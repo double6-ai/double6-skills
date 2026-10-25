@@ -1,4 +1,4 @@
-# Double6 Skills 维护版本（2026-10-18）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
+# Double6 Skills 维护版本（2026-10-24）：与上游v0.5.24的修改及继承维护见 Skill 根目录 MODIFICATIONS.md；保留原作者版权与许可。
 import math
 import re
 
@@ -41,6 +41,51 @@ from babeldoc.format.pdf.document_il.utils.spatial_analyzer import (
     is_element_contained_in_formula,
 )
 from babeldoc.format.pdf.translation_config import TranslationConfig
+
+
+# Double6: 合成空格之后的上/下标判定阈值（相对基字字号）。字号须明显缩小（与原角标规则同为 0.79），
+# 且字形垂直中心相对基字偏移至少 0.15 个基字字号（同基线的小字号正文偏移约 0.05–0.08）。
+SYNTHETIC_SPACE_SCRIPT_SIZE_RATIO = 0.79
+SYNTHETIC_SPACE_SCRIPT_MIN_OFFSET = 0.15
+
+
+def _is_synthetic_space(char: PdfCharacter | None) -> bool:
+    """paragraph_finder/layout_helper 按字距补入的 dummy 空格：没有源 PDF 字形编号。"""
+    return (
+        char is not None
+        and char.pdf_character_id is None
+        and (char.char_unicode or "").isspace()
+    )
+
+
+def script_vertical_offset(char: PdfCharacter, base: PdfCharacter) -> float:
+    """char 相对 base 的垂直中心偏移，以 base 字号归一（正=上标方向，负=下标方向）。"""
+    size = base.pdf_style.font_size or 0.0
+    if size <= 0:
+        return 0.0
+    centre = (char.box.y + char.box.y2) / 2
+    base_centre = (base.box.y + base.box.y2) / 2
+    return (centre - base_centre) / size
+
+
+def _is_script_after_synthetic_space(
+    chars: list[PdfCharacter], index: int, tags: list[bool]
+) -> bool:
+    """chars[index] 前面只隔一个合成空格、紧跟一个已判为公式的基字形，且字号明显更小、
+    垂直方向明显偏离基字：它是该公式的上/下标，不是新起的正文。"""
+    if index < 2 or len(tags) < index:
+        return False
+    char, gap, base = chars[index], chars[index - 1], chars[index - 2]
+    if not _is_synthetic_space(gap) or not tags[index - 2]:
+        return False
+    if not base.char_unicode or base.char_unicode.isspace():
+        return False
+    if char.vertical or base.vertical:
+        return False
+    size, base_size = char.pdf_style.font_size, base.pdf_style.font_size
+    if not size or not base_size or size >= base_size * SYNTHETIC_SPACE_SCRIPT_SIZE_RATIO:
+        return False
+    return abs(script_vertical_offset(char, base)) >= SYNTHETIC_SPACE_SCRIPT_MIN_OFFSET
 
 
 class StylesAndFormulas:
@@ -613,6 +658,20 @@ class StylesAndFormulas:
                     and not in_corner_mark_state
                 )
             )
+
+            if (
+                not is_corner_mark
+                and not in_corner_mark_state
+                and not first_is_bullet
+                and not isspace
+                and _is_script_after_synthetic_space(
+                    line.pdf_character, i, is_formula_tags
+                )
+            ):
+                # Double6: paragraph_finder 在公式字形与其上/下标之间按间距补的
+                # 合成空格（无 pdf_character_id）不是源文空格；它曾让 V_n^max 的
+                # “max” 退化为基线上的普通样式片段（层级被压平）。
+                is_corner_mark = True
 
             is_formula = is_formula or is_corner_mark
 
