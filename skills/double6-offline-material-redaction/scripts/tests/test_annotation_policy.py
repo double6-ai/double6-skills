@@ -1,4 +1,5 @@
 """产品边界 A：默认保留批注；明确勾选才按严格像素规则清批注。材料全部是虚构示例。"""
+import io
 import json
 import os
 import subprocess
@@ -70,7 +71,12 @@ def _annot_blob(annot):
 
 
 def _word_leaked(data, word):
-    """交付副本里还能读到补选词，才算漏。拒绝交付不算漏。"""
+    """交付副本里还能读到补选词，才算漏。拒绝交付不算漏。
+
+    压缩流里的明文用解压后的对象和流来看，不能只扫文件字节。
+    """
+    utf8 = word.encode("utf-8")
+    utf16 = word.encode("utf-16-be")
     with pdf.backend().open(stream=data, filetype="pdf") as doc:
         for page in doc:
             if word in page.get_text():
@@ -78,9 +84,49 @@ def _word_leaked(data, word):
             for annot in page.annots() or []:
                 if word.casefold() in _annot_blob(annot).casefold():
                     return "批注"
-    if word.encode("utf-8") in data or word.encode("utf-16-be") in data:
+        for xref in range(1, doc.xref_length()):
+            try:
+                obj = doc.xref_object(xref).encode("latin-1", "replace")
+            except Exception:
+                obj = b""
+            stream = b""
+            try:
+                if doc.xref_is_stream(xref):
+                    stream = doc.xref_stream(xref) or b""
+            except Exception:
+                stream = b""
+            if utf8 in obj or utf8 in stream or utf16 in obj or utf16 in stream:
+                return "对象"
+    if utf8 in data or utf16 in data:
         return "文件字节"
     return ""
+
+
+def _secret_places(data, secret):
+    """对象、解压流，以及外观里 feff 后面的单字节十六进制。"""
+    needles = [
+        secret.encode("utf-8"),
+        secret.encode("utf-16-be"),
+        secret.encode("utf-16-le"),
+        secret.encode("utf-8").hex().encode("ascii"),
+    ]
+    places = []
+    with pdf.backend().open(stream=data, filetype="pdf") as doc:
+        for xref in range(1, doc.xref_length()):
+            try:
+                obj = doc.xref_object(xref).encode("latin-1", "replace")
+            except Exception:
+                obj = b""
+            stream = b""
+            try:
+                if doc.xref_is_stream(xref):
+                    stream = doc.xref_stream(xref) or b""
+            except Exception:
+                stream = b""
+            blob = obj.lower() + b"\n" + stream.lower()
+            if any(needle.lower() in blob for needle in needles):
+                places.append(xref)
+    return places
 
 
 def _office_samples():
@@ -385,6 +431,146 @@ class DefaultOfficeTests(unittest.TestCase):
         doc.xref_set_key(square.xref, "NM", "<00014142>")
         raw, box = _pack(doc, page, WORD)
         message = self._assert_quiet_refusal(raw, box, WORD)
+        self.assertIn("没法确认", message)
+
+    def _form_xref(self, doc, annot):
+        value = doc.xref_get_key(annot.xref, "AP")[1]
+        tokens = value.replace("<", " ").replace(">", " ").split()
+        return int(tokens[tokens.index("/N") + 1])
+
+    def _insert_escaped_key(self, doc, xref, key, value):
+        obj = doc.xref_object(xref).rstrip()
+        escaped = "/" + "".join(f"#{byte:02X}" for byte in key.encode("utf-8"))
+        self.assertTrue(obj.endswith(">>"))
+        doc.update_object(xref, obj[:-2] + f" {escaped} {value}\n>>")
+        stored = doc.xref_object(xref)
+        self.assertTrue(escaped in stored or key in stored)
+
+    def _assert_default_copy_has_no_secret(self, raw, box, secret, kept):
+        out, report, _ext = policy.export(raw, ".pdf", _plan(box))
+        self.assertIn("默认保留批注", report["scope"])
+        self.assertEqual(_secret_places(out, secret), [])
+        self.assertFalse(_word_leaked(out, secret))
+        with pdf.backend().open(stream=out, filetype="pdf") as opened:
+            text = opened[0].get_text()
+            self.assertIn(KEEP, text)
+            self.assertIn(kept, text)
+        return out
+
+    def test_dictionary_keys_are_not_left_in_the_copy(self):
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        doc.xref_set_key(square.xref, WORD, "true")
+        raw, box = _pack(doc, page, WORD)
+        self._assert_default_copy_has_no_secret(raw, box, WORD, PHONE)
+
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        doc.xref_set_key(square.xref, PHONE, "1")
+        raw, box = _pack(doc, page, PHONE)
+        self._assert_default_copy_has_no_secret(raw, box, PHONE, WORD)
+
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        self._insert_escaped_key(doc, square.xref, WORD, "true")
+        raw, box = _pack(doc, page, WORD)
+        self._assert_default_copy_has_no_secret(raw, box, WORD, PHONE)
+
+        fitz, doc, page = _new_page()
+        highlight = page.add_highlight_annot(page.search_for(KEEP)[0])
+        highlight.update()
+        doc.xref_set_key(highlight.xref, WORD, "true")
+        raw, box = _pack(doc, page, WORD)
+        with self.assertRaises(engine.Rejected) as caught:
+            policy.export(raw, ".pdf", _plan(box))
+        message = str(caught.exception)
+        self.assertIn("露出", message)
+        self.assertNotIn(WORD, message)
+        self.assertNotIn(PHONE, message)
+        self.assertNotIn(KEEP, message)
+
+    def test_appearance_indirect_string_is_not_left_in_the_copy(self):
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        indirect = doc.get_new_xref()
+        doc.update_object(indirect, "(" + PHONE + ")")
+        ap = doc.xref_get_key(square.xref, "AP")[1]
+        doc.xref_set_key(square.xref, "AP", ap[:-2] + f" /Extra {indirect} 0 R>>")
+        raw, box = _pack(doc, page, PHONE)
+        with pdf.backend().open(stream=raw, filetype="pdf") as opened:
+            kept = opened[0]
+            annot = kept.first_annot
+            blob, bad = pdf.annotation_text(opened, annot.xref, annot)
+        self.assertFalse(bad)
+        self.assertIn(PHONE, blob)
+        self._assert_default_copy_has_no_secret(raw, box, PHONE, WORD)
+
+    def test_stream_names_are_not_left_in_the_copy(self):
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        doc.xref_set_key(self._form_xref(doc, square), "Name", "(" + PHONE + ")")
+        raw, box = _pack(doc, page, PHONE)
+        out = self._assert_default_copy_has_no_secret(raw, box, PHONE, WORD)
+        with pdf.backend().open(stream=out, filetype="pdf") as opened:
+            self.assertIsNotNone(opened[0].first_annot)
+
+        fitz, doc, page = _new_page()
+        image = Image.new("RGB", (40, 40), (180, 20, 20))
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", quality=90)
+        page.insert_image(fitz.Rect(300, 40, 360, 100), stream=buffer.getvalue())
+        info = page.get_image_info(xrefs=True)
+        self.assertEqual(len(info), 1)
+        self.assertFalse(info[0].get("has-mask"))
+        doc.xref_set_key(info[0]["xref"], "Name", "(" + PHONE + ")")
+        raw, box = _pack(doc, page, PHONE)
+        self._assert_default_copy_has_no_secret(raw, box, PHONE, WORD)
+
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        doc.xref_set_key(self._form_xref(doc, square), "Name", "<00014142>")
+        raw, box = _pack(doc, page, WORD)
+        message = self._assert_quiet_refusal(raw, box, WORD)
+        self.assertIn("读不全", message)
+
+        fitz, doc, page = _new_page()
+        masked = Image.new("RGBA", (30, 30), (10, 20, 30, 180))
+        buffer = io.BytesIO()
+        masked.save(buffer, format="PNG")
+        page.insert_image(fitz.Rect(300, 40, 340, 80), stream=buffer.getvalue())
+        raw, box = _pack(doc, page, PHONE)
+        message = self._assert_quiet_refusal(raw, box, PHONE)
+        self.assertTrue("遮罩" in message or "图片" in message, message)
+
+    def test_fake_bom_bytes_are_not_left_in_the_copy(self):
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        payload = "FEFF" + PHONE.encode("ascii").hex() + "20"
+        self._paint_hex(doc, page, square, payload, "Tj")
+        raw, box = _pack(doc, page, PHONE)
+        with pdf.backend().open(stream=raw, filetype="pdf") as opened:
+            kept = opened[0]
+            annot = kept.first_annot
+            blob, bad = pdf.annotation_text(opened, annot.xref, annot)
+        self.assertFalse(bad)
+        self.assertIn(PHONE, blob)
+        out = self._assert_default_copy_has_no_secret(raw, box, PHONE, WORD)
+        self.assertNotIn(payload.lower().encode("ascii"), out)
+
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        payload = "FEFF" + WORD.encode("ascii").hex()
+        self._paint_hex(doc, page, square, payload, "Tj")
+        raw, box = _pack(doc, page, WORD)
+        out = self._assert_default_copy_has_no_secret(raw, box, WORD, PHONE)
+        self.assertNotIn(payload.lower().encode("ascii"), out)
+
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        payload = "FEFF" + PHONE.encode("ascii").hex()
+        self._paint_hex(doc, page, square, payload, "Tj")
+        raw, box = _pack(doc, page, PHONE)
+        message = self._assert_quiet_refusal(raw, box, PHONE)
         self.assertIn("没法确认", message)
 
 

@@ -532,6 +532,28 @@ def _decode_pdf_bytes(raw):
     return raw.decode('ascii')
 
 
+def _join_views(raw):
+    """解码后的文字，再加上原始字节。
+
+    以 FE FF 开头却后面直接跟单字节明文时，按 UTF-16 会解成别的字。原始字节里的明文仍要参与命中，不能当成已经读过且没命中。
+    """
+    try:
+        text = _decode_pdf_bytes(raw)
+    except (UnicodeDecodeError, ValueError):
+        return '', False
+    views = []
+    if text:
+        views.append(text)
+    pieces = [raw]
+    if raw.startswith((b'\xfe\xff', b'\xff\xfe')) and len(raw) > 2:
+        pieces.append(raw[2:])
+    for piece in pieces:
+        plain = piece.decode('latin-1')
+        if plain and plain not in views:
+            views.append(plain)
+    return '\n'.join(views), True
+
+
 def _skip_pdf(data, index):
     while index < len(data):
         if data[index] in b' \t\r\n\x00':
@@ -584,7 +606,9 @@ def _parse_pdf_value(data, index, doc, seen, depth, in_ap, follow_key):
     index = _skip_pdf(data, index)
     if index >= len(data):
         return [], index, True
-    if depth > 8:
+    # 外观会连到字体：Form → Resources → Font → Descendant → Descriptor。
+    # 这条链超过 8 层时不能当成读不全，否则普通中文外观会被整份拒绝。
+    if depth > 32:
         return [], index, True
     if data.startswith(b'<<', index):
         return _parse_pdf_dict(data, index, doc, seen, depth + 1, in_ap)
@@ -612,7 +636,8 @@ def _parse_pdf_value(data, index, doc, seen, depth, in_ap, follow_key):
         if ref and data[index] in b'0123456789':
             xref = int(ref.group(1))
             index += ref.end()
-            if in_ap or follow_key in _SKIP_FOLLOW_KEYS:
+            # 页面和另一条批注不在这里展开。外观字典里的间接对象要读：字符串和 /Name 都不能跳过。
+            if follow_key in _SKIP_FOLLOW_KEYS:
                 return [], index, False
             texts, bad = _xref_carrier_text(doc, xref, seen, depth + 1)
             return texts, index, bad
@@ -658,6 +683,9 @@ def _parse_pdf_dict(data, index, doc, seen, depth, in_ap):
             key = _pdf_name_text(raw_key)
         except (UnicodeDecodeError, ValueError):
             return [], index, True
+        # 键名本身可以写成补选词或 # 转义。值是 true/数字时也不能把键漏掉。
+        if key:
+            texts.append(key)
         found, index, bad = _parse_pdf_value(data, index, doc, seen, depth, in_ap or key == 'AP', key)
         if bad:
             return [], index, True
@@ -665,12 +693,16 @@ def _parse_pdf_dict(data, index, doc, seen, depth, in_ap):
 
 
 def _xref_carrier_text(doc, xref, seen, depth):
-    """批注字典里所有字符串和名称值。读不完就视为无法确认，避免只扫 Contents 时把明文留在 /NM 等键里。"""
-    if xref <= 0 or depth > 6 or xref in seen:
+    """批注能带到副本里的文字：键名、字符串、名称值，以及外观旁的间接对象和流字典里的 /Name。
+
+    流的绘制字节不在这里当正文读，外观算子另走。读不完就视为无法确认。
+    """
+    if xref <= 0 or depth > 16:
         return [], True
+    if xref in seen:
+        return [], False
+    seen.add(xref)
     try:
-        if doc.xref_is_stream(xref):
-            return [], True
         raw = doc.xref_object(xref, compressed=True)
         data = raw.encode('latin1')
     except (UnicodeEncodeError, ValueError, RuntimeError):
@@ -679,11 +711,67 @@ def _xref_carrier_text(doc, xref, seen, depth):
         return [], True
     if not data.strip():
         return [], True
-    seen.add(xref)
     texts, index, bad = _parse_pdf_value(data, 0, doc, seen, depth, False, '')
     if bad or _skip_pdf(data, index) != len(data):
         return [], True
     return texts, False
+
+
+def _key_views(doc, xref, wanted):
+    """某个字典键的值。没有这个键不算失败；值读不全则失败。"""
+    try:
+        data = doc.xref_object(xref, compressed=True).encode('latin1')
+    except (UnicodeEncodeError, ValueError, RuntimeError):
+        return '', True
+    except Exception:
+        return '', True
+    index = _skip_pdf(data, 0)
+    if not data.startswith(b'<<', index):
+        return '', True
+    index += 2
+    while True:
+        index = _skip_pdf(data, index)
+        if index >= len(data):
+            return '', True
+        if data.startswith(b'>>', index):
+            return '', False
+        if data[index] != ord('/'):
+            return '', True
+        raw_key, index = _parse_pdf_name(data, index)
+        try:
+            key = _pdf_name_text(raw_key)
+        except (UnicodeDecodeError, ValueError):
+            return '', True
+        if key == wanted:
+            found, _index, bad = _parse_pdf_value(data, index, doc, set(), 0, False, key)
+            if bad:
+                return '', True
+            return '\n'.join(found), False
+        _found, index, bad = _parse_pdf_value(data, index, doc, set(), 0, False, key)
+        if bad:
+            return '', True
+
+
+def _drop_stream_names(doc, terms):
+    """Form 和图片上的 /Name 会进副本。里面有补选词就去掉这个名字；读不全就整份停止。"""
+    if not terms:
+        return
+    for xref in range(1, doc.xref_length()):
+        try:
+            if not doc.xref_is_stream(xref):
+                continue
+        except Exception:
+            raise engine.Rejected('PDF对象名称读不全，没法确认有没有要隐去的内容，已停止。') from None
+        subtype = doc.xref_get_key(xref, 'Subtype')[1]
+        if subtype not in {'/Form', '/Image'}:
+            continue
+        if doc.xref_get_key(xref, 'Name')[0] == 'null':
+            continue
+        text, bad = _key_views(doc, xref, 'Name')
+        if bad:
+            raise engine.Rejected('PDF对象名称读不全，没法确认有没有要隐去的内容，已停止。')
+        if _text_hits(text, terms):
+            doc.xref_set_key(xref, 'Name', 'null')
 
 
 def _parse_literal(data, index):
@@ -733,10 +821,10 @@ def _parse_literal(data, index):
         index += 1
     if depth:
         return '', index, False
-    try:
-        return _decode_pdf_bytes(bytes(out)), index, True
-    except (UnicodeDecodeError, ValueError):
+    text, ok = _join_views(bytes(out))
+    if not ok:
         return '', index, False
+    return text, index, True
 
 
 def _parse_hex_string(data, index):
@@ -749,8 +837,11 @@ def _parse_hex_string(data, index):
     if len(body) % 2:
         body += b'0'
     try:
-        text = _decode_pdf_bytes(bytes.fromhex(body.decode('ascii')))
-    except (UnicodeDecodeError, ValueError):
+        raw = bytes.fromhex(body.decode('ascii'))
+    except ValueError:
+        return '', end + 1, False
+    text, ok = _join_views(raw)
+    if not ok:
         return '', end + 1, False
     return text, end + 1, True
 
@@ -1279,11 +1370,12 @@ def export(data, plan, _verify=True):
                 page_boxes[index] = boxes
                 if any(a.type[0] == fitz.PDF_ANNOT_REDACT for a in page.annots() or []):
                     raise engine.Rejected('PDF已有未应用的涂黑标记，请先在原软件完成或移除后再检查。')
-                if not clearing:
-                    for term in selected_terms(page, boxes):
-                        if term not in seen_terms:
-                            seen_terms.add(term)
-                            all_terms.append(term)
+                for term in selected_terms(page, boxes):
+                    if term not in seen_terms:
+                        seen_terms.add(term)
+                        all_terms.append(term)
+            # 图片和外观 Form 的 /Name 不在批注字典里。先去掉命中的名字，避免默认交付后明文还在。
+            _drop_stream_names(doc, all_terms)
             planned_drops = {}
             if not clearing:
                 for index, page in enumerate(doc):
@@ -1353,6 +1445,9 @@ def verify(data, plan, source):
                     if term not in seen_terms:
                         seen_terms.add(term)
                         all_terms.append(term)
+            # 和导出一样，先按命中去掉图片 / 外观 Form 的 /Name，再决定删哪些批注。
+            # 否则基准仍把这条外观当成命中而删掉，正式副本只清了名字，框外像素对不上。
+            _drop_stream_names(doc, all_terms)
             for index, page in enumerate(doc):
                 drops[index] = annotations_to_drop(page, page_boxes[index], index + 1, all_terms)
         pixel_source = without_dropped_annotations(source, drops) or source
