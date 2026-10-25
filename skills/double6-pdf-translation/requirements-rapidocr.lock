@@ -1,0 +1,5 @@
+# RapidOCR 本体。不安装它声明的依赖：那些声明会带上带界面的 opencv-python。
+# numpy、Pillow、PyYAML、onnxruntime、shapely、pyclipper、tqdm 已在 requirements-runtime.lock。
+# 图像库用 opencv-python-headless。
+rapidocr-onnxruntime==1.4.4 \
+    --hash=sha256:971d7d5f223a7a808662229df1ef69893809d8457d834e6373d3854bc1782cbf

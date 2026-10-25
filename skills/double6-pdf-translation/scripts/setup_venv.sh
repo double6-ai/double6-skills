@@ -18,8 +18,12 @@ PYTHON_BIN="${PDFTR_PYTHON:-$(uv python find 3.12 --no-python-downloads)}"
 uv venv --python "$PYTHON_BIN" --no-python-downloads "$TARGET_ENV"
 ENV_PYTHON="$TARGET_ENV/bin/python"
 uv pip install --python "$ENV_PYTHON" --require-hashes -r "$SKILL_ROOT/requirements-runtime.lock"
+# rapidocr 的安装声明会带上带界面的 opencv-python。这里只装本体，图像库用 headless。
+uv pip install --python "$ENV_PYTHON" --require-hashes --no-deps -r "$SKILL_ROOT/requirements-rapidocr.lock"
 uv pip install --python "$ENV_PYTHON" --require-hashes --no-deps -r "$SKILL_ROOT/requirements-build.lock"
 uv pip install --python "$ENV_PYTHON" --no-deps --no-build-isolation "$SKILL_ROOT/vendor/pdfmathtranslate_next"
+# 打包 PDFMathTranslate 时用到的工具，运行时不再保留。tomlkit 与 packaging 在运行锁里。
+uv pip uninstall --python "$ENV_PYTHON" hatchling editables pathspec pluggy trove-classifiers setuptools
 # Python distribution版本来自安装元数据，实际BabelDOC执行优先使用随包修复源码。
 "$ENV_PYTHON" - "$SKILL_ROOT" <<'PY'
 import pathlib,sys,sysconfig
@@ -35,7 +39,20 @@ import os, subprocess, sys
 env = dict(os.environ)
 env.update(OMP_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1', MKL_NUM_THREADS='1', VECLIB_MAXIMUM_THREADS='1')
 subprocess.run(
-    [sys.executable, '-c', 'import pymupdf, onnx, onnxruntime, cv2; from sklearn.cluster import DBSCAN; from babeldoc.docvision.doclayout import OnnxModel'],
+    [sys.executable, '-c', '''
+import importlib.metadata as metadata
+import cv2, onnx, onnxruntime, pymupdf, rapidocr_onnxruntime, tomlkit
+from sklearn.cluster import DBSCAN
+from babeldoc.docvision.doclayout import OnnxModel
+from babeldoc.main import create_progress_handler
+for name in ("opencv-python", "ruff", "lxml", "huggingface-hub", "uharfbuzz", "babeldoc"):
+    try:
+        metadata.version(name)
+    except metadata.PackageNotFoundError:
+        continue
+    raise SystemExit("unexpected package: " + name)
+metadata.version("opencv-python-headless")
+'''],
     env=env, check=True, timeout=180,
 )
 PY

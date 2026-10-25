@@ -8,7 +8,7 @@
 bash scripts/setup_venv.sh /absolute/new/venv
 ```
 
-安装器只接受新环境路径，使用 `uv` 和现有 Python 3.12，在新 venv 安装 `requirements-runtime.lock` 与 `requirements-build.lock` 的哈希锁定依赖，再以无依赖、无构建隔离方式安装本地维护的 PDFMathTranslate-next。用户自行准备 Python 和 uv；脚本不下载解释器、不复用或修改 WorkBuddy 等共享环境。
+安装器只接受新环境路径，使用 `uv` 和现有 Python 3.12，在新 venv 安装 `requirements-runtime.lock` 与 `requirements-rapidocr.lock`（后者只装 RapidOCR 本体，不跟随它声明的带界面 OpenCV），再安装 `requirements-build.lock` 以便构建本地维护的 PDFMathTranslate-next。构建完成后卸掉打包工具。用户自行准备 Python 和 uv；脚本不下载解释器、不复用或修改 WorkBuddy 等共享环境。PyPI 上的 babeldoc 包不安装，运行使用 `vendor/babeldoc`。
 
 ## 分层
 
@@ -39,7 +39,7 @@ bash scripts/setup_venv.sh /absolute/new/venv
 
 公开包保留第一方 AGPL-3.0-only、两项后端原许可证、内嵌 pdfminer 的 MIT 声明与 Adobe CMap 的再分发声明。维护版与所标上游版本的源码差异、维护日期见根目录 [MODIFICATIONS.md](../MODIFICATIONS.md)。旧 `pdf2zh_skill` 缺少可核验的许可凭据，未纳入分发。
 
-本次核对覆盖锁定运行环境的 98 项分发包。它们由安装器按哈希下载，不将 wheel、已安装环境或模型权重放进 Skill 包。MIT、BSD、Apache、ISC、PSF 等许可仍属于各自原作者；不能因为安装后在同一环境中运行，就把其许可证文字替换为本项目许可证。
+本次核对覆盖运行锁 76 条，另加不跟随声明依赖的 RapidOCR。它们由安装器按哈希下载，不将 wheel、已安装环境或模型权重放进 Skill 包。MIT、BSD、Apache、ISC、PSF 等许可仍属于各自原作者；不能因为安装后在同一环境中运行，就把其许可证文字替换为本项目许可证。带界面的 OpenCV、Hugging Face 下载库、`lxml`、`uharfbuzz`、`ruff`、xsdata 的命令行附加项和 `scikit-image` 不在运行环境里。图像处理只用 `opencv-python-headless`。配置读写用 `tomlkit`。扫描件判断默认跳过；真要跑那一步时才导入 `scikit-image`，需要的话另行安装。PyPI 上的 babeldoc 发行包不安装。
 
 需要单独保留理解的条目包括：PyMuPDF 与 BabelDOC 使用 AGPL；Levenshtein 0.27.3 标注 GPL-2.0-or-later，可按后续版本选项选择 GPLv3，与 AGPLv3 组合时遵守各自条件；certifi、orjson 与 tqdm 涉及 MPL 或复合许可。GNU 对 GPLv3/AGPLv3 组合及“或更新版本”的说明见[许可兼容说明](https://www.gnu.org/licenses/license-compatibility.en.html)。下载和再分发这些依赖时，仍须保留各自声明和适用的源码义务。
 
@@ -47,7 +47,7 @@ bash scripts/setup_venv.sh /absolute/new/venv
 
 ## 翻译服务凭据
 
-唯一入口是环境变量 `LOCAL_TRANSLATION_API_KEY`；`doctor`、`candidate` 及各路线都只读它（不再读取 `OPENAI_API_KEY`），`doctor` 结果的 `credential` 字段只报告来源与是否存在，不记录值。`run_pdf_translation.py --api-key` 仅为兼容保留，用它时值会出现在该进程自身的命令行里，不建议使用。
+运行时只读环境变量 `LOCAL_TRANSLATION_API_KEY`；`doctor`、`candidate` 及各路线都只读它（不再读取 `OPENAI_API_KEY`），`doctor` 结果的 `credential` 字段只报告来源与是否存在，不记录值。默认模型档案是智谱 coding plan（`configs/model-profiles.json`，模型 `glm-5.3-flash`，端点 `https://open.bigmodel.cn/api/coding/paas/v4`）。这个档案在 `LOCAL_TRANSLATION_API_KEY` 为空、且环境里已有 `GLM_API_KEY` 时，先把后者抄进前者，再走同一条通道；值不进命令行。不要把 coding plan 密钥配到 `https://open.bigmodel.cn/api/paas/v4`，那个地址会返回 429（错误码 1113）。`run_pdf_translation.py --api-key` 仅为兼容保留，用它时值会出现在该进程自身的命令行里，不建议使用。
 
 - 回环地址（`localhost`、`127.0.0.1`、`::1`）未提供时使用明确的 `local-no-auth` 占位值；它不是凭据。远端地址（包括其它 `127.x` 地址）未提供即报 `remote_backend_requires_explicit_api_key`，在启动任何子进程或代理之前停止。实际上游 HTTP 请求在未配置密钥时不发送 `Bearer None`。
 - 凭据不进入任何子进程的命令行，按各后端原生的非命令行通道传入：电子 PDF 后端（PDFMathTranslate-next）读取其配置环境变量 `PDF2ZH_OPENAI_API_KEY`；`qwen-cli` 适配器继承 `LOCAL_TRANSLATION_API_KEY`；可信 LaTeX 路线（`independent_latex`）在本进程内发起请求。启动后端前先清除继承的 `PDF2ZH_OPENAI_API_KEY`、`LOCAL_TRANSLATION_API_KEY`、`OPENAI_API_KEY` 与 `PDF2ZH_DEBUG`（后者会让后端把含凭据的完整配置写进调试日志），再只放入该后端需要的一个变量。

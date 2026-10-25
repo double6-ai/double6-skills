@@ -1,6 +1,8 @@
 import contextlib
 import logging
 import re
+import threading
+import time
 from abc import ABC
 from abc import abstractmethod
 
@@ -51,6 +53,11 @@ class BaseTranslator(ABC):
 
         self.translate_call_count = 0
         self.translate_cache_call_count = 0
+        # 真正打到模型服务的次数，以及花在限流等待和这次调用上的秒数。本机译文缓存命中不计入。
+        self.model_request_count = 0
+        self.model_wait_seconds = 0.0
+        self.usage_reported_count = 0
+        self._model_wait_lock = threading.Lock()
 
     def __del__(self):
         with contextlib.suppress(Exception):
@@ -84,8 +91,7 @@ class BaseTranslator(ABC):
                     return cache
             except Exception as e:
                 logger.debug(f"try get cache failed, ignore it: {e}")
-        self.rate_limiter.wait(rate_limit_params)
-        translation = self.do_translate(text, rate_limit_params)
+        translation = self._call_model(self.do_translate, text, rate_limit_params)
         if not (self.ignore_cache or ignore_cache):
             self.cache.set(text, translation)
         return translation
@@ -105,11 +111,27 @@ class BaseTranslator(ABC):
                     return cache
             except Exception as e:
                 logger.debug(f"try get cache failed, ignore it: {e}")
-        self.rate_limiter.wait(rate_limit_params)
-        translation = self.do_llm_translate(text, rate_limit_params)
+        translation = self._call_model(self.do_llm_translate, text, rate_limit_params)
         if not (self.ignore_cache or ignore_cache):
             self.cache.set(text, translation)
         return translation
+
+    def _call_model(self, call, text, rate_limit_params):
+        """限流等待和模型调用算进等待时间。调用抛错也记一次请求；还没发出去就失败则不记。"""
+        started = time.perf_counter()
+        self.rate_limiter.wait(rate_limit_params)
+        try:
+            return call(text, rate_limit_params)
+        finally:
+            waited = time.perf_counter() - started
+            with self._model_wait_lock:
+                self.model_wait_seconds += waited
+                self.model_request_count += 1
+
+    def note_usage_reported(self) -> None:
+        """服务商这次响应里带了用量。没带的调用不记，账本就不会把缺失写成 0。"""
+        with self._model_wait_lock:
+            self.usage_reported_count += 1
 
     def do_llm_translate(self, text, rate_limit_params: dict = None):
         """

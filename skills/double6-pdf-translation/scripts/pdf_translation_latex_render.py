@@ -159,7 +159,7 @@ def run_latex_direct_render(
             log.write(f"MODEL: {args.model}\n")
             log.write(f"BASE_URL: {args.base_url}\n")
             log.write(f"LATEX_DIRECT_HYMT_COMPAT_PROXY: {json.dumps(manifest['hymt_compat_proxy'], ensure_ascii=False)}\n")
-            log.write(f"LOCAL_MAX_CONCURRENCY: {args.local_max_concurrency}\n")
+            log.write(f"LOCAL_MAX_CONCURRENCY: {effective_local_max_concurrency(args.local_max_concurrency)}\n")
             log.write(f"LATEX_COMPILE_RUNTIME: {json.dumps(compile_runtime, ensure_ascii=False)}\n")
             log.flush()
             try:

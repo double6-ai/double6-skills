@@ -214,17 +214,26 @@ def build_pdf2zh_command(args: argparse.Namespace, output_dir: Path, context_fil
                 "--openai-temperature",
                 str(args.temperature),
                 "--openai-send-temprature",
-                "--openai-reasoning-effort",
-                args.openai_reasoning_effort,
-                "--openai-send-reasoning-effort",
+            ]
+        )
+        if getattr(args, "openai_send_reasoning_effort", True):
+            command.extend(
+                [
+                    "--openai-reasoning-effort",
+                    args.openai_reasoning_effort,
+                    "--openai-send-reasoning-effort",
+                    "--term-openai-reasoning-effort",
+                    args.openai_reasoning_effort,
+                    "--term-openai-send-reasoning-effort",
+                ]
+            )
+        command.extend(
+            [
                 "--term-openai-timeout",
                 str(args.openai_timeout),
                 "--term-openai-temperature",
                 str(args.temperature),
                 "--term-openai-send-temprature",
-                "--term-openai-reasoning-effort",
-                args.openai_reasoning_effort,
-                "--term-openai-send-reasoning-effort",
             ]
         )
         if args.openai_json_mode:
@@ -234,15 +243,15 @@ def build_pdf2zh_command(args: argparse.Namespace, output_dir: Path, context_fil
     command.extend(
         [
             "--qps",
-            str(args.local_max_concurrency),
+            str(effective_local_max_concurrency(args.local_max_concurrency)),
             "--custom-system-prompt",
             args.custom_system_prompt,
             "--pool-max-workers",
-            str(args.local_max_concurrency),
+            str(effective_local_max_concurrency(args.local_max_concurrency)),
             "--term-qps",
-            str(args.local_max_concurrency),
+            str(effective_local_max_concurrency(args.local_max_concurrency)),
             "--term-pool-max-workers",
-            str(args.local_max_concurrency),
+            str(effective_local_max_concurrency(args.local_max_concurrency)),
             "--no-auto-extract-glossary",
             "--skip-scanned-detection",
             "--watermark-output-mode",
@@ -399,7 +408,7 @@ def build_latex_direct_command(
         "--translation-model",
         args.model,
         "--workers",
-        str(args.local_max_concurrency),
+        str(effective_local_max_concurrency(args.local_max_concurrency)),
         "--translate-timeout-seconds",
         str(args.latex_translate_timeout),
         "--compile-timeout-seconds",

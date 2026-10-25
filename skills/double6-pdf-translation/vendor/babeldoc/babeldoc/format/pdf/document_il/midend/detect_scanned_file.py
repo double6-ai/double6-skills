@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 import pymupdf
 import regex
-from skimage.metrics import structural_similarity
 
 from babeldoc.babeldoc_exception.BabelDOCException import ScannedPDFError
 from babeldoc.format.pdf.document_il import il_version_1
@@ -170,5 +169,8 @@ class DetectScannedFile:
         )[:, :, ::-1]
         before_page_image = cv2.cvtColor(before_page_image, cv2.COLOR_RGB2GRAY)
         after_page_image = cv2.cvtColor(after_page_image, cv2.COLOR_RGB2GRAY)
+        # 只在真正做扫描件判断时加载。主路径会跳过这一步，启动时不装也不导入 scikit-image。
+        from skimage.metrics import structural_similarity
+
         similarity = structural_similarity(before_page_image, after_page_image)
         return similarity > 0.95

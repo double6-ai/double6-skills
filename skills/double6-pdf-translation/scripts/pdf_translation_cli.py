@@ -4,6 +4,8 @@
 from __future__ import annotations
 from run_pdf_translation_context import *
 
+from model_profiles import request_concurrency_from_env
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the strong PDF-first paper translation pipeline.")
     parser.add_argument("input_pdf", help="Input PDF path.")
@@ -38,7 +40,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=int(os.environ.get("PAPER_TRANSLATION_HYMT_COMPAT_PROXY_PORT", str(DEFAULT_HYMT_COMPAT_PROXY_PORT))),
         help="hy-mt JSON 兼容代理本地端口。",
     )
-    parser.add_argument("--local-max-concurrency", type=int, default=int(os.environ.get("LOCAL_MODEL_MAX_CONCURRENCY", str(DEFAULT_LOCAL_MAX_CONCURRENCY))))
+    parser.add_argument(
+        "--local-max-concurrency",
+        type=int,
+        default=request_concurrency_from_env(),
+        help="同时发给模型的请求数。不写时，智谱档案用 8，其它模型用 3。环境变量 LOCAL_MODEL_MAX_CONCURRENCY 同样算写明了。",
+    )
     parser.add_argument("--openai-json-mode", action=argparse.BooleanOptionalAction, default=os.environ.get("PDF_TRANSLATION_OPENAI_JSON_MODE", "1") not in {"0", "false", "False"})
     parser.add_argument(
         "--disable-same-text-fallback",
@@ -61,6 +68,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=int, default=int(os.environ.get("PDF_TRANSLATION_TIMEOUT_SEC", "3600")))
     parser.add_argument("--openai-timeout", type=int, default=int(os.environ.get("PDF_TRANSLATION_OPENAI_TIMEOUT_SEC", "7200")))
     parser.add_argument("--openai-reasoning-effort", default=os.environ.get("PDF_TRANSLATION_OPENAI_REASONING_EFFORT", DEFAULT_REASONING_EFFORT))
+    parser.add_argument("--openai-send-reasoning-effort", action=argparse.BooleanOptionalAction, default=True,
+                        help="把 reasoning_effort 发给模型。智谱 GLM-5.3 不能关闭思考，档案使用它的最低档 low。")
     parser.add_argument("--temperature", type=float, default=float(os.environ.get("PDF_TRANSLATION_TEMPERATURE", str(DEFAULT_HYMT2_TEMPERATURE))))
     parser.add_argument("--cli-max-tokens", type=int, default=int(os.environ.get("PDF_TRANSLATION_CLI_MAX_TOKENS", str(DEFAULT_CLI_MAX_TOKENS))))
     parser.add_argument("--target-language", choices=SUPPORTED_TARGET_LANGUAGES, default="zh",
@@ -143,7 +152,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--scanned-parser",
         choices=["auto", "rapidocr", "mineru"],
         default=os.environ.get("PAPER_TRANSLATION_SCANNED_PARSER", "auto"),
-        help="Scanned-page parser. auto starts with RapidOCR and escalates difficult pages to MinerU.",
+        help="Scanned-page parser. auto starts with RapidOCR. Clear single-column pages stay there; rotated, multi-column, table, or formula pages escalate to MinerU.",
     )
     parser.add_argument(
         "--mineru-tier",
@@ -168,7 +177,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=5,
         help="Bound one scanned run to 1–20 pages (default 5). Raise explicitly only after one-page and <=5-page smoke stages pass.",
     )
-    parser.add_argument('--scanned-checkpoint-dir', help='Persistent raw-response checkpoints; resume in a fresh output directory and rerun QA/rendering.')
+    parser.add_argument('--scanned-checkpoint-dir', help='Persistent raw-response checkpoints. Defaults to the workspace scanned-reuse cache; resume in a fresh output directory and rerun QA/rendering.')
     parser.add_argument('--scanned-model-fingerprint', help='SHA-256 of frozen model/provider revision evidence, required when checkpoints are enabled.')
     parser.add_argument('--scanned-parse-checkpoint-dir', help='Persistent per-page raw parser checkpoints; retain original parse evidence and use a fresh output attempt.')
     parser.add_argument('--scanned-parser-fingerprint', help='SHA-256 of frozen parser package/model/service evidence, required for parse checkpoints.')

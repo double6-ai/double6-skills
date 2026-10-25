@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "default_profile": "glm-coding",
+  "profiles": [
+    {
+      "id": "glm-coding",
+      "provider": "zhipu",
+      "surface": "openai-compatible-coding-plan",
+      "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
+      "default_model": "glm-5.3-flash",
+      "models": [
+        "glm-4.5",
+        "glm-4.5-air",
+        "glm-4.6",
+        "glm-4.7",
+        "glm-5",
+        "glm-5-turbo",
+        "glm-5.1",
+        "glm-5.2",
+        "glm-5.3",
+        "glm-5.3-flash",
+        "glm-5.3-flashx"
+      ],
+      "auth": "bearer",
+      "credential_env": "LOCAL_TRANSLATION_API_KEY",
+      "credential_fallback_env": "GLM_API_KEY",
+      "temperature": 0.7,
+      "send_reasoning_effort": true,
+      "json_mode": true,
+      "max_concurrency": 8,
+      "thinking_floors": {
+        "glm-5.3": {"thinking": "enabled", "reasoning_effort": "low"},
+        "glm-5.3-flash": {"thinking": "enabled", "reasoning_effort": "low"},
+        "glm-5.3-flashx": {"thinking": "enabled", "reasoning_effort": "low"},
+        "glm-5.2": {"thinking": "enabled", "reasoning_effort": "minimal"}
+      },
+      "thinking_floor_default": {"thinking": "disabled", "reasoning_effort": "none"},
+      "request_notes": "coding plan 密钥必须走 /api/coding/paas/v4。/api/paas/v4 会返回 429，错误码 1113，那不是余额不足。未改思考参数时，按模型用它自己的最低档，不升到默认的 max。GLM-5.3、glm-5.3-flash、glm-5.3-flashx 不能关闭思考，最低档是 reasoning_effort=low，并显式 thinking.type=enabled；none 和 minimal 在 coding plan 上也会被当成 low。GLM-5.2 的最低档是 minimal（放弃思考）；对它发 low 会被抬成 high。更早的 GLM-4.5 到 GLM-5.1 仍允许关闭思考，最低档是 thinking.type=disabled。显式温度和 reasoning 优先。--no-openai-send-reasoning-effort 则留下模型自带的默认强度。没写同时请求数时一次发 8 路，只缩短等待，字数账单不变。coding plan 仍可能限流，限流会排队重试。一页只有两三批时几乎没差别。写了 --local-max-concurrency 或 LOCAL_MODEL_MAX_CONCURRENCY 就用那个数。其它模型不套用这 8 路。单块时间和内存上限不变。"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-# 长文档分块翻译（`chunked-candidate`，2.0.0-rc.9）
+# 长文档分块翻译（`chunked-candidate`，2.0.1）
 
 `candidate` 只接受完整的 1–5 页文档（FREEZE 页门 `page_limit_exceeded`）。超过一个有界任务能力的长文档
 （单任务 120 s、5 GiB RSS、重任务并发 1）改用 `chunked-candidate`：按页范围切成一串有界块，**每块是一次普通
@@ -56,7 +56,9 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
      正文照常计数），不是放宽。单份翻译不传此状态，报告逐字不变。实测（arXiv 2501.00659 p9 单独成块）：不带入时整页
      按无标题文献判 `exceeds_document_fraction` → high 0.751；带入后 ok 0.2262。
 3. **逐块执行**：每次尝试先在 `CHUNKED_RUN_STATE.json`（原子替换）登记 `started`，再以普通 `candidate` 运行
-   （同一进程内调用；重任务仍是独立的有界子进程树，拥有式计量、PID + create_time + nonce + 父链核验回收）。
+   （编排进程内调用；块任务仍是独立的有界子进程树，拥有式计量、PID + create_time + nonce + 父链核验回收）。
+   电子块的翻译后端不再每块重新拉起：整份文档共用一个已经加载版面模型的进程。某块碰到时间上限时，
+   这个进程随该块的连接断开而退出，下一块重新加载一次。扫描块不走这个进程。单份不超过 5 页的 `candidate` 仍是每份单独启动。
    - 资源停止（`task_timeout`、`whole_job_deadline_exceeded`、`task_memory_limit`、`backend_timeout`）：块二分（id 追加 `a`/`b`），
      直到单页；单页仍超限 → 该块 `chunk_page_exceeds_task_budget`（带实测），不放宽限制。`backend_timeout` = 后端在本任务时限内
      的内部超时（块 `out/render_manifest.json` 的 `errors` 含 `error_type=timeout`）。实测（NIST AI 100-1，4 页块）：后端 110 s
