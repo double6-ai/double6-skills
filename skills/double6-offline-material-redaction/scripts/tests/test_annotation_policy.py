@@ -276,6 +276,117 @@ class DefaultOfficeTests(unittest.TestCase):
         message = self._assert_quiet_refusal(raw, box, PHONE)
         self.assertTrue("没法确认" in message or "图片" in message, message)
 
+    def _margin_square(self, page):
+        annot = page.add_rect_annot(pdf.backend().Rect(300, 230, 400, 290))
+        annot.set_colors(stroke=(0, 0, 0))
+        annot.set_border(width=1)
+        annot.update()
+        return annot
+
+    def _appearance_hex(self, text, coding):
+        if coding == "utf-16-be":
+            return "".join(f"{ord(char):04X}" for char in text)
+        if coding == "utf-16-le":
+            return "".join(f"{ord(char):02X}00" for char in text)
+        if coding == "utf-16-be-bom":
+            return "FEFF" + "".join(f"{ord(char):04X}" for char in text)
+        raise AssertionError(coding)
+
+    def _paint_hex(self, doc, page, annot, payload, operator):
+        resources = doc.xref_object(int(doc.xref_get_key(page.xref, "Resources")[1].split()[0]))
+        font = int(resources.split("/china-s")[1].split()[0])
+        value = doc.xref_get_key(annot.xref, "AP")[1]
+        tokens = value.replace("<", " ").replace(">", " ").split()
+        form = int(tokens[tokens.index("/N") + 1])
+        shown = f"<{payload}> Tj" if operator == "Tj" else f"[<{payload}>]TJ"
+        stream = f"q\nBT\n1 0 0 1 310 50 Tm\n/china-s 12 Tf {shown}\nET\nQ\n".encode("ascii")
+        doc.xref_set_key(form, "Resources", "<</Font <</china-s " + str(font) + " 0 R>>>>")
+        doc.update_stream(form, stream)
+
+    def _assert_margin_hit_is_removed(self, raw, box, secret, payload):
+        out, report, _ext = policy.export(raw, ".pdf", _plan(box))
+        self.assertIn("默认保留批注", report["scope"])
+        self.assertNotIn(secret.encode("utf-8"), out)
+        self.assertNotIn(secret.encode("utf-16-be"), out)
+        self.assertNotIn(secret.encode("utf-16-le"), out)
+        self.assertNotIn(payload.encode("ascii"), out)
+        self.assertNotIn(payload.lower().encode("ascii"), out)
+        self.assertFalse(_word_leaked(out, secret))
+        with pdf.backend().open(stream=out, filetype="pdf") as opened:
+            self.assertIn(KEEP, opened[0].get_text())
+
+    def test_utf16_appearance_without_bom_is_not_delivered(self):
+        cases = (
+            ("utf-16-be", "Tj", PHONE),
+            ("utf-16-be", "TJ", PHONE),
+            ("utf-16-be", "Tj", WORD),
+            ("utf-16-le", "Tj", PHONE),
+            ("utf-16-be-bom", "TJ", WORD),
+        )
+        for coding, operator, secret in cases:
+            fitz, doc, page = _new_page()
+            annot = self._margin_square(page)
+            payload = self._appearance_hex(secret, coding)
+            self._paint_hex(doc, page, annot, payload, operator)
+            raw, box = _pack(doc, page, secret)
+            with pdf.backend().open(stream=raw, filetype="pdf") as opened:
+                kept = opened[0]
+                annot = kept.first_annot
+                blob, bad = pdf.annotation_text(opened, annot.xref, annot)
+            self.assertFalse(bad, coding + " " + operator)
+            self.assertIn(secret, blob, coding + " " + operator)
+            self._assert_margin_hit_is_removed(raw, box, secret, payload)
+
+    def test_dictionary_strings_outside_the_old_list_do_not_remain(self):
+        fitz, doc, page = _new_page()
+        highlight = page.add_highlight_annot(page.search_for(KEEP)[0])
+        highlight.update()
+        doc.xref_set_key(highlight.xref, "NM", "(" + WORD + ")")
+        raw, box = _pack(doc, page, WORD)
+        with self.assertRaises(engine.Rejected) as caught:
+            policy.export(raw, ".pdf", _plan(box))
+        message = str(caught.exception)
+        self.assertIn("露出", message)
+        self.assertNotIn(WORD, message)
+        self.assertNotIn(PHONE, message)
+        self.assertNotIn(KEEP, message)
+
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        doc.xref_set_key(square.xref, "NM", "(" + WORD + ")")
+        raw, box = _pack(doc, page, WORD)
+        out, _report, _ext = policy.export(raw, ".pdf", _plan(box))
+        self.assertNotIn(WORD.encode("utf-8"), out)
+        self.assertFalse(_word_leaked(out, WORD))
+        with pdf.backend().open(stream=out, filetype="pdf") as opened:
+            self.assertIn(PHONE, opened[0].get_text())
+            self.assertIn(KEEP, opened[0].get_text())
+
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        doc.xref_set_key(square.xref, "ExData", "<</Private (" + WORD + ")>>")
+        raw, box = _pack(doc, page, WORD)
+        out, _report, _ext = policy.export(raw, ".pdf", _plan(box))
+        self.assertNotIn(WORD.encode("utf-8"), out)
+        self.assertFalse(_word_leaked(out, WORD))
+
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        indirect = doc.get_new_xref()
+        doc.update_object(indirect, "(" + WORD + ")")
+        doc.xref_set_key(square.xref, "NM", str(indirect) + " 0 R")
+        raw, box = _pack(doc, page, WORD)
+        out, _report, _ext = policy.export(raw, ".pdf", _plan(box))
+        self.assertNotIn(WORD.encode("utf-8"), out)
+        self.assertFalse(_word_leaked(out, WORD))
+
+        fitz, doc, page = _new_page()
+        square = self._margin_square(page)
+        doc.xref_set_key(square.xref, "NM", "<00014142>")
+        raw, box = _pack(doc, page, WORD)
+        message = self._assert_quiet_refusal(raw, box, WORD)
+        self.assertIn("没法确认", message)
+
 
 class ClearPathTests(unittest.TestCase):
     def test_gray_and_thin_covers_do_not_leak_when_clearing_is_explicit(self):
