@@ -43,7 +43,7 @@ def fatal_reason(result, job):
         return 'provider_authentication_failed'
     if re.search(r'insufficient_quota|credit_balance|payment_required', text, re.I):
         return 'provider_quota_unavailable'
-    if re.search(r'\bmodel_not_found\b|\bunknown model\b|\binvalid model\b|model[^\n]{0,40}does not exist', text, re.I):
+    if re.search(r'configured_model_identity_mismatch|\bmodel_not_found\b|\bunknown model\b|\binvalid model\b|model[^\n]{0,40}does not exist', text, re.I):
         return 'configured_model_unavailable'
     return None
 
@@ -105,6 +105,10 @@ def run_page(page_pdf, directory, args, closure):
     from pdf_input_preflight import classify_page
     import fitz
     directory.mkdir(parents=True)
+    scan_page = getattr(args, 'scan_layout_page', None)
+    if scan_page is not None:
+        from scan_layout_translation import run_bounded_page
+        return run_bounded_page(page_pdf, directory, args, scan_page)
     with fitz.open(page_pdf) as doc:
         kind = classify_page(doc[0])['kind']
     route = 'digital_pdf' if kind == 'native_text' else 'scanned_ocr'
@@ -180,6 +184,14 @@ def run(args, page_runner=None):
     from chunked_workflow import run_lock, reclaim_stale
     from pdf_input_preflight import classify_page, detect_language
     source = Path(args.input).resolve()
+    scan_plan_path = getattr(args, 'scan_layout_plan', None)
+    scan_plan = None
+    if scan_plan_path:
+        from scan_layout_translation import load_plan
+        try:
+            scan_plan = load_plan(scan_plan_path, source, args.target_language)
+        except (ValueError, OSError, KeyError, TypeError, RuntimeError) as exc:
+            return {'status': 'blocked', 'error_code': 'scan_layout_plan_invalid', 'message': str(exc)}
     try:
         document = fitz.open(source)
         if document.needs_pass or not len(document):
@@ -203,6 +215,9 @@ def run(args, page_runner=None):
                 'generation': {k: os.environ.get(k) for k in ('PDF_TRANSLATION_TEMPERATURE','PDF_TRANSLATION_OPENAI_REASONING_EFFORT',
                                                               'PDF_TRANSLATION_SYSTEM_PROMPT','PAPER_TRANSLATION_IGNORE_CACHE')},
                 'request_concurrency': args.local_max_concurrency, 'resource_limits': args.resource_limits}
+    if scan_plan_path:
+        identity['scan_layout_plan_ref'] = reference(scan_plan_path)
+        identity['scan_layout_review_ref'] = scan_plan['review_basis_ref']
     state = {'identity': identity, 'pages': []}
     pages_root = Path(args.receipts).resolve()/'pages' if getattr(args, 'receipts', None) else output/'pages'
     if args.resume and state_path.exists():
@@ -224,8 +239,13 @@ def run(args, page_runner=None):
         model_checked = False
         completed = {r['page']: r for r in state['pages']}
         for index in range(len(document)):
+            args.scan_layout_page = next((p for p in scan_plan['pages'] if p['page'] == index+1), None) if scan_plan else None
             if reference(source) != identity['input']:
                 return {'status': 'blocked', 'error_code': 'source_changed_during_translation', 'state': str(state_path)}
+            if scan_plan_path and reference(scan_plan_path) != identity['scan_layout_plan_ref']:
+                return {'status': 'blocked', 'error_code': 'scan_layout_plan_changed', 'state': str(state_path)}
+            if scan_plan and reference(scan_plan['review_basis_ref']['path']) != scan_plan['review_basis_ref']:
+                return {'status': 'blocked', 'error_code': 'scan_layout_review_changed', 'state': str(state_path)}
             previous = completed.get(index+1)
             if previous and previous['status'] in {'translated', 'already_target_language', 'blank_preserved'} and previous.get('target'):
                 p = Path(previous['target']['path'])
@@ -234,7 +254,7 @@ def run(args, page_runner=None):
             page = document[index]
             facts = classify_page(page)
             blank = not page.get_text().strip() and not page.get_images() and not page.get_drawings()
-            if blank or (facts['kind'] == 'native_text' and detect_language(page.get_text())['language'] == args.target_language):
+            if blank or (not args.scan_layout_page and facts['kind'] == 'native_text' and detect_language(page.get_text())['language'] == args.target_language):
                 result = {'status': 'blank_preserved' if blank else 'already_target_language', 'issues': []}
                 page_dir = pages_root/f'{index+1:05d}'/('unchanged-'+datetime.now().strftime('%H%M%S-%f'));page_dir.mkdir(parents=True)
                 piece = page_dir/'source.pdf'
@@ -249,7 +269,7 @@ def run(args, page_runner=None):
                     part.insert_pdf(document, from_page=index, to_page=index);part.save(piece)
                 args.document_page = index+1
                 # 全部完成页的恢复和本来就在目标语言的页，不依赖模型在线或翻译引擎库存。
-                if page_runner is run_page and not model_checked:
+                if page_runner is run_page and not model_checked and not args.scan_layout_page:
                     health = workflow.doctor(args.base_url, args.model, permissive_inventory=True)
                     write(output/'environment.json', health)
                     if health['blockers']:

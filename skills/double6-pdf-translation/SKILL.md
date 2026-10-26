@@ -3,7 +3,7 @@ name: double6-pdf-translation
 description: PDF英译中与中译英。默认translate自动分页、冻结并续译，少量低置信或失败区域保留原文，其余继续；问题写独立审校记录，不插入正式正文。严重全局故障才停，支持resume。
 metadata:
   version: "2.1.0"
-  development_revision: "110-unpublished"
+  development_revision: "112-unpublished"
   source_contract_revision: "111-20261017"
   release_status: "stable"
   default_routes: "configs/default-routes.json"
@@ -21,6 +21,14 @@ python scripts/paper_translation_workflow.py translate --input /绝对路径/原
 中译英用 `--target-language en`。自动分页、路由、冻结输入与配置SHA、保存进度；不要求用户先手填FREEZE或人工验收材料。按用户提供的页范围处理，不宣称节选是完整作品。
 
 默认智谱 coding plan `glm-5.3-flash`、`https://open.bigmodel.cn/api/coding/paas/v4`、`low`、温度0.7、请求并发8；显式设置优先，不静默换模型。凭据只走 `LOCAL_TRANSLATION_API_KEY`（兼容已有 `GLM_API_KEY`），不得进入命令、日志、缓存身份或PDF。安装见[运行依赖](references/runtime-dependencies.md)。
+
+## 扫描页的版式与源角色
+
+扫描公文、论文、书本先按[扫描版式处理](references/scan-layout.md)核对原图、OCR覆盖和阅读顺序。标题、标签强调、正文、整段缩进、首行缩进、图注、印章分别识别；同类文字共享字号和基线间距，不能为了塞入每个OCR框而各自缩字。整段按语义翻译后分配空间，先调整可用框和段间距，保留标题层级与正文可读性。
+
+普通水平单栏页需要重排时，由执行者建立源PDF及审阅依据SHA绑定的版式计划，运行原入口加 `--scan-layout-plan /绝对路径/扫描版式.json`。该路径直接用真实模型翻译源单元，保留扫描底图，写回统一样式并检查保存后的PDF。未覆盖页仍自动续译；用户无需填写计划或额外批准。跨栏续段使用现有 `scan_semantic_flow.py`，复杂彩底按上述参考中的边界处理。
+
+源底图擦除、保留资产及实际译文需要视觉核验；文字审计通过不代表背景修复、OCR覆盖或语义已通过。真实调用与复用旧响应重排分别记录。
 
 ## 遇到问题继续翻译
 

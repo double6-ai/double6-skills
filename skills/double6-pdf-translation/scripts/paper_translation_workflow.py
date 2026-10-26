@@ -911,6 +911,7 @@ def main(argv=None):
     translate.add_argument('--base-url', default=None)
     translate.add_argument('--local-max-concurrency', type=int, default=request_concurrency_from_env())
     translate.add_argument('--resume', action='store_true')
+    translate.add_argument('--scan-layout-plan', type=Path, help='执行者核定的扫描源角色、统一样式与单栏排版计划；未覆盖页仍自动续译')
     inspect = sub.add_parser('inspect-input', help='只读有界输入事实与库存；源图资格不自动判定')
     inspect.add_argument('--input', type=Path, required=True)
     inspect.add_argument('--output', type=Path, required=True)
