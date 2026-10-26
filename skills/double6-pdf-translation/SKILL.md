@@ -2,7 +2,7 @@
 name: double6-pdf-translation
 description: PDF英译中与中译英。默认translate自动分页、冻结并续译，少量低置信或失败区域保留原文，其余继续；问题写独立审校记录，不插入正式正文。严重全局故障才停，支持resume。
 metadata:
-  version: "2.1.0"
+  version: "2.1.1"
   development_revision: "112-unpublished"
   source_contract_revision: "111-20261017"
   release_status: "stable"
