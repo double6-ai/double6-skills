@@ -283,7 +283,9 @@ def test_cross_chunk_terminology_inconsistency_is_high():
 def test_document_term_context_is_shared_first_and_local_terms_follow(tmp_path):
     from pdf_translation_commands import build_backend_system_prompt
     (tmp_path / 'term_policy.json').write_text(json.dumps({'terms': [
-        {'source_term': 'AI RMF', 'translation': '本地译法'}, {'source_term': 'chunk-only term'}]}))
+        {'source_term': 'AI RMF', 'translation': '本地译法'},
+        # 此例检查整篇/分块策略优先级，使用明确译法；待审空译法另有拒绝注入测试。
+        {'source_term': 'chunk-only term', 'translation': '分块专用术语'}]}))
     plain = build_backend_system_prompt('BASE', tmp_path)
     shared = build_backend_system_prompt('BASE', tmp_path, document_context={
         'term_policy': {'terms': [{'source_term': 'AI RMF', 'translation': '人工智能风险管理框架'}]},

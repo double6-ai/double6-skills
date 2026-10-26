@@ -90,12 +90,13 @@ def project_lock(path):
         yield
 
 
-def doctor(base_url, model=MODEL, provider_generation_required=True, include_ocr=False):
+def doctor(base_url, model=MODEL, provider_generation_required=True, include_ocr=False, permissive_inventory=False):
     """只检查首发必需项；扫描/OCR依赖不参与首发阻塞。"""
     dependencies = {name: importlib.util.find_spec(name) is not None
                     for name in ('fitz', 'psutil', 'PIL', 'requests', 'pdf2zh_next', 'babeldoc')}
     blockers = [f'missing_dependency:{name}' for name, present in dependencies.items() if not present]
     models = []
+    warnings = []
     from credential_env import CREDENTIAL_ENV, REMOTE_REQUIRES_KEY, credential_source, is_loopback_endpoint
     # 与运行入口同一来源：只读 LOCAL_TRANSLATION_API_KEY（不再静默采用 OPENAI_API_KEY）；只报告来源，不记录值。
     credential = credential_source(os.environ)
@@ -110,14 +111,18 @@ def doctor(base_url, model=MODEL, provider_generation_required=True, include_ocr
                 payload = json.load(response)
             models = sorted(row['id'] for row in payload.get('data', []) if isinstance(row.get('id'), str))
             if model not in models:
-                blockers.append('configured_model_not_available')
+                (warnings if permissive_inventory else blockers).append('configured_model_not_available')
         except (OSError, ValueError, KeyError) as exc:
-            blockers.append('model_endpoint_unavailable:' + type(exc).__name__)
+            entry = 'model_endpoint_unavailable:' + type(exc).__name__
+            if permissive_inventory and getattr(exc, 'code', None) not in (401, 403):
+                warnings.append(entry)
+            else:
+                blockers.append(entry)
     memory = snapshot([])
     if any(row['rss'] >= 20 * 1024**3 for row in memory['codex']):
         blockers.append('codex_memory_fuse')
     return {'schema_version': 1, 'status': 'ready' if not blockers else 'blocked',
-            'blockers': blockers, 'dependencies': dependencies,
+            'blockers': blockers, 'warnings': warnings, 'dependencies': dependencies,
             'latex_compiler': shutil.which('xelatex'), 'latex_ready': bool(shutil.which('xelatex')),
             'model': model, 'available_model_ids': models,
             'model_identity': 'served model ID only; weight/provider fingerprint requires separate frozen evidence',
@@ -334,8 +339,12 @@ def run_scanned_ocr_candidate(args, freeze):
         args.task_deadline_monotonic = time.monotonic() + limits['per_job_seconds']
     workdir = (args.receipts / 'ocr').resolve()
     target = getattr(args, 'target_language', 'zh')
+    preserve_local = bool(getattr(args, 'ocr_preserve_local', False))
+    if freeze.get('ocr_failure_policy', 'strict') != ('preserve_regions' if preserve_local else 'strict'):
+        raise ValueError('frozen OCR failure policy changed')
     job = run_job(args, [sys.executable, str(SCRIPT_DIR / 'ocr_route.py'), '--input', str(args.input.resolve()),
-                         '--workdir', str(workdir), '--target-language', target, '--tesseract', info['binary']],
+                         '--workdir', str(workdir), '--target-language', target, '--tesseract', info['binary']]
+                        + (['--preserve-local'] if preserve_local else []),
                   'ocr-reconstruct', interval_seconds=0.5)
     manifest_path = workdir / 'OCR_MANIFEST.json'
     ocr = {'engine': engine, 'job': {k: job.get(k) for k in ('status', 'stop_reason', 'error_code', 'elapsed_seconds',
@@ -684,6 +693,7 @@ def execute_digital(freeze_path, command, ocr_manifest=None):
         rebuilt = manifest.get('reconstructed_source') or {}
         if (freeze.get('route')!='scanned_ocr' or freeze.get('routing_contract')!=OCR_ROUTING or not args.pdf_backend_only
                 or args.latex_render_mode!='off' or manifest.get('status')!='ok'
+                or manifest.get('failure_policy', 'strict') != freeze.get('ocr_failure_policy', 'strict')
                 or manifest.get('input',{}).get('sha256')!=freeze['input']['sha256']
                 or ref(args.input_pdf)!={'path':rebuilt.get('path'),'sha256':rebuilt.get('sha256')}):
             raise ValueError('explicit scanned OCR route identity or reconstructed source binding missing or changed')
@@ -709,7 +719,17 @@ def execute_digital(freeze_path, command, ocr_manifest=None):
         context=source_cache({'path':str(args.source_cache_context.resolve()),'sha256':args.source_cache_context_sha256},args.source_cache_mode).context
         if context['freeze_ref']!=ref(freeze_path) or context['input_ref']!=freeze['input'] or context['scope_ref']!=freeze['scope_evidence']:
             raise ValueError('source cache current freeze/input/scope mismatch')
-    result = run_pdf_translation.run(args)
+    # 清除继承的扫描身份；只有本次逐 SHA 验过的 scanned_ocr 清单能约束后端段落。
+    from ocr_text_layout import ENV as ocr_layout_env
+    previous_ocr_layout = os.environ.pop(ocr_layout_env, None)
+    try:
+        if ocr_manifest is not None:
+            os.environ[ocr_layout_env] = json.dumps(ocr_manifest)
+        result = run_pdf_translation.run(args)
+    finally:
+        os.environ.pop(ocr_layout_env, None)
+        if previous_ocr_layout is not None:
+            os.environ[ocr_layout_env] = previous_ocr_layout
     if args.source_cache_mode=='collect':
         if result.get('status')!='source_only_collected':raise ValueError('source-only collection missing')
         return result
@@ -882,6 +902,15 @@ def deliver(packet_path, acceptance_path, output):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='action', required=True)
+    translate = sub.add_parser('translate', help='默认续译：自动分页与冻结，局部问题保留原文，其余继续')
+    translate.add_argument('--input', type=Path, required=True)
+    translate.add_argument('--output', type=Path, required=True)
+    translate.add_argument('--receipts', type=Path)
+    translate.add_argument('--target-language', choices=('zh', 'en'), default='zh')
+    translate.add_argument('--model', default=None)
+    translate.add_argument('--base-url', default=None)
+    translate.add_argument('--local-max-concurrency', type=int, default=request_concurrency_from_env())
+    translate.add_argument('--resume', action='store_true')
     inspect = sub.add_parser('inspect-input', help='只读有界输入事实与库存；源图资格不自动判定')
     inspect.add_argument('--input', type=Path, required=True)
     inspect.add_argument('--output', type=Path, required=True)
@@ -973,6 +1002,8 @@ def main(argv=None):
                            help='目标语言：zh=英译中（默认），en=中译英')
             p.add_argument('--source-cache-context',type=Path)
             p.add_argument('--source-cache-context-sha256')
+            if action == 'candidate':
+                p.add_argument('--ocr-preserve-local', action='store_true', help='只用于已冻结的续译策略：不可靠段落保留源图，其余翻译')
         else:
             p.add_argument('--candidate', type=Path, required=True)
     chunked = sub.add_parser('chunked-candidate', help='长文档：按页范围分成有界块逐块走既有路线，按原页序合并；任何一块失败即整份失败关闭')
@@ -1008,7 +1039,7 @@ def main(argv=None):
         group.add_argument('--memory-metric', choices=('rss', 'pss'), default=None,
                            help='内存计量口径；也可用 PAPER_TRANSLATION_MEMORY_METRIC。默认 macOS rss、Linux pss')
     args = parser.parse_args(argv)
-    if args.action in {'doctor', 'candidate', 'collect', 'resume-latex', 'chunked-candidate'}:
+    if args.action in {'doctor', 'candidate', 'collect', 'resume-latex', 'chunked-candidate', 'translate'}:
         apply_model_profile(args)
     try:
         result = dispatch(args)
@@ -1031,7 +1062,8 @@ def main(argv=None):
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if result['status'] == 'blocked':
         return EXIT_BLOCKED
-    ok = result['status'] in {'ready', 'succeeded', 'ready_for_delivery', 'delivered', 'candidate', 'source_only_collected'}
+    ok = result['status'] in {'ready', 'succeeded', 'ready_for_delivery', 'delivered', 'candidate', 'source_only_collected',
+                              'completed', 'completed_with_warnings', 'already_target_language'}
     if ok and result.get('quality_status') == 'fail':
         # 任何生成候选的动作/路线：译文已照常写出，但综合质量判 fail，用独立退出码 3（预检拦截为 2）。
         result.setdefault('exit_code', EXIT_QUALITY_FAIL)
@@ -1248,6 +1280,9 @@ def dispatch(args):
     if hasattr(args, 'task_memory_mib') and args.action not in FREEZE_BOUND_ACTIONS:
         args.resource_limits = resolve_limits(memory_mib=args.task_memory_mib,
             timeout_seconds=args.job_timeout_seconds, memory_metric=args.memory_metric)
+    if args.action == 'translate':
+        from translation_continuation import run
+        return run(args)
     if args.action == 'inspect-input':
         result = input_inspection_job(args)
     elif args.action == 'run-reviewed-scan':
@@ -1304,7 +1339,8 @@ def dispatch(args):
             del current
             from pdf_source_cache import release_source_parsing_cache
             release_source_parsing_cache()
-        health = doctor(args.base_url, args.model,provider_generation_required=not offline_revision)
+        health = doctor(args.base_url, args.model,provider_generation_required=not offline_revision,
+                        **({'permissive_inventory': True} if freeze.get('continuation_policy') == 'local_preserve_v1' else {}))
         if health['blockers'] or args.route == 'latex_verified' and not health['latex_ready']:
             raise ValueError('required environment not ready')
         if args.action=='collect':

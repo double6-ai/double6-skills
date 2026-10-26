@@ -76,6 +76,9 @@ def direction_fields(direction: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _show_pdf_page_vector(page: Any, rect: Any, source_doc: Any, page_index: int, fitz: Any) -> None:
+    # show_pdf_page 不自动展平源页 /Rotate；只规范内存中的页，不写回原件。
+    if source_doc[page_index].rotation:
+        source_doc[page_index].remove_rotation()
     page.show_pdf_page(rect, source_doc, page_index)
 
 
@@ -102,6 +105,9 @@ def build_en_left_zh_right_pdf_pypdf(source_pdf: Path, translated_pdf: Path, out
     for index in range(page_count):
         source_page = source_reader.pages[index] if index < source_pages else None
         translated_page = translated_reader.pages[index] if index < translated_pages else None
+        for input_page in (source_page, translated_page):
+            if input_page is not None and input_page.rotation:
+                input_page.transfer_rotation_to_content()
         source_width = float(source_page.mediabox.width if source_page is not None else translated_page.mediabox.width)
         source_height = float(source_page.mediabox.height if source_page is not None else translated_page.mediabox.height)
         translated_width = float(translated_page.mediabox.width if translated_page is not None else source_page.mediabox.width)

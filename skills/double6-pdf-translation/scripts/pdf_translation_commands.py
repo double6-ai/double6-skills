@@ -65,10 +65,13 @@ def build_qwen_cli_command(args: argparse.Namespace, context_file: Path | None =
 
 def _compact_policy_items(items: list[dict[str, Any]], *, limit: int = 12) -> list[str]:
     lines: list[str] = []
-    for item in items[:limit]:
+    for item in items:
         source = str(item.get("source_term") or item.get("source") or item.get("value") or "")
         translation = str(item.get("translation") or item.get("target") or "")
         if not source:
+            continue
+        # 待审候选不构成保留原文的指令。只有明确译法或具名保留策略进入提示词。
+        if not translation and str(item.get("action") or "decide") not in {"keep", "preserve", "keep+explain"}:
             continue
         line = f"- {source}"
         if translation:
@@ -77,6 +80,8 @@ def _compact_policy_items(items: list[dict[str, Any]], *, limit: int = 12) -> li
         if isinstance(forbidden, list) and forbidden:
             line += "；禁用：" + "、".join(str(value) for value in forbidden if value)
         lines.append(line[:240])
+        if len(lines) >= limit:
+            break
     return lines
 
 _CJK_POLICY_TEXT = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")

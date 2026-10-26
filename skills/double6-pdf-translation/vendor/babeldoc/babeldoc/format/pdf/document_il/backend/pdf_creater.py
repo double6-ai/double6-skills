@@ -484,7 +484,9 @@ end"""
 
 def make_tounicode(cmap, used):
     short = []
-    for x in used:
+    # 空格没有轮廓，不能因此丢掉已有 Unicode 映射；否则 CID 3 复制成 U+0003。
+    blanks = [gid for gid, code in cmap.items() if 0x20 <= code <= 0x10FFFF and chr(code).isspace()]
+    for x in dict.fromkeys([*used, *blanks]):
         if x in cmap:
             short.append((x, cmap[x]))
     line = [TOUNICODE_HEAD]

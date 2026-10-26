@@ -108,10 +108,14 @@ STABLE_PROMPT = Template(
 
 $glossary_usage_rules_block
 ## Output Format
-Return a JSON array of the same length.  
+Return a JSON object with a "translations" array of the same length as the input.
 For each item:
 - Keep the same "id" and remove other fields like "input" and "layout_label".
 - Add "output" with the translated text only.
+- If "source_numbering" is provided for an English target, start with its exact "output_marker". Keep each clause/subitem separate; never restart or invent numbering.
+- Keep every "protected_identifiers" value verbatim, including its occurrence count. Category codes and model numbers cannot be replaced by a translated category name.
+- Translate only supplied source text. A fragment at a page boundary must remain a fragment; do not invent its continuation.
+- Return the translation body only. Do not insert reviewer notes, missing-page labels, or bracketed editorial additions. Preserve brackets/citations actually present in the source.
 - No extra text, no ```json blocks.
 
 ## Style
@@ -128,12 +132,12 @@ Input:
     }
 ]
 Output:
-[
+{"translations": [
     {
     "id": 0,
     "output": "{v1}<style id='2'>你好</style>，世界！"
     }
-]
+]}
 
 """
 )
@@ -596,6 +600,9 @@ class ILTranslatorLLMOnly:
 
             if p2.box.y2 - p1.box.y2 <= 20:
                 continue
+            # 跨栏必须同时有向右越过栏间空白的几何证据；纵向跳动本身不代表换栏。
+            if p2.box.x < p1.box.x2 + 3:
+                continue
 
             total_token_count = self.calc_token_count(
                 p1.unicode
@@ -850,6 +857,13 @@ class ILTranslatorLLMOnly:
                     "page": getattr(tracker, "page", None),
                     "debug_id": str(getattr(input_text[2], "debug_id", "") or ""),
                 }
+                from babeldoc.format.pdf.document_il.utils.cjk_structure import cjk_numbering, cjk_identifiers
+                numbering = cjk_numbering(input_text[2].unicode)
+                if numbering:
+                    obj['source_numbering'] = numbering
+                identifiers = cjk_identifiers(input_text[0])
+                if identifiers:
+                    obj['protected_identifiers'] = identifiers
                 if (
                     placeholders_hint
                     and self.translation_config.add_formula_placehold_hint
@@ -890,6 +904,8 @@ class ILTranslatorLLMOnly:
 
             parsed_output = json.loads(llm_output)
 
+            if isinstance(parsed_output, dict) and isinstance(parsed_output.get("translations"), list):
+                parsed_output = parsed_output["translations"]
             if isinstance(parsed_output, dict) and parsed_output.get(
                 "output", parsed_output.get("input", False)
             ):
