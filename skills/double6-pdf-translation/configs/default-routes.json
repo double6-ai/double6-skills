@@ -2,26 +2,25 @@
   "schema_version": 1,
   "development_revision": "110-unpublished",
   "entry_script": "scripts/paper_translation_workflow.py",
-  "selection": "classify input and task from source evidence; no automatic scan default for everyPDF",
+  "selection": "默认 translate 自动按页续译；局部风险保留原文并记录，不阻断其余页。严格验收入口另行显式调用。",
   "defaults": {
-    "scan_new_input": "inspect-input",
+    "scan_new_input": "translate",
     "scan_reviewed_reprepare": "run-reviewed-scan",
     "scan_frozen_rebuild": "trial-render",
-    "digital_pdf": "collect",
-    "latex_verified": "candidate"
+    "digital_pdf": "translate",
+    "latex_verified": "candidate",
+    "mixed_pdf": "translate",
+    "long_pdf": "translate"
   },
   "routes": {
     "scan_new_input": {
       "input_family": "scanned_pdf",
-      "supported_scope": "existing finite clear single-column image scan; qualification unknown until bound source-image review",
-      "action": "inspect-input",
-      "requires": [
-        "bound_source_image_review_before_fresh",
-        "complete_work_and_script_kind_confirmation",
-        "existing_OCR_sourceplan_roles_and_full_semantic_review_before_render"
-      ],
+      "supported_scope": "Reliable text is translated; unreliable paragraphs or unsupported pages retain original content with separate review records.",
+      "action": "translate",
+      "requires": [],
       "next_existing_entry": "prepare-scan",
-      "default_max_pages": 2
+      "default_max_pages": 2,
+      "strict_inspection_entry": "inspect-input"
     },
     "scan_reviewed_reprepare": {
       "input_family": "scanned_pdf",
@@ -43,13 +42,11 @@
     },
     "digital_pdf": {
       "input_family": "native_digital_pdf",
-      "action": "collect",
-      "fixed_arguments": [
-        "--route",
-        "digital_pdf"
-      ],
+      "action": "translate",
+      "fixed_arguments": [],
       "existing_route_unchanged": true,
-      "reference": "references/release-quickstart.md"
+      "reference": "references/release-quickstart.md",
+      "legacy_strict_action": "collect or candidate"
     },
     "latex_verified": {
       "input_family": "verified_latex",
@@ -60,6 +57,17 @@
       ],
       "existing_route_unchanged": true,
       "reference": "references/release-quickstart.md"
+    },
+    "translation": {
+      "action": "translate",
+      "input_family": "scanned_native_or_mixed_pdf",
+      "failure_policy": "local_preserve_v1",
+      "automatic_freeze": true,
+      "per_page_resource_contract_unchanged": true,
+      "local_problem": "preserve_original_region_or_page_and_continue",
+      "report_location": "separate_sidecar_only",
+      "resume": "--resume",
+      "legacy_strict_entry": "candidate or chunked-candidate"
     }
   },
   "quality_requirements": [
@@ -73,7 +81,7 @@
   ],
   "source_policy": {
     "physical_scale": "preserve_input_media_crop_boxes",
-    "hidden_OCR": "report_and_require_explicit_route_decision",
+    "hidden_OCR": "默认按实际可见页型路由；不可靠隐藏识别层不阻断其它页。",
     "handwriting_complete_work": "UNKNOWN_until_bound_source_image_review",
     "auto_model_fallback": false
   },
@@ -127,5 +135,6 @@
     "execution_entry": "scripts/paper_translation_workflow.py",
     "selection": "read this config, classify source/task, invoke existing action directly"
   },
-  "candidate_version": "2.0.1"
+  "candidate_version": "2.1.0",
+  "quality_requirements_scope": "这些项目约束质量接受，不再作为默认译文生成的先决阻断；问题登记在附件，正式PDF不插入审校说明。"
 }

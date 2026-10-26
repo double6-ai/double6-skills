@@ -118,9 +118,8 @@ def build_args_parser(
                 if arg is bool:
                     parser.add_argument(
                         f"--{args_name}",
-                        action="store_true"
-                        if field_detail.default is False
-                        else "store_false",
+                        # 可选布尔值的 None 表示未设置；正向开关必须将它打开。
+                        action="store_false" if field_detail.default is True else "store_true",
                         default=MagicDefault,
                         help=field_detail.description,
                     )
