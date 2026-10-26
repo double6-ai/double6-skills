@@ -255,3 +255,7 @@
 - 2026-10-25：`parser_policy.assess_rapidocr_page` 的 `escalate` 不再因单栏置信度偏低而成立；旋转、双栏、表格、公式、空页和已有质量失败仍升级。`checkpoint.enable_default_scanned_reuse` 在未忽略缓存时为扫描路线补上默认断点目录，并用模型/提示词、解析档位推导指纹。`execution_identity` 不再把接口密钥和断点目录算进配置指纹。
 - 2026-10-25：`scanned_raster/pipeline_translation.py` 在调用模型前查固定短句和栏位译法（`_fixed_scan_translation`）。整段命中则不再请求；表格搜索层同样命中则跳过该次请求。未命中的请求、后处理和失败处理不变。
 - 2026-10-25：新增 `scripts/translation_cost_ledger.py`。后端在完成事件里附上本次请求、字数和阶段耗时，并写入工作目录的 `translation_cost_ledger.json`；渲染清单、候选回执和分块结果带同一份 `cost_ledger`。`il_translator_llm_only.py` 的一批额度改为源文 1000 token 或 24 段；整批失败对半再试，只剩一段才逐段重译。质量门未改。
+
+## 2.1.0（2026-10-26）
+
+新增默认逐页续译与局部原图保留、断点恢复；修复扫描阅读顺序、中文条款和保护代码、JSON批量翻译、CLI可选布尔参数、空格ToUnicode以及旋转双语拼版。维护源码的实际改动位于对应scripts与vendor目录，原有许可继续适用。

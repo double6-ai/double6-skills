@@ -368,6 +368,16 @@ def _adopt(line: dict[str, Any], result: dict[str, Any]) -> None:
                  'min_readable_word_conf': result['weakest']})
 
 
+def _cjk_structural_suspicion(text: str, lang_key: str) -> str | None:
+    if lang_key != 'chi_sim':
+        return None
+    if not _CJK.search(text) and 1 <= len(_LATIN.findall(text)) <= 4 and not re.search(r'\d', text):
+        return 'orphan_latin'
+    if re.match(r'^\s*[（(][+＝=\-—]{1,5}[）)]\s*[\u3400-\u9fff]', text):
+        return 'damaged_cjk_marker'
+    return None
+
+
 def verify_weak_lines(lines: list[dict[str, Any]], image_path: Path, *, binary: str, lang: str, lang_key: str,
                       workdir: Path, page_no: int, log: list[dict[str, Any]]) -> None:
     """含低置信度词（< WORD_MIN_CONF）的行做多遍独立识别并表决（常规 OCR 多遍校验，不猜字、不删字）：
@@ -382,12 +392,13 @@ def verify_weak_lines(lines: list[dict[str, Any]], image_path: Path, *, binary: 
     image = None
     for number, line in enumerate(lines):
         weakest = line.get('min_readable_word_conf')
-        if weakest is None or weakest >= WORD_MIN_CONF:
+        structural = _cjk_structural_suspicion(line['text'], lang_key)
+        if not structural and (weakest is None or weakest >= WORD_MIN_CONF):
             continue
         if image is None:
             image = Image.open(image_path)
         x0, y0, x1, y1 = line['bbox_px']
-        pad = max(8, int(0.25 * (y1 - y0)))
+        pad = max(8, int((0.45 if structural == 'orphan_latin' else 0.25) * (y1 - y0)))
         crop_box = (max(0, x0 - pad), max(0, y0 - pad), min(image.width, x1 + pad), min(image.height, y1 + pad))
         crop = image.crop(crop_box)
         crop_path = workdir / f'page-{page_no:03d}.verify-{number:03d}.png'
@@ -396,6 +407,23 @@ def verify_weak_lines(lines: list[dict[str, Any]], image_path: Path, *, binary: 
         second = _line_pass(binary, crop_path, lang, log, 'weak_line_verification', crop_box[:2])
         passes = {'first': line['text'], 'second': second['text'] if second else None}
         outcome = 'unverified'
+        if structural:
+            # 数学符号被排除在“可读词最低置信度”之外，坏编号会有很高行均值。
+            # 只追加实际裁图识别；两次新读数一致、置信度合格且异常消失才采用。
+            big_path = workdir / f'page-{page_no:03d}.verify-{number:03d}.x15.png'
+            crop.resize((int(crop.width * 1.5), int(crop.height * 1.5)), Image.LANCZOS).save(big_path)
+            third = _line_pass(binary, big_path, lang, log, 'cjk_structure_verification', crop_box[:2], scale=1.5)
+            passes['third'] = third['text'] if third else None
+            if (second and third and _consensus_key(second['text']) == _consensus_key(third['text'])
+                    and _CJK.search(second['text']) and not _cjk_structural_suspicion(second['text'], lang_key)
+                    and all(p['weakest'] is not None and p['weakest'] >= WORD_MIN_CONF
+                            and p['mean'] >= TEXT_CONF[lang_key] for p in (second, third))):
+                _adopt(line, second)
+                outcome = 'consensus'
+            line['verification_passes'] = passes
+            line['weak_word_verification'] = outcome
+            line['structural_reverification'] = structural
+            continue
         if second and first_key and _consensus_key(second['text']) == first_key:
             outcome = 'consensus'
         else:
@@ -978,7 +1006,7 @@ def image_union_fraction(page) -> float:
 
 
 def analyse_scanned_page(page, index: int, *, binary: str, lang: str, lang_key: str, workdir: Path,
-                         log: list[dict[str, Any]]) -> dict[str, Any]:
+                         log: list[dict[str, Any]], preserve_local: bool = False) -> dict[str, Any]:
     """渲染、方向、OCR、版式门；受支持时返回覆盖后的背景与文字行。"""
     import numpy as np
     import pymupdf
@@ -995,7 +1023,10 @@ def analyse_scanned_page(page, index: int, *, binary: str, lang: str, lang_key: 
     if dpi is not None and dpi < MIN_SOURCE_DPI * DPI_TOLERANCE:
         record['findings'].append(finding('ocr_resolution_too_low', page=index + 1, source_image_dpi=round(dpi, 1),
                                           minimum_dpi=MIN_SOURCE_DPI))
-        return record
+        if not preserve_local:
+            return record
+        record['warnings'] = [{**record['findings'].pop(), 'severity': 'warning',
+                               'action': 'attempt_ocr_then_preserve_unreliable_regions'}]
     # 表格/网格框线证据在 OSD 之前按渲染方向检测（对称判定，与旋转无关）
     rules = ruling_lines(image.convert('L'))
     record['ruling_lines'] = rules
@@ -1106,13 +1137,21 @@ def analyse_scanned_page(page, index: int, *, binary: str, lang: str, lang_key: 
                          enclosed_numerals=sum(q['kind'] == 'enclosed' for x in script_lines for q in x['suspects']),
                          samples=script_lines[:5],
                          fraction_samples=bars[:3]))
+    if preserve_local:
+        from ocr_local_preservation import select_lines
+        safe_lines = select_lines(record, lines, script_lines, bars)
+        f = record['findings']
+        if safe_lines is not None and not safe_lines:
+            f.append(finding('ocr_no_reliable_text', page=page_no))
+    else:
+        safe_lines = None
     if f:
         record['line_details'] = [{k: l[k] for k in ('key', 'bbox_px', 'text', 'mean_conf', 'class', 'math')} for l in lines]
         return record
     # 覆盖原文：可信文字行与不确定行（≤2 行，经上面的门）都覆盖；不确定行同样写回（低置信度在回执中标出）
     rgb = np.asarray(image).copy()
     gray = np.asarray(gray_img)
-    covered = text_lines + uncertain
+    covered = safe_lines if safe_lines is not None else text_lines + uncertain
     pads = {}
     boxes = []
     for l in covered:
@@ -1148,7 +1187,9 @@ def analyse_scanned_page(page, index: int, *, binary: str, lang: str, lang_key: 
     cleaned_path = workdir / f'page-{index + 1:03d}.background.png'
     (cleaned if colourful else cleaned.convert('L')).save(cleaned_path, optimize=True)
     residue_words = ocr_tsv(binary, cleaned_path, lang, log, 'background_residue')
-    residue = [w for w in residue_words if w['conf'] >= RESIDUE_CONF and
+    from ocr_local_preservation import residue_is_preserved
+    residue = [w for w in residue_words if not residue_is_preserved(w, record.get('preserved_regions', []))
+               and w['conf'] >= RESIDUE_CONF and
                (len(_CJK.findall(w['text'])) >= 1 or len(_LATIN_WORD.findall(w['text'])) >= 1)
                and (len(_CJK.findall(w['text'])) + len(_LATIN.findall(w['text']))) >= 2]
     record['background_residue'] = {'words_recognised': len(residue_words), 'source_words_conf_ge_70': len(residue),
@@ -1159,6 +1200,8 @@ def analyse_scanned_page(page, index: int, *, binary: str, lang: str, lang_key: 
         return record
     record['background'] = {'path': cleaned_path.name, 'sha256': sha256_file(cleaned_path), 'colour': colourful,
                             'size_px': [w, h]}
+    # 被准入的低置信行也属于原段落，不能因排在 text_lines + uncertain 末尾而被挪到页尾。
+    covered.sort(key=lambda line: (line['key'], line['bbox_px'][1], line['bbox_px'][0]))
     record['text_lines'] = [{'bbox_px': l['bbox_px'], 'text': l['text'], 'mean_conf': l['mean_conf'],
                              'class': l['class'], 'paragraph': l['key'][:2], 'ink_rgb': l['ink_rgb']} for l in covered]
     return record
@@ -1248,7 +1291,8 @@ def reconstruct(source, records: list[dict[str, Any]], workdir: Path, output: Pa
 
 # ---------------------------------------------------------------- driver
 
-def run(input_pdf: Path, workdir: Path, target_language: str, tesseract: str | None = None) -> dict[str, Any]:
+def run(input_pdf: Path, workdir: Path, target_language: str, tesseract: str | None = None,
+        *, preserve_local: bool = False) -> dict[str, Any]:
     import pymupdf
     from pdf_input_preflight import classify_page, detect_language
     workdir.mkdir(parents=True, exist_ok=False)
@@ -1268,7 +1312,7 @@ def run(input_pdf: Path, workdir: Path, target_language: str, tesseract: str | N
                                     'rule_ink_threshold': RULE_INK_THRESHOLD, 'rule_row_tolerance': RULE_ROW_TOLERANCE,
                                     'body_line_height_ratio': BODY_LINE_HEIGHT_RATIO, 'body_size_cap_ratio': BODY_SIZE_CAP_RATIO},
                                 'quality_claim': 'none: OCR text is machine output, not human-verified; never quality acceptance',
-                                'processes': [], 'pages': []}
+                                'processes': [], 'pages': [], 'failure_policy': 'preserve_regions' if preserve_local else 'strict'}
     info = engine_info(tesseract)
     manifest['engine'] = info
     findings: list[dict[str, Any]] = []
@@ -1284,7 +1328,8 @@ def run(input_pdf: Path, workdir: Path, target_language: str, tesseract: str | N
             page = source[index]
             facts = classify_page(page)
             if facts['kind'] == 'scanned_image':
-                record = analyse_scanned_page(page, index, binary=binary, lang=lang, lang_key=lang_key, workdir=workdir, log=log)
+                record = analyse_scanned_page(page, index, binary=binary, lang=lang, lang_key=lang_key, workdir=workdir, log=log,
+                                              **({'preserve_local': True} if preserve_local else {}))
             elif facts['kind'] == 'no_text_layer':
                 record = {'page': index + 1, 'kind': 'outlined', 'findings': [finding('ocr_outlined_vector_text_unsupported', page=index + 1)]}
             elif facts['kind'] == 'sparse_text' and image_union_fraction(page) >= .5:
@@ -1320,6 +1365,8 @@ def run(input_pdf: Path, workdir: Path, target_language: str, tesseract: str | N
             page_row['reconstructed_page'] = r.get('reconstructed_page')
             if r['kind'] == 'scanned':
                 page_row['text_line_count'] = len(r['text_lines'])
+                line_path = workdir / f'page-{r["page"]:03d}.lines.json'
+                page_row['text_lines_ref'] = {'path': str(line_path.resolve()), 'sha256': sha256_file(line_path)}
                 page_row['low_confidence_lines_written'] = [l['text'] for l in r['text_lines'] if l['class'] == 'uncertain']
     except EngineError as exc:
         findings.append(finding('ocr_engine_failed', detail=str(exc)[:300]))
@@ -1343,9 +1390,11 @@ def main(argv=None) -> int:
     parser.add_argument('--workdir', type=Path, required=True)
     parser.add_argument('--target-language', choices=sorted(ENGINE_LANGS), default='zh')
     parser.add_argument('--tesseract', default=None)
+    parser.add_argument('--preserve-local', action='store_true')
     args = parser.parse_args(argv)
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    manifest = run(args.input.resolve(), args.workdir.resolve(), args.target_language, args.tesseract)
+    manifest = run(args.input.resolve(), args.workdir.resolve(), args.target_language, args.tesseract,
+                   preserve_local=args.preserve_local)
     print(json.dumps({k: manifest.get(k) for k in ('status', 'error_code', 'seconds')}, ensure_ascii=False))
     return 0
 

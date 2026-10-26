@@ -10,6 +10,16 @@ OCR 文字是机器输出，没有经过人工逐字核对，所以**永不作�
 
 ## 流程
 
+### 低置信中文扫描的显式校对辅助
+
+自动 OCR 被拒绝后，先对照整页原图逐段校对，不把原始 OCR 当成正确源文。若重建供电子后端翻译的源 PDF，应保留源页标题、条款、子项、字号、位置、页码和原页截断边界；不得把整页改为小字号密排再声称版式已保留。
+
+具备这些校对材料时，可运行 `python scripts/reviewed_text_source.py --review-json <校对JSON> --output <全新源PDF>`，再显式用 `candidate --route digital_pdf --target-language en` 翻译。校对 JSON 必须有 `status: executor_reviewed_source`、具名 `reviewer`、`original_scan` 路径与 SHA256、字体路径与 SHA256，以及按实际页面排序的 `pages`。每页声明 `complete_visible_text: true`，`blocks` 逐块给 `id`、`role`、`text`、阅读方向 point 坐标 `bbox`、`font`、`font_size`、`leading`，可给首行缩进 `first_line_indent` 和居中 `align: center`。两处源页边界不连续时按原文保留，`source_continues` 只记录事实，不补造缺页。
+
+工具逐 SHA 核对来源、范围、实际字体字形、块间重叠和溢出；任何一项失败不写出源 PDF。可视页面物理尺寸保持，旋转元数据归零会在 `.source.json` 明确记录。将该清单绑定到 FREEZE 的 `source_adaptation_ref`，保留原自动 OCR 拒绝回执。执行者校对与重建不构成用户验收，也不把该原件改记为自动 OCR 成功。
+
+常规 OCR 的短孤立拉丁片段（如把“用。”读为 `Fil.`）与数学符号构成的损坏段首编号（如 `(+=)`）会追加两次裁图识别；仅当两次新结果一致、最低词置信度及均值合格、结构异常消失时采用。它不按词典猜字，不跳过后续置信度与图像公式门，无法取得一致结果仍按原规则拒绝。中文条款进入翻译时保持逐款逐项分组；类别/型号代码遗漏会拒绝写回并进入原有重试，不能只因成品中已没有中文就判为语义合格。
+
 1. **引擎检查**：需要 `tesseract` 与 `chi_sim`、`eng`、`osd` 语言数据。缺失时只阻断本路线（`ocr_engine_unavailable`，退出码 2）。`doctor` 只报告引擎状态（`blocks_routes: ["scanned_ocr"]`，`blocks_digital_route: false`），不进入电子路线的阻断项。
 2. **有界 OCR 重建**：`ocr_route.py` 作为 `run_bounded` 的任务运行（操作名 `ocr-reconstruct`，0.5 s 采样）。
    - 每个 `tesseract` 都是它的直接子进程，进程树与后端一样：计入同一任务内存，记录 PID 与 create_time，带启动 nonce、父链核验，超限或超时整树回收。

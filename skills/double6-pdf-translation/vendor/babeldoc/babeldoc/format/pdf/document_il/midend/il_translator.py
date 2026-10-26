@@ -1407,8 +1407,20 @@ class ILTranslator:
         translated_text: str,
     ):
         """Post-translation processing: update paragraph with translated text."""
+        from babeldoc.format.pdf.document_il.utils.cjk_structure import normalize_cjk_numbering, missing_cjk_identifiers
+        target_language = getattr(getattr(self, 'translation_config', None), 'lang_out', None)
+        translated_text = normalize_cjk_numbering(
+            paragraph.unicode, translated_text, target_language)
         tracker.set_output(translated_text)
         input_unicode = getattr(translate_input, "unicode", str(translate_input))
+        missing_codes = missing_cjk_identifiers(input_unicode, translated_text, target_language)
+        if missing_codes:
+            reason = 'missing_protected_cjk_identifier:' + ','.join(missing_codes)
+            if hasattr(tracker, 'set_writeback_status'):
+                tracker.set_writeback_status('rejected', reason)
+            _safe_set_paragraph_attr(paragraph, 'writeback_status', 'rejected')
+            _safe_set_paragraph_attr(paragraph, 'writeback_reason', reason)
+            return False
         allow_dropcap_placeholder_loss = is_styled_dropcap_source(input_unicode)
         if allow_dropcap_placeholder_loss:
             translated_text = strip_translated_dropcap_prefix(input_unicode, translated_text)

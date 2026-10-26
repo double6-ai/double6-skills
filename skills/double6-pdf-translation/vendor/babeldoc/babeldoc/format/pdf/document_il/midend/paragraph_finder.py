@@ -546,14 +546,16 @@ class ParagraphFinder:
 
         # 先算每个字符的版面归属，再按物理行统一（见 line_fragments.unify_line_layouts）：
         # 文字框比实际行窄或两个同级框重叠时，同一行不再被切成几段。
-        char_layouts = [get_character_layout(char, layout_index, layout_map) for char in page.pdf_character]
-        unify_line_layouts(page.pdf_character, char_layouts, layout_index, layout_map, Layout,
-                           lambda c: bool(SPACE_REGEX.match(c.char_unicode or "")))
+        from ocr_text_layout import bind_ocr_layout
+        char_layouts = bind_ocr_layout(page, page.pdf_character, Layout)
+        if char_layouts is None:
+            char_layouts = [get_character_layout(char, layout_index, layout_map) for char in page.pdf_character]
+            unify_line_layouts(page.pdf_character, char_layouts, layout_index, layout_map, Layout,
+                               lambda c: bool(SPACE_REGEX.match(c.char_unicode or "")))
         for char, char_layout in zip(page.pdf_character, char_layouts):
             # Check if character is in any formula layout and set formula_layout_id
-            char.formula_layout_id = is_character_in_formula_layout(
-                char, page, layout_index, layout_map
-            )
+            char.formula_layout_id = (None if getattr(char_layout, "ocr_bound", False) else
+                                     is_character_in_formula_layout(char, page, layout_index, layout_map))
 
             if not is_text_layout(char_layout) or self.is_isolated_formula(char):
                 skip_chars.append(char)
@@ -1773,6 +1775,30 @@ class ParagraphFinder:
     def _looks_like_code_label_paragraph(self, paragraph: PdfParagraph) -> bool:
         return self._classify_code_label_paragraph(paragraph) is not None
 
+    def _split_cjk_clause_paragraph(self, paragraph):
+        """只按实际行首条款边界拆组，保留每条的续行、字符样式和原始坐标。"""
+        from babeldoc.format.pdf.document_il.utils.cjk_structure import cjk_numbering
+        parts = paragraph.pdf_paragraph_composition
+        if not parts or any(not part.pdf_line for part in parts):
+            return [paragraph]
+        markers = [cjk_numbering(self._line_text(part.pdf_line).strip()) for part in parts]
+        starts = [i for i, marker in enumerate(markers) if marker]
+        if not starts or (len(starts) == 1 and starts[0] == 0):
+            return [paragraph]
+        # 行内引用、数字公式、普通英文编号均不触发此规则；只拆视觉行首。
+        boundaries = sorted({0, *starts, len(parts)})
+        result = []
+        for begin, end in zip(boundaries, boundaries[1:]):
+            child = copy.deepcopy(paragraph)
+            child.debug_id = generate_base58_id()
+            child.pdf_paragraph_composition = parts[begin:end]
+            marker = markers[begin]
+            if marker:
+                child.layout_label = 'section_heading' if marker['level'] == 'section' else 'plain text'
+            self.update_paragraph_data(child, update_unicode=True)
+            result.append(child)
+        return result
+
     def process_independent_paragraphs(
         self,
         paragraphs: list[PdfParagraph],
@@ -1781,6 +1807,11 @@ class ParagraphFinder:
         i = 0
         while i < len(paragraphs):
             paragraph = paragraphs[i]
+            cjk_parts = self._split_cjk_clause_paragraph(paragraph)
+            if len(cjk_parts) > 1:
+                paragraphs[i:i + 1] = cjk_parts
+                i += len(cjk_parts)
+                continue
             if self.translation_config.split_short_lines:
                 split_paragraphs = self._split_cover_year_paragraph(paragraph)
                 if len(split_paragraphs) > 1:

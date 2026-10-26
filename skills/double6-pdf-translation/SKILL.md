@@ -1,8 +1,8 @@
 ---
 name: double6-pdf-translation
-description: 论文和PDF英译中执行。先读 configs/default-routes.json，按源证据直接调用已有命令。清晰单栏扫描先预检和源图确认；审过再准备用单配置；冻住了只重出PDF。电子PDF和已核过的LaTeX走原路线。全文、实际PDF、复制和冷重建必须保留。旧的整篇强翻译流水线不是当前入口。
+description: PDF英译中与中译英。默认translate自动分页、冻结并续译，少量低置信或失败区域保留原文，其余继续；问题写独立审校记录，不插入正式正文。严重全局故障才停，支持resume。
 metadata:
-  version: "2.0.1"
+  version: "2.1.0"
   development_revision: "110-unpublished"
   source_contract_revision: "111-20261017"
   release_status: "stable"
@@ -10,84 +10,35 @@ metadata:
   entry_point: "scripts/paper_translation_workflow.py"
 ---
 
-# PDF 中文翻译
+# PDF 翻译
 
-## 当前合同
+先读 [默认路线](configs/default-routes.json)，电子、扫描、混合和长 PDF 均运行：
 
-先读 [configs/default-routes.json](configs/default-routes.json)，按源证据选择 [scripts/paper_translation_workflow.py](scripts/paper_translation_workflow.py) 的已有动作。使用已安装目录与独立 Python 环境。
+```bash
+python scripts/paper_translation_workflow.py translate --input /绝对路径/原文.pdf --output /绝对路径/新目录 --target-language zh
+```
 
-`110-unpublished` 是历史路线身份，来源合同为第 111 轮。执行使用当前入口；旧默认命令、并发 3/4 和历史模型参数不适用。
+中译英用 `--target-language en`。自动分页、路由、冻结输入与配置SHA、保存进度；不要求用户先手填FREEZE或人工验收材料。按用户提供的页范围处理，不宣称节选是完整作品。
 
-| 输入和任务 | 直接调用 |
-| --- | --- |
-| 清晰单栏扫描，还没审过 | `inspect-input`。具名看过源图之后，才进入既有 OCR、source-plan 和全文审校 |
-| 扫描已经审过，确需按原配置再准备 | `run-reviewed-scan --config` |
-| 同一份冻结合同，只是重出 PDF | `trial-render`。不重复准备，不探测模型 |
-| 电子版 PDF | `collect`，固定参数 `--route digital_pdf`，再走既有源组审校和 candidate |
-| 已经核过的 LaTeX | `candidate`，固定参数 `--route latex_verified` |
-| 中文电子 PDF 译成英文 | `candidate --route digital_pdf --target-language en`；方向准入见[路线明细](references/release-quickstart.md#方向扫描和长文档路线明细) |
-| 扫描/电子混合 PDF（1–5 页、横排正文） | `candidate --route scanned_ocr`；Tesseract 识别、全部质量门、最高 `unverified`，复杂/不可靠页拒绝。先读 [OCR 准入](references/ocr-route.md) |
-| 长文档（最多 500 页） | `chunked-candidate --route digital_pdf\|scanned_ocr\|per_chunk`；电子块 ≤4 页、扫描块 ≤2 页，原资源与质量门；电子长文档各块共用一个已加载的翻译进程，某块超时后这个进程退出、下一块重新加载；任何块失败不交付部分结果。`--resume` 先回收和逐 SHA 核验，见[分块合同](references/chunked-translation.md) |
+默认智谱 coding plan `glm-5.3-flash`、`https://open.bigmodel.cn/api/coding/paas/v4`、`low`、温度0.7、请求并发8；显式设置优先，不静默换模型。凭据只走 `LOCAL_TRANSLATION_API_KEY`（兼容已有 `GLM_API_KEY`），不得进入命令、日志、缓存身份或PDF。安装见[运行依赖](references/runtime-dependencies.md)。
 
-扫描这条不能套到所有 PDF。隐藏文字层要单独决定走不走，不能悄悄换模型，也不能悄悄改页面尺寸。
+## 遇到问题继续翻译
 
-## 必须留下的结果
+先读[续译策略与停止条件](references/translation-continuation.md)。少量低置信OCR、坏编号、可定位公式按完整段落保留原图，其余照译；不能可靠排版的复杂表格、公式或坏页保留整页，后页继续。新译文不得覆盖保留区。普通样式、链接或审校证据欠缺只列事项；发现明确误译、漏译或编号错配要修复，无法可靠修复则保留对应原内容，不能只记清单就算完成。
 
-- 完整源组和角色都要有人确认过的依据。分组提案不能当成已经确认。
-- 全文语义要审。漏译、误译、重复、语义变了，必须改，包括只出现一次的句子。改完对照源段，在实际 PDF 上重核内容和样式、链接。
-- 要有实际中文页，以及左边原文、右边译文的双语页。
-- 核对实际字形、字体、样式、链接和保护区域。刊头的颜色和字重能按源复原就复原；做不到就写明没复原。
-- 用普通阅读器打开，整段中文要能真实复制出来。
-- 材料冻住后，在新目录冷重建一次。
-- 只有源、译文、实际成品和适用标准都没变，才沿用旧结论。
-- 页面保持输入的原始尺寸，不把原页静默放大或换一套包装。
+单页超时或超内存，确认回收所属进程后继续。鉴权/额度/实际模型无效、输入损坏或运行中被替换、核心依赖或输出写入失败、系统级内存压力、进程归属/回收不明才停止，保留进度。模型库存404/空列表不代替实际请求判定。各页串行，沿用资源合同：macOS默认5GiB RSS/120秒，Linux默认4GiB PSS/300秒。
 
-## 明确不自动做
+正式PDF只含译文及保留的原内容；禁止执行者评语、审校说明、缺页标签、虚构方括号补词或内部验收状态。源文真实括号、脚注、引用照常保留；节选断句按现有上下文翻译，不猜字或凭空补全。解释只放独立附件。
 
-- 不自动判断是不是完整作品、有没有手写、隐藏识别层能不能用。
-- 不自动确认分组、角色、几何、跨页或空白页。
-- 不把重复填路径、重复准备省下的几秒，写成省下了人第一次读源的时间。人的操作时间要单独记，机器耗时不能代替。
-- 软件版本与发行状态见顶部元信息。上游历史本地分发包为 `2.0.0-trial.2`，其发布接受不自动延续到当前成品；严格验收和阅读接受都要另记。
-- 差扫描、手写页，没有这页范围里的实测，就不能写成已经支持。公式只承诺下节列出的硬门；多栏、复杂表格、脚注/引用标点细缝按下节“明确不承诺”处理，不能写成已经支持。
+## 输出与恢复
 
-## 2.0 产品边界
+输出 `译文.pdf`、`原文左-译文右.pdf`，按原页序保留范围；附件 `翻译审校记录.md`、`翻译报告.json` 精确列出局部/整页原文保留与原因。整份没有可用译文时输出 `原文保留稿.pdf`，明确未译成。
 
-2.0 只承诺阅读底线硬门，不承诺像素级版面复刻。
+中断后同命令加 `--resume`，核对SHA后复用完成页、重试失败页。代码/配置改变自动开新运行目录。断点复用不能冒称真实模型新生成；局部保留不能计为全文质量通过。技术核验、用户接受、软件发布分别登记，缺证据限制相应质量声明，不阻止输出可用译文。
 
-承诺（阅读底线硬门）：
+## 其它路线
 
-- 以数字 PDF 为主；扫描和可信 LaTeX 只按上文的有限范围。
-- 不叠字：译文不压在原文或其它译文上。
-- 大面积未译即质量失败，并写清哪页、哪段、为什么。
-- 公式不压平：上/下标层级丢失就判失败，不以 ok 交付。
-- 可读版数学保真：做不到就在写出前拒绝，不留下坏文件。
-- 凭据不进子进程命令行、日志、回执和缓存身份。
-- 失败可解释：稳定错误码、根因与页码；确定性失败不重试。
-- 方向感知 QA：按真实翻译方向检查残留、命名和标注双语产物。
-
-明确不承诺：
-
-- 复杂表格的像素级或结构级完美（合并单元格、跨页表、密集数值表等）。
-- 多栏、栏溢出的像素级保真。
-- 脚注号、引用号与相邻标点之间的几何细缝。
-
-检到这些不稳定结构时，稳定拒绝或标为 `unverified`，交给人看；不再靠有限反例逐个继续抠。复杂表格若以后要做，另开议题（抽表→译→重排），不是本切片的续磨。
-
-## 细节放在哪
-
-命令参数见 [references/input-preflight-and-reviewed-run.md](references/input-preflight-and-reviewed-run.md)。结构、字号和源页锚点见 [references/adaptive-flow-contract.md](references/adaptive-flow-contract.md)。整页验收见 [references/quality-and-delivery-contract.md](references/quality-and-delivery-contract.md)。译法见 [references/academic-translation-policy.md](references/academic-translation-policy.md)。电子版和 LaTeX 的原步骤见 [references/release-quickstart.md](references/release-quickstart.md)。
-
-单任务串行执行，严格遵守 FREEZE 的资源合同；本轮 macOS 使用 5GiB RSS／120 秒。未冻结时的各平台默认、显式覆盖、方向准入、残留规则和退出码详见[资源合同、方向检查与退出码](references/release-quickstart.md#资源合同方向检查与退出码)。遇到非零退出码按该说明处理；退出码 0 仍可能为 `unverified`，不能据此跳过逐件审校或严格交付门。
-
-## 安装、配置与恢复
-
-使用 macOS/Linux、Python 3.12。从 skill 目录执行 `bash scripts/setup_venv.sh /absolute/new/venv`，随后用该环境的 Python 运行 `scripts/paper_translation_workflow.py`。详见 [运行依赖](references/runtime-dependencies.md)。
-
-未写 `--model` 和 `--base-url` 时，用 `configs/model-profiles.json` 的默认档案：智谱 coding plan 的 `glm-5.3-flash`，端点 `https://open.bigmodel.cn/api/coding/paas/v4`。显式传入的模型、端点、温度和 reasoning 仍优先，不会改成别的模型，也不会改选本机服务。思考强度默认用该模型自己的最低档，不升到服务商默认的最高档。`glm-5.3-flash` 不能关闭思考，最低档是轻量推理 `low`。没有单独档案的模型仍发送 `reasoning_effort=none`。没写 `--local-max-concurrency`、也没设置 `LOCAL_MODEL_MAX_CONCURRENCY` 时，这份档案一次向模型发 8 路；写了数就用那个数。其它模型保持原样：直接翻译是 3 路，从工作流进去是 1 路。这缩短的是等待，字数账单不变。服务商限流时会排队重试。一页只有两三批请求时，快不了多少。一次只跑一个任务，单块时间和内存上限不变。凭据只经环境变量 `LOCAL_TRANSLATION_API_KEY` 提供，不进入子进程命令行；该变量为空且环境里已有 `GLM_API_KEY` 时，先抄入前者再交给原有通道。回环地址未提供时用 `local-no-auth` 占位，远端未提供即在启动任何子进程前报 `remote_backend_requires_explicit_api_key`；详见[运行依赖](references/runtime-dependencies.md#翻译服务凭据)。库存预检需显式给定 `--catalog-url`（不给则不探测库存，`inspect-input` 照常输出事实）。运行目录可通过 `PAPER_TRANSLATION_WORKSPACE` 指定；输入、输出及回执用绝对路径，输出选全新目录。联网获取源码、字体或模型须明确授权并记录来源。
-
-主入口电子 PDF 与可信 LaTeX 的完整输入限 1–5 页。LaTeX 保护拒绝后的完整单元修订和断点恢复见 [恢复说明](references/latex-recovery.md)。`preflight` / `deliver` 仍使用严格门；有限交付只适用于具名接受的精确 PDF 及披露的限制。缺少语义、视觉、阅读器或重建证据时保留未验证。
-
-许可原文见 [LICENSE](LICENSE)，依赖及来源见 [运行依赖](references/runtime-dependencies.md)，维护差异见 [MODIFICATIONS.md](MODIFICATIONS.md)。
+明确需要严格验收/冻结重建时使用 `candidate`、`chunked-candidate`、`collect`、`inspect-input`、`prepare-scan`、`run-reviewed-scan`、`trial-render`、`preflight`、`deliver`，这些合同不作为普通 `translate` 的前置门槛。详见[质量合同](references/quality-and-delivery-contract.md)、[严格OCR](references/ocr-route.md)。显式已审扫描文字源使用 [reviewed_text_source.py](scripts/reviewed_text_source.py)；已确认LaTeX可用 `candidate --route latex_verified`，普通PDF不依赖LaTeX。
 
 ## 关于 Double6
 

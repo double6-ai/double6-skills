@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 SCHEMA_VERSION = 2
-SKILL_VERSION = "2.0.1"
+SKILL_VERSION = "2.1.0"
 MINERU_VERSION = "4.0.4"
 MINERU_MIDDLE_SCHEMA = "docvortex.middle"
 MINERU_MIDDLE_SCHEMA_VERSION = "2.0"
