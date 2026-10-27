@@ -154,6 +154,7 @@ def run_page(page_pdf, directory, args, closure):
         frozen['backend_environment']['PAPER_TRANSLATION_ENGINE_HOME'] = os.environ['PAPER_TRANSLATION_ENGINE_HOME']
     if route == 'scanned_ocr':
         frozen['ocr_failure_policy'] = 'preserve_regions'
+        frozen['stamp_policy']=getattr(args,'stamp_policy','preserve')
         if getattr(args,'source_review',None):frozen['source_review_ref']=reference(args.source_review)
     freeze = directory / 'FREEZE.json'; write(freeze, frozen)
     arguments = ['candidate', '--input', str(page_pdf), '--freeze', str(freeze), '--route', route,
@@ -241,7 +242,7 @@ def run(args, page_runner=None):
     skill = Path(__file__).resolve().parents[1]
     closure = [reference(p) for p in sorted(skill.rglob('*.py')) if 'tests' not in p.parts and '__pycache__' not in p.parts]
     identity = {'input': reference(source), 'model': args.model, 'base_url': args.base_url,
-                'target_language': args.target_language, 'policy': POLICY,
+                'target_language': args.target_language, 'policy': POLICY,'stamp_policy':getattr(args,'stamp_policy','preserve'),
                 'runtime_sha256': hashlib.sha256(json.dumps(closure, sort_keys=True).encode()).hexdigest(),
                 'configuration_refs': [reference(skill / name) for name in ('configs/model-profiles.json',
                     'configs/default-routes.json', 'references/academic-translation-policy.md',

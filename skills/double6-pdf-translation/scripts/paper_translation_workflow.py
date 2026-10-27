@@ -345,7 +345,8 @@ def run_scanned_ocr_candidate(args, freeze):
     job = run_job(args, [sys.executable, str(SCRIPT_DIR / 'ocr_route.py'), '--input', str(args.input.resolve()),
                          '--workdir', str(workdir), '--target-language', target, '--tesseract', info['binary']]
                         + (['--preserve-local'] if preserve_local else [])
-                        + (['--source-review',freeze['source_review_ref']['path'],'--source-review-sha256',freeze['source_review_ref']['sha256']] if freeze.get('source_review_ref') else []),
+                        + (['--source-review',freeze['source_review_ref']['path'],'--source-review-sha256',freeze['source_review_ref']['sha256']] if freeze.get('source_review_ref') else [])
+                        + (['--stamp-policy','translate'] if freeze.get('stamp_policy')=='translate' else []),
                   'ocr-reconstruct', interval_seconds=0.5)
     manifest_path = workdir / 'OCR_MANIFEST.json'
     ocr = {'engine': engine, 'job': {k: job.get(k) for k in ('status', 'stop_reason', 'error_code', 'elapsed_seconds',
@@ -924,6 +925,7 @@ def main(argv=None):
     translate.add_argument('--local-max-concurrency', type=int, default=request_concurrency_from_env())
     translate.add_argument('--resume', action='store_true')
     translate.add_argument('--scan-layout-plan', type=Path, help='执行者核定的扫描源角色、统一样式与单栏排版计划；未覆盖页仍自动续译')
+    translate.add_argument('--stamp-policy',choices=['preserve','translate'],default='preserve',help='preserve保留印章；用户允许损坏印章时用translate优先翻译章下可靠文字')
     translate.add_argument('--source-review',type=Path,help='默认扫描源复核记录；只含原文更正，布局由程序自动生成')
     inspect = sub.add_parser('inspect-input', help='只读有界输入事实与库存；源图资格不自动判定')
     inspect.add_argument('--input', type=Path, required=True)

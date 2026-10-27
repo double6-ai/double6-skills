@@ -20,7 +20,7 @@ export LOCAL_TRANSLATION_API_KEY='你的API凭据'
 /absolute/new/venv/bin/python scripts/paper_translation_workflow.py translate --input /absolute/source.pdf --output /absolute/new-output --target-language zh
 ```
 
-中译英用 `--target-language en`；中断后同命令加 `--resume`。默认模型为智谱coding plan `glm-5.3-flash`，支持显式模型和端点；详情见[默认路线](configs/default-routes.json)。凭据不进入命令参数或PDF。
+用户允许覆盖或损坏印章以补译章下文字时，加 `--stamp-policy translate`；仍需核实原文，不猜被遮挡的字。中译英用 `--target-language en`；中断后同命令加 `--resume`。默认模型为智谱coding plan `glm-5.3-flash`，支持显式模型和端点；详情见[默认路线](configs/default-routes.json)。凭据不进入命令参数或PDF。
 
 复杂表格、多栏、密集公式和低质量扫描仍可能保留原文，无法承诺逐页完整翻译或像素级复现。无效鉴权/额度、损坏输入、全局资源异常等严重问题会停止并保存进度。每页沿用资源上限。软件发布不代表每份译文通过语义审校或用户验收；详见[续译策略](references/translation-continuation.md)。显式严格路线继续保留。
 

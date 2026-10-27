@@ -3,7 +3,7 @@ name: double6-pdf-translation
 description: PDF英译中与中译英。默认translate自动分页、冻结并续译，少量低置信或失败区域保留原文，其余继续；问题写独立审校记录，不插入正式正文。严重全局故障才停，支持resume。
 metadata:
   version: "2.1.1"
-  development_revision: "114-unpublished"
+  development_revision: "115-unpublished"
   source_contract_revision: "111-20261017"
   release_status: "stable"
   default_routes: "configs/default-routes.json"
@@ -28,7 +28,9 @@ python scripts/paper_translation_workflow.py translate --input /绝对路径/原
 
 中文水平单栏公文和通知默认执行源文字复核、整段翻译和统一重排。执行者核对标题、文号、人名、联系方式、路线代码及首尾覆盖；OCR有误时建立仅含原文及源坐标的SHA绑定记录，以 `--source-review /绝对路径/源文复核.json` 交给原入口。程序自动计算输出框、共同样式和印章保护区，保存后核查实际字形、阅读顺序与保护区像素；用户无需填写计划。普通模型重试和局部失败按续译策略继续。
 
-密集表格默认对灰底、竖排字段做单元格OCR交叉识别，按行高选择全页共同字号，真实测量放不下时再调用模型压缩一次；签名、印章及仍不可靠的局部保留。高级源角色覆盖仍可使用 `--scan-layout-plan`；跨栏续段使用现有 `scan_semantic_flow.py`，学术公式和复杂彩底按各自适用路线处理。
+密集表格默认对灰底、竖排字段做单元格OCR交叉识别，按行高选择全页共同字号，真实测量放不下时再按剩余页预算调用模型压缩，至多两次；签名、印章及仍不可靠的局部保留。高级源角色覆盖仍可使用 `--scan-layout-plan`；跨栏续段使用现有 `scan_semantic_flow.py`，学术公式和复杂彩底按各自适用路线处理。
+
+用户明确表示可以损坏或覆盖印章时，原入口加 `--stamp-policy translate`，优先翻译可核实的章下正文和表格文字。只在识别到的章覆盖范围解除保章，不猜补被遮住的字、不重绘英文印章；手写签名及其它不可靠内容仍局部保留。该选择进入冻结和恢复身份；未明确选择时用 `preserve`。
 
 源底图擦除、保留资产及实际译文需要视觉核验；文字审计通过不代表背景修复、OCR覆盖或语义已通过。真实调用与复用旧响应重排分别记录。
 
