@@ -346,6 +346,7 @@ def run_scanned_ocr_candidate(args, freeze):
                          '--workdir', str(workdir), '--target-language', target, '--tesseract', info['binary']]
                         + (['--preserve-local'] if preserve_local else [])
                         + (['--source-review',freeze['source_review_ref']['path'],'--source-review-sha256',freeze['source_review_ref']['sha256']] if freeze.get('source_review_ref') else [])
+                        + (['--document-kind',freeze['scan_document_kind']]if freeze.get('scan_document_kind')in {'notice','official_document'}else[])
                         + (['--stamp-policy','translate'] if freeze.get('stamp_policy')=='translate' else []),
                   'ocr-reconstruct', interval_seconds=0.5)
     manifest_path = workdir / 'OCR_MANIFEST.json'

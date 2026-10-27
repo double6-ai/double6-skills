@@ -153,6 +153,7 @@ def run_page(page_pdf, directory, args, closure):
     if os.environ.get('PAPER_TRANSLATION_ENGINE_HOME'):
         frozen['backend_environment']['PAPER_TRANSLATION_ENGINE_HOME'] = os.environ['PAPER_TRANSLATION_ENGINE_HOME']
     if route == 'scanned_ocr':
+        if getattr(args,'scan_document_kind',None)in {'notice','official_document'}:frozen['scan_document_kind']=args.scan_document_kind
         frozen['ocr_failure_policy'] = 'preserve_regions'
         frozen['stamp_policy']=getattr(args,'stamp_policy','preserve')
         if getattr(args,'source_review',None):frozen['source_review_ref']=reference(args.source_review)
@@ -210,6 +211,7 @@ def run_page(page_pdf, directory, args, closure):
     local_preserved = bool(manifest and any(p.get('preserved_regions') for p in manifest['pages']))
     return {'status': ('partially_translated' if local_preserved else 'translated') if target else 'original_preserved',
             'target': reference(target) if target else None, 'issues': list(dict.fromkeys(issues)),
+            'document_kind':next((p.get('document_kind')for p in (manifest or{}).get('pages',[])if p.get('document_kind')),None),
             'ocr_manifest_ref': reference(manifest_path) if manifest else None}
 
 
@@ -275,6 +277,7 @@ def run(args, page_runner=None):
         model_checked = False
         completed = {r['page']: r for r in state['pages']}
         for index in range(len(document)):
+            args.scan_document_kind=completed.get(index,{}).get('document_kind')
             args.scan_layout_page = next((p for p in scan_plan['pages'] if p['page'] == index+1), None) if scan_plan else None
             if reference(source) != identity['input']:
                 return {'status': 'blocked', 'error_code': 'source_changed_during_translation', 'state': str(state_path)}
@@ -321,7 +324,15 @@ def run(args, page_runner=None):
             if result.get('fatal'):
                 return {'status': 'blocked', 'error_code': result['fatal'], 'state': str(state_path),
                         'completed_pages': len(completed)-1, 'resume_supported': True}
-        translated = sum(r['status'] in {'translated','partially_translated'} for r in state['pages'])
+        # 基线页结果保持不可变，跨页排版只用于本次拼版视图；恢复不会重复搬移标题。
+        rows=state['pages']
+        if page_runner is run_page:
+            from scan_notice_pagination import finalize_notices
+            rows,notice_audit=finalize_notices(rows,output/'notice-pagination',args)
+            if notice_audit:write(output/'NOTICE_PAGINATION.json',notice_audit)
+            if notice_audit and notice_audit.get('fatal'):return {'status':'blocked','error_code':notice_audit['fatal'],'state':str(state_path)}
+        completed={r['page']:r for r in rows}
+        translated = sum(r['status'] in {'translated','partially_translated'} for r in rows)
         formal = output/('译文.pdf' if translated else '原文保留稿.pdf')
         with fitz.open() as merged:
             for i in range(len(document)):
@@ -336,7 +347,6 @@ def run(args, page_runner=None):
         dual = output/'原文左-译文右.pdf'
         build_en_left_zh_right_pdf(source, formal, dual, mode='vector',
                                  direction=bilingual_direction('en' if args.target_language=='zh' else 'zh', args.target_language))
-        rows = state['pages']
         retained = sum(r['status']=='original_preserved' for r in rows)
         partial = sum(r['status']=='partially_translated' for r in rows)
         warnings = retained or partial or any(r['issues'] for r in rows)
