@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import time
 
 POLICY = 'local_preserve_v1'
 
@@ -66,16 +67,21 @@ def usable_candidate(directory, manifest):
         text = doc[0].get_text()
         if not text.strip() or any(ord(c) < 32 and c not in '\n\r\t' for c in text) or '\ufffd' in text:
             return None, 'page_text_unreadable'
+        if manifest:
+            from ocr_local_preservation import translated_lines_overlap
+            if translated_lines_overlap(doc[0]):return None, 'translated_lines_overlap'
         regions = []
         for p in (manifest or {}).get('pages', []):
             for item in p.get('preserved_regions', []):
                 regions.append(fitz.Rect([v * 72 / manifest['render_dpi'] for v in item['bbox_px']]))
-        for block in doc[0].get_text('dict')['blocks']:
-            for line in block.get('lines', []):
-                for span in line['spans']:
-                    box = fitz.Rect(span['bbox'])
-                    if any((box & region).get_area() > .1 for region in regions):
-                        return None, 'translated_text_over_preserved_source'
+        # 字体行框含额外升部/降部空间，也可能跨越空白列；按保存后的实际字符度量框检查。
+        for span in doc[0].get_texttrace():
+            if span.get('type')==3 or span.get('opacity',1)==0:continue
+            for char in span['chars']:
+                if chr(char[0]).isspace():continue
+                box=fitz.Rect(char[3])
+                if any((box & region).get_area() > .1 for region in regions):
+                    return None, 'translated_text_over_preserved_source'
         if regions:
             # 字框不相交仍可能被后端白底擦掉；实际核对保留区，严重改变才退回原页。
             import numpy as np
@@ -104,6 +110,7 @@ def run_page(page_pdf, directory, args, closure):
     from bounded_execution import run_bounded
     from pdf_input_preflight import classify_page
     import fitz
+    page_started=time.monotonic()
     directory.mkdir(parents=True)
     scan_page = getattr(args, 'scan_layout_page', None)
     if scan_page is not None:
@@ -161,6 +168,19 @@ def run_page(page_pdf, directory, args, closure):
         target, error = None, result.get('error_code') or job.get('stop_reason') or 'page_translation_unavailable'
     else:
         target, error = usable_candidate(directory/'output', manifest)
+    if (error in {'translated_text_over_preserved_source','preserved_source_damaged','translated_lines_overlap'} and manifest
+            and not manifest.get('translation_mode') and len(manifest.get('pages',[]))==1
+            and not manifest['pages'][0].get('upright') and job.get('cleanup',{}).get('confirmed') is True):
+        remaining=limits['per_job_seconds']-(time.monotonic()-page_started)
+        if remaining>=10:
+            from ocr_region_translation import run_text_fallback
+            fallback,guard=run_text_fallback(page_pdf,manifest_path,directory/'region-fallback',args,remaining)
+            fatal=fatal_reason(fallback,guard)
+            if fatal:return {'fatal':fatal,'status':'original_preserved','issues':[fatal]}
+            if guard.get('status')=='succeeded' and fallback.get('target'):
+                manifest=read(manifest_path)
+                target,error=usable_candidate(directory/'region-fallback',manifest)
+                result['local_region_fallback']=fallback
     issues = []
     if error:
         issues.append(result.get('error_code') or error)

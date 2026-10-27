@@ -363,9 +363,18 @@ def run_scanned_ocr_candidate(args, freeze):
     ocr['tesseract_processes'] = manifest.get('processes', [])
     if manifest['status'] != 'ok':
         return dict(blocked_result(manifest['findings']), ocr_stage='ocr_reconstruct', ocr=ocr)
+    if manifest.get('translation_mode') == 'local_table_regions':
+        from ocr_region_translation import run_table_candidate
+        result = run_table_candidate(args, freeze, manifest_path)
+        ocr['manifest_ref'] = ref(manifest_path)
+        result.update(ocr=ocr, ocr_stage='local_region_translation')
+        return result
     rebuilt = Path(manifest['reconstructed_source']['path'])
+    # 仅对本轮OCR输出免除原生页启发式；输入/清单/重建源逐SHA绑定仍由执行子进程核实。
+    if ref(args.input) != manifest['input'] or sha(rebuilt) != manifest['reconstructed_source']['sha256']:
+        raise ValueError('OCR reconstructed source binding changed')
     ocr['reconstructed_source_ref'] = ref(rebuilt)
-    report = bounded_input_preflight(rebuilt, args.receipts / 'reconstructed-input', require_digital=True, target_language=target)
+    report = bounded_input_preflight(rebuilt, args.receipts / 'reconstructed-input', require_digital=False, target_language=target)
     ocr['reconstructed_preflight'] = {k: report.get(k) for k in ('status', 'error_code', 'warnings', 'source_language', 'page_count')}
     if report['status'] == 'blocked':
         return dict(report, ocr_stage='ocr_reconstructed_preflight', ocr=ocr)
@@ -707,8 +716,10 @@ def execute_digital(freeze_path, command, ocr_manifest=None):
     expected_transport=read_json(Path(freeze['model_fingerprint_ref']['path'])).get('api_contract') or 'openai_compatible'
     if args.translation_transport!=expected_transport or (expected_transport!='openai_compatible' and args.translator_mode!='openai'):
         raise ValueError('frozen explicit transport changed')
+    if ocr_manifest is not None:
+        args.verified_ocr_manifest = ocr_manifest
     route = route_pdf(Path(args.input_pdf), args=args)
-    if route.get('document_route') != 'pdf_backend' or not route.get('dispatch_allowed'):
+    if ocr_manifest is None and (route.get('document_route') != 'pdf_backend' or not route.get('dispatch_allowed')):
         review_pages = [{'page': p.get('page'), 'reasons': p.get('reasons')} for p in route.get('pages', [])
                         if p.get('decision') not in (None, 'native_digital', 'digital')][:20]
         raise PreflightError('non_digital_pages', '路由判定存在非原生电子页（扫描、图像文字或信号不足）；电子 PDF 路线要求全部页面为原生文字层。',
