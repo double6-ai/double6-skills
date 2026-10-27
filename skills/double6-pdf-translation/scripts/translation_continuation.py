@@ -70,6 +70,19 @@ def usable_candidate(directory, manifest):
         if manifest:
             from ocr_local_preservation import translated_lines_overlap
             if translated_lines_overlap(doc[0]):return None, 'translated_lines_overlap'
+        if (manifest or {}).get('translation_mode')=='semantic_scan_flow':
+            # 默认重排已在300dpi复开成品核对完整保护区，避免再采样到144dpi的假损伤。
+            from scan_layout_translation import checked_ref
+            try:
+                audit=read(checked_ref(manifest['render_audit_ref']))
+                expectations=read(checked_ref(manifest['layout_expectations_ref']))
+                if (audit.get('status')!='pass' or audit.get('issues') or audit.get('pdf_ref')!=reference(target)
+                        or audit.get('source_ref')!=manifest['input'] or expectations.get('source_ref')!=manifest['input']
+                        or any(audit.get('protected_pixel_changes',[1])) or audit.get('outside_allowed_pixel_changes')!=0
+                        or len(audit.get('protected_pixel_changes',[]))!=sum(len(p.get('preserved_regions',[]))for p in manifest['pages'])):
+                    return None,'automatic_layout_audit_unverifiable'
+            except (ValueError,KeyError,OSError):return None,'automatic_layout_audit_unverifiable'
+            return target,None
         regions = []
         for p in (manifest or {}).get('pages', []):
             for item in p.get('preserved_regions', []):
@@ -141,6 +154,7 @@ def run_page(page_pdf, directory, args, closure):
         frozen['backend_environment']['PAPER_TRANSLATION_ENGINE_HOME'] = os.environ['PAPER_TRANSLATION_ENGINE_HOME']
     if route == 'scanned_ocr':
         frozen['ocr_failure_policy'] = 'preserve_regions'
+        if getattr(args,'source_review',None):frozen['source_review_ref']=reference(args.source_review)
     freeze = directory / 'FREEZE.json'; write(freeze, frozen)
     arguments = ['candidate', '--input', str(page_pdf), '--freeze', str(freeze), '--route', route,
         '--model', args.model, '--base-url', args.base_url, '--target-language', args.target_language,
@@ -238,6 +252,7 @@ def run(args, page_runner=None):
     if scan_plan_path:
         identity['scan_layout_plan_ref'] = reference(scan_plan_path)
         identity['scan_layout_review_ref'] = scan_plan['review_basis_ref']
+    if getattr(args,'source_review',None):identity['source_review_ref']=reference(args.source_review)
     state = {'identity': identity, 'pages': []}
     pages_root = Path(args.receipts).resolve()/'pages' if getattr(args, 'receipts', None) else output/'pages'
     if args.resume and state_path.exists():
@@ -262,6 +277,8 @@ def run(args, page_runner=None):
             args.scan_layout_page = next((p for p in scan_plan['pages'] if p['page'] == index+1), None) if scan_plan else None
             if reference(source) != identity['input']:
                 return {'status': 'blocked', 'error_code': 'source_changed_during_translation', 'state': str(state_path)}
+            if getattr(args,'source_review',None) and reference(args.source_review)!=identity['source_review_ref']:
+                return {'status':'blocked','error_code':'source_review_changed_during_translation','state':str(state_path)}
             if scan_plan_path and reference(scan_plan_path) != identity['scan_layout_plan_ref']:
                 return {'status': 'blocked', 'error_code': 'scan_layout_plan_changed', 'state': str(state_path)}
             if scan_plan and reference(scan_plan['review_basis_ref']['path']) != scan_plan['review_basis_ref']:

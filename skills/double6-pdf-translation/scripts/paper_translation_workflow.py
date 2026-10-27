@@ -344,7 +344,8 @@ def run_scanned_ocr_candidate(args, freeze):
         raise ValueError('frozen OCR failure policy changed')
     job = run_job(args, [sys.executable, str(SCRIPT_DIR / 'ocr_route.py'), '--input', str(args.input.resolve()),
                          '--workdir', str(workdir), '--target-language', target, '--tesseract', info['binary']]
-                        + (['--preserve-local'] if preserve_local else []),
+                        + (['--preserve-local'] if preserve_local else [])
+                        + (['--source-review',freeze['source_review_ref']['path'],'--source-review-sha256',freeze['source_review_ref']['sha256']] if freeze.get('source_review_ref') else []),
                   'ocr-reconstruct', interval_seconds=0.5)
     manifest_path = workdir / 'OCR_MANIFEST.json'
     ocr = {'engine': engine, 'job': {k: job.get(k) for k in ('status', 'stop_reason', 'error_code', 'elapsed_seconds',
@@ -363,7 +364,7 @@ def run_scanned_ocr_candidate(args, freeze):
     ocr['tesseract_processes'] = manifest.get('processes', [])
     if manifest['status'] != 'ok':
         return dict(blocked_result(manifest['findings']), ocr_stage='ocr_reconstruct', ocr=ocr)
-    if manifest.get('translation_mode') == 'local_table_regions':
+    if manifest.get('translation_mode') in {'local_table_regions','semantic_scan_flow'}:
         from ocr_region_translation import run_table_candidate
         result = run_table_candidate(args, freeze, manifest_path)
         ocr['manifest_ref'] = ref(manifest_path)
@@ -923,6 +924,7 @@ def main(argv=None):
     translate.add_argument('--local-max-concurrency', type=int, default=request_concurrency_from_env())
     translate.add_argument('--resume', action='store_true')
     translate.add_argument('--scan-layout-plan', type=Path, help='执行者核定的扫描源角色、统一样式与单栏排版计划；未覆盖页仍自动续译')
+    translate.add_argument('--source-review',type=Path,help='默认扫描源复核记录；只含原文更正，布局由程序自动生成')
     inspect = sub.add_parser('inspect-input', help='只读有界输入事实与库存；源图资格不自动判定')
     inspect.add_argument('--input', type=Path, required=True)
     inspect.add_argument('--output', type=Path, required=True)

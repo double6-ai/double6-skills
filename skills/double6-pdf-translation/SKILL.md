@@ -3,7 +3,7 @@ name: double6-pdf-translation
 description: PDF英译中与中译英。默认translate自动分页、冻结并续译，少量低置信或失败区域保留原文，其余继续；问题写独立审校记录，不插入正式正文。严重全局故障才停，支持resume。
 metadata:
   version: "2.1.1"
-  development_revision: "113-unpublished"
+  development_revision: "114-unpublished"
   source_contract_revision: "111-20261017"
   release_status: "stable"
   default_routes: "configs/default-routes.json"
@@ -26,7 +26,9 @@ python scripts/paper_translation_workflow.py translate --input /绝对路径/原
 
 扫描公文、论文、书本先按[扫描版式处理](references/scan-layout.md)核对原图、OCR覆盖和阅读顺序。标题、标签强调、正文、整段缩进、首行缩进、图注、印章分别识别；同类文字共享字号和基线间距，不能为了塞入每个OCR框而各自缩字。整段按语义翻译后分配空间，先调整可用框和段间距，保留标题层级与正文可读性。
 
-普通水平单栏页需要重排时，由执行者建立源PDF及审阅依据SHA绑定的版式计划，运行原入口加 `--scan-layout-plan /绝对路径/扫描版式.json`。该路径直接用真实模型翻译源单元，保留扫描底图，写回统一样式并检查保存后的PDF。未覆盖页仍自动续译；用户无需填写计划或额外批准。跨栏续段使用现有 `scan_semantic_flow.py`，复杂彩底按上述参考中的边界处理。
+中文水平单栏公文和通知默认执行源文字复核、整段翻译和统一重排。执行者核对标题、文号、人名、联系方式、路线代码及首尾覆盖；OCR有误时建立仅含原文及源坐标的SHA绑定记录，以 `--source-review /绝对路径/源文复核.json` 交给原入口。程序自动计算输出框、共同样式和印章保护区，保存后核查实际字形、阅读顺序与保护区像素；用户无需填写计划。普通模型重试和局部失败按续译策略继续。
+
+密集表格默认对灰底、竖排字段做单元格OCR交叉识别，按行高选择全页共同字号，真实测量放不下时再调用模型压缩一次；签名、印章及仍不可靠的局部保留。高级源角色覆盖仍可使用 `--scan-layout-plan`；跨栏续段使用现有 `scan_semantic_flow.py`，学术公式和复杂彩底按各自适用路线处理。
 
 源底图擦除、保留资产及实际译文需要视觉核验；文字审计通过不代表背景修复、OCR覆盖或语义已通过。真实调用与复用旧响应重排分别记录。
 
