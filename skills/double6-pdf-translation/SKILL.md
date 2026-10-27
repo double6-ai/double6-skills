@@ -3,7 +3,7 @@ name: double6-pdf-translation
 description: PDF英译中与中译英。默认translate自动分页、冻结并续译，少量低置信或失败区域保留原文，其余继续；问题写独立审校记录，不插入正式正文。严重全局故障才停，支持resume。
 metadata:
   version: "2.1.1"
-  development_revision: "115-unpublished"
+  development_revision: "116-unpublished"
   source_contract_revision: "111-20261017"
   release_status: "stable"
   default_routes: "configs/default-routes.json"
@@ -31,6 +31,8 @@ python scripts/paper_translation_workflow.py translate --input /绝对路径/原
 密集表格默认对灰底、竖排字段做单元格OCR交叉识别，按行高选择全页共同字号，真实测量放不下时再按剩余页预算调用模型压缩，至多两次；签名、印章及仍不可靠的局部保留。高级源角色覆盖仍可使用 `--scan-layout-plan`；跨栏续段使用现有 `scan_semantic_flow.py`，学术公式和复杂彩底按各自适用路线处理。
 
 用户明确表示可以损坏或覆盖印章时，原入口加 `--stamp-policy translate`，优先翻译可核实的章下正文和表格文字。只在识别到的章覆盖范围解除保章，不猜补被遮住的字、不重绘英文印章；手写签名及其它不可靠内容仍局部保留。该选择进入冻结和恢复身份；未明确选择时用 `preserve`。
+
+表格保护按文字与笔迹分别定位，已核实的印刷姓名可与相邻签名分开翻译；后续子表的印刷标签不能继承上一表的签名列保护。本次真实回复的首译与简译进入有界候选池，按源事实和实际字体自动择用，重复原文共享候选；可选请求失败保留已有可用译文。
 
 源底图擦除、保留资产及实际译文需要视觉核验；文字审计通过不代表背景修复、OCR覆盖或语义已通过。真实调用与复用旧响应重排分别记录。
 
