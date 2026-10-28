@@ -926,7 +926,7 @@ def main(argv=None):
     translate.add_argument('--local-max-concurrency', type=int, default=request_concurrency_from_env())
     translate.add_argument('--resume', action='store_true')
     translate.add_argument('--scan-layout-plan', type=Path, help='执行者核定的扫描源角色、统一样式与单栏排版计划；未覆盖页仍自动续译')
-    translate.add_argument('--stamp-policy',choices=['preserve','translate'],default='preserve',help='preserve保留印章；用户允许损坏印章时用translate优先翻译章下可靠文字')
+    translate.add_argument('--stamp-policy',choices=['preserve','translate'],default='translate',help='默认translate：允许覆盖印章以翻译章下可靠文字；preserve保留印章')
     translate.add_argument('--source-review',type=Path,help='默认扫描源复核记录；只含原文更正，布局由程序自动生成')
     inspect = sub.add_parser('inspect-input', help='只读有界输入事实与库存；源图资格不自动判定')
     inspect.add_argument('--input', type=Path, required=True)
