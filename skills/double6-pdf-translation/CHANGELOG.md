@@ -1,5 +1,9 @@
 # 变更记录
 
+### 2.1.3 同版本模型配置修订 · 2026-10-28
+
+- 默认模型改为 DeepSeek-V4.1-Flash（官方 ID `deepseek-flash`）；默认读取 `DEEPSEEK_API_KEY` 或显式的 `LOCAL_TRANSLATION_API_KEY`。保留显式智谱模型档案及其凭据配置，不将智谱凭据自动用于 DeepSeek。
+
 ## 2.1.3 · 2026-10-28
 
 - 普通翻译默认允许覆盖印章，优先翻译可核实的章下内容；指定 `--stamp-policy preserve` 可保留印章，原文未核实和手写签名仍局部保留。印章策略继续绑定恢复身份。

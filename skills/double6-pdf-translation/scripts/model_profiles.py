@@ -76,7 +76,7 @@ def _blank(value) -> str | None:
 def apply_model_profile(args, environ: dict | None = None, profiles: dict | None = None) -> str | None:
     """补上档案里的模型、端点，以及没写明时的同时请求数。已写明的模型、端点、温度、reasoning、路数不改。
 
-    命中档案且 LOCAL_TRANSLATION_API_KEY 为空时，把 credential_fallback_env（智谱为 GLM_API_KEY）
+    命中档案且 LOCAL_TRANSLATION_API_KEY 为空时，把对应服务的 credential_fallback_env
     抄进进程环境的 LOCAL_TRANSLATION_API_KEY，供子进程继承。不写入命令行，也不把值放进返回值。
     """
     env = os.environ if environ is None else environ

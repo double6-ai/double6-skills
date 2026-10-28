@@ -1,7 +1,23 @@
 {
   "schema_version": 1,
-  "default_profile": "glm-coding",
+  "default_profile": "deepseek-official",
   "profiles": [
+    {
+      "id": "deepseek-official",
+      "provider": "deepseek",
+      "surface": "openai-compatible",
+      "base_url": "https://api.deepseek.com",
+      "default_model": "deepseek-flash",
+      "models": ["deepseek-flash"],
+      "auth": "bearer",
+      "credential_env": "LOCAL_TRANSLATION_API_KEY",
+      "credential_fallback_env": "DEEPSEEK_API_KEY",
+      "temperature": 0.7,
+      "send_reasoning_effort": true,
+      "json_mode": true,
+      "thinking_floor_default": {"thinking": "disabled", "reasoning_effort": "none"},
+      "request_notes": "DeepSeek-V4.1-Flash 使用官方模型 ID deepseek-flash；默认关闭思考以执行翻译。显式模型、端点和生成设置优先；不读取智谱凭据作为 DeepSeek 密钥。"
+    },
     {
       "id": "glm-coding",
       "provider": "zhipu",

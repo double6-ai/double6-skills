@@ -33,7 +33,7 @@ python scripts/paper_translation_workflow.py collect \
   --output /absolute/new/collect --receipts /absolute/new/receipts
 ```
 
-远端服务的凭据只经环境变量 `LOCAL_TRANSLATION_API_KEY` 提供（回环地址可不提供，使用 `local-no-auth` 占位；远端缺凭据在启动子进程前报 `remote_backend_requires_explicit_api_key`），不要写进命令行参数；规则与边界见[翻译服务凭据](runtime-dependencies.md#翻译服务凭据)。未写 `--model` 和 `--base-url` 时用 `configs/model-profiles.json` 的默认档案（智谱 `glm-5.3-flash`，`https://open.bigmodel.cn/api/coding/paas/v4`）；上面示例里的显式模型和地址仍然优先。
+远端服务的凭据经环境变量 `LOCAL_TRANSLATION_API_KEY` 或默认档案支持的 `DEEPSEEK_API_KEY` 提供（回环地址可不提供，使用 `local-no-auth` 占位；远端缺凭据在启动子进程前报 `remote_backend_requires_explicit_api_key`），不要写进命令行参数；规则与边界见[翻译服务凭据](runtime-dependencies.md#翻译服务凭据)。未写 `--model` 和 `--base-url` 时用 `configs/model-profiles.json` 的默认档案（DeepSeek `deepseek-flash`，`https://api.deepseek.com`）；上面示例里的显式模型和地址仍然优先。
 
 `FREEZE.json` 须由 agent 按实际输入准备：完整1–5页、源范围证据、模型指纹、入口/规则/标准和实现引用、资源合同及各路线保护策略。实际校验字段见 `scripts/paper_translation_workflow.py` 的 `validate_freeze`，严禁抄旧样本 SHA。电子 PDF 完成源组和整段审校后再 `candidate --route digital_pdf`；可信 LaTeX 使用 `candidate --route latex_verified`、完整本地可信源和显式编译器。低层脚本提供修复工具，不自动授予最终接受。
 

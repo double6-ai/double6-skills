@@ -3,7 +3,7 @@ name: double6-pdf-translation
 description: PDF英译中与中译英。默认translate自动分页、冻结并续译，少量低置信或失败区域保留原文，其余继续；问题写独立审校记录，不插入正式正文。严重全局故障才停，支持resume。
 metadata:
   version: "2.1.3"
-  development_revision: "118"
+  development_revision: "119"
   source_contract_revision: "111-20261017"
   release_status: "stable"
   default_routes: "configs/default-routes.json"
@@ -20,7 +20,7 @@ python scripts/paper_translation_workflow.py translate --input /绝对路径/原
 
 中译英用 `--target-language en`。自动分页、路由、冻结输入与配置SHA、保存进度；不要求用户先手填FREEZE或人工验收材料。按用户提供的页范围处理，不宣称节选是完整作品。
 
-默认智谱 coding plan `glm-5.3-flash`、`https://open.bigmodel.cn/api/coding/paas/v4`、`low`、温度0.7、请求并发8；显式设置优先，不静默换模型。凭据只走 `LOCAL_TRANSLATION_API_KEY`（兼容已有 `GLM_API_KEY`），不得进入命令、日志、缓存身份或PDF。安装见[运行依赖](references/runtime-dependencies.md)。
+默认 DeepSeek-V4.1-Flash，官方模型 ID `deepseek-flash`、端点 `https://api.deepseek.com`，默认关闭思考、温度0.7；显式设置优先，不静默换模型。凭据经 `LOCAL_TRANSLATION_API_KEY` 或 `DEEPSEEK_API_KEY` 提供，不得进入命令、日志、缓存身份或PDF。显式选择智谱模型仍支持 `GLM_API_KEY`。安装见[运行依赖](references/runtime-dependencies.md)。
 
 ## 扫描页的版式与源角色
 

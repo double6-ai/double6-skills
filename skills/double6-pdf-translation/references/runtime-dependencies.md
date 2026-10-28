@@ -47,7 +47,7 @@ bash scripts/setup_venv.sh /absolute/new/venv
 
 ## 翻译服务凭据
 
-运行时只读环境变量 `LOCAL_TRANSLATION_API_KEY`；`doctor`、`candidate` 及各路线都只读它（不再读取 `OPENAI_API_KEY`），`doctor` 结果的 `credential` 字段只报告来源与是否存在，不记录值。默认模型档案是智谱 coding plan（`configs/model-profiles.json`，模型 `glm-5.3-flash`，端点 `https://open.bigmodel.cn/api/coding/paas/v4`）。这个档案在 `LOCAL_TRANSLATION_API_KEY` 为空、且环境里已有 `GLM_API_KEY` 时，先把后者抄进前者，再走同一条通道；值不进命令行。不要把 coding plan 密钥配到 `https://open.bigmodel.cn/api/paas/v4`，那个地址会返回 429（错误码 1113）。`run_pdf_translation.py --api-key` 仅为兼容保留，用它时值会出现在该进程自身的命令行里，不建议使用。
+运行时统一使用 `LOCAL_TRANSLATION_API_KEY`；默认 DeepSeek 档案在它为空时读取 `DEEPSEEK_API_KEY` 并传给子进程，默认模型 `deepseek-flash`、端点 `https://api.deepseek.com`。显式选择智谱档案时可用 `GLM_API_KEY`；不会将其当作 DeepSeek 的密钥。`doctor` 仅报告凭据来源与是否存在，不记录值。不要把 coding plan 密钥配到 `https://open.bigmodel.cn/api/paas/v4`，那个地址会返回 429（错误码 1113）。`run_pdf_translation.py --api-key` 仅为兼容保留，用它时值会出现在该进程自身的命令行里，不建议使用。
 
 - 回环地址（`localhost`、`127.0.0.1`、`::1`）未提供时使用明确的 `local-no-auth` 占位值；它不是凭据。远端地址（包括其它 `127.x` 地址）未提供即报 `remote_backend_requires_explicit_api_key`，在启动任何子进程或代理之前停止。实际上游 HTTP 请求在未配置密钥时不发送 `Bearer None`。
 - 凭据不进入任何子进程的命令行，按各后端原生的非命令行通道传入：电子 PDF 后端（PDFMathTranslate-next）读取其配置环境变量 `PDF2ZH_OPENAI_API_KEY`；`qwen-cli` 适配器继承 `LOCAL_TRANSLATION_API_KEY`；可信 LaTeX 路线（`independent_latex`）在本进程内发起请求。启动后端前先清除继承的 `PDF2ZH_OPENAI_API_KEY`、`LOCAL_TRANSLATION_API_KEY`、`OPENAI_API_KEY` 与 `PDF2ZH_DEBUG`（后者会让后端把含凭据的完整配置写进调试日志），再只放入该后端需要的一个变量。
