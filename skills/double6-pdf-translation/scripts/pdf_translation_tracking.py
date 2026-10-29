@@ -249,7 +249,12 @@ def extract_tracking_failures(tracking_path: Path | None) -> list[dict[str, Any]
             classification = "protected_or_passthrough"
         else:
             failure_type = "structured_translation_failure"
-            if "same as input" in error_text.lower():
+            if str(paragraph.get("writeback_status") or "") == "applied" and output.strip() and not fallback:
+                # 修订 135：解析失败只发生在历史重试（如纯翻译模型首次输出不带
+                # 结构化包装，重试后成功），最终已写回且译文有效时不计 blocking。
+                failure_type = "recovered_after_parse_retry"
+                classification = "recovered_after_parse_retry"
+            elif "same as input" in error_text.lower():
                 classification = "ordinary_same_as_input"
             elif re.search(r"[\u4e00-\u9fff]", output) and re.search(r"[A-Za-z]{2,}", source):
                 classification = "structured_translated_needs_mapping"

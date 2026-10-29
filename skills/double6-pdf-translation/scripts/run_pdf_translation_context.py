@@ -160,6 +160,7 @@ NON_BLOCKING_BACKEND_FAILURE_CLASSES = {
     "fallback_but_translated_warn",
     "structured_translated_needs_mapping",
     "pdf_direct_repaired",
+    "recovered_after_parse_retry",
 }
 
 PDF_DIRECT_REPAIR_RESOLUTIONS = {

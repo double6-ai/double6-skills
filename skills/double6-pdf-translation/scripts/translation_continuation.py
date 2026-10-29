@@ -149,10 +149,18 @@ def run_page(page_pdf, directory, args, closure):
     write(fingerprint, {'model_id': args.model, 'endpoint': args.base_url})
     frozen = {'input': reference(page_pdf), 'pages': [1], 'complete_semantic_scope': True,
               'scope_evidence': reference(scope), 'route': route, 'model': args.model,
+              'target_language': args.target_language,
+              'hymt_proxy_mode': str(getattr(args, 'hymt_compat_proxy', 'auto') or 'auto'),
               'routing_contract': workflow.DIGITAL_ROUTING if route == 'digital_pdf' else workflow.OCR_ROUTING,
               'model_fingerprint_ref': reference(fingerprint),
-              'proxy_quality_contract': {'adapter': 'hymt_compat' if 'hy-mt' in args.model.lower() else 'none',
-                                         'required': 'hy-mt' in args.model.lower()},
+              # 修订 135：hy-mt 代理仅在译中且未显式关闭时必需（en 目标 auto 跳过代理，
+              # 见 pdf_translation_render.py；与 paper_translation_workflow 的合同校验同构推导）
+              'proxy_quality_contract': {'adapter': 'hymt_compat' if ('hy-mt' in args.model.lower()
+                                          and args.target_language == 'zh'
+                                          and str(getattr(args, 'hymt_compat_proxy', 'auto') or 'auto') != 'off') else 'none',
+                                         'required': 'hy-mt' in args.model.lower()
+                                                     and args.target_language == 'zh'
+                                                     and str(getattr(args, 'hymt_compat_proxy', 'auto') or 'auto') != 'off'},
               'resource_contract': {k: limits[k] for k in ('task_rss_bytes', 'per_job_seconds', 'memory_metric')} | {'concurrency': 1},
               'entrypoint': reference(workflow.__file__), 'rules': reference(Path(workflow.SCRIPT_DIR).parent / 'references/academic-translation-policy.md'),
               'standard': reference(Path(workflow.SCRIPT_DIR).parent / 'references/quality-and-delivery-contract.md'),

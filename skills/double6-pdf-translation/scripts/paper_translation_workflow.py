@@ -191,7 +191,11 @@ def validate_freeze(freeze, input_pdf, route, model, *, chunked=False):
     if route in PDF_BACKEND_ROUTES or route == 'per_chunk':
         api_contract=bound_json(freeze['model_fingerprint_ref']).get('api_contract')
         if api_contract not in (None,'lmstudio_native_chat_v1'):raise ValueError('unknown frozen API contract')
-        expected_proxy = 'source_bound_native' if api_contract else ('hymt_compat' if 'hy-mt' in model.lower() else 'none')
+        # 修订 135：与 translation_continuation 的合同生成同构推导——hy-mt 代理仅在
+        # 译中且未显式关闭时必需；旧 freeze 无 target_language 字段默认 zh（行为不变）。
+        need_hymt_proxy = 'hy-mt' in model.lower() and freeze.get('target_language','zh')=='zh' \
+            and freeze.get('hymt_proxy_mode','auto')!='off'
+        expected_proxy = 'source_bound_native' if api_contract else ('hymt_compat' if need_hymt_proxy else 'none')
         if freeze.get('proxy_quality_contract') != {'adapter':expected_proxy,'required':expected_proxy!='none'}:
             raise ValueError('frozen proxy quality applicability missing or changed')
     # 资源合同只约束边界与并发 1；实际上限由 --task-memory-mib/--job-timeout-seconds、环境变量或平台默认值决定。

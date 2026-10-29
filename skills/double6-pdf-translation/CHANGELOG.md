@@ -1,5 +1,13 @@
 # 变更记录
 
+### 本地修订 135，未发布 · 2026-10-29
+
+- Hy-MT2（1.8B 本机）zh→en 端到端打通，三处既有门槛的目标语言/本地模型适配补齐：
+  1. **解析重试恢复**（`pdf_translation_tracking.py` + `run_pdf_translation_context.py`）：段落最终 `writeback_status=applied` 且译文有效时，历史解析错误（纯翻译模型首次输出不带结构化包装，重试后成功）降级为非阻塞 `recovered_after_parse_retry`，不再整页保留。实测 cn-digital 修复前后 blocking 2→0。
+  2. **代理合同目标语言感知**（`translation_continuation.py` + `paper_translation_workflow.py`）：hy-mt 代理合同仅在译中且未显式关闭时 required；freeze 记录 `target_language`/`hymt_proxy_mode`，两侧同构推导，旧 freeze 缺字段默认译中（行为不变）。修复 `required proxy not actually active` 对 en 目标直连运行的误挡。
+  3. **小模型 JSON 容错**（`scan_layout_translation.py`）：`_repair_model_json`（尾随逗号、JSON 后多余文本两种安全修复）+ `_extract_units_lenient`（逐单元无歧义抽取兜底，其余单元按 model_unit_missing 保留原文）。实测 1.8B 三份损坏响应回放：两份全量救回（28/7 单元）、一份部分救回；另经参数代理注入 max_tokens=4096 解决 mlx_lm server 默认 512 截断（finish=length）。
+- 验证：电子 zh→en 50s completed（译文专业："In accordance with the Regulations on Government Information Disclosure of the People's Republic of China…"）；扫描件 zh→en（3 页环评表）104s completed_with_warnings，事实字段保真（Unified Social Credit Code 等）；单元测试与全套回归 1,309 项通过。
+
 ### 本地修订 134，未发布 · 2026-10-29
 
 - Hy-MT2 本机部署与双向翻译实证：LM Studio GUI 因 custom_model 协议缺陷无法加载该系列（其改写 config 时删除 model_file 字段），绕过方案为引擎自带 Python 直跑 `mlx_lm.server --trust-remote-code` + 参数适配代理（剥 skill 官方参数中的 top_k=-1，mlx_lm 校验 ≥0）。
