@@ -26,6 +26,14 @@ def write(path, value):
     temp.replace(path)
 
 
+def roster_review_unchanged(path, review, identity):
+    try:
+        return (reference(path)==identity['roster_continuation_review_ref']
+                and reference(review['review_basis_ref']['path'])==identity['roster_continuation_basis_ref'])
+    except (OSError,KeyError,TypeError,ValueError):
+        return False
+
+
 def read(path):
     return json.loads(Path(path).read_text())
 
@@ -153,6 +161,10 @@ def run_page(page_pdf, directory, args, closure):
     if os.environ.get('PAPER_TRANSLATION_ENGINE_HOME'):
         frozen['backend_environment']['PAPER_TRANSLATION_ENGINE_HOME'] = os.environ['PAPER_TRANSLATION_ENGINE_HOME']
     if route == 'scanned_ocr':
+        from scan_model_config import ocr_review_settings
+        settings=ocr_review_settings(args)
+        if settings is not None:frozen['ocr_review']=settings
+        frozen['document_glossary']=getattr(args,'document_glossary',[])
         if getattr(args,'scan_document_kind',None)in {'notice','official_document'}:frozen['scan_document_kind']=args.scan_document_kind
         frozen['ocr_failure_policy'] = 'preserve_regions'
         frozen['stamp_policy']=getattr(args,'stamp_policy','preserve')
@@ -184,7 +196,7 @@ def run_page(page_pdf, directory, args, closure):
         target, error = None, result.get('error_code') or job.get('stop_reason') or 'page_translation_unavailable'
     else:
         target, error = usable_candidate(directory/'output', manifest)
-    if (error in {'translated_text_over_preserved_source','preserved_source_damaged','translated_lines_overlap'} and manifest
+    if (error in {'translated_text_over_preserved_source','preserved_source_damaged','translated_lines_overlap','ocr_layout_character_unbound'} and manifest
             and not manifest.get('translation_mode') and len(manifest.get('pages',[]))==1
             and not manifest['pages'][0].get('upright') and job.get('cleanup',{}).get('confirmed') is True):
         remaining=limits['per_job_seconds']-(time.monotonic()-page_started)
@@ -209,7 +221,15 @@ def run_page(page_pdf, directory, args, closure):
     if result.get('quality_status') == 'fail':
         issues.append('quality_review_required')
     local_preserved = bool(manifest and any(p.get('preserved_regions') for p in manifest['pages']))
+    glossary=[]
+    if target and manifest and manifest.get('document_glossary_ref'):
+        from scan_layout_translation import checked_ref
+        glossary=read(checked_ref(manifest['document_glossary_ref'])).get('entries',[])
     return {'status': ('partially_translated' if local_preserved else 'translated') if target else 'original_preserved',
+            'document_glossary':glossary,
+            'source_review_packets':[p['source_review_packet'] for p in (manifest or{}).get('pages',[]) if p.get('source_review_packet')],
+            'name_review_refs':[p['name_review_ref'] for p in (manifest or{}).get('pages',[]) if target and p.get('name_review_ref')],
+            'source_conflict_refs':[p['source_visual_conflict_ref'] for p in (manifest or{}).get('pages',[]) if p.get('source_visual_conflict_ref')],
             'target': reference(target) if target else None, 'issues': list(dict.fromkeys(issues)),
             'document_kind':next((p.get('document_kind')for p in (manifest or{}).get('pages',[])if p.get('document_kind')),None),
             'ocr_manifest_ref': reference(manifest_path) if manifest else None}
@@ -236,6 +256,15 @@ def run(args, page_runner=None):
             return {'status': 'blocked', 'error_code': 'password_required_or_empty_pdf'}
     except Exception:
         return {'status': 'blocked', 'error_code': 'pdf_unreadable'}
+    roster_review_path=getattr(args,'roster_continuation_review',None)
+    roster_review=None
+    if roster_review_path:
+        from scan_roster_pagination import load_continuation_review
+        try:
+            roster_review=load_continuation_review(roster_review_path,source,len(document),args.target_language)
+        except (ValueError,TypeError,KeyError,OSError) as exc:
+            document.close()
+            return {'status':'blocked','error_code':'roster_continuation_review_invalid','message':str(exc)}
     output = Path(args.output).resolve()
     if output.exists() and not args.resume:
         output = output / ('run-' + datetime.now().strftime('%Y%m%d-%H%M%S-%f'))
@@ -256,6 +285,12 @@ def run(args, page_runner=None):
         identity['scan_layout_plan_ref'] = reference(scan_plan_path)
         identity['scan_layout_review_ref'] = scan_plan['review_basis_ref']
     if getattr(args,'source_review',None):identity['source_review_ref']=reference(args.source_review)
+    if roster_review_path:
+        identity['roster_continuation_review_ref']=reference(roster_review_path)
+        identity['roster_continuation_basis_ref']=roster_review['review_basis_ref']
+    from scan_model_config import ocr_review_settings
+    settings=ocr_review_settings(args)
+    if settings is not None:identity['ocr_review']=settings
     state = {'identity': identity, 'pages': []}
     pages_root = Path(args.receipts).resolve()/'pages' if getattr(args, 'receipts', None) else output/'pages'
     if args.resume and state_path.exists():
@@ -277,12 +312,20 @@ def run(args, page_runner=None):
         model_checked = False
         completed = {r['page']: r for r in state['pages']}
         for index in range(len(document)):
+            # 只沿用本运行已经完成的前页真实术语，未完成/未来页不参与。
+            terms={}
+            for n,row in sorted(completed.items()):
+                if n<=index and row.get('target'):
+                    for term in row.get('document_glossary',[]):terms.setdefault(term['source'],term)
+            args.document_glossary=list(terms.values())
             args.scan_document_kind=completed.get(index,{}).get('document_kind')
             args.scan_layout_page = next((p for p in scan_plan['pages'] if p['page'] == index+1), None) if scan_plan else None
             if reference(source) != identity['input']:
                 return {'status': 'blocked', 'error_code': 'source_changed_during_translation', 'state': str(state_path)}
             if getattr(args,'source_review',None) and reference(args.source_review)!=identity['source_review_ref']:
                 return {'status':'blocked','error_code':'source_review_changed_during_translation','state':str(state_path)}
+            if roster_review_path and not roster_review_unchanged(roster_review_path,roster_review,identity):
+                return {'status':'blocked','error_code':'roster_review_changed_during_translation','state':str(state_path)}
             if scan_plan_path and reference(scan_plan_path) != identity['scan_layout_plan_ref']:
                 return {'status': 'blocked', 'error_code': 'scan_layout_plan_changed', 'state': str(state_path)}
             if scan_plan and reference(scan_plan['review_basis_ref']['path']) != scan_plan['review_basis_ref']:
@@ -331,22 +374,33 @@ def run(args, page_runner=None):
             rows,notice_audit=finalize_notices(rows,output/'notice-pagination',args)
             if notice_audit:write(output/'NOTICE_PAGINATION.json',notice_audit)
             if notice_audit and notice_audit.get('fatal'):return {'status':'blocked','error_code':notice_audit['fatal'],'state':str(state_path)}
+        if roster_review:
+            if not roster_review_unchanged(roster_review_path,roster_review,identity):
+                return {'status':'blocked','error_code':'roster_review_changed_during_translation','state':str(state_path)}
+            from scan_roster_pagination import finalize_roster_supplements
+            rows,roster_audit=finalize_roster_supplements(rows,roster_review,output/'roster-continuation')
+            write(output/'ROSTER_CONTINUATION.json',roster_audit)
         completed={r['page']:r for r in rows}
         translated = sum(r['status'] in {'translated','partially_translated'} for r in rows)
         formal = output/('译文.pdf' if translated else '原文保留稿.pdf')
+        bilingual_page_map = []
         with fitz.open() as merged:
             for i in range(len(document)):
                 row = completed[i+1]
                 if row.get('target'):
                     with fitz.open(row['target']['path']) as part:
+                        bilingual_page_map.extend([i] * len(part))
                         merged.insert_pdf(part)
                 else:
+                    bilingual_page_map.append(i)
                     merged.insert_pdf(document, from_page=i, to_page=i)
             temp = output/'译文.tmp.pdf';merged.save(temp,garbage=4,deflate=True);temp.replace(formal)
         from build_bilingual_pdf import build_en_left_zh_right_pdf, bilingual_direction
         dual = output/'原文左-译文右.pdf'
+        bilingual_options = {'source_page_map': bilingual_page_map} if len(bilingual_page_map) != len(document) else {}
         build_en_left_zh_right_pdf(source, formal, dual, mode='vector',
-                                 direction=bilingual_direction('en' if args.target_language=='zh' else 'zh', args.target_language))
+                                 direction=bilingual_direction('en' if args.target_language=='zh' else 'zh', args.target_language),
+                                 **bilingual_options)
         retained = sum(r['status']=='original_preserved' for r in rows)
         partial = sum(r['status']=='partially_translated' for r in rows)
         warnings = retained or partial or any(r['issues'] for r in rows)
@@ -365,6 +419,13 @@ def run(args, page_runner=None):
         lines = ['# 翻译审校记录', '', f'共{len(rows)}页，翻译{translated}页，局部保留原文{partial}页，整页保留原文{retained}页。',
                  '这些记录不插入正式译文。', '']
         lines += [f'- 第{r["page"]}页：{r["status"]}；'+'、'.join(r['issues']) for r in rows if r['issues']]
+        for row in rows:
+            for packet in row.get('source_review_packets',[]):
+                lines.append(f'- 第{row["page"]}页 OCR 疑点与原图：[打开复核清单]({packet["html_ref"]["path"]})')
+            for name_review in row.get('name_review_refs',[]):
+                lines.append(f'- 第{row["page"]}页姓名译写：[打开复核清单]({name_review["path"]})')
+            for conflict in row.get('source_conflict_refs',[]):
+                lines.append(f'- 第{row["page"]}页源姓名识别冲突：[打开候选记录]({conflict["path"]})')
         (output/'翻译审校记录.md').write_text('\n'.join(lines)+'\n')
         return result
 

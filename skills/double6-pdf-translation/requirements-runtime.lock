@@ -1585,6 +1585,10 @@ pymupdf==1.25.2 \
     --hash=sha256:f61e5cdb25b86eb28d34aa3557b49ecf9e361d5f5cd3b1660406f8f0bf813af7
     # via
     #   -r requirements-runtime.in
+pypinyin==0.55.0 \
+    --hash=sha256:d53b1e8ad2cdb815fb2cb604ed3123372f5a28c6f447571244aca36fc62a286f \
+    --hash=sha256:b5711b3a0c6f76e67408ec6b2e3c4987a3a806b7c528076e7c7b86fcf0eaa66b
+    # via -r requirements-runtime.in
 pypdf==6.13.2 \
     --hash=sha256:5a96a17dbdfbf9c2ab24c0a13fa0aba182be22ba6f283098712c16fc242f509f \
     --hash=sha256:6eeb9e57693f29d41bd01255d02660cbbb41fd7fc818a982677389a35e4f2083

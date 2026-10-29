@@ -12,6 +12,7 @@ fonttools==4.63.0
 freetype-py==2.5.1
 reportlab==4.5.1
 pypdf==6.13.2
+pypinyin==0.55.0
 requests==2.34.2
 pymupdf==1.25.2
 tqdm==4.67.3

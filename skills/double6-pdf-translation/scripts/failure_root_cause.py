@@ -37,6 +37,7 @@ CODES = {
     'typesetting_readable_floor_overflow': DETERMINISTIC,
     'typesetting_writeback_failed': DETERMINISTIC,
     'pdf_backend_timeout': RESOURCE,
+    'ocr_layout_character_unbound': DETERMINISTIC,
     UNAVAILABLE: UNKNOWN,
 }
 MAX_ROWS = 20
@@ -131,6 +132,18 @@ def derive(output_dir: Path | str, manifest: dict[str, Any] | None, *, expected_
             return cause
         checked.append(f"typesetting report status={report.get('status')} failures={len(report.get('failures') or [])}")
     errors = [e for e in (manifest or {}).get('errors') or [] if isinstance(e, dict)]
+    path=out/'OCR_LAYOUT_FAILURE.json'
+    checked.append('OCR_LAYOUT_FAILURE.json: '+str(path.exists()))
+    if _inside(path,out) and (started_at is None or path.stat().st_mtime>=started_at):
+        try:
+            report=json.loads(path.read_text(encoding='utf-8'))
+        except (OSError,ValueError):report={}
+        if (isinstance(report,dict) and report.get('protocol')=='ocr_layout_failure_v1'
+                and report.get('code')=='ocr_layout_character_unbound'
+                and (expected_pages is None or report.get('page_count')==expected_pages)):
+            return {'code':'ocr_layout_character_unbound','retry':DETERMINISTIC,'stage':'ocr_layout_binding',
+                    'details':{k:report.get(k)for k in ('page','character_center_pt','admitted_line_count')},
+                    'evidence':[_ref(path)]}
     checked.append('render_manifest.errors: ' + ','.join(str(e.get('error_type')) for e in errors))
     if any(e.get('error_type') == 'timeout' for e in errors):
         manifest_path = out / 'render_manifest.json'
@@ -188,6 +201,8 @@ def message(cause: dict[str, Any]) -> str:
         return f'排版回执：{details.get("failure_count")} 段原生写回失败（页 {details.get("pages")}）。'
     if code == 'pdf_backend_timeout':
         return f'PDF 后端内部超时（{details.get("timeout_seconds")} s）。'
+    if code == 'ocr_layout_character_unbound':
+        return f'扫描文字绑定失败：第 {details.get("page")} 页存在不属于本次准入 OCR 行的字符。'
     return f'PDF 后端未产出候选，且本尝试没有可核实的结构化根因（{cause.get("problem")}）。'
 
 

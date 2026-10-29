@@ -305,8 +305,11 @@ def build_en_left_zh_right_pdf(
     mode: str = "pypdf-vector",
     raster_dpi: int = 144,
     direction: dict[str, Any] | None = None,
+    source_page_map: list[int] | None = None,
 ) -> dict[str, Any]:
     if mode == "pypdf-vector":
+        if source_page_map is not None:
+            raise ValueError("source_page_map_requires_fitz_mode")
         return build_en_left_zh_right_pdf_pypdf(source_pdf, translated_pdf, output_pdf, direction=direction)
     fitz = _load_fitz()
     if mode not in {"vector", "raster", "pypdf-vector"}:
@@ -318,9 +321,18 @@ def build_en_left_zh_right_pdf(
     try:
         source_pages = int(source_doc.page_count)
         translated_pages = int(translated_doc.page_count)
-        page_count = max(source_pages, translated_pages)
+        if source_page_map is not None:
+            if (len(source_page_map) != translated_pages or not source_page_map
+                    or any(type(i) is not int or i < 0 or i >= source_pages for i in source_page_map)
+                    or source_page_map != sorted(source_page_map)
+                    or set(source_page_map) != set(range(source_pages))):
+                raise ValueError("invalid_bilingual_source_page_map")
+            page_count = translated_pages
+        else:
+            page_count = max(source_pages, translated_pages)
         for index in range(page_count):
-            source_page = source_doc[index] if index < source_doc.page_count else None
+            source_index = source_page_map[index] if source_page_map is not None else index
+            source_page = source_doc[source_index] if source_index < source_doc.page_count else None
             translated_page = translated_doc[index] if index < translated_doc.page_count else None
             source_rect = source_page.rect if source_page is not None else translated_page.rect
             translated_rect = translated_page.rect if translated_page is not None else source_page.rect
@@ -332,7 +344,7 @@ def build_en_left_zh_right_pdf(
                 if mode == "raster":
                     _show_pdf_page_raster(page, left_rect, source_page, fitz, raster_dpi)
                 else:
-                    _show_pdf_page_vector(page, left_rect, source_doc, index, fitz)
+                    _show_pdf_page_vector(page, left_rect, source_doc, source_index, fitz)
             if translated_page is not None:
                 right_rect = fitz.Rect(source_rect.width, 0, source_rect.width + translated_rect.width, translated_rect.height)
                 if mode == "raster":
@@ -358,6 +370,7 @@ def build_en_left_zh_right_pdf(
         "text_layer_policy": "visual_raster_composite; use mono_pdf for searchable translated text" if mode == "raster" else "preserve_embedded_page_text_when_viewer_supports_form_xobject",
         "source_pages": source_pages,
         "translated_pages": translated_pages,
+        "source_page_map": source_page_map,
         "page_count": page_count,
     }
 

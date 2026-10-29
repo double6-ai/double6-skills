@@ -18,11 +18,21 @@ bash scripts/setup_venv.sh /absolute/new/venv
 | PyMuPDF、fontTools、freetype-py、NumPy、reportlab、pypdf | 真实 PDF 读写、字形/布局/保护区和双语核验；reportlab/pypdf 也服务辅助渲染与诊断，不能因辅助工具缺失宣称所有主翻译路径失败 |
 | PDFMathTranslate-next 2.8.2 与 BabelDOC 0.5.24 维护副本 | 电子 PDF 排版、保护和翻译后端，包含本地修复，不能替换成无修改上游包后继承既有质量结论 |
 | RapidOCR 1.4.4 | 已有后端及可选 OCR；模型/字体下载与来源单独声明 |
+| pypinyin 0.55.0 | 扫描译文中短地名及明确专名的拼音音节核对，MIT；按哈希安装，不提供官方英文名保证。缺失时记录未做拼音核对，其它事实检查继续。来源：[PyPI 固定版本](https://pypi.org/project/pypinyin/0.55.0/) |
 | XeLaTeX 与所需 TeX 包 | 仅可信 LaTeX 路线，调用方显式准备 |
 | Poppler | 可选独立文字框诊断 |
 | Tesseract OCR 5.x（CLI）与 tessdata_fast `chi_sim`/`eng`/`osd` | 仅 `candidate --route scanned_ocr`；系统包安装，不随 skill 分发；缺失只阻断该路线，不算主路线失败 |
 | MinerU 4.0.4、其模型及服务 | 可选扫描实验，不在默认环境安装；无此能力时可使用明确提供的已有 OCR，不宣称 OCR 已完成 |
 | 模型服务、API key、字体、源论文 | 调用方明确提供与冻结，不随 skill 分发 |
+
+### 管理式开源 CJK 字体（修订 132 起）
+
+扫描写回嵌入的衬线 CJK 字体默认使用管理式开源字体，替代对系统字体的依赖：
+
+- 组件：Noto Serif SC Regular（SIL Open Font License 1.1，允许嵌入输出 PDF 并再分发；来源 notofonts/noto-cjk `Serif/SubsetOTF/SC`，固定 SHA256 `e8f396de…67c83a1cd3`，约 11MB）。
+- 获取：`python3 scripts/setup_cjk_fonts.py`（纯标准库、跨平台，Windows 原生可用；jsDelivr 主源、GitHub raw 备源，含许可文本与 `fonts_manifest.json` 登记）。缓存目录：`PAPER_TRANSLATION_FONT_CACHE` → `<repo>/.cache/double6-pdf-translation/fonts/` → `~/.cache/double6-pdf-translation/fonts/`。
+- 候选链：显式 `PAPER_TRANSLATION_SCANNED_CJK_FONT` → 管理字体 → fitz 内置 china-s（Droid Sans Fallback，Apache-2.0）。系统字体（macOS Songti.ttc、Linux 路径）不再默认参与，仅 `PAPER_TRANSLATION_ALLOW_SYSTEM_FONTS=1` 时作为显式降级——系统字体授权不覆盖"嵌入输出 PDF 分发给第三方"。
+- 已知限制（已解决）：MuPDF `subset_fonts` 对 CFF 版报 `Reserved charstring byte` 回退完整嵌入；`setup_cjk_fonts.py` 校验官方 OTF 后用 fontTools 本地转换 TrueType 版（cu2qu max_err=0.8，登记 fontTools 版本），写入侧默认选 TTF，子集化正常（同页输出约 19KB），渲染对比无可见差异。LaTeX 可信路线的 `--cjk-font`（默认 Songti SC）为 XeLaTeX 编译环境配置，由调用方自行准备，不属本链。
 
 默认依赖已移除 Gradio/gradio-pdf/gradio-i18n、FastAPI/Uvicorn/SSE，以及 Ollama、Xinference、DeepL、Azure 翻译和腾讯翻译 SDK。当前公共入口使用 OpenAI-compatible 服务；需要其它上游适配时应另行配置和验证。上游 GUI 源码仅为完整来源保留，CLI 发行候选拒绝 GUI 执行。
 

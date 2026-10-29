@@ -366,7 +366,7 @@ def run_scanned_ocr_candidate(args, freeze):
     ocr['tesseract_processes'] = manifest.get('processes', [])
     if manifest['status'] != 'ok':
         return dict(blocked_result(manifest['findings']), ocr_stage='ocr_reconstruct', ocr=ocr)
-    if manifest.get('translation_mode') in {'local_table_regions','semantic_scan_flow'}:
+    if manifest.get('translation_mode') in {'local_table_regions','semantic_scan_flow','local_text_regions'}:
         from ocr_region_translation import run_table_candidate
         result = run_table_candidate(args, freeze, manifest_path)
         ocr['manifest_ref'] = ref(manifest_path)
@@ -734,16 +734,21 @@ def execute_digital(freeze_path, command, ocr_manifest=None):
         if context['freeze_ref']!=ref(freeze_path) or context['input_ref']!=freeze['input'] or context['scope_ref']!=freeze['scope_evidence']:
             raise ValueError('source cache current freeze/input/scope mismatch')
     # 清除继承的扫描身份；只有本次逐 SHA 验过的 scanned_ocr 清单能约束后端段落。
-    from ocr_text_layout import ENV as ocr_layout_env
+    from ocr_text_layout import ENV as ocr_layout_env, FAILURE_ENV as ocr_failure_env
     previous_ocr_layout = os.environ.pop(ocr_layout_env, None)
+    previous_ocr_failure = os.environ.pop(ocr_failure_env, None)
     try:
         if ocr_manifest is not None:
             os.environ[ocr_layout_env] = json.dumps(ocr_manifest)
+            os.environ[ocr_failure_env] = str((Path(args.output_dir)/'OCR_LAYOUT_FAILURE.json').resolve())
         result = run_pdf_translation.run(args)
     finally:
         os.environ.pop(ocr_layout_env, None)
         if previous_ocr_layout is not None:
             os.environ[ocr_layout_env] = previous_ocr_layout
+        os.environ.pop(ocr_failure_env,None)
+        if previous_ocr_failure is not None:
+            os.environ[ocr_failure_env]=previous_ocr_failure
     if args.source_cache_mode=='collect':
         if result.get('status')!='source_only_collected':raise ValueError('source-only collection missing')
         return result
@@ -927,7 +932,10 @@ def main(argv=None):
     translate.add_argument('--resume', action='store_true')
     translate.add_argument('--scan-layout-plan', type=Path, help='执行者核定的扫描源角色、统一样式与单栏排版计划；未覆盖页仍自动续译')
     translate.add_argument('--stamp-policy',choices=['preserve','translate'],default='translate',help='默认translate：允许覆盖印章以翻译章下可靠文字；preserve保留印章')
+    translate.add_argument('--ocr-review-model', choices=('glm-5.3-flash','none'), default='glm-5.3-flash', help='独立看图复核模型；使用 OCR_REVIEW_API_KEY 或 GLM_API_KEY，none 关闭')
+    translate.add_argument('--ocr-review-base-url', default=None, help='OCR 复核独立端点，默认按复核模型档案')
     translate.add_argument('--source-review',type=Path,help='默认扫描源复核记录；只含原文更正，布局由程序自动生成')
+    translate.add_argument('--roster-continuation-review',type=Path,help='已核定源文和姓名译写的名单续页记录；绑定原PDF与复核依据')
     inspect = sub.add_parser('inspect-input', help='只读有界输入事实与库存；源图资格不自动判定')
     inspect.add_argument('--input', type=Path, required=True)
     inspect.add_argument('--output', type=Path, required=True)
