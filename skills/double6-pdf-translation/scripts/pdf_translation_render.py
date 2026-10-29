@@ -174,9 +174,16 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
         'transport':getattr(args,'translation_transport','openai_compatible'),
     }
     if target_language != "zh" and should_enable_hymt_compat_proxy(args) and not skip_pdf_backend:
-        # HY-MT 兼容代理与源绑定原生传输只会译成简体中文（纯中文段落原样返回），中译英时直接拒绝。
-        raise ValueError("target_language_backend_unsupported: --target-language en does not support the HY-MT compat proxy "
-                         "or lmstudio_native_chat_v1 transport; use an OpenAI-compatible model or the Qwen CLI adapter")
+        # HY-MT 兼容代理与源绑定原生传输只会译成简体中文（纯中文段落原样返回）。
+        # 修订 134 实证（2026-10-29）：Hy-MT2 模型本体经通用 OpenAI 兼容传输可正常
+        # 中译英（1.8B 实测质量可用、常驻约 120-175 tokens/s），auto 模式下 en 目标
+        # 改为跳过 hymt 代理直连；显式 --hymt-compat-proxy on 与 lmstudio_native
+        # 传输仍维持原拒绝（代理确实译中专供）。
+        if str(getattr(args, "hymt_compat_proxy", "auto") or "auto") == "on" or \
+                getattr(args, 'translation_transport', 'openai_compatible') == 'lmstudio_native_chat_v1':
+            raise ValueError("target_language_backend_unsupported: --target-language en does not support the HY-MT compat proxy "
+                             "or lmstudio_native_chat_v1 transport; use an OpenAI-compatible model or the Qwen CLI adapter")
+        args.hymt_compat_proxy = "off"
     if should_enable_hymt_compat_proxy(args) and not skip_pdf_backend:
         if not getattr(args, 'source_cache_mode', None):
             # 代理会以真实上游地址发起生成请求：远端缺凭据同样在启动代理/子进程前稳定报错（仅缓存回放/收集模式无生成请求）。

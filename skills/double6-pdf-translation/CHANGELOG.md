@@ -1,5 +1,12 @@
 # 变更记录
 
+### 本地修订 134，未发布 · 2026-10-29
+
+- Hy-MT2 本机部署与双向翻译实证：LM Studio GUI 因 custom_model 协议缺陷无法加载该系列（其改写 config 时删除 model_file 字段），绕过方案为引擎自带 Python 直跑 `mlx_lm.server --trust-remote-code` + 参数适配代理（剥 skill 官方参数中的 top_k=-1，mlx_lm 校验 ≥0）。
+- 速度实测（常驻）：Hy-MT2-1.8B-4bit 约 **120–175 tokens/s**（30B-8bit 约 3.5–4 t/s，慢 40 倍）；端到端 en→zh 电子论文 32 秒完成。
+- **放开 zh→en 硬拒绝**（`pdf_translation_render.py`）：原 auto 模式下 HY-MT 模型 en 目标无条件拒绝；实证模型本体反向翻译可用（结构化管线下标题/摘要译文质量良好），改为 auto 时跳过 hymt 译中专供代理、走通用 OpenAI 兼容传输直连；显式 `--hymt-compat-proxy on` 与 lmstudio_native 传输维持原拒绝。相关测试通过，全套回归 1,309 项通过。
+- 已知缺口（后续修订处理）：zh→en 端到端仍被后端质量门拦截——译好的段落被 `structured_translation_failure` 判 blocking（`pdf_translation_tracking.py` 的分类条件隐含译中假设，源中文→译文英文落入 `needs_backend_mapping`），页面保留。属质量门对 en 目标的适配缺口，非模型能力问题。
+
 ### 本地修订 133，未发布 · 2026-10-29
 
 - 吸收 OXR/Unlimited OCR 2 对照实验的实证教训，并用 R4 回归组三份真实样本验证：
