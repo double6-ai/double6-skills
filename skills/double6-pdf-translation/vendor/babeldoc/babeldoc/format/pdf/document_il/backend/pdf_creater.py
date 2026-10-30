@@ -45,6 +45,24 @@ def _reviewed_style_registry():
     return current_registry()
 
 
+def _boxes_overlap(
+    box_a: "il_version_1.Box | None", box_b: "il_version_1.Box | None"
+) -> bool:
+    """两个 IL Box 是否有正面积交集；任一为空或坐标缺失时按不相交处理。"""
+    if box_a is None or box_b is None:
+        return False
+    if any(
+        coord is None
+        for coord in (box_a.x, box_a.y, box_a.x2, box_a.y2,
+                      box_b.x, box_b.y, box_b.x2, box_b.y2)
+    ):
+        return False
+    return (min(box_a.x, box_a.x2) < max(box_b.x, box_b.x2)
+            and max(box_a.x, box_a.x2) > min(box_b.x, box_b.x2)
+            and min(box_a.y, box_a.y2) < max(box_b.y, box_b.y2)
+            and max(box_a.y, box_a.y2) > min(box_b.y, box_b.y2))
+
+
 class RenderUnit(ABC):
     """Abstract base class for all renderable units."""
 
@@ -819,6 +837,56 @@ class PDFCreater:
 
         return render_units
 
+    def _demote_background_covers_behind_text(
+        self, render_units: list[RenderUnit]
+    ) -> None:
+        """纯填充背景块不得晚于与其重叠的文字绘制。
+
+        源页的行底白块在源内容流里常位于文字之后；重建页面时译文继承源
+        字符的渲染序，背景块若仍按源序后画，会把落在同一区域的译文整行
+        盖成不可见。这里只把"与文字重叠且排序在文字之后"的纯填充背景
+        块（无描边）提前到该文字之前半步，其余绘制顺序保持不变。源曲线
+        依靠 debug_info 标记进入渲染（见 layout_parser/il_creater），该
+        标记不代表调试线框，因此不能用它排除；不重叠或本就在文字之前
+        的背景块不受影响，OCR workaround 的擦除块默认序号为 10，同样
+        不会被推后。
+        """
+        char_units = [
+            unit
+            for unit in render_units
+            if isinstance(unit, CharacterRenderUnit)
+            and getattr(unit.char, "box", None) is not None
+        ]
+        if not char_units:
+            return
+        for unit in render_units:
+            box = None
+            if isinstance(unit, RectangleRenderUnit):
+                if not unit.rectangle.fill_background or unit.rectangle.debug_info:
+                    continue
+                box = unit.rectangle.box
+            elif isinstance(unit, CurveRenderUnit):
+                if not unit.curve.fill_background or unit.curve.stroke_path:
+                    continue
+                box = unit.curve.box
+            else:
+                continue
+            if box is None:
+                continue
+            overlapping = [
+                char_unit
+                for char_unit in char_units
+                if _boxes_overlap(box, char_unit.char.box)
+                and unit.get_sort_key() > char_unit.get_sort_key()
+            ]
+            if not overlapping:
+                continue
+            target_order, target_sub = min(
+                char_unit.get_sort_key() for char_unit in overlapping
+            )
+            unit.render_order = target_order
+            unit.sub_render_order = target_sub - 0.5
+
     def render_units_to_stream(
         self,
         render_units: list[RenderUnit],
@@ -828,6 +896,7 @@ class PDFCreater:
     ) -> None:
         """Render sorted render units to appropriate draw streams."""
         # Sort render units by (render_order, sub_render_order)
+        self._demote_background_covers_behind_text(render_units)
         sorted_units = sorted(render_units, key=lambda unit: unit.get_sort_key())
 
         for unit in sorted_units:

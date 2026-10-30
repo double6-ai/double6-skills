@@ -1,5 +1,9 @@
 # 来源与维护变更
 
+### 本地修订 136，未发布 · 2026-10-29
+
+- 修复写回渲染排序缺陷：源页行底白块（纯填充背景曲线）在源内容流里常排在文字之后，重建页面时译文继承源字符渲染序，白块后画会把落在同一区域的译文整行盖成不可见（文字层完整但渲染无墨迹，自动审计不报警）。`vendor/babeldoc` 的 `pdf_creater.py` 在渲染排序前新增 `_demote_background_covers_behind_text`：仅把"与文字包围盒重叠且排序在其之后"的纯填充背景块（无描边）提前到该文字之前半步；源曲线依赖 `debug_info="a"` 作为渲染准入标记而非调试线框，不得据此排除。不重叠、本就在文字之前或带描边的图形顺序不变，OCR workaround 擦除块（默认序号 10）不受影响。经真实彩色混排页（正文+卫星图）复测：被盖行恢复可见。
+
 ### 本地修订 132，未发布 · 2026-10-29
 
 - 新增第一方模块 `scripts/managed_fonts.py` 与 `scripts/setup_cjk_fonts.py`（管理式开源 CJK 字体，OFL-1.1，跨平台含 Windows）；`scanned_raster/pipeline_fonts.py` 的 `_embedded_cjk_font` 候选链改为：显式环境变量 → 管理字体 → 内置 china-s，系统字体仅显式允许时参与。字体来源/SHA/许可进入写回元数据。不涉及上游 vendor 代码变更。
