@@ -1,9 +1,7 @@
 # macOS/Linux，Python 3.12。版本沿用上一份锁，避免顺手升级。
 # 不安装 PyPI 上的 babeldoc：运行使用 vendor/babeldoc。
-# 不在这里安装 rapidocr-onnxruntime：它的声明会带上带界面的 opencv-python。
-# 本体在 requirements-rapidocr.lock，安装时加 --no-deps。图像库只用 opencv-python-headless。
-# 不安装 huggingface-hub、uharfbuzz、lxml、ruff、带界面的 opencv-python、xsdata 的命令行附加项，以及 scikit-image。
-# scikit-image 只用于扫描件判断；主路径会跳过，用到时才导入。scipy 仍留给分行聚类。
+# 不安装 huggingface-hub、uharfbuzz、lxml、ruff、带界面的 opencv-python、xsdata 的命令行附加项。
+# 图像库只用 opencv-python-headless（babeldoc docvision 布局模型使用）。
 psutil==7.2.2
 pyyaml==6.0.3
 jsonschema==4.26.0
@@ -12,7 +10,6 @@ fonttools==4.63.0
 freetype-py==2.5.1
 reportlab==4.5.1
 pypdf==6.13.2
-pypinyin==0.55.0
 requests==2.34.2
 pymupdf==1.25.2
 tqdm==4.67.3

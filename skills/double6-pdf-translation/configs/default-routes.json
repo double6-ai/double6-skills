@@ -4,42 +4,11 @@
   "entry_script": "scripts/paper_translation_workflow.py",
   "selection": "默认 translate 自动按页续译；局部风险保留原文并记录，不阻断其余页。严格验收入口另行显式调用。",
   "defaults": {
-    "scan_new_input": "translate",
-    "scan_reviewed_reprepare": "run-reviewed-scan",
-    "scan_frozen_rebuild": "trial-render",
     "digital_pdf": "translate",
     "latex_verified": "candidate",
-    "mixed_pdf": "translate",
     "long_pdf": "translate"
   },
   "routes": {
-    "scan_new_input": {
-      "input_family": "scanned_pdf",
-      "supported_scope": "Reliable text is translated; unreliable paragraphs or unsupported pages retain original content with separate review records.",
-      "action": "translate",
-      "requires": [],
-      "next_existing_entry": "prepare-scan",
-      "default_max_pages": 2,
-      "strict_inspection_entry": "inspect-input"
-    },
-    "scan_reviewed_reprepare": {
-      "input_family": "scanned_pdf",
-      "action": "run-reviewed-scan",
-      "config_schema": "schemas/reviewed-scan-run.schema.json",
-      "requires": [
-        "existing_frozen_preparation_parent_SHA_chain"
-      ],
-      "model_network_required": false
-    },
-    "scan_frozen_rebuild": {
-      "input_family": "scanned_pdf",
-      "action": "trial-render",
-      "requires": [
-        "exact_frozen_source_contract_code_refs"
-      ],
-      "repeat_preparation": false,
-      "model_network_required": false
-    },
     "digital_pdf": {
       "input_family": "native_digital_pdf",
       "action": "translate",
@@ -60,7 +29,7 @@
     },
     "translation": {
       "action": "translate",
-      "input_family": "scanned_native_or_mixed_pdf",
+      "input_family": "native_digital_or_latex_pdf",
       "failure_policy": "local_preserve_v1",
       "automatic_freeze": true,
       "per_page_resource_contract_unchanged": true,
@@ -76,13 +45,10 @@
     "actual_mono_and_dual_pages",
     "actual_glyph_font_style_links_protection",
     "ordinary_reader_and_real_wholeparagraph_copy",
-    "frozen_cold_rebuild",
     "only_inherit_when_source_target_actual_content_and_standard_unchanged"
   ],
   "source_policy": {
     "physical_scale": "preserve_input_media_crop_boxes",
-    "hidden_OCR": "默认按实际可见页型路由；不可靠隐藏识别层不阻断其它页。",
-    "handwriting_complete_work": "UNKNOWN_until_bound_source_image_review",
     "auto_model_fallback": false
   },
   "runtime": {

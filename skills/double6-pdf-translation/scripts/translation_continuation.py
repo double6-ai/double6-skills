@@ -26,14 +26,6 @@ def write(path, value):
     temp.replace(path)
 
 
-def roster_review_unchanged(path, review, identity):
-    try:
-        return (reference(path)==identity['roster_continuation_review_ref']
-                and reference(review['review_basis_ref']['path'])==identity['roster_continuation_basis_ref'])
-    except (OSError,KeyError,TypeError,ValueError):
-        return False
-
-
 def read(path):
     return json.loads(Path(path).read_text())
 
@@ -75,54 +67,6 @@ def usable_candidate(directory, manifest):
         text = doc[0].get_text()
         if not text.strip() or any(ord(c) < 32 and c not in '\n\r\t' for c in text) or '\ufffd' in text:
             return None, 'page_text_unreadable'
-        if manifest:
-            from ocr_local_preservation import translated_lines_overlap
-            if translated_lines_overlap(doc[0]):return None, 'translated_lines_overlap'
-        if (manifest or {}).get('translation_mode')=='semantic_scan_flow':
-            # 默认重排已在300dpi复开成品核对完整保护区，避免再采样到144dpi的假损伤。
-            from scan_layout_translation import checked_ref
-            try:
-                audit=read(checked_ref(manifest['render_audit_ref']))
-                expectations=read(checked_ref(manifest['layout_expectations_ref']))
-                if (audit.get('status')!='pass' or audit.get('issues') or audit.get('pdf_ref')!=reference(target)
-                        or audit.get('source_ref')!=manifest['input'] or expectations.get('source_ref')!=manifest['input']
-                        or any(audit.get('protected_pixel_changes',[1])) or audit.get('outside_allowed_pixel_changes')!=0
-                        or len(audit.get('protected_pixel_changes',[]))!=sum(len(p.get('preserved_regions',[]))for p in manifest['pages'])):
-                    return None,'automatic_layout_audit_unverifiable'
-            except (ValueError,KeyError,OSError):return None,'automatic_layout_audit_unverifiable'
-            return target,None
-        regions = []
-        for p in (manifest or {}).get('pages', []):
-            for item in p.get('preserved_regions', []):
-                regions.append(fitz.Rect([v * 72 / manifest['render_dpi'] for v in item['bbox_px']]))
-        # 字体行框含额外升部/降部空间，也可能跨越空白列；按保存后的实际字符度量框检查。
-        for span in doc[0].get_texttrace():
-            if span.get('type')==3 or span.get('opacity',1)==0:continue
-            for char in span['chars']:
-                if chr(char[0]).isspace():continue
-                box=fitz.Rect(char[3])
-                if any((box & region).get_area() > .1 for region in regions):
-                    return None, 'translated_text_over_preserved_source'
-        if regions:
-            # 字框不相交仍可能被后端白底擦掉；实际核对保留区，严重改变才退回原页。
-            import numpy as np
-            source_ref = manifest.get('reconstructed_source', {})
-            source = Path(source_ref.get('path', ''))
-            if not source.is_file() or reference(source)['sha256'] != source_ref.get('sha256'):
-                return None, 'preserved_source_unverifiable'
-            # 提取图文dict后同一MuPDF对象可能残留图像颜色/缓存状态；像素核对重新打开磁盘PDF。
-            with fitz.open(source) as original, fitz.open(target) as rendered:
-                for region in regions:
-                    a = original[0].get_pixmap(matrix=fitz.Matrix(2,2), clip=region, colorspace=fitz.csGRAY)
-                    b = rendered[0].get_pixmap(matrix=fitz.Matrix(2,2), clip=region, colorspace=fitz.csGRAY)
-                    if (a.width,a.height)!=(b.width,b.height):
-                        return None, 'preserved_source_geometry_changed'
-                    before = np.frombuffer(a.samples, np.uint8).astype(float)
-                    after = np.frombuffer(b.samples, np.uint8).astype(float)
-                    ink = before < 160
-                    ink_loss = float((after[ink] >= 160).mean()) if ink.any() else 0
-                    if float(np.abs(before-after).mean()) > 2 or ink_loss > .1:
-                        return None, 'preserved_source_damaged'
     return target, None
 
 
@@ -133,13 +77,7 @@ def run_page(page_pdf, directory, args, closure):
     import fitz
     page_started=time.monotonic()
     directory.mkdir(parents=True)
-    scan_page = getattr(args, 'scan_layout_page', None)
-    if scan_page is not None:
-        from scan_layout_translation import run_bounded_page
-        return run_bounded_page(page_pdf, directory, args, scan_page)
-    with fitz.open(page_pdf) as doc:
-        kind = classify_page(doc[0])['kind']
-    route = 'digital_pdf' if kind == 'native_text' else 'scanned_ocr'
+    route = 'digital_pdf'
     limits = args.resource_limits
     scope = directory / 'scope.json'
     write(scope, {'pages': [1], 'complete_semantic_scope': True,
@@ -151,7 +89,7 @@ def run_page(page_pdf, directory, args, closure):
               'scope_evidence': reference(scope), 'route': route, 'model': args.model,
               'target_language': args.target_language,
               'hymt_proxy_mode': str(getattr(args, 'hymt_compat_proxy', 'auto') or 'auto'),
-              'routing_contract': workflow.DIGITAL_ROUTING if route == 'digital_pdf' else workflow.OCR_ROUTING,
+              'routing_contract': workflow.DIGITAL_ROUTING,
               'model_fingerprint_ref': reference(fingerprint),
               # 修订 135：hy-mt 代理仅在译中且未显式关闭时必需（en 目标 auto 跳过代理，
               # 见 pdf_translation_render.py；与 paper_translation_workflow 的合同校验同构推导）
@@ -168,22 +106,11 @@ def run_page(page_pdf, directory, args, closure):
               'backend_environment': {'BABELDOC_ONNX_PROVIDER': 'cpu'}}
     if os.environ.get('PAPER_TRANSLATION_ENGINE_HOME'):
         frozen['backend_environment']['PAPER_TRANSLATION_ENGINE_HOME'] = os.environ['PAPER_TRANSLATION_ENGINE_HOME']
-    if route == 'scanned_ocr':
-        from scan_model_config import ocr_review_settings
-        settings=ocr_review_settings(args)
-        if settings is not None:frozen['ocr_review']=settings
-        frozen['document_glossary']=getattr(args,'document_glossary',[])
-        if getattr(args,'scan_document_kind',None)in {'notice','official_document'}:frozen['scan_document_kind']=args.scan_document_kind
-        frozen['ocr_failure_policy'] = 'preserve_regions'
-        frozen['stamp_policy']=getattr(args,'stamp_policy','preserve')
-        if getattr(args,'source_review',None):frozen['source_review_ref']=reference(args.source_review)
     freeze = directory / 'FREEZE.json'; write(freeze, frozen)
     arguments = ['candidate', '--input', str(page_pdf), '--freeze', str(freeze), '--route', route,
         '--model', args.model, '--base-url', args.base_url, '--target-language', args.target_language,
         '--local-max-concurrency', str(args.local_max_concurrency or 1), '--output', str(directory/'output'),
         '--receipts', str(directory/'receipts')]
-    if route == 'scanned_ocr':
-        arguments.append('--ocr-preserve-local')
     result_path = directory / 'candidate-result.json'
     config = directory / 'job.json'; write(config, {'arguments': arguments, 'result': str(result_path)})
     job = run_bounded([sys.executable, str(Path(__file__).with_name('continuation_page_job.py')), str(config)],
@@ -196,51 +123,19 @@ def run_page(page_pdf, directory, args, closure):
     except (OSError, ValueError):
         result = {'error_code': job.get('stop_reason') or 'page_worker_failed'}
     fatal = fatal_reason(result, job)
-    manifest_path = directory/'receipts/ocr/OCR_MANIFEST.json'
-    manifest = read(manifest_path) if manifest_path.exists() else None
     if fatal:
         return {'fatal': fatal, 'status': 'original_preserved', 'issues': [fatal]}
     if job.get('status') == 'stopped' or result.get('status') not in {'succeeded', 'candidate', 'ready'}:
         target, error = None, result.get('error_code') or job.get('stop_reason') or 'page_translation_unavailable'
     else:
-        target, error = usable_candidate(directory/'output', manifest)
-    if (error in {'translated_text_over_preserved_source','preserved_source_damaged','translated_lines_overlap','ocr_layout_character_unbound'} and manifest
-            and not manifest.get('translation_mode') and len(manifest.get('pages',[]))==1
-            and not manifest['pages'][0].get('upright') and job.get('cleanup',{}).get('confirmed') is True):
-        remaining=limits['per_job_seconds']-(time.monotonic()-page_started)
-        if remaining>=10:
-            from ocr_region_translation import run_text_fallback
-            fallback,guard=run_text_fallback(page_pdf,manifest_path,directory/'region-fallback',args,remaining)
-            fatal=fatal_reason(fallback,guard)
-            if fatal:return {'fatal':fatal,'status':'original_preserved','issues':[fatal]}
-            if guard.get('status')=='succeeded' and fallback.get('target'):
-                manifest=read(manifest_path)
-                target,error=usable_candidate(directory/'region-fallback',manifest)
-                result['local_region_fallback']=fallback
+        target, error = usable_candidate(directory/'output', None)
     issues = []
     if error:
         issues.append(result.get('error_code') or error)
-    if manifest:
-        issues.append('ocr_text_unverified')
-        for p in manifest['pages']:
-            issues += [f['code'] for f in p.get('warnings', [])]
-            if p.get('preserved_regions'):
-                issues.append('local_source_regions_preserved')
     if result.get('quality_status') == 'fail':
         issues.append('quality_review_required')
-    local_preserved = bool(manifest and any(p.get('preserved_regions') for p in manifest['pages']))
-    glossary=[]
-    if target and manifest and manifest.get('document_glossary_ref'):
-        from scan_layout_translation import checked_ref
-        glossary=read(checked_ref(manifest['document_glossary_ref'])).get('entries',[])
-    return {'status': ('partially_translated' if local_preserved else 'translated') if target else 'original_preserved',
-            'document_glossary':glossary,
-            'source_review_packets':[p['source_review_packet'] for p in (manifest or{}).get('pages',[]) if p.get('source_review_packet')],
-            'name_review_refs':[p['name_review_ref'] for p in (manifest or{}).get('pages',[]) if target and p.get('name_review_ref')],
-            'source_conflict_refs':[p['source_visual_conflict_ref'] for p in (manifest or{}).get('pages',[]) if p.get('source_visual_conflict_ref')],
-            'target': reference(target) if target else None, 'issues': list(dict.fromkeys(issues)),
-            'document_kind':next((p.get('document_kind')for p in (manifest or{}).get('pages',[])if p.get('document_kind')),None),
-            'ocr_manifest_ref': reference(manifest_path) if manifest else None}
+    return {'status': 'translated' if target else 'original_preserved',
+            'target': reference(target) if target else None, 'issues': list(dict.fromkeys(issues))}
 
 
 def run(args, page_runner=None):
@@ -249,14 +144,6 @@ def run(args, page_runner=None):
     from chunked_workflow import run_lock, reclaim_stale
     from pdf_input_preflight import classify_page, detect_language
     source = Path(args.input).resolve()
-    scan_plan_path = getattr(args, 'scan_layout_plan', None)
-    scan_plan = None
-    if scan_plan_path:
-        from scan_layout_translation import load_plan
-        try:
-            scan_plan = load_plan(scan_plan_path, source, args.target_language)
-        except (ValueError, OSError, KeyError, TypeError, RuntimeError) as exc:
-            return {'status': 'blocked', 'error_code': 'scan_layout_plan_invalid', 'message': str(exc)}
     try:
         document = fitz.open(source)
         if document.needs_pass or not len(document):
@@ -264,15 +151,6 @@ def run(args, page_runner=None):
             return {'status': 'blocked', 'error_code': 'password_required_or_empty_pdf'}
     except Exception:
         return {'status': 'blocked', 'error_code': 'pdf_unreadable'}
-    roster_review_path=getattr(args,'roster_continuation_review',None)
-    roster_review=None
-    if roster_review_path:
-        from scan_roster_pagination import load_continuation_review
-        try:
-            roster_review=load_continuation_review(roster_review_path,source,len(document),args.target_language)
-        except (ValueError,TypeError,KeyError,OSError) as exc:
-            document.close()
-            return {'status':'blocked','error_code':'roster_continuation_review_invalid','message':str(exc)}
     output = Path(args.output).resolve()
     if output.exists() and not args.resume:
         output = output / ('run-' + datetime.now().strftime('%Y%m%d-%H%M%S-%f'))
@@ -281,7 +159,7 @@ def run(args, page_runner=None):
     skill = Path(__file__).resolve().parents[1]
     closure = [reference(p) for p in sorted(skill.rglob('*.py')) if 'tests' not in p.parts and '__pycache__' not in p.parts]
     identity = {'input': reference(source), 'model': args.model, 'base_url': args.base_url,
-                'target_language': args.target_language, 'policy': POLICY,'stamp_policy':getattr(args,'stamp_policy','preserve'),
+                'target_language': args.target_language, 'policy': POLICY,
                 'runtime_sha256': hashlib.sha256(json.dumps(closure, sort_keys=True).encode()).hexdigest(),
                 'configuration_refs': [reference(skill / name) for name in ('configs/model-profiles.json',
                     'configs/default-routes.json', 'references/academic-translation-policy.md',
@@ -289,16 +167,6 @@ def run(args, page_runner=None):
                 'generation': {k: os.environ.get(k) for k in ('PDF_TRANSLATION_TEMPERATURE','PDF_TRANSLATION_OPENAI_REASONING_EFFORT',
                                                               'PDF_TRANSLATION_SYSTEM_PROMPT','PAPER_TRANSLATION_IGNORE_CACHE')},
                 'request_concurrency': args.local_max_concurrency, 'resource_limits': args.resource_limits}
-    if scan_plan_path:
-        identity['scan_layout_plan_ref'] = reference(scan_plan_path)
-        identity['scan_layout_review_ref'] = scan_plan['review_basis_ref']
-    if getattr(args,'source_review',None):identity['source_review_ref']=reference(args.source_review)
-    if roster_review_path:
-        identity['roster_continuation_review_ref']=reference(roster_review_path)
-        identity['roster_continuation_basis_ref']=roster_review['review_basis_ref']
-    from scan_model_config import ocr_review_settings
-    settings=ocr_review_settings(args)
-    if settings is not None:identity['ocr_review']=settings
     state = {'identity': identity, 'pages': []}
     pages_root = Path(args.receipts).resolve()/'pages' if getattr(args, 'receipts', None) else output/'pages'
     if args.resume and state_path.exists():
@@ -326,18 +194,8 @@ def run(args, page_runner=None):
                 if n<=index and row.get('target'):
                     for term in row.get('document_glossary',[]):terms.setdefault(term['source'],term)
             args.document_glossary=list(terms.values())
-            args.scan_document_kind=completed.get(index,{}).get('document_kind')
-            args.scan_layout_page = next((p for p in scan_plan['pages'] if p['page'] == index+1), None) if scan_plan else None
             if reference(source) != identity['input']:
                 return {'status': 'blocked', 'error_code': 'source_changed_during_translation', 'state': str(state_path)}
-            if getattr(args,'source_review',None) and reference(args.source_review)!=identity['source_review_ref']:
-                return {'status':'blocked','error_code':'source_review_changed_during_translation','state':str(state_path)}
-            if roster_review_path and not roster_review_unchanged(roster_review_path,roster_review,identity):
-                return {'status':'blocked','error_code':'roster_review_changed_during_translation','state':str(state_path)}
-            if scan_plan_path and reference(scan_plan_path) != identity['scan_layout_plan_ref']:
-                return {'status': 'blocked', 'error_code': 'scan_layout_plan_changed', 'state': str(state_path)}
-            if scan_plan and reference(scan_plan['review_basis_ref']['path']) != scan_plan['review_basis_ref']:
-                return {'status': 'blocked', 'error_code': 'scan_layout_review_changed', 'state': str(state_path)}
             previous = completed.get(index+1)
             if previous and previous['status'] in {'translated', 'already_target_language', 'blank_preserved'} and previous.get('target'):
                 p = Path(previous['target']['path'])
@@ -346,7 +204,7 @@ def run(args, page_runner=None):
             page = document[index]
             facts = classify_page(page)
             blank = not page.get_text().strip() and not page.get_images() and not page.get_drawings()
-            if blank or (not args.scan_layout_page and facts['kind'] == 'native_text' and detect_language(page.get_text())['language'] == args.target_language):
+            if blank or (facts['kind'] == 'native_text' and detect_language(page.get_text())['language'] == args.target_language):
                 result = {'status': 'blank_preserved' if blank else 'already_target_language', 'issues': []}
                 page_dir = pages_root/f'{index+1:05d}'/('unchanged-'+datetime.now().strftime('%H%M%S-%f'));page_dir.mkdir(parents=True)
                 piece = page_dir/'source.pdf'
@@ -361,7 +219,7 @@ def run(args, page_runner=None):
                     part.insert_pdf(document, from_page=index, to_page=index);part.save(piece)
                 args.document_page = index+1
                 # 全部完成页的恢复和本来就在目标语言的页，不依赖模型在线或翻译引擎库存。
-                if page_runner is run_page and not model_checked and not args.scan_layout_page:
+                if page_runner is run_page and not model_checked:
                     health = workflow.doctor(args.base_url, args.model, permissive_inventory=True)
                     write(output/'environment.json', health)
                     if health['blockers']:
@@ -377,17 +235,6 @@ def run(args, page_runner=None):
                         'completed_pages': len(completed)-1, 'resume_supported': True}
         # 基线页结果保持不可变，跨页排版只用于本次拼版视图；恢复不会重复搬移标题。
         rows=state['pages']
-        if page_runner is run_page:
-            from scan_notice_pagination import finalize_notices
-            rows,notice_audit=finalize_notices(rows,output/'notice-pagination',args)
-            if notice_audit:write(output/'NOTICE_PAGINATION.json',notice_audit)
-            if notice_audit and notice_audit.get('fatal'):return {'status':'blocked','error_code':notice_audit['fatal'],'state':str(state_path)}
-        if roster_review:
-            if not roster_review_unchanged(roster_review_path,roster_review,identity):
-                return {'status':'blocked','error_code':'roster_review_changed_during_translation','state':str(state_path)}
-            from scan_roster_pagination import finalize_roster_supplements
-            rows,roster_audit=finalize_roster_supplements(rows,roster_review,output/'roster-continuation')
-            write(output/'ROSTER_CONTINUATION.json',roster_audit)
         completed={r['page']:r for r in rows}
         translated = sum(r['status'] in {'translated','partially_translated'} for r in rows)
         formal = output/('译文.pdf' if translated else '原文保留稿.pdf')
@@ -427,13 +274,6 @@ def run(args, page_runner=None):
         lines = ['# 翻译审校记录', '', f'共{len(rows)}页，翻译{translated}页，局部保留原文{partial}页，整页保留原文{retained}页。',
                  '这些记录不插入正式译文。', '']
         lines += [f'- 第{r["page"]}页：{r["status"]}；'+'、'.join(r['issues']) for r in rows if r['issues']]
-        for row in rows:
-            for packet in row.get('source_review_packets',[]):
-                lines.append(f'- 第{row["page"]}页 OCR 疑点与原图：[打开复核清单]({packet["html_ref"]["path"]})')
-            for name_review in row.get('name_review_refs',[]):
-                lines.append(f'- 第{row["page"]}页姓名译写：[打开复核清单]({name_review["path"]})')
-            for conflict in row.get('source_conflict_refs',[]):
-                lines.append(f'- 第{row["page"]}页源姓名识别冲突：[打开候选记录]({conflict["path"]})')
         (output/'翻译审校记录.md').write_text('\n'.join(lines)+'\n')
         return result
 

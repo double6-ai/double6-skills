@@ -24,6 +24,57 @@ def load_document_term_context(args: argparse.Namespace) -> dict[str, Any] | Non
     return context
 
 
+ROUTE_SCHEMA_VERSION = 2
+
+
+def digital_route_manifest(input_pdf: Path, *, explicit_override=None) -> dict:
+    """公开版路由清单：仅电子 PDF 后端与 LaTeX 直排两条路线，无扫描分支。
+
+    LaTeX 身份已验证 → latex_direct；存在扫描图像/无文字层页 → mixed_review 拒绝分发；
+    其余一律 pdf_backend。字段与既有 route_manifest.json 消费方保持兼容。"""
+    import fitz
+    from pdf_input_preflight import classify_page
+
+    latex_source = {"status": "not_applicable", "expected_key": None}
+    if explicit_override is not None:
+        latex_source = {"status": "verified_match", "source_path": str(explicit_override), "expected_key": None}
+        return {
+            "schema_version": ROUTE_SCHEMA_VERSION,
+            "document_route": "latex_direct",
+            "route_status": "ready",
+            "dispatch_allowed": True,
+            "intended_render_source": "latex_direct",
+            "review_reasons": [],
+            "latex_source": latex_source,
+            "pages": [],
+        }
+    with fitz.open(input_pdf) as document:
+        non_digital = [row for row in (classify_page(page) for page in document)
+                       if row["kind"] in ("scanned_image", "no_text_layer")]
+    if non_digital:
+        reason = "non_digital_pages:" + ",".join(str(row["page"]) for row in non_digital[:20])
+        return {
+            "schema_version": ROUTE_SCHEMA_VERSION,
+            "document_route": "mixed_review",
+            "route_status": "needs_review",
+            "dispatch_allowed": False,
+            "intended_render_source": None,
+            "review_reasons": [reason],
+            "latex_source": latex_source,
+            "pages": [{"page": row["page"], "kind": row["kind"]} for row in non_digital[:20]],
+        }
+    return {
+        "schema_version": ROUTE_SCHEMA_VERSION,
+        "document_route": "pdf_backend",
+        "route_status": "ready",
+        "dispatch_allowed": True,
+        "intended_render_source": "pdf_backend",
+        "review_reasons": [],
+        "latex_source": latex_source,
+        "pages": [],
+    }
+
+
 def _run_render(args: argparse.Namespace) -> dict[str, Any]:
     from pdf_translation_artifacts import build_standard_bilingual_output, collect_pdfs, enrich_quality_artifacts, extract_pdf_text, maybe_build_visual_repair_output, mirror_latex_direct_bilingual_output, relocate_backend_dual_intermediate, render_qa_repaired_pdf, run_quality_check, select_pdf_outputs, write_glossary, write_layout_map, write_translation_artifacts
     from pdf_translation_backend_quality import annotate_backend_quality_origin, copy_backend_tracking_artifact, enrich_translation_cache_stats, fallback_to_text_path, maybe_run_cloud_layout, parse_backend_quality, parse_translation_cache_stats, refine_backend_quality_with_retry_failures, resolve_backend_quality_with_pdf_direct_repairs
@@ -44,11 +95,6 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
     args.input_pdf = str(input_pdf)
     output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else default_output_dir(input_pdf).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    if bool(getattr(args, "route_only", False)):
-        from scanned_raster.route_pdf import write_route_only_result
-
-        return write_route_only_result(input_pdf, output_dir, args)
-
     if bool(getattr(args,'pdf_backend_only',False)):
         if args.source_override or args.latex_render_mode!='off':
             raise ValueError('explicit PDF-only route requires --latex-render-mode off and no TeX override')
@@ -65,14 +111,12 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
         }
         source_override = None
 
-    from scanned_raster.route_pdf import route_pdf, write_route_manifest
-
-    route_manifest = route_pdf(
+    route_manifest = digital_route_manifest(
         input_pdf,
-        args=args,
         explicit_override=(source_override if source_selection.get("identity_status") == "verified_match" else None),
     )
-    route_manifest_path = write_route_manifest(output_dir, route_manifest)
+    route_manifest_path = output_dir / "route_manifest.json"
+    route_manifest_path.write_text(json.dumps(route_manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if not route_manifest.get("dispatch_allowed"):
         return {
             "schema_version": route_manifest.get("schema_version"),
@@ -84,14 +128,6 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
             "actual_render_source": None,
             "review_reasons": route_manifest.get("review_reasons") or [],
         }
-    if route_manifest.get("document_route") == "mixed_cover_digital":
-        from scanned_raster.mixed_cover import run_mixed_cover
-
-        return run_mixed_cover(input_pdf, output_dir, route_manifest, args, body_runner=run)
-    if route_manifest.get("document_route") == "scanned_raster":
-        from scanned_raster.pipeline import run_scanned_translation
-
-        return run_scanned_translation(input_pdf, output_dir, route_manifest, args)
     if route_manifest.get("document_route") == "pdf_backend":
         source_override = None
         source_selection = {

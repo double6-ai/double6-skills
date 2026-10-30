@@ -2,26 +2,6 @@
 
 从已安装 skill 目录运行，`python` 指向按[依赖说明](runtime-dependencies.md)创建的新环境。用户输出和回执使用全新绝对路径。可设置 `PAPER_TRANSLATION_WORKSPACE` 控制锁和缓存的位置。
 
-## 先核输入
-
-```bash
-python scripts/paper_translation_workflow.py inspect-input \
-  --input /absolute/source.pdf --output /absolute/new/INPUT_PREFLIGHT.json \
-  --receipts /absolute/new/receipts
-```
-
-该动作核真实页框、可见/隐藏字形和扫描覆盖，不改源文件、不自动选择 OCR 或模型。不给 `--catalog-url` 时不探测模型库存。结果可能是 `needs_source_review`，须检查 `blockers` 和 `todos`。新扫描的完整作品、源角色和手写资格需要具名源图审阅；如进入新翻译，显式给定 `--fresh --source-review`、`--model` 和 LM Studio 兼容的 `--catalog-url`。未配置库存时不探测任何默认本机服务。其它服务的新翻译身份通过对应路线的冻结合同核定。
-
-## 已审扫描重建
-
-```bash
-python scripts/paper_translation_workflow.py trial-render \
-  --input /absolute/source.pdf --contract /absolute/TRIAL_CONTRACT.json \
-  --output /absolute/new/render --receipts /absolute/new/receipts
-```
-
-先核源、目标、字体、源组/角色、语义审校及实现 SHA。确需重新准备时才使用 `run-reviewed-scan --config /absolute/run.json`，详见[输入与重放合同](input-preflight-and-reviewed-run.md)。已有 OCR 可用 `prepare-scan` 生成待审源计划；命令的实际参数以子命令 `--help` 及 [结构合同](adaptive-flow-contract.md) 为准。缺源、遗漏、歧义、越界或证据过期时停止。
-
 ## 电子 PDF 与可信 LaTeX
 
 ```bash
@@ -45,7 +25,7 @@ python scripts/paper_translation_workflow.py collect \
 
 ## 资源上限
 
-`inspect-input`、`candidate`、`collect`、`review` 等重任务动作都接受：
+`candidate`、`collect`、`review` 等重任务动作都接受：
 
 | 参数 | 环境变量 | 默认（macOS / Linux） |
 |---|---|---|
@@ -53,7 +33,7 @@ python scripts/paper_translation_workflow.py collect \
 | `--job-timeout-seconds` | `PAPER_TRANSLATION_JOB_TIMEOUT_SECONDS` | 120 / 300 |
 | `--memory-metric` | `PAPER_TRANSLATION_MEMORY_METRIC` | `rss` / `pss` |
 
-无 FREEZE 的动作（`inspect-input`、`review`、`run-reviewed-scan` 等）优先级为：命令行 > 环境变量 > 平台默认。显式内存上限最多为物理内存 50%，越界直接报 `resource_limit_invalid`。
+无 FREEZE 的动作（`review` 等）优先级为：命令行 > 环境变量 > 平台默认。显式内存上限最多为物理内存 50%，越界直接报 `resource_limit_invalid`。
 
 带 FREEZE 的动作（`candidate`、`collect`、`resume-latex`）以冻结的 `resource_contract` 为唯一权威预算：
 
@@ -68,7 +48,7 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 
 ## 结构化预检与错误码
 
-`inspect-input` 报告和 `candidate`/`collect` 的 `WORKFLOW_INPUT_PREFLIGHT.json` 使用同一结构：`status`（`ok`/`blocked`，扫描事实报告另有原状态）、`error_code`、`warnings` 和 `findings[]`（`code`、`severity`、`message`、`details`）。任何动作被预检或合同校验拦下时，标准输出是同形 JSON，退出码 2；不再打印原始 traceback。
+`candidate`/`collect` 的 `WORKFLOW_INPUT_PREFLIGHT.json` 结构：`status`（`ok`/`blocked`）、`error_code`、`warnings` 和 `findings[]`（`code`、`severity`、`message`、`details`）。任何动作被预检或合同校验拦下时，标准输出是同形 JSON，退出码 2；不再打印原始 traceback。
 
 | 退出码 | 含义 |
 |---|---|
@@ -83,11 +63,11 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 | `pdf_truncated_or_corrupt` | error | 无法打开、缺少文件尾或修复后 0 页 |
 | `encrypted_user_password_required` | error | 需要打开密码；不猜测、不破解 |
 | `permissions_restricted` | warning | 所有者权限限制（禁止修改/复制等）；请确认有权翻译 |
-| `page_limit_exceeded` | error | 超出当前路线页数（电子 PDF 1–5 页；扫描预检 `--max-pages`，默认 2、最大 20；`chunked-candidate` 1–500 页） |
-| `non_digital_pages` | error | 电子 PDF 路线遇到扫描图像页、文字转曲页或路由判为需复核的页 |
+| `page_limit_exceeded` | error | 超出当前路线页数（电子 PDF 1–5 页；`chunked-candidate` 1–500 页） |
+| `non_digital_pages` | error | 电子 PDF 路线遇到扫描图像页、图像内嵌文字页或文字转曲页，整页保留原文 |
 | `source_language_matches_target` | error | 源文主要语言已经是目标语言（英译中时源文为中文，中译英时源文为英文） |
 | `target_language_unsupported` | error | `--target-language` 不是 `zh`（英译中）或 `en`（中译英） |
-| `target_language_route_unsupported` | error | `--target-language en` 只支持 `candidate --route digital_pdf` / `scanned_ocr`；`latex_verified` 与 `collect` 的译者固定译成简体中文 |
+| `target_language_route_unsupported` | error | `--target-language en` 只支持 `candidate --route digital_pdf`；`latex_verified` 与 `collect` 的译者固定译成简体中文 |
 | `zh2en_inline_object_math_unsupported` | error | 中译英：中文正文行内的变量/公式由 Form XObject 文字或矢量路径字形绘制，无法随英文重排（`details.pages` 列出每页计数） |
 | `source_language_mixed` / `source_language_unknown` | warning / info | 中英混合或可抽取文字过少 |
 | `page_load_failed` | error | 部分页面无法解析 |
@@ -153,29 +133,21 @@ Linux 默认按 PSS 计量：后端 fork 出的子进程与父进程共享只读
 | 中译英 | `<源文件名>.zh-left.en-right.dual.pdf` | `zh_left_en_right` | `zh` / `en` |
 | 方向未知（直接调用且未传方向） | `<源文件名>.source-left.translation-right.dual.pdf` | `source_left_translation_right` | `unknown` / `unknown` |
 
-清单另记 `left_role=source`、`right_role=translation`、`left_label`/`right_label`（如“中文原文”/“英文译文”，未知时“原文”/“译文”）与 `direction_basis`。LaTeX 直连的双语副本按清单记录的方向命名；Round38 结构化候选单语页为 `.round38-structured-candidates.<目标语言>.mono.pdf`。`--bilingual-layout en-left-zh-right` 是历史取值名，两个方向都表示“源左译右”。扫描栅格路线只接受英译中，其双语清单显式声明 `en→zh`（文件名 `bilingual_scanned.pdf` 等不变）。
+清单另记 `left_role=source`、`right_role=translation`、`left_label`/`right_label`（如“中文原文”/“英文译文”，未知时“原文”/“译文”）与 `direction_basis`。LaTeX 直连的双语副本按清单记录的方向命名；Round38 结构化候选单语页为 `.round38-structured-candidates.<目标语言>.mono.pdf`。`--bilingual-layout en-left-zh-right` 是历史取值名，两个方向都表示“源左译右”。
 
 已知局限：
 - 行内公式由 Form XObject 或矢量路径绘制的中文 PDF 不支持（预检拒绝，见上；只要定位到 1 个即拒绝）。定位依赖“对象中心落在中文行文字范围内、字形大小”的结构规则：中文行内的小图标也会被拒绝（误拦），不在行内的对象不检测；
 - Type3 字体的源文（如网页打印 PDF）英文无法沿用粗体；
 - 中文参考文献不剔除，按残留计数；图片里的中文不翻译（需要 OCR）。
 
-## 扫描件 / 混合 PDF：`candidate --route scanned_ocr`（rc.8）
-
-需要本地 Tesseract 5.x 与 `chi_sim`、`eng`、`osd` 语言数据（例如 Debian/Ubuntu：`apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim tesseract-ocr-osd`）。缺失时只有这条路线报 `ocr_engine_unavailable`（退出码 2），`doctor` 的 `ocr_engine` 字段只作提示，不阻断电子路线。
-
-FREEZE 的 `route` 为 `scanned_ocr`，`routing_contract` 须逐字等于 `paper_translation_workflow.OCR_ROUTING`，不得带 `source_cache_contract`，`implementation_refs` 应包含 `scripts/ocr_route.py`。推荐资源合同：`{"task_rss_bytes": 5368709120, "per_job_seconds": 120, "concurrency": 1, "memory_metric": "rss"}`（`resource_limits.RSS_CONTRACT`；rc.8 由 3 GiB 调为 5 GiB）；OCR 与后端共享同一单任务时限。
-
-回执：`receipts/ocr/OCR_MANIFEST.json`（逐页渲染图、识别文字、背景图、行明细、每个 tesseract 进程身份）、`receipts/ocr-reconstruct/`（有界执行资源采样与回收结论）、`receipts/reconstructed-input/`（重建源电子预检）、`receipts/candidate/`（后端）。`WORKFLOW_CANDIDATE.json` 的 `ocr` 字段汇总引擎身份、逐页结论、重建源 sha256；`ocr_stage` 指出停在哪一步。支持/拒绝矩阵与错误码见 [ocr-route.md](ocr-route.md)。
-
 ## 长文档分块：`chunked-candidate`（rc.9）
 
-超过 5 页或一个有界任务做不完的文档用 `chunked-candidate`（参数与 `candidate` 相同，另有 `--resume`；`--route` 可取 `digital_pdf`、`scanned_ocr`、`per_chunk`）。parent FREEZE 的 `pages` 为完整 1..N（N ≤ 500），`chunking_contract` 逐字等于 `chunked_translation.CHUNKING_CONTRACT`，`implementation_refs` 包含 `scripts/chunked_translation.py`；`per_chunk` 的 `routing_contract` 为 `PER_CHUNK_ROUTING`。每块派生自己的 FREEZE，以普通 `candidate` 运行，受同一冻结资源合同约束；合并质量不好于最差的一块，任一块没有产物即 `chunk_failed`（退出码 2）。设计、回执、续跑与限制见 [chunked-translation.md](chunked-translation.md)。
+超过 5 页或一个有界任务做不完的文档用 `chunked-candidate`（参数与 `candidate` 相同，另有 `--resume`；`--route` 可取 `digital_pdf`、`per_chunk`）。parent FREEZE 的 `pages` 为完整 1..N（N ≤ 500），`chunking_contract` 逐字等于 `chunked_translation.CHUNKING_CONTRACT`，`implementation_refs` 包含 `scripts/chunked_translation.py`；`per_chunk` 的 `routing_contract` 为 `PER_CHUNK_ROUTING`。每块派生自己的 FREEZE，以普通 `candidate` 运行，受同一冻结资源合同约束；合并质量不好于最差的一块，任一块没有产物即 `chunk_failed`（退出码 2）。设计、回执、续跑与限制见 [chunked-translation.md](chunked-translation.md)。
 
 
 ## 资源合同、方向检查与退出码
 
-资源按当前路线：一次只跑一个任务；进程树内存上限与单作业时限按平台默认（macOS 5GiB RSS／120 秒，Linux 4GiB PSS／300 秒，且默认不超过物理内存 25%；rc.8 起 RSS 上限由 3GiB 调为 5GiB），可用 `--task-memory-mib`、`--job-timeout-seconds`、`--memory-metric` 或对应环境变量 `PAPER_TRANSLATION_TASK_MEMORY_MIB`、`PAPER_TRANSLATION_JOB_TIMEOUT_SECONDS`、`PAPER_TRANSLATION_MEMORY_METRIC` 显式调整（显式值最多物理内存 50%）。带 FREEZE 的动作（`candidate`、`collect`、`resume-latex`）以 FREEZE 中冻结的 `resource_contract` 为唯一预算：命令行/环境变量只能与冻结值相同，不同即以 `resource_override_conflicts_with_freeze` 拒绝（退出码 2），要换预算请重新冻结；合同未写 `memory_metric` 时按 `rss` 解释（Linux 上 RSS 相加会重复计入共享页，旧合同视作业可能超出预算，建议重新冻结），Linux 建议冻结 `{"task_rss_bytes": 4294967296, "per_job_seconds": 300, "concurrency": 1, "memory_metric": "pss"}`（`doctor` 输出 `recommended_resource_contract`）。回执的 `resource_limits` 记录实际执行的上限。扫描新输入默认最多 2 页。模型服务另计，上限 40GiB。先做一页，确认内存正常再扩大。
+资源按当前路线：一次只跑一个任务；进程树内存上限与单作业时限按平台默认（macOS 5GiB RSS／120 秒，Linux 4GiB PSS／300 秒，且默认不超过物理内存 25%；rc.8 起 RSS 上限由 3GiB 调为 5GiB），可用 `--task-memory-mib`、`--job-timeout-seconds`、`--memory-metric` 或对应环境变量 `PAPER_TRANSLATION_TASK_MEMORY_MIB`、`PAPER_TRANSLATION_JOB_TIMEOUT_SECONDS`、`PAPER_TRANSLATION_MEMORY_METRIC` 显式调整（显式值最多物理内存 50%）。带 FREEZE 的动作（`candidate`、`collect`、`resume-latex`）以 FREEZE 中冻结的 `resource_contract` 为唯一预算：命令行/环境变量只能与冻结值相同，不同即以 `resource_override_conflicts_with_freeze` 拒绝（退出码 2），要换预算请重新冻结；合同未写 `memory_metric` 时按 `rss` 解释（Linux 上 RSS 相加会重复计入共享页，旧合同视作业可能超出预算，建议重新冻结），Linux 建议冻结 `{"task_rss_bytes": 4294967296, "per_job_seconds": 300, "concurrency": 1, "memory_metric": "pss"}`（`doctor` 输出 `recommended_resource_contract`）。回执的 `resource_limits` 记录实际执行的上限。模型服务另计，上限 40GiB。先做一页，确认内存正常再扩大。
 
 输入预检与失败统一输出结构化 JSON：`status`、`error_code` 和 `findings`（每项含 `code`/`severity`/`message`/`details`）；被预检拦下时退出码为 2。错误码含 `encrypted_user_password_required`、`pdf_truncated_or_corrupt`、`page_limit_exceeded`、`non_digital_pages`、`source_language_matches_target` 等，`permissions_restricted` 为警告。支持英译中（默认 `--target-language zh`）与中译英（`--target-language en`，电子 PDF 路线）：源文主要语言已经是目标语言时 `candidate` 直接拒绝（`source_language_matches_target`），不会静默输出原文；中译英成品改做渲染中文残留检查，源文保留字形与译文压叠、矢量公式字形丢失同样判失败；行内公式由 Form XObject/矢量路径绘制的中文 PDF 以 `zh2en_inline_object_math_unsupported` 预检拒绝，`latex_verified`/`collect` 加 `--target-language en` 报 `target_language_route_unsupported`。成品另做渲染英文残留检查，大面积未翻译判为高风险失败（`quality_status: fail`），此时仍写出译文，但以退出码 3 结束并在 JSON 中列出失败原因；退出码 3 由综合质量结论驱动（电子 PDF、LaTeX 及其它生成候选的动作同样适用），不只看残留检查。残留检查不计参考文献条目（按几何阅读顺序定位、逐条校验，字母附录处结束，句子式正文与指标枚举一律否决；只缺年份或出处的 weak 条目默认计数，仅在编号连续或跨页/跨栏续接时剔除；无标题时只剔除文末、左边距一致、至少 3 条带年份和出处的连续条目，且不超过全文英文词一半，候选段写入 `excluded.headingless_runs` 供审计）、等宽代码、URL/DOI/邮箱、编号与作者-年份引用。错误码表见[运行说明](references/release-quickstart.md)。
 
@@ -186,10 +158,9 @@ FREEZE 的 `route` 为 `scanned_ocr`，`routing_contract` 须逐字等于 `paper
 | 2 | 被输入预检或合同校验拦下（`status: blocked`，见 `error_code`/`findings`），不产生译文 |
 | 3 | 生成候选的动作（`candidate` 各路线、`resume-latex`、`revise-latex`、`preserve-roles` 等）：译文照常写出，但综合质量判 `fail`；结果 JSON 含 `quality_gate: fail`、`quality_fail_summary`、`quality_fail_reasons`（检查项、页码、残留比例与逐页等级）、`render_residue_pages` 和 `output_files` |
 
-## 方向、扫描和长文档路线明细
+## 方向与长文档路线明细
 
 | 输入和任务 | 直接调用 |
 | --- | --- |
 | 中文电子版 PDF 译成英文 | `candidate --route digital_pdf` 加 `--target-language en`（默认 `zh` 为英译中）；行内公式由 Form XObject/矢量路径绘制的 PDF 预检拒绝 |
-| 扫描件或扫描/电子混合 PDF（1–5 页，横排正文） | `candidate --route scanned_ocr`（可加 `--target-language en`）：本地 Tesseract 识别受支持页，重建源再走电子后端与全部质量门；表格、公式、低分辨率、低置信度、不确定方向等以稳定错误码退出码 2 拒绝，OCR 文字不作验收，综合质量最高 `unverified`。见 [references/ocr-route.md](references/ocr-route.md) |
-| 超过 5 页、一个有界任务做不完的长文档（最多 500 页，电子、扫描或混合） | `chunked-candidate --route digital_pdf\|scanned_ocr\|per_chunk`：按安全页边界切成有界块（电子 ≤4 页、扫描 ≤2 页），每块是一次普通 `candidate`（原路线、原门、同一冻结资源合同），按原页序合并并恢复目录/页码标签/内部链接；任一块失败整份 `chunk_failed`（退出码 2、不交付部分结果），合并质量不好于最差的一块；`--resume` 回收遗留进程树、只复用逐 sha 核对一致的块。见 [references/chunked-translation.md](references/chunked-translation.md) |
+| 超过 5 页、一个有界任务做不完的长文档（最多 500 页，电子） | `chunked-candidate --route digital_pdf\|per_chunk`：按安全页边界切成有界块（每块 ≤4 页），每块是一次普通 `candidate`（原路线、原门、同一冻结资源合同），按原页序合并并恢复目录/页码标签/内部链接；任一块失败整份 `chunk_failed`（退出码 2、不交付部分结果），合并质量不好于最差的一块；`--resume` 回收遗留进程树、只复用逐 sha 核对一致的块。见 [references/chunked-translation.md](references/chunked-translation.md) |

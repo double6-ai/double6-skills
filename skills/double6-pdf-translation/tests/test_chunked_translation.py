@@ -100,15 +100,14 @@ def test_formula_and_paragraph_continuation_signals(tmp_path):
 
 
 def test_per_chunk_routing_keeps_chunks_route_homogeneous():
-    kinds = ['native_text', 'native_text', 'scanned_image', 'scanned_image', 'scanned_image', 'sparse_text', 'native_text']
+    kinds = ['native_text', 'native_text', 'sparse_text', 'native_text', 'native_text']
     routes = ct.page_routes(kinds, 'per_chunk')
-    assert routes == ['digital_pdf', 'digital_pdf', 'scanned_ocr', 'scanned_ocr', 'scanned_ocr', 'scanned_ocr', 'digital_pdf']
-    signals = [{'after_page': i + 1, 'hard_unsafe': False, 'safe': True} for i in range(6)]
+    assert routes == ['digital_pdf'] * 5
+    signals = [{'after_page': i + 1, 'hard_unsafe': False, 'safe': True} for i in range(4)]
     chunks = ct.plan_chunks(signals, routes, ct.CHUNKING_CONTRACT)
-    assert [(c['start'], c['end'], c['route']) for c in chunks] == [
-        (1, 2, 'digital_pdf'), (3, 4, 'scanned_ocr'), (5, 6, 'scanned_ocr'), (7, 7, 'digital_pdf')]
+    assert [(c['start'], c['end'], c['route']) for c in chunks] == [(1, 4, 'digital_pdf'), (5, 5, 'digital_pdf')]
     # 显式路线：所有页同一路线（不合格页由该路线既有门拒绝，不在这里改路线）
-    assert ct.page_routes(kinds, 'digital_pdf') == ['digital_pdf'] * 7
+    assert ct.page_routes(kinds, 'digital_pdf') == ['digital_pdf'] * 5
     with pytest.raises(ValueError):
         ct.page_routes(kinds, 'latex_verified')
 
@@ -320,7 +319,7 @@ def parent_freeze(tmp_path, pdf, route='digital_pdf', **overrides):
         count = len(doc)
     freeze = {'input': wf.ref(pdf), 'pages': list(range(1, count + 1)), 'complete_semantic_scope': True,
               'scope_evidence': wf.ref(scope), 'route': route, 'model': 'm',
-              'routing_contract': {'digital_pdf': wf.DIGITAL_ROUTING, 'scanned_ocr': wf.OCR_ROUTING,
+              'routing_contract': {'digital_pdf': wf.DIGITAL_ROUTING,
                                    'per_chunk': wf.PER_CHUNK_ROUTING}[route],
               'chunking_contract': ct.CHUNKING_CONTRACT, 'model_fingerprint_ref': wf.ref(fingerprint),
               'proxy_quality_contract': {'adapter': 'none', 'required': False},
@@ -347,7 +346,7 @@ def test_chunked_freeze_accepts_long_documents_plain_candidate_still_rejects(tmp
 
 @pytest.mark.parametrize('change, message', [
     ({'chunking_contract': None}, 'chunking contract'),
-    ({'chunking_contract': {**ct.CHUNKING_CONTRACT, 'max_pages_per_chunk': {'digital_pdf': 40, 'scanned_ocr': 2}}}, 'chunking contract'),
+    ({'chunking_contract': {**ct.CHUNKING_CONTRACT, 'max_pages_per_chunk': {'digital_pdf': 40}}}, 'chunking contract'),
     ({'pages': [1, 2, 4]}, None),
     ({'implementation_refs': [{'path': str(SKILL / 'scripts/run_pdf_translation.py'), 'sha256': ''}]}, 'chunked_translation.py'),
     ({'source_cache_contract': {'protocol': 'x'}}, 'source cache'),

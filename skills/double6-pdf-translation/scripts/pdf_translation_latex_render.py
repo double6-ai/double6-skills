@@ -336,7 +336,7 @@ def iter_latex_candidates(root: Path) -> list[Path]:
     return candidates
 
 def discover_latex_source(input_pdf: Path, args: argparse.Namespace) -> tuple[Path | None, dict[str, Any]]:
-    from scanned_raster.latex_identity import latex_cache_root, resolve_latex_identity
+    from latex_identity import latex_cache_root, resolve_latex_identity
 
     if getattr(args, "disable_latex_autodiscovery", False):
         return None, {"policy": "latex_first_auto", "status": "disabled", "identity_status": "not_applicable"}

@@ -11,8 +11,7 @@ from pathlib import Path
 from typing import Any
 
 ASSESSMENT_VERSION = 1
-ROUTES = {"digital_pdf": "pdf_backend", "latex_verified": "latex_direct", "scanned_pdf": "scanned_raster",
-          "mixed_cover_pdf": "mixed_cover_digital"}
+ROUTES = {"digital_pdf": "pdf_backend", "latex_verified": "latex_direct"}
 
 
 def sha256(path: Path) -> str:
@@ -150,8 +149,6 @@ def assess(output_dir: Path, source_pdf: Path, route: str, *, min_pages: int = 5
 
     routing = load("route_manifest.json")
     render = load("render_manifest.json")
-    scan = load("scan_quality_gate.json")
-    parse = load("scan_parse_manifest.json")
     source = inspect_pdf(source_pdf, max_pages)
     source_sha = source.get("sha256", "")
     if source.get("status") != "ok":
@@ -163,11 +160,6 @@ def assess(output_dir: Path, source_pdf: Path, route: str, *, min_pages: int = 5
 
     outputs = render.get("outputs") if isinstance(render.get("outputs"), dict) else {}
     target = outputs.get("translated_pdf") or outputs.get("mono_pdf")
-    if route == "scanned_pdf":
-        # 固定文件名来自扫描流水线合同；不猜测目录里的任意 PDF。
-        target = str(output_dir / "translated_scanned.pdf")
-        if parse.get("status") != "ok" or parse.get("input_sha256") != source_sha:
-            blockers.append("scan_parser_not_ok_or_input_mismatch")
     target_path = Path(target) if target else None
     if target_path and not target_path.is_absolute():
         target_path = output_dir / target_path
@@ -180,60 +172,7 @@ def assess(output_dir: Path, source_pdf: Path, route: str, *, min_pages: int = 5
         blockers.append("searchable_chinese_missing")
     if route != "latex_verified" and pdf.get("page_count") != source.get("page_count"):
         blockers.append("page_count_mismatch")
-    component_reviews = []
-    if route == "scanned_pdf":
-        if scan.get("status") not in {"ok", "partial"}:
-            blockers.append("scan_quality_not_ready")
-        for item in scan.get("issues", []):
-            if item.get("severity") in {"blocking", "high", "error"}:
-                blockers.append(f"scan:{item.get('rule')}")
-    elif route == "mixed_cover_pdf":
-        from scanned_raster.mixed_cover import cover_plan, verify_composition
-        mixed = load('mixed_manifest.json')
-        components = mixed.get('components', [])
-        plan = cover_plan(routing.get('pages', []), max_pages=max_pages)
-        if (render.get('status') not in {'ok', 'partial'} or render.get('actual_render_source') != ROUTES[route]
-            or not plan or mixed.get('plan') != plan or mixed.get('input_sha256') != source_sha
-            or mixed.get('candidate_sha256') != pdf.get('sha256') or len(components) != 2):
-            blockers.append('mixed_manifest_chain_inconsistent')
-        elif pdf.get('status') == 'ok':
-            try:
-                for component, name, child_route in zip(components, ['cover', 'body'], ['scanned_pdf', 'digital_pdf']):
-                    child_manifest = Path(component['render_manifest'])
-                    if (component['name'] != name or component['source_pages'] != plan[f'{name}_pages']
-                        or sha256(child_manifest) != component['render_manifest_sha256']
-                        or sha256(Path(component['source_pdf'])) != component['source_sha256']):
-                        raise ValueError('mixed component identity changed')
-                    child = assess(child_manifest.parent, Path(component['source_pdf']), child_route, min_pages=1, max_pages=max_pages)
-                    if child['layers']['mechanical'] != 'passed':
-                        blockers.append(f'mixed_{name}_mechanical_blocked')
-                    quality_identity = {filename: sha256(child_manifest.parent/filename)
-                        for filename in ('quality_report.md', 'qa_checks.json', 'scan_quality_gate.json')
-                        if (child_manifest.parent/filename).is_file()}
-                    declared_quality = component.get('quality_evidence_sha256')
-                    quality_bound = declared_quality is not None and declared_quality == quality_identity
-                    if declared_quality is not None and not quality_bound:
-                        raise ValueError('mixed component QA identity changed')
-                    child_findings = list(child['findings'])
-                    child_status = child['qa_status']
-                    if name == 'cover':
-                        child_gate = read_object(child_manifest.parent/'scan_quality_gate.json')
-                        child_status = child_gate.get('status', 'missing')
-                        for issue in child_gate.get('issues', []):
-                            payload = json.dumps(issue, ensure_ascii=False, sort_keys=True)
-                            child_findings.append({'finding_id': hashlib.sha256(payload.encode()).hexdigest(),
-                                'severity': 'high' if issue.get('severity') in {'high', 'error', 'blocking'} else 'medium',
-                                'category': issue.get('rule', 'scan_quality'), 'evidence': payload,
-                                'review_layer': 'human' if issue.get('rule') == 'human_visual_pending' else 'semantic'})
-                    component_reviews.append({'name': name, 'source_pages': component['source_pages'],
-                        'source_sha256': component['source_sha256'], 'candidate_sha256': component['candidate_sha256'],
-                        'qa_status': child_status, 'quality_bound': quality_bound,
-                        'quality_evidence_sha256': quality_identity, 'findings': child_findings})
-                if verify_composition(target_path, components)['status'] != 'ok':
-                    blockers.append('mixed_page_composition_mismatch')
-            except (KeyError, TypeError, ValueError, OSError, RuntimeError):
-                blockers.append('mixed_component_evidence_invalid')
-    else:
+    if True:
         if render.get("status") != "ok" or render.get("actual_render_source") != ROUTES[route]:
             blockers.append("render_status_or_actual_source_mismatch")
         if render.get("errors"):
@@ -298,24 +237,6 @@ def assess(output_dir: Path, source_pdf: Path, route: str, *, min_pages: int = 5
     match = re.search(r"状态：`([^`]+)`", qa_text)
     qa_status = match.group(1) if match else "missing"
     qa_binding_field = "quality_report_sha256"
-    if route == "mixed_cover_pdf":
-        # 绑定所有子QA及页映射；相同文字的两段警告也有不同身份。
-        # 子段的语义/视觉回执不直接授予合并PDF验收。
-        qa_binding_field = "qa_evidence_sha256"
-        payload = {"root_quality_report_sha256": qa_sha, "components": component_reviews}
-        qa_sha = hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
-        evidence["mixed_qa_aggregate"] = qa_sha
-        for component in component_reviews:
-            for finding in component['findings']:
-                identity = json.dumps([component['name'], component['source_sha256'],
-                    component['candidate_sha256'], finding['finding_id']], sort_keys=True)
-                findings.append({**finding, 'finding_id': hashlib.sha256(identity.encode()).hexdigest(),
-                    'component': component['name'], 'source_pages': component['source_pages'],
-                    'child_finding_id': finding['finding_id']})
-        if len(component_reviews) != 2 or any(not c['quality_bound'] or c['qa_status'] == 'missing' for c in component_reviews):
-            qa_status = 'incomplete'
-        else:
-            qa_status = 'warn' if findings or any(c['qa_status'] != 'ok' for c in component_reviews) else 'ok'
     semantic_review = load("semantic_review.json")
     candidate_sha = pdf.get("sha256", "")
     count = pdf.get("page_count", 0)
@@ -332,13 +253,11 @@ def assess(output_dir: Path, source_pdf: Path, route: str, *, min_pages: int = 5
     semantic_unresolved = [f for f in unresolved if f.get('review_layer', 'semantic') == 'semantic']
     if semantic_findings and (semantic_review.get(qa_binding_field) != qa_sha or semantic_unresolved):
         semantic_ok = False
-    if route == "mixed_cover_pdf" and (qa_status == 'incomplete' or semantic_review.get(qa_binding_field) != qa_sha):
-        semantic_ok = False
 
     visual = load("visual_review.json")
     visual_ok = receipt_valid(visual, source_sha, candidate_sha, count,
                              {"full_page_sweep", "targeted_region_audit", "readability"})
-    human = load("human_visual_review.json") or scan.get("human_visual_review") or {}
+    human = load("human_visual_review.json")
     human_ok = receipt_valid(human, source_sha, candidate_sha, count,
                             {"full_page_sweep", "readability"}) and human.get("reviewer_kind") == "human"
     if human_ok:

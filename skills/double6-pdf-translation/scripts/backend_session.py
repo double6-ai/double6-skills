@@ -543,9 +543,7 @@ class BackendSession:
 
 
 def open_document_backend(directory: Path, route: str) -> BackendSession | None:
-    """电子长文档启动一次翻译进程。纯扫描不启动。起不来就按原来的方式，每块单独启动。"""
-    if route == "scanned_ocr":
-        return None
+    """电子长文档启动一次翻译进程。起不来就按原来的方式，每块单独启动。"""
     try:
         return BackendSession.start(directory)
     except Exception as exc:

@@ -255,7 +255,7 @@ def chunk_freeze(wf, parent: dict[str, Any], parent_ref: dict[str, str], plan_re
     freeze = {k: v for k, v in parent.items() if k != 'chunking_contract'}
     freeze.update(input=chunk['source_ref'], pages=list(range(1, chunk['pages'] + 1)), complete_semantic_scope=True,
                   scope_evidence=wf.ref(scope), route=chunk['route'],
-                  routing_contract=wf.DIGITAL_ROUTING if chunk['route'] == 'digital_pdf' else wf.OCR_ROUTING,
+                  routing_contract=wf.DIGITAL_ROUTING,
                   document_term_context_ref=context_ref,
                   chunk_of={'parent_freeze_ref': parent_ref, 'plan_ref': plan_ref, 'chunk_id': chunk['id'],
                             'source_pages': [chunk['start'], chunk['end']]})
@@ -660,7 +660,7 @@ def run(args: argparse.Namespace, wf) -> dict[str, Any]:
                 entry['status'] = 'running'
                 save_state(state_path, state)
                 started = time.monotonic()
-                if session is not None and entry.get('route') != 'scanned_ocr':
+                if session is not None:
                     session.ensure()
                 result = CHUNK_RUNNER(wf, args, freeze_path, entry, attempt_dir, entry_context)
                 kind = classify(result, CHUNKING_CONTRACT, attempt_dir)

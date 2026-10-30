@@ -8,7 +8,7 @@
 bash scripts/setup_venv.sh /absolute/new/venv
 ```
 
-安装器只接受新环境路径，使用 `uv` 和现有 Python 3.12，在新 venv 安装 `requirements-runtime.lock` 与 `requirements-rapidocr.lock`（后者只装 RapidOCR 本体，不跟随它声明的带界面 OpenCV），再安装 `requirements-build.lock` 以便构建本地维护的 PDFMathTranslate-next。构建完成后卸掉打包工具。用户自行准备 Python 和 uv；脚本不下载解释器、不复用或修改 WorkBuddy 等共享环境。PyPI 上的 babeldoc 包不安装，运行使用 `vendor/babeldoc`。
+安装器只接受新环境路径，使用 `uv` 和现有 Python 3.12，在新 venv 安装 `requirements-runtime.lock`，再安装 `requirements-build.lock` 以便构建本地维护的 PDFMathTranslate-next。构建完成后卸掉打包工具。用户自行准备 Python 和 uv；脚本不下载解释器、不复用或修改 WorkBuddy 等共享环境。PyPI 上的 babeldoc 包不安装，运行使用 `vendor/babeldoc`。
 
 ## 分层
 
@@ -17,24 +17,9 @@ bash scripts/setup_venv.sh /absolute/new/venv
 | Python、psutil、PyYAML、Pillow、jsonschema | 工作流、资源限制、配置与审校输入 |
 | PyMuPDF、fontTools、freetype-py、NumPy、reportlab、pypdf | 真实 PDF 读写、字形/布局/保护区和双语核验；reportlab/pypdf 也服务辅助渲染与诊断，不能因辅助工具缺失宣称所有主翻译路径失败 |
 | PDFMathTranslate-next 2.8.2 与 BabelDOC 0.5.24 维护副本 | 电子 PDF 排版、保护和翻译后端，包含本地修复，不能替换成无修改上游包后继承既有质量结论 |
-| RapidOCR 1.4.4 | 已有后端及可选 OCR；模型/字体下载与来源单独声明 |
-| pypinyin 0.55.0 | 扫描译文中短地名及明确专名的拼音音节核对，MIT；按哈希安装，不提供官方英文名保证。缺失时记录未做拼音核对，其它事实检查继续。来源：[PyPI 固定版本](https://pypi.org/project/pypinyin/0.55.0/) |
 | XeLaTeX 与所需 TeX 包 | 仅可信 LaTeX 路线，调用方显式准备 |
 | Poppler | 可选独立文字框诊断 |
-| Tesseract OCR 5.x（CLI）与 tessdata_fast `chi_sim`/`eng`/`osd` | 仅 `candidate --route scanned_ocr`；系统包安装，不随 skill 分发；缺失只阻断该路线，不算主路线失败 |
-| MinerU 4.0.4、其模型及服务 | 可选扫描实验，不在默认环境安装；无此能力时可使用明确提供的已有 OCR，不宣称 OCR 已完成 |
 | 模型服务、API key、字体、源论文 | 调用方明确提供与冻结，不随 skill 分发 |
-
-### 管理式开源 CJK 字体（修订 132 起）
-
-扫描写回嵌入的衬线 CJK 字体默认使用管理式开源字体，替代对系统字体的依赖：
-
-- 组件：Noto Serif SC Regular（SIL Open Font License 1.1，允许嵌入输出 PDF 并再分发；来源 notofonts/noto-cjk `Serif/SubsetOTF/SC`，固定 SHA256 `e8f396de…67c83a1cd3`，约 11MB）。
-- 获取：`python3 scripts/setup_cjk_fonts.py`（纯标准库、跨平台，Windows 原生可用；jsDelivr 主源、GitHub raw 备源，含许可文本与 `fonts_manifest.json` 登记）。缓存目录：`PAPER_TRANSLATION_FONT_CACHE` → `<repo>/.cache/double6-pdf-translation/fonts/` → `~/.cache/double6-pdf-translation/fonts/`。
-- 候选链：显式 `PAPER_TRANSLATION_SCANNED_CJK_FONT` → 管理字体 → fitz 内置 china-s（Droid Sans Fallback，Apache-2.0）。系统字体（macOS Songti.ttc、Linux 路径）不再默认参与，仅 `PAPER_TRANSLATION_ALLOW_SYSTEM_FONTS=1` 时作为显式降级——系统字体授权不覆盖"嵌入输出 PDF 分发给第三方"。
-- 已知限制（已解决）：MuPDF `subset_fonts` 对 CFF 版报 `Reserved charstring byte` 回退完整嵌入；`setup_cjk_fonts.py` 校验官方 OTF 后用 fontTools 本地转换 TrueType 版（cu2qu max_err=0.8，登记 fontTools 版本），写入侧默认选 TTF，子集化正常（同页输出约 19KB），渲染对比无可见差异。LaTeX 可信路线的 `--cjk-font`（默认 Songti SC）为 XeLaTeX 编译环境配置，由调用方自行准备，不属本链。
-
-默认依赖已移除 Gradio/gradio-pdf/gradio-i18n、FastAPI/Uvicorn/SSE，以及 Ollama、Xinference、DeepL、Azure 翻译和腾讯翻译 SDK。当前公共入口使用 OpenAI-compatible 服务；需要其它上游适配时应另行配置和验证。上游 GUI 源码仅为完整来源保留，CLI 发行候选拒绝 GUI 执行。
 
 ## 来源和许可证
 
@@ -49,7 +34,7 @@ bash scripts/setup_venv.sh /absolute/new/venv
 
 公开包保留第一方 AGPL-3.0-only、两项后端原许可证、内嵌 pdfminer 的 MIT 声明与 Adobe CMap 的再分发声明。维护版与所标上游版本的源码差异、维护日期见根目录 [MODIFICATIONS.md](../MODIFICATIONS.md)。旧 `pdf2zh_skill` 缺少可核验的许可凭据，未纳入分发。
 
-本次核对覆盖运行锁 76 条，另加不跟随声明依赖的 RapidOCR。它们由安装器按哈希下载，不将 wheel、已安装环境或模型权重放进 Skill 包。MIT、BSD、Apache、ISC、PSF 等许可仍属于各自原作者；不能因为安装后在同一环境中运行，就把其许可证文字替换为本项目许可证。带界面的 OpenCV、Hugging Face 下载库、`lxml`、`uharfbuzz`、`ruff`、xsdata 的命令行附加项和 `scikit-image` 不在运行环境里。图像处理只用 `opencv-python-headless`。配置读写用 `tomlkit`。扫描件判断默认跳过；真要跑那一步时才导入 `scikit-image`，需要的话另行安装。PyPI 上的 babeldoc 发行包不安装。
+本次核对覆盖运行锁全部条目。它们由安装器按哈希下载，不将 wheel、已安装环境或模型权重放进 Skill 包。MIT、BSD、Apache、ISC、PSF 等许可仍属于各自原作者；不能因为安装后在同一环境中运行，就把其许可证文字替换为本项目许可证。带界面的 OpenCV、Hugging Face 下载库、`lxml`、`uharfbuzz`、`ruff` 和 xsdata 的命令行附加项不在运行环境里。图像处理只用 `opencv-python-headless`（babeldoc docvision 使用）。配置读写用 `tomlkit`。PyPI 上的 babeldoc 发行包不安装。
 
 需要单独保留理解的条目包括：PyMuPDF 与 BabelDOC 使用 AGPL；Levenshtein 0.27.3 标注 GPL-2.0-or-later，可按后续版本选项选择 GPLv3，与 AGPLv3 组合时遵守各自条件；certifi、orjson 与 tqdm 涉及 MPL 或复合许可。GNU 对 GPLv3/AGPLv3 组合及“或更新版本”的说明见[许可兼容说明](https://www.gnu.org/licenses/license-compatibility.en.html)。下载和再分发这些依赖时，仍须保留各自声明和适用的源码义务。
 
@@ -66,18 +51,3 @@ bash scripts/setup_venv.sh /absolute/new/venv
 - 边界：环境变量对同一用户的其它进程可见（如 Linux `/proc/<pid>/environ`），不构成保密隔离边界；本改动只保证凭据不出现在子进程命令行、日志、回执、清单、异常与缓存中，不宣称完全隔离。
 
 安装脚本在哈希锁定安装后实际导入主路径原生模块，最多等待 180 秒；该步骤不载入翻译模型、不发送翻译请求。安装完成后的论文任务仍按各自冻结合同计算资源与时限。
-
-## OCR 路线第三方声明（rc.8，`--route scanned_ocr`）
-
-以下组件由运行者通过系统包管理器安装，不随 Skill 再分发；本 Skill 只以子进程方式调用 `tesseract` 命令行，不链接其库。
-
-| 组件 | 核对版本（Debian trixie 包） | 许可证 | 来源 |
-| --- | --- | --- | --- |
-| Tesseract OCR 引擎（`tesseract-ocr`、`libtesseract5`） | 5.5.0-1+b1（`tesseract 5.5.0`） | Apache-2.0（个别构建脚本 MIT） | https://github.com/tesseract-ocr/tesseract |
-| Leptonica 图像库（`libleptonica6`，Tesseract 的依赖） | 1.84.1-4 | Leptonica 许可（BSD 2 条款式） | https://github.com/DanBloomberg/leptonica |
-| 语言数据 `chi_sim.traineddata`（`tesseract-ocr-chi-sim`） | 1:4.1.0-2，2,469,156 字节 | Apache-2.0（上游 tessdata_fast） | https://github.com/tesseract-ocr/tessdata_fast |
-| 语言数据 `eng.traineddata`（`tesseract-ocr-eng`） | 1:4.1.0-2，4,113,088 字节 | Apache-2.0（上游 tessdata_fast） | 同上 |
-| 方向与文字检测 `osd.traineddata`（`tesseract-ocr-osd`） | 1:4.1.0-2，10,562,727 字节 | Apache-2.0（上游 tessdata_fast） | 同上 |
-| 重建源中文字体：PyMuPDF 内置 `china-s`（Droid Sans Fallback） | 随 PyMuPDF 1.25.2（锁定依赖） | Apache-2.0（字体）；PyMuPDF 本身 AGPL-3.0 | PyMuPDF / Android Open Source Project |
-
-`OCR_MANIFEST.json` 记录实际运行的引擎版本横幅、`tessdata` 目录及每个语言数据文件的大小与 sha256，便于复核。没有使用任何付费 API、云 OCR 或密钥。其它发行版的 Tesseract 5.x 可用，但识别结果和置信度会随版本与语言数据变化；本版只在上表版本上测量过。

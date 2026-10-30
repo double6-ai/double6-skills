@@ -30,17 +30,14 @@ from runtime_paths import workspace_root
 ROOT = workspace_root()
 PROJECT = ROOT / 'projects/paper-translation'
 MODEL = None
-ROUTES = {'digital_pdf': 'pdf_backend', 'latex_verified': 'latex_direct', 'scanned_ocr': 'ocr_reconstruct_pdf_backend'}
+ROUTES = {'digital_pdf': 'pdf_backend', 'latex_verified': 'latex_direct'}
 DIGITAL_ROUTING = {'selection':'explicit_pdf_backend_only','complete_native_pages_required':True,
                    'latex_discovery':'disabled','scan_or_mixed':'rejected'}
-# 扫描/混合 PDF 的常规 OCR 路线（rc.8）：只接受受支持版式；OCR 重建源随后走同一电子 PDF 后端与全部质量门。
-OCR_ROUTING = {'selection':'explicit_scanned_ocr','engine':'tesseract_cli','scan_or_mixed':'ocr_supported_pages_only',
-               'unsupported_layouts':'rejected','latex_discovery':'disabled','backend':'pdf_backend_on_reconstructed_source'}
-PDF_BACKEND_ROUTES = ('digital_pdf', 'scanned_ocr')
-# 长文档分块（rc.9）：parent FREEZE 声明整份页数 + 冻结分块合同；每块派生自己的 FREEZE 走上面两条既有路线之一。
-CHUNK_ROUTES = ('digital_pdf', 'scanned_ocr', 'per_chunk')
-PER_CHUNK_ROUTING = {'selection':'per_chunk_explicit','native_text_pages':'digital_pdf','scanned_pages':'scanned_ocr',
-                     'sparse_pages':'attach_to_neighbour_run','digital':DIGITAL_ROUTING,'scanned':OCR_ROUTING}
+PDF_BACKEND_ROUTES = ('digital_pdf',)
+# 长文档分块（rc.9）：parent FREEZE 声明整份页数 + 冻结分块合同；每块派生自己的 FREEZE 走既有路线。
+CHUNK_ROUTES = ('digital_pdf', 'per_chunk')
+PER_CHUNK_ROUTING = {'selection':'per_chunk_explicit','native_text_pages':'digital_pdf',
+                     'sparse_pages':'attach_to_neighbour_run','digital':DIGITAL_ROUTING}
 
 
 class BackendFailure(ValueError):
@@ -131,23 +128,14 @@ def doctor(base_url, model=MODEL, provider_generation_required=True, include_ocr
             'credential': credential,
             'resources': {key: memory[key] for key in ('total', 'available', 'swap_used', 'codex')},
             'supported_routes': list(ROUTES),
-            'recommended_resource_contract': recommended_contract(),
-            **({'ocr_engine': ocr_engine_status()} if include_ocr else {})}
-
-
-def ocr_engine_status():
-    """OCR 路线依赖（仅信息）：缺失只影响 --route scanned_ocr，不进入 doctor 阻断项。"""
-    from ocr_route import engine_info
-    info = engine_info()
-    return {k: info.get(k) for k in ('engine', 'available', 'version', 'languages', 'missing', 'tessdata_dir', 'traineddata')} | {
-        'blocks_routes': ['scanned_ocr'] if not info.get('available') else [], 'blocks_digital_route': False}
+            'recommended_resource_contract': recommended_contract()}
 
 
 def validate_freeze(freeze, input_pdf, route, model, *, chunked=False):
     if route not in ROUTES and not (chunked and route == 'per_chunk'):
         raise ValueError('route outside limited first release')
     if chunked and route == 'latex_verified':
-        raise ValueError('chunked translation supports digital_pdf, scanned_ocr and per_chunk only')
+        raise ValueError('chunked translation supports digital_pdf and per_chunk only')
     if freeze.get('input') != ref(input_pdf):
         raise ValueError('input identity changed')
     pages = freeze.get('pages')
@@ -174,8 +162,6 @@ def validate_freeze(freeze, input_pdf, route, model, *, chunked=False):
         raise ValueError('route or model differs from freeze')
     if route=='digital_pdf' and freeze.get('routing_contract')!=DIGITAL_ROUTING:
         raise ValueError('frozen explicit digital routing contract differs')
-    if route=='scanned_ocr' and (freeze.get('routing_contract')!=OCR_ROUTING or freeze.get('source_cache_contract')):
-        raise ValueError('frozen explicit scanned OCR routing contract differs')
     if route=='per_chunk' and freeze.get('routing_contract')!=PER_CHUNK_ROUTING:
         raise ValueError('frozen per-chunk routing contract differs')
     if route=='digital_pdf' and freeze.get('source_cache_contract'):
@@ -316,84 +302,6 @@ def attach_root_cause(result):
     return result
 
 
-def cap_ocr_quality(result):
-    """OCR 文本未经人工核对：重建源的文字层不构成验收，综合质量最高为 unverified（fail 保持 fail）。"""
-    if result.get('status') == 'blocked':
-        return
-    status = result.get('quality_status')
-    result['ocr_text_layer_is_acceptance'] = False
-    if status not in (None, 'fail', 'unverified'):
-        result['quality_status_before_ocr_cap'] = status
-        result['quality_status'] = 'unverified'
-    result.setdefault('quality_pending', []).append({'id': 'ocr_text_unverified',
-        'message': 'OCR 识别文本未经人工逐字核对；译文质量不因生成的文字层而被视为通过。'})
-
-
-def run_scanned_ocr_candidate(args, freeze):
-    """scanned_ocr：有界 OCR 重建（tesseract 子进程计入同一进程树计量与回收）→ 重建源电子预检 → 电子后端。
-    OCR 与后端共享同一单任务时限（FREEZE 资源合同的 per_job_seconds）。任何不受支持的版式在模型调用前以退出码 2 拒绝。"""
-    import ocr_route
-    info = ocr_route.engine_info()
-    engine = {k: info.get(k) for k in ('engine', 'version', 'available', 'missing', 'languages', 'traineddata', 'tessdata_dir')}
-    if not info['available']:
-        return dict(blocked_result([finding('ocr_engine_unavailable', ocr_route.CODES['ocr_engine_unavailable'],
-                                            missing=info.get('missing'))]), ocr_stage='ocr_engine', ocr_engine=engine)
-    limits = job_limits(args)
-    if getattr(args, 'task_deadline_monotonic', None) is None:
-        args.task_deadline_monotonic = time.monotonic() + limits['per_job_seconds']
-    workdir = (args.receipts / 'ocr').resolve()
-    target = getattr(args, 'target_language', 'zh')
-    preserve_local = bool(getattr(args, 'ocr_preserve_local', False))
-    if freeze.get('ocr_failure_policy', 'strict') != ('preserve_regions' if preserve_local else 'strict'):
-        raise ValueError('frozen OCR failure policy changed')
-    job = run_job(args, [sys.executable, str(SCRIPT_DIR / 'ocr_route.py'), '--input', str(args.input.resolve()),
-                         '--workdir', str(workdir), '--target-language', target, '--tesseract', info['binary']]
-                        + (['--preserve-local'] if preserve_local else [])
-                        + (['--source-review',freeze['source_review_ref']['path'],'--source-review-sha256',freeze['source_review_ref']['sha256']] if freeze.get('source_review_ref') else [])
-                        + (['--document-kind',freeze['scan_document_kind']]if freeze.get('scan_document_kind')in {'notice','official_document'}else[])
-                        + (['--stamp-policy','translate'] if freeze.get('stamp_policy')=='translate' else []),
-                  'ocr-reconstruct', interval_seconds=0.5)
-    manifest_path = workdir / 'OCR_MANIFEST.json'
-    ocr = {'engine': engine, 'job': {k: job.get(k) for k in ('status', 'stop_reason', 'error_code', 'elapsed_seconds',
-           'peak_task_memory_bytes', 'peak_task_rss_sum_bytes', 'rss_limit_bytes', 'memory_metric', 'resource_receipt',
-           'observed_owned_identities', 'launch_identity')} | {'cleanup_status': (job.get('cleanup') or {}).get('status')},
-           'manifest_ref': ref(manifest_path) if manifest_path.is_file() else None}
-    if job.get('status') != 'succeeded':
-        return dict(job, ocr_stage='ocr_reconstruct', ocr=ocr)
-    if not manifest_path.is_file():
-        raise ValueError('OCR reconstruction finished without its manifest')
-    manifest = read_json(manifest_path)
-    ocr['status'] = manifest['status']
-    ocr['pages'] = [{k: row.get(k) for k in ('page', 'kind', 'source_image_dpi', 'mean_word_conf', 'lines', 'osd', 'skew_degrees',
-                     'ruling_lines', 'tabular_lines', 'background_residue', 'reconstructed_page', 'text_line_count',
-                     'low_confidence_lines_written', 'refined_rows')} for row in manifest.get('pages', [])]
-    ocr['tesseract_processes'] = manifest.get('processes', [])
-    if manifest['status'] != 'ok':
-        return dict(blocked_result(manifest['findings']), ocr_stage='ocr_reconstruct', ocr=ocr)
-    if manifest.get('translation_mode') in {'local_table_regions','semantic_scan_flow','local_text_regions'}:
-        from ocr_region_translation import run_table_candidate
-        result = run_table_candidate(args, freeze, manifest_path)
-        ocr['manifest_ref'] = ref(manifest_path)
-        result.update(ocr=ocr, ocr_stage='local_region_translation')
-        return result
-    rebuilt = Path(manifest['reconstructed_source']['path'])
-    # 仅对本轮OCR输出免除原生页启发式；输入/清单/重建源逐SHA绑定仍由执行子进程核实。
-    if ref(args.input) != manifest['input'] or sha(rebuilt) != manifest['reconstructed_source']['sha256']:
-        raise ValueError('OCR reconstructed source binding changed')
-    ocr['reconstructed_source_ref'] = ref(rebuilt)
-    report = bounded_input_preflight(rebuilt, args.receipts / 'reconstructed-input', require_digital=False, target_language=target)
-    ocr['reconstructed_preflight'] = {k: report.get(k) for k in ('status', 'error_code', 'warnings', 'source_language', 'page_count')}
-    if report['status'] == 'blocked':
-        return dict(report, ocr_stage='ocr_reconstructed_preflight', ocr=ocr)
-    command = candidate_command(args, freeze, input_pdf=rebuilt)
-    result = run_job(args, [sys.executable, str(Path(__file__)), '_execute-digital', '--freeze', str(args.freeze.resolve()),
-                            '--ocr-manifest', str(manifest_path), '--ocr-manifest-sha256', sha(manifest_path),
-                            '--', *command[2:]], 'candidate')
-    result['ocr'] = ocr
-    result['ocr_stage'] = 'pdf_backend'
-    return result
-
-
 def run_chunked_candidate(args):
     """长文档分块（rc.9）：编排见 chunked_workflow.py；每块是一次普通 candidate。"""
     import chunked_workflow
@@ -525,101 +433,6 @@ def child_structured_result(result):
     return value if value and value.get('status') == 'blocked' else None
 
 
-def input_inspection_job(args):
-    command = [sys.executable, str(SCRIPT_DIR/'scan_input_preflight.py'), '--input', str(args.input.resolve()),
-               '--output', str(args.output.resolve()), '--max-pages', str(args.max_pages)]
-    if getattr(args, 'catalog_url', None):
-        command += ['--catalog-url', str(args.catalog_url)]
-    for name in ('source_review', 'reuse_contract', 'model'):
-        value = getattr(args, name, None)
-        if value is not None:
-            command += ['--'+name.replace('_', '-'), str(value)]
-    if getattr(args, 'fresh', False):
-        command.append('--fresh')
-    result = run_job(args, command, 'bounded-input-inspection')
-    result.update(report_ref=ref(args.output) if args.output.is_file() else None,
-                  input_modified=False, new_OCR_MT_calls=0)
-    if args.output.is_file():
-        try:
-            report = read_json(args.output)
-        except ValueError:
-            report = {}
-        result.update(preflight_status=report.get('status'), error_code=report.get('error_code'),
-                      findings=report.get('findings', []), source_language=report.get('source_language'))
-        if report.get('status') == 'blocked' and result['status'] == 'failed':
-            result['status'] = 'blocked'
-            result['error_code'] = report.get('error_code') or (report.get('blockers') or [None])[0]
-    write_new(args.receipts/'WORKFLOW_INPUT_INSPECTION.json', result)
-    return result
-
-
-def prepare_scan_job(args):
-    command=[sys.executable,str(SCRIPT_DIR/'scan_structure_proposal.py'),'--source',str(args.input.resolve()),'--prepare-directory',str(args.output.resolve()),'--max-pages',str(args.max_pages)]
-    for name in ('ocr','reuse-preparation','source-plan','groups','roles','targets','font','semantic-review','ink-protection','raw-targets'):
-        value=getattr(args,name.replace('-','_'))
-        if value is not None:command+=['--'+name,str(value.resolve())]
-    if args.draft_source_plan:command+=['--draft-source-plan']
-    result=run_job(args,command,'reviewed-scan-preparation')
-    prepared_inputs=args.output/'FROZEN_PREPARATION_INPUTS.json'
-    raw_ocr_ref=read_json(prepared_inputs)['rawOCR'] if result['status']=='succeeded' and prepared_inputs.is_file() else (ref(args.ocr) if args.ocr else None)
-    result.update(stage='scan_source_and_trial_preparation',input_ref=ref(args.input),raw_OCR_ref=raw_ocr_ref,new_model_calls=0,human_accepted=False,strict_delivery=False)
-    write_new(args.receipts/'WORKFLOW_SCAN_PREPARATION.json',result)
-    return result
-
-
-def trial_render_job(args):
-    contract = read_json(args.contract)
-    if contract.get('source_pdf_ref') != ref(args.input):
-        raise ValueError('trial source PDF identity mismatch')
-    result = run_job(args, [sys.executable, str(SCRIPT_DIR/'source_anchored_trial.py'),
-        '--contract', str(args.contract.resolve()), '--output', str(args.output.resolve())], 'finite-source-anchored-trial')
-    result.update(contract_ref=ref(args.contract), input_ref=ref(args.input),
-                  stage='finite_source_anchored_trial', new_model_calls=0, human_accepted=False, strict_delivery=False)
-    write_new(args.receipts/'WORKFLOW_TRIAL_RENDER.json', result)
-    return result
-
-
-def run_reviewed_scan(args):
-    from scan_input_preflight import load_run_config, ref as input_ref
-    result = {'status': 'blocked', 'development_revision': '109-unpublished', 'stages': [],
-              'new_OCR_MT_calls': 0, 'human_acceptance': False, 'strict_delivery': False}
-    try:
-        if args.output.exists():
-            raise ValueError('reviewed_run_requires_new_output')
-        config, source, cp = load_run_config(args.config)
-        limits = job_limits(args)
-        args.task_deadline_monotonic = time.monotonic()+limits['per_job_seconds']
-        common = dict(lock_path=args.lock_path, task_deadline_monotonic=args.task_deadline_monotonic, resource_limits=limits)
-        inspect = argparse.Namespace(input=source, output=args.output/'INPUT_PREFLIGHT.json',
-            receipts=args.receipts/'inspection', max_pages=config.get('max_pages', 2),
-            catalog_url=config.get('model_catalog_url'),
-            model=config.get('model'), reuse_contract=cp, source_review=None, fresh=False, **common)
-        outcome = input_inspection_job(inspect)
-        result['stages'].append(outcome)
-        if outcome['status'] != 'succeeded':
-            raise ValueError('input_inspection_failed_before_render')
-        if config['mode'] == 'reprepare':
-            fields = {n: None for n in ('ocr', 'source_plan', 'groups', 'roles', 'targets', 'font', 'semantic_review', 'ink_protection', 'raw_targets')}
-            prepare = argparse.Namespace(input=source, output=args.output/'prepared', receipts=args.receipts/'prepare',
-                reuse_preparation=cp, max_pages=config.get('max_pages', 2), draft_source_plan=False, **fields, **common)
-            outcome = prepare_scan_job(prepare)
-            result['stages'].append(outcome)
-            if outcome['status'] != 'succeeded':
-                raise ValueError('preparation_failed_before_render')
-            cp = prepare.output/'TRIAL_CONTRACT.json'
-        render = argparse.Namespace(input=source, contract=cp, output=args.output/'render',
-                                    receipts=args.receipts/'render', **common)
-        outcome = trial_render_job(render)
-        result['stages'].append(outcome)
-        result.update(status=outcome['status'], mode=config['mode'], config_ref=ref(args.config), source_ref=ref(source),
-            entry_code_ref=ref(__file__), inspection_code_ref=input_ref(SCRIPT_DIR/'scan_input_preflight.py'),
-            contract_ref=ref(cp), candidate_PDFs={k: ref(render.output/('page.'+k+'.pdf')) for k in ('mono','dual')} if outcome['status']=='succeeded' else {})
-    except (ValueError, OSError, KeyError, TypeError) as exc:
-        result.update(status='blocked', reason=str(exc), failed_before_new_OCR_MT=True)
-    write_new(args.receipts/'WORKFLOW_REVIEWED_SCAN.json', result)
-    return result
-
-
 def run_latex_candidate(args, freeze, *, resume=False):
     """每个完整语义单元单独取锁和监控；任何失败阻止后续编译。"""
     script = str(SCRIPT_DIR / 'independent_latex.py')
@@ -691,31 +504,26 @@ def validate_proxy_evidence(path, required, adapter=None):
     validate_proxy_quality(evidence.get('stats'),native=adapter=='source_bound_native')
 
 
-def execute_digital(freeze_path, command, ocr_manifest=None):
-    """子任务内核对真实页数和扫描路线，扫描禁止进入首发模型调用。
-    scanned_ocr 路线：输入必须是同一 FREEZE 输入经 OCR 清单绑定的重建源（逐 sha 核对），其余守门与电子路线相同。"""
+def execute_digital(freeze_path, command):
+    """子任务内核对真实页数与数字页守门：扫描/图像文字/文字转曲页禁止进入首发模型调用。"""
     import fitz
     import run_pdf_translation
-    from scanned_raster.route_pdf import route_pdf
+    from pdf_input_preflight import classify_page
     started_at = time.time()
     freeze = read_json(freeze_path)
     args = run_pdf_translation.build_parser().parse_args(command)
     args.attempt_started_at, args.attempt_freeze_path = started_at, freeze_path
-    if ocr_manifest is None:
-        if freeze.get('route')!='digital_pdf' or freeze.get('routing_contract')!=DIGITAL_ROUTING or not args.pdf_backend_only or args.latex_render_mode!='off':
-            raise ValueError('explicit digital route identity missing or changed')
-    else:
-        manifest = bound_json(ocr_manifest)
-        rebuilt = manifest.get('reconstructed_source') or {}
-        if (freeze.get('route')!='scanned_ocr' or freeze.get('routing_contract')!=OCR_ROUTING or not args.pdf_backend_only
-                or args.latex_render_mode!='off' or manifest.get('status')!='ok'
-                or manifest.get('failure_policy', 'strict') != freeze.get('ocr_failure_policy', 'strict')
-                or manifest.get('input',{}).get('sha256')!=freeze['input']['sha256']
-                or ref(args.input_pdf)!={'path':rebuilt.get('path'),'sha256':rebuilt.get('sha256')}):
-            raise ValueError('explicit scanned OCR route identity or reconstructed source binding missing or changed')
+    if freeze.get('route')!='digital_pdf' or freeze.get('routing_contract')!=DIGITAL_ROUTING or not args.pdf_backend_only or args.latex_render_mode!='off':
+        raise ValueError('explicit digital route identity missing or changed')
     with fitz.open(args.input_pdf) as document:
         if list(range(1, len(document)+1)) != freeze['pages']:
             raise ValueError('actual PDF page scope differs from freeze')
+        non_digital = [row for row in (classify_page(page) for page in document)
+                       if row['kind'] in ('scanned_image', 'no_text_layer')][:20]
+    if non_digital:
+        raise PreflightError('non_digital_pages', '存在非原生电子页（扫描、图像文字或文字转曲）；电子 PDF 路线要求全部页面为原生文字层。',
+                             pages=[{'page': row['page'], 'kind': row['kind'], 'visible_glyphs': row['visible_glyphs'],
+                                     'largest_image_coverage': row['largest_image_coverage']} for row in non_digital])
     given_context = ({'path': str(Path(args.document_term_context).resolve()), 'sha256': args.document_term_context_sha256}
                      if args.document_term_context else None)
     if freeze.get('document_term_context_ref') != given_context or (given_context and sha(given_context['path']) != given_context['sha256']):
@@ -723,36 +531,12 @@ def execute_digital(freeze_path, command, ocr_manifest=None):
     expected_transport=read_json(Path(freeze['model_fingerprint_ref']['path'])).get('api_contract') or 'openai_compatible'
     if args.translation_transport!=expected_transport or (expected_transport!='openai_compatible' and args.translator_mode!='openai'):
         raise ValueError('frozen explicit transport changed')
-    if ocr_manifest is not None:
-        args.verified_ocr_manifest = ocr_manifest
-    route = route_pdf(Path(args.input_pdf), args=args)
-    if ocr_manifest is None and (route.get('document_route') != 'pdf_backend' or not route.get('dispatch_allowed')):
-        review_pages = [{'page': p.get('page'), 'reasons': p.get('reasons')} for p in route.get('pages', [])
-                        if p.get('decision') not in (None, 'native_digital', 'digital')][:20]
-        raise PreflightError('non_digital_pages', '路由判定存在非原生电子页（扫描、图像文字或信号不足）；电子 PDF 路线要求全部页面为原生文字层。',
-                             document_route=route.get('document_route'), review_reasons=route.get('review_reasons'),
-                             pages=review_pages)
     if args.source_cache_mode:
         from pdf_source_cache import source_cache
         context=source_cache({'path':str(args.source_cache_context.resolve()),'sha256':args.source_cache_context_sha256},args.source_cache_mode).context
         if context['freeze_ref']!=ref(freeze_path) or context['input_ref']!=freeze['input'] or context['scope_ref']!=freeze['scope_evidence']:
             raise ValueError('source cache current freeze/input/scope mismatch')
-    # 清除继承的扫描身份；只有本次逐 SHA 验过的 scanned_ocr 清单能约束后端段落。
-    from ocr_text_layout import ENV as ocr_layout_env, FAILURE_ENV as ocr_failure_env
-    previous_ocr_layout = os.environ.pop(ocr_layout_env, None)
-    previous_ocr_failure = os.environ.pop(ocr_failure_env, None)
-    try:
-        if ocr_manifest is not None:
-            os.environ[ocr_layout_env] = json.dumps(ocr_manifest)
-            os.environ[ocr_failure_env] = str((Path(args.output_dir)/'OCR_LAYOUT_FAILURE.json').resolve())
-        result = run_pdf_translation.run(args)
-    finally:
-        os.environ.pop(ocr_layout_env, None)
-        if previous_ocr_layout is not None:
-            os.environ[ocr_layout_env] = previous_ocr_layout
-        os.environ.pop(ocr_failure_env,None)
-        if previous_ocr_failure is not None:
-            os.environ[ocr_failure_env]=previous_ocr_failure
+    result = run_pdf_translation.run(args)
     if args.source_cache_mode=='collect':
         if result.get('status')!='source_only_collected':raise ValueError('source-only collection missing')
         return result
@@ -846,14 +630,13 @@ def continue_digital(contract_ref, receipt_path):
         source_cache_mode='read',source_cache_context=Path(contract['context_ref']['path']),
         source_cache_context_sha256=contract['context_ref']['sha256'],pages=invocation['requested_pages'])
     import fitz
-    from scanned_raster.route_pdf import route_pdf
+    from pdf_input_preflight import classify_page
+    args.pdf_backend_only=True;args.latex_render_mode='off'
     with fitz.open(args.input_pdf) as source:
         if list(range(1,len(source)+1)) != freeze['pages']:
             raise ValueError('actual original source page scope changed')
-    args.pdf_backend_only=True;args.latex_render_mode='off'
-    route=route_pdf(Path(args.input_pdf),args=args)
-    if route.get('document_route') != 'pdf_backend' or not route.get('dispatch_allowed'):
-        raise ValueError('original source digital route changed')
+        if any(classify_page(page)['kind'] in ('scanned_image', 'no_text_layer') for page in source):
+            raise ValueError('original source digital route changed')
     # 同一实际保存产物重跑既有字形/字体/ToUnicode绑定，不继承一个布尔成功。
     run_pdf_translation.bind_final_group_artifact(args,output,manifest,contract['invocation_ref'])
     if ref(output/'FINAL_ARTIFACT_IDENTITY.json') != contract['identity_ref']:
@@ -934,28 +717,6 @@ def main(argv=None):
     translate.add_argument('--base-url', default=None)
     translate.add_argument('--local-max-concurrency', type=int, default=request_concurrency_from_env())
     translate.add_argument('--resume', action='store_true')
-    translate.add_argument('--scan-layout-plan', type=Path, help='执行者核定的扫描源角色、统一样式与单栏排版计划；未覆盖页仍自动续译')
-    translate.add_argument('--stamp-policy',choices=['preserve','translate'],default='translate',help='默认translate：允许覆盖印章以翻译章下可靠文字；preserve保留印章')
-    translate.add_argument('--ocr-review-model', choices=('glm-5.3-flash','none'), default='glm-5.3-flash', help='独立看图复核模型；使用 OCR_REVIEW_API_KEY 或 GLM_API_KEY，none 关闭')
-    translate.add_argument('--ocr-review-base-url', default=None, help='OCR 复核独立端点，默认按复核模型档案')
-    translate.add_argument('--source-review',type=Path,help='默认扫描源复核记录；只含原文更正，布局由程序自动生成')
-    translate.add_argument('--roster-continuation-review',type=Path,help='已核定源文和姓名译写的名单续页记录；绑定原PDF与复核依据')
-    inspect = sub.add_parser('inspect-input', help='只读有界输入事实与库存；源图资格不自动判定')
-    inspect.add_argument('--input', type=Path, required=True)
-    inspect.add_argument('--output', type=Path, required=True)
-    inspect.add_argument('--receipts', type=Path, required=True)
-    inspect.add_argument('--max-pages', type=int, default=2)
-    inspect.add_argument('--source-review', type=Path)
-    inspect.add_argument('--reuse-contract', type=Path)
-    inspect.add_argument('--model')
-    inspect.add_argument('--catalog-url', default=None)
-    inspect.add_argument('--fresh', action='store_true')
-    inspect.add_argument('--lock-path', type=Path, default=PROJECT/'logs/paper_translation_workflow.lock')
-    reviewed = sub.add_parser('run-reviewed-scan', help='单配置衔接既有输入预检、审后复用和有限渲染')
-    reviewed.add_argument('--config', type=Path, required=True)
-    reviewed.add_argument('--output', type=Path, required=True)
-    reviewed.add_argument('--receipts', type=Path, required=True)
-    reviewed.add_argument('--lock-path', type=Path, default=PROJECT/'logs/paper_translation_workflow.lock')
     d = sub.add_parser('doctor')
     d.add_argument('--base-url', default=None)
     d.add_argument('--model', default=None)
@@ -967,8 +728,6 @@ def main(argv=None):
     continuation.add_argument('--lock-path', type=Path, default=PROJECT / 'logs/paper_translation_workflow.lock')
     internal = sub.add_parser('_execute-digital', help=argparse.SUPPRESS)
     internal.add_argument('--freeze', type=Path, required=True)
-    internal.add_argument('--ocr-manifest', type=Path)
-    internal.add_argument('--ocr-manifest-sha256')
     internal.add_argument('command', nargs=argparse.REMAINDER)
     revision = sub.add_parser('revise-latex', help='审校通过的完整源单元修订，另生成候选')
     revision.add_argument('--input', type=Path, required=True)
@@ -983,24 +742,6 @@ def main(argv=None):
     roles.add_argument('--output', type=Path, required=True)
     roles.add_argument('--receipts', type=Path, required=True)
     roles.add_argument('--lock-path', type=Path, default=PROJECT / 'logs/paper_translation_workflow.lock')
-    trial = sub.add_parser('trial-render', help='显式源角色/同类leading/源锚点的有限cache-only候选')
-    trial.add_argument('--input', type=Path, required=True)
-    trial.add_argument('--contract', type=Path, required=True)
-    trial.add_argument('--output', type=Path, required=True)
-    trial.add_argument('--receipts', type=Path, required=True)
-    trial.add_argument('--lock-path', type=Path, default=PROJECT / 'logs/paper_translation_workflow.lock')
-    scan_prepare = sub.add_parser('prepare-scan', help='复用OCR和具名完整源组/角色输入，准备现有trial-render')
-    scan_prepare.add_argument('--input',type=Path,required=True)
-    scan_prepare.add_argument('--ocr',type=Path)
-    scan_prepare.add_argument('--reuse-preparation',type=Path)
-    scan_prepare.add_argument('--source-plan',type=Path)
-    scan_prepare.add_argument('--draft-source-plan',action='store_true')
-    scan_prepare.add_argument('--output',type=Path,required=True)
-    scan_prepare.add_argument('--receipts',type=Path,required=True)
-    scan_prepare.add_argument('--lock-path',type=Path,default=PROJECT/'logs/paper_translation_workflow.lock')
-    scan_prepare.add_argument('--max-pages',type=int,default=5)
-    for name in ('groups','roles','targets','font','semantic-review','ink-protection','raw-targets'):
-        scan_prepare.add_argument('--'+name,type=Path)
     resumed = sub.add_parser('resume-latex', help='核原失败回执与完整单元后继续LaTeX候选；保留所有保护门')
     for name in ('input', 'freeze', 'output', 'receipts', 'previous-result'):
         resumed.add_argument('--'+name, type=Path, required=True)
@@ -1041,7 +782,7 @@ def main(argv=None):
     chunked.add_argument('--receipts', type=Path, required=True)
     chunked.add_argument('--freeze', type=Path, required=True)
     chunked.add_argument('--route', choices=list(CHUNK_ROUTES), required=True,
-                         help='digital_pdf / scanned_ocr：全部块同一路线；per_chunk：原生文字页走 digital_pdf，扫描页走 scanned_ocr')
+                         help='digital_pdf：全部块同一路线；per_chunk：原生文字页走 digital_pdf')
     chunked.add_argument('--model', default=None)
     chunked.add_argument('--base-url', default=None)
     chunked.add_argument('--local-max-concurrency', type=int, default=request_concurrency_from_env(),
@@ -1173,7 +914,7 @@ def check_target_language_route(args):
     allowed = PDF_BACKEND_ROUTES + (('per_chunk',) if args.action == 'chunked-candidate' else ())
     if args.route not in allowed or args.action == 'collect':
         exc = PreflightError('target_language_route_unsupported',
-                             f'--target-language {target} 只支持 candidate --route digital_pdf / scanned_ocr；'
+                             f'--target-language {target} 只支持 candidate --route digital_pdf；'
                              f'当前 {args.action} --route {args.route} 的译者固定译成简体中文。',
                              target_language=target, route=args.route, action=args.action)
         exc.result = dict(blocked_result([finding('target_language_route_unsupported', target_language=target,
@@ -1182,7 +923,7 @@ def check_target_language_route(args):
         raise exc
 
 
-INSPECT_INPUT_MAX_PAGES = 20  # scan_input_preflight.inspect_input：--max-pages 只接受 1–20
+INSPECT_INPUT_MAX_PAGES = 20  # 预检 --max-pages 的显示上限
 GUIDANCE_SCHEMA = 'input_preflight_guidance_v1'
 WORKFLOW_CLI = 'python scripts/paper_translation_workflow.py'
 
@@ -1194,9 +935,7 @@ def input_preflight_guidance(report, action, route, target_language='zh'):
     以下情形返回 None（不给任何路线建议）：非 candidate 动作、损坏/加密/未知错误、
     除本错误外另有 error 级发现、页数或页型未核实、目标语言未知或与预检实际使用的目标语言冲突（不猜方向）。
     ``target_language`` 是本次 candidate 已请求并经 argparse 校验的 ``--target-language``（默认与 CLI 一致为 zh）；
-    提示里接受该参数的执行入口命令（chunked-candidate、candidate --route scanned_ocr）原样带上它，
-    不接受该参数的入口（inspect-input、prepare-scan）不加；inspect-input 固定按目标 zh 判定源语言，
-    所以中译英的长文档提示不再把它列为可运行的核对命令，扫描提示则注明这一限制。
+    提示里接受该参数的执行入口命令（chunked-candidate、candidate）原样带上它。
     """
     if action != 'candidate' or report.get('status') != 'blocked':
         return None
@@ -1223,24 +962,14 @@ def input_preflight_guidance(report, action, route, target_language='zh'):
             return dict(base, eligibility='over_chunked_document_limit', route_hint=None, next_steps=[],
                         message=(f'PDF 共 {page_count} 页，超过现有长文档分块路线的整份上限 {limit} 页；'
                                  '现有路线均不适用，本提示不推荐换路线，也不提高页数上限或自动拆分。'))
-        if target_language != 'zh':
-            inspect = ('先核对页型与源语言：只读入口 inspect-input 不接受 --target-language，固定按英译中（目标 zh）判定源语言，'
-                       '中文源会被它以 source_language_matches_target 拒绝，不能用于本次中译英核对；逐页页型与源语言尚未核实，'
-                       f'所列 chunked-candidate（带 {lang_flag}）会在冻结校验与任何模型调用之前对整份输入做有界预检'
-                       f'（最多 {limit} 页），digital_pdf 路线遇非原生页仍以退出码 2 拒绝。')
-        elif page_count <= INSPECT_INPUT_MAX_PAGES:
-            inspect = (f'先只读核对输入事实（不调用模型、不改 PDF）：{WORKFLOW_CLI} inspect-input --input <PDF> '
-                       f'--output <新报告.json> --receipts <新目录> --max-pages {page_count}。')
-        else:
-            inspect = (f'先核对页型：只读入口 inspect-input 最多 --max-pages {INSPECT_INPUT_MAX_PAGES}，不能覆盖本文件的 '
-                       f'{page_count} 页；逐页页型（原生/扫描/稀疏/无文字层）尚未核实，chunked-candidate 会在冻结校验与'
-                       f'任何模型调用之前对整份输入做有界预检（最多 {limit} 页），digital_pdf 路线遇非原生页仍以退出码 2 拒绝。')
+        verify = ('逐页页型与源语言尚未核实，chunked-candidate（带 ' + lang_flag + '）会在冻结校验与任何模型调用之前'
+                  f'对整份输入做有界预检（最多 {limit} 页），digital_pdf 路线遇非原生页仍以退出码 2 拒绝。')
         return dict(base, eligibility='within_chunked_document_limit', route_hint='chunked-candidate',
                     message=(f'PDF 共 {page_count} 页，超过单份 candidate 上限 {max_pages} 页，但在现有长文档分块入口 '
                              f'chunked-candidate 的整份上限 {limit} 页之内。本提示不自动分块、不执行任何入口、'
                              '不绕过冻结，也不提高页数上限。'),
                     next_steps=[
-                        inspect,
+                        verify,
                         (f'再按整份 {page_count} 页重新冻结 parent FREEZE：pages=1..{page_count}、complete_semantic_scope 与 '
                          'scope_evidence 覆盖完整语义范围、chunking_contract 逐字等于 chunked_translation.CHUNKING_CONTRACT、'
                          'routing_contract 与所选路线一致（见 references/chunked-translation.md）；不能沿用当前 FREEZE。'),
@@ -1257,30 +986,10 @@ def input_preflight_guidance(report, action, route, target_language='zh'):
         kinds = sorted({p.get('kind') for p in pages}, key=str)
         numbers = '、'.join(str(p['page']) for p in pages)
         base.update(page_kinds=[{'page': p['page'], 'kind': p.get('kind')} for p in pages])
-        if kinds != ['scanned_image'] or page_count > DIGITAL_MAX_PAGES:
-            return dict(base, eligibility='not_scan_eligible', route_hint=None, next_steps=[],
-                        message=(f'第 {numbers} 页存在无文字层页（no_text_layer，常见于文字转曲）或无法归类的页型；'
-                                 '这类页不属于扫描 OCR 可处理的整页扫描图像，本提示不推荐换路线。'))
-        max_flag = f' --max-pages {page_count}' if page_count > 2 else ''
-        return dict(base, eligibility='scanned_image_pages_only', route_hint='scanned_ocr',
-                    message=(f'第 {numbers} 页为整页扫描图像（scanned_image），电子 PDF 路线（digital_pdf）按设计拒绝。'
-                             '现有显式扫描路线 scanned_ocr 可能适用，但须另行满足其准入条件；'
-                             '本提示不自动切换路线、不执行 OCR 或任何入口。'),
-                    next_steps=[
-                        (f'先只读核对输入事实（不调用模型、不改 PDF）：{WORKFLOW_CLI} inspect-input --input <PDF> '
-                         f'--output <新报告.json> --receipts <新目录>{max_flag}；源图是否为完整作品、打印或手写不会被自动判定，'
-                         '须人工审阅源图（准备新扫描时加 --fresh --source-review <绑定源图的审阅文件> --model <实际模型>）。'
-                         + ('' if target_language == 'zh' else
-                            'inspect-input 不接受 --target-language、固定按目标 zh 判定源语言；若含中文原生文字页会以 '
-                            'source_language_matches_target 拒绝，这不是本次中译英的结论。')),
-                        ('常规 OCR 路线：重新冻结 FREEZE（route=scanned_ocr、routing_contract 等于 OCR_ROUTING、完整语义作用域证据），'
-                         f'再显式运行 {WORKFLOW_CLI} candidate --route scanned_ocr {lang_flag} …；仍受 1–5 页上限、Tesseract 引擎'
-                         '（chi_sim/eng/osd）与版式/公式准入门约束（如 ocr_formula_unsupported、ocr_table_unsupported、'
-                         'ocr_low_confidence，见 references/ocr-route.md）；OCR 文字不作质量验收，须人工复核。'),
-                        (f'具名源组/角色的审后扫描准备沿既有入口：{WORKFLOW_CLI} prepare-scan --input <PDF> --output <新目录> '
-                         '--receipts <新目录> …，须原 OCR 及原始具名完整源组（--groups）与角色（--roles）；草案从 '
-                         '--source-plan <SEED> --draft-source-plan 开始，所有确认须人工完成'
-                         '（见 references/input-preflight-and-reviewed-run.md）。')])
+        return dict(base, eligibility='non_digital_pages_unsupported', route_hint=None, next_steps=[],
+                    message=(f'第 {numbers} 页为非原生电子页（{"、".join(kinds)}：扫描图像、图像内嵌文字或文字转曲），'
+                             '本公开版仅支持原生电子 PDF（全部页面为可提取文字层）；'
+                             '本提示不推荐换路线，也不对扫描页做任何处理。'))
     return None
 
 
@@ -1312,21 +1021,13 @@ def dispatch(args):
     if args.action == 'translate':
         from translation_continuation import run
         return run(args)
-    if args.action == 'inspect-input':
-        result = input_inspection_job(args)
-    elif args.action == 'run-reviewed-scan':
-        result = run_reviewed_scan(args)
-    elif args.action == 'continue-digital':
+    if args.action == 'continue-digital':
         with project_lock(args.lock_path):
             result = continue_digital({'path':str(args.contract.resolve()),'sha256':args.contract_sha256},args.receipt)
     elif args.action == '_execute-digital':
-        manifest_ref = ({'path': str(args.ocr_manifest.resolve()), 'sha256': args.ocr_manifest_sha256}
-                        if args.ocr_manifest else None)
-        if args.ocr_manifest and not args.ocr_manifest_sha256:
-            raise ValueError('OCR manifest exact SHA required')
-        result = execute_digital(args.freeze, args.command[1:] if args.command[:1] == ['--'] else args.command, manifest_ref)
+        result = execute_digital(args.freeze, args.command[1:] if args.command[:1] == ['--'] else args.command)
     elif args.action == 'doctor':
-        result = doctor(args.base_url, args.model, include_ocr=True)
+        result = doctor(args.base_url, args.model)
         if args.output:
             write_new(args.output, result)
     elif args.action == 'resume-latex':
@@ -1392,8 +1093,6 @@ def dispatch(args):
             result=run_job(args,[sys.executable,str(Path(__file__)),'_execute-digital','--freeze',str(args.freeze.resolve()),'--',*command[2:]],'source-collect')
         elif args.route == 'latex_verified':
             result = run_latex_candidate(args, freeze)
-        elif args.route == 'scanned_ocr':
-            result = run_scanned_ocr_candidate(args, freeze)
         else:
             command = candidate_command(args, freeze)
             if freeze.get('source_cache_contract') and not args.source_cache_context:
@@ -1409,12 +1108,10 @@ def dispatch(args):
         result.update(input_preflight={k: preflight_report[k] for k in ('status', 'warnings', 'source_language', 'page_count')},
                       resource_contract_frozen=freeze.get('resource_contract'))
         if args.route=='digital_pdf':result['routing_contract']=DIGITAL_ROUTING
-        if args.route=='scanned_ocr':result['routing_contract']=OCR_ROUTING
         if args.action=='collect':result.update(stage='source_only_collect',candidate_generated=False)
         else:
             # 任何路线（电子 PDF、LaTeX）都把综合质量结论上浮到回执；fail 时退出码 3。
             result.update(quality_verdict(args.output))
-            if args.route=='scanned_ocr':cap_ocr_quality(result)
         write_new(args.receipts / ('WORKFLOW_COLLECTION.json' if args.action=='collect' else 'WORKFLOW_CANDIDATE.json'), result)
     elif args.action == 'chunked-candidate':
         result = run_chunked_candidate(args)
@@ -1430,10 +1127,6 @@ def dispatch(args):
                       human_accepted=False, strict_delivery=False)
         result.update(quality_verdict(args.output))
         write_new(args.receipts/'WORKFLOW_EDITORIAL_REVISION.json', result)
-    elif args.action == 'prepare-scan':
-        result = prepare_scan_job(args)
-    elif args.action == 'trial-render':
-        result = trial_render_job(args)
     elif args.action == 'preserve-roles':
         contract = read_json(args.contract)
         if contract.get('source_pdf_ref') != ref(args.input):
@@ -1462,7 +1155,7 @@ def dispatch(args):
         result = deliver_finite(args.packet, args.acceptance, args.output)
     else:
         result = deliver(args.packet, args.acceptance, args.output)
-    if args.action in {'trial-render', 'run-reviewed-scan', 'continue-digital'} and 'quality_status' not in result:
+    if args.action == 'continue-digital' and 'quality_status' not in result:
         # 这些动作的回执由各自流程写出；若产出了综合质量结论，另写一份结论回执并上浮。
         for directory in quality_output_dirs(args, result):
             verdict = quality_verdict(directory)

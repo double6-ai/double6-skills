@@ -546,8 +546,12 @@ class ParagraphFinder:
 
         # 先算每个字符的版面归属，再按物理行统一（见 line_fragments.unify_line_layouts）：
         # 文字框比实际行窄或两个同级框重叠时，同一行不再被切成几段。
-        from ocr_text_layout import bind_ocr_layout
-        char_layouts = bind_ocr_layout(page, page.pdf_character, Layout)
+        # 公开电子版不携带 OCR 布局绑定模块，直接走原生字符归属。
+        try:
+            from ocr_text_layout import bind_ocr_layout
+        except ModuleNotFoundError:
+            bind_ocr_layout = None
+        char_layouts = bind_ocr_layout(page, page.pdf_character, Layout) if bind_ocr_layout else None
         if char_layouts is None:
             char_layouts = [get_character_layout(char, layout_index, layout_map) for char in page.pdf_character]
             unify_line_layouts(page.pdf_character, char_layouts, layout_index, layout_map, Layout,

@@ -107,8 +107,6 @@ def test_entry_argparse_target_language_support(tmp_path):
     """提示只给 argparse 实际接受该参数的入口加 --target-language。"""
     assert '--target-language' in help_text(tmp_path, 'candidate')
     assert '--target-language' in help_text(tmp_path, 'chunked-candidate')
-    assert '--target-language' not in help_text(tmp_path, 'inspect-input')
-    assert '--target-language' not in help_text(tmp_path, 'prepare-scan')
 
 
 # ---------- 长文档：zh->en 与默认 en->zh 成对 ----------
@@ -121,10 +119,9 @@ def test_long_document_listed_chunked_command_keeps_direction_and_passes_languag
     assert result['error_code'] == 'page_limit_exceeded' and result['page_count'] == 6
     g = result['guidance']
     assert g['route_hint'] == 'chunked-candidate' and g['target_language'] == requested
-    inspect, _, chunked = g['next_steps']
+    verify, _, chunked = g['next_steps']
     assert f'--route digital_pdf --target-language {requested} --model' in chunked
-    assert 'inspect-input' in inspect
-    assert all('--target-language' not in c for c in re.findall(r'inspect-input --input[^；。]*', inspect))
+    assert 'inspect-input' not in verify and 'chunked-candidate（带' in verify
     # 按所列参数真实调用分块入口：语言预检通过（源语言与目标相反），再因空 FREEZE 拒绝。
     tokens, argv = listed_argv(chunked, tmp_path, pdf, 'chunked')
     assert tokens[0] == 'chunked-candidate' and tokens.count('--target-language') == 1
@@ -134,25 +131,6 @@ def test_long_document_listed_chunked_command_keeps_direction_and_passes_languag
     assert pre['source_language']['language'] == SOURCE_FOR[requested]
     assert code == 2 and out['error_code'] == 'input_or_contract_invalid', out
     assert not list((tmp_path / 'chunked/out').rglob('*.pdf'))
-    if requested == 'zh':
-        # 所列 inspect-input 命令按原参数可被 argparse 接受并只读运行。
-        tokens, argv = listed_argv(inspect, tmp_path, pdf, 'inspect')
-        assert tokens[0] == 'inspect-input' and '--max-pages' in tokens
-        code, out = run(tmp_path, argv)
-        assert code == 0 and out['status'] == 'succeeded'
-    else:
-        # 中译英：inspect-input 固定目标 zh，不列为可运行核对命令，只说明限制并指向带 en 的分块预检。
-        assert 'inspect-input --input' not in inspect and 'source_language_matches_target' in inspect
-        assert '不接受 --target-language' in inspect and 'chunked-candidate（带 --target-language en）' in inspect
-
-
-def test_inspect_input_is_fixed_to_zh_target_so_zh_to_en_hint_does_not_list_it(tmp_path):
-    """依据：真实 inspect-input 对中文长文档（6 页，在其 20 页窗口内）按固定目标 zh 拒绝。"""
-    pdf = text_pdf(tmp_path / 'six.pdf', 'zh')
-    code, out = run(tmp_path, ['inspect-input', '--input', str(pdf), '--output', str(tmp_path / 'i/INPUT.json'),
-                               '--receipts', str(tmp_path / 'i/rc'), '--max-pages', '6',
-                               '--lock-path', str(tmp_path / 'i/heavy.lock')])
-    assert code == 2 and out['error_code'] == 'source_language_matches_target'
 
 
 def test_zh_to_en_listed_command_without_language_would_fall_back_and_be_refused(tmp_path):
@@ -176,32 +154,14 @@ def test_explicit_zh_and_default_give_identical_guidance(tmp_path):
 # ---------- 扫描提示：en 与 zh ----------
 
 @pytest.mark.parametrize('target', ['en', 'zh'])
-def test_scan_hint_keeps_direction_only_on_entries_that_accept_it(tmp_path, target):
+def test_scan_pages_get_no_route_hint_in_public_build(tmp_path, target):
     pdf = scan_pdf(tmp_path / 'scan.pdf')
     result, receipt = candidate(tmp_path, pdf, target)
     assert result['error_code'] == 'non_digital_pages'
     g = result['guidance']
-    assert g['route_hint'] == 'scanned_ocr' and g['target_language'] == target
-    inspect, ocr, prepare = g['next_steps']
-    assert f'candidate --route scanned_ocr --target-language {target} …' in ocr
-    assert all('--target-language' not in c for c in re.findall(r'inspect-input --input[^；。]*', inspect))
-    assert '--target-language' not in prepare
-    assert ('source_language_matches_target' in inspect) == (target == 'en')
-    # 所列 inspect-input 命令（不带语言参数）对纯扫描输入按原参数只读运行成功。
-    tokens, iargv = listed_argv(inspect, tmp_path, pdf, 'inspect')
-    assert tokens[0] == 'inspect-input' and '--target-language' not in tokens
-    code, out = run(tmp_path, iargv)
-    assert code == 0 and out['status'] == 'succeeded'
-    # 按所列 candidate --route scanned_ocr 参数（加上该入口必需的输入/冻结/端点参数）真实调用：OCR 之前因空 FREEZE 拒绝。
-    tokens, argv = listed_argv(ocr, tmp_path, pdf, 'ocr')
-    assert tokens == ['candidate', '--route', 'scanned_ocr', '--target-language', target]
-    code, out = run(tmp_path, argv + ['--input', str(pdf), '--freeze', str(tmp_path / 'FREEZE.json'),
-                                      '--model', 'agent-self', '--base-url', 'http://127.0.0.1:9/v1',
-                                      '--output', str(tmp_path / 'ocr/out'), '--receipts', str(tmp_path / 'ocr/rc')])
-    pre = json.loads((tmp_path / 'ocr/rc/WORKFLOW_INPUT_PREFLIGHT.json').read_text())
-    assert pre['status'] == 'ok' and pre['target_language'] == target
-    assert code == 2 and out['error_code'] == 'input_or_contract_invalid', out
-    assert not (tmp_path / 'ocr/out').exists()
+    assert g['route_hint'] is None and g['target_language'] == target
+    assert g['eligibility'] == 'non_digital_pages_unsupported' and g['next_steps'] == []
+    assert '仅支持原生电子 PDF' in g['message']
 
 
 # ---------- 未知或冲突的目标语言：不猜 ----------

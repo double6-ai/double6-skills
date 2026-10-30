@@ -24,22 +24,10 @@
     "defaults": {
       "type": "object",
       "required": [
-        "scan_new_input",
-        "scan_reviewed_reprepare",
-        "scan_frozen_rebuild",
         "digital_pdf",
         "latex_verified"
       ],
       "properties": {
-        "scan_new_input": {
-          "const": "inspect-input"
-        },
-        "scan_reviewed_reprepare": {
-          "const": "run-reviewed-scan"
-        },
-        "scan_frozen_rebuild": {
-          "const": "trial-render"
-        },
         "digital_pdf": {
           "const": "collect"
         },
@@ -52,9 +40,6 @@
     "routes": {
       "type": "object",
       "required": [
-        "scan_new_input",
-        "scan_reviewed_reprepare",
-        "scan_frozen_rebuild",
         "digital_pdf",
         "latex_verified"
       ]

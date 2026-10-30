@@ -30,9 +30,9 @@ SCHEMA_VERSION = 1
 CHUNKING_CONTRACT = {
     'protocol': 'page_range_chunks_v1',
     'max_document_pages': 500,
-    # 单块页数上限：电子页实测约 17 s/页 + 固定开销（5 页 83 s），扫描页另加 OCR 约 8 s/页；
-    # 都留出 120 s 单任务时限的余量。超时/超内存的块再二分，直到单页。
-    'max_pages_per_chunk': {'digital_pdf': 4, 'scanned_ocr': 2},
+    # 单块页数上限：电子页实测约 17 s/页 + 固定开销（5 页 83 s），
+    # 留出 120 s 单任务时限的余量。超时/超内存的块再二分，直到单页。
+    'max_pages_per_chunk': {'digital_pdf': 4},
     'boundary_policy': 'safe_page_boundary_v1',
     'boundary_search_pages': 1,
     # backend_timeout：后端在本任务时限内的内部超时（render_manifest.errors 记 error_type=timeout），
@@ -55,7 +55,7 @@ CHUNKING_CONTRACT = {
 }
 QUALITY_ORDER = {'pass': 0, 'unverified': 1, 'fail': 2}
 TERM_CONTEXT_PROTOCOL = 'document_term_context_v1'
-PAGE_KIND_ROUTE = {'native_text': 'digital_pdf', 'scanned_image': 'scanned_ocr'}
+PAGE_KIND_ROUTE = {'native_text': 'digital_pdf'}
 _TERMINAL = re.compile(r'[.!?;:。！？；：…)\]}"”’》」』]\s*$')
 _OPEN_MATH = re.compile(r'(?:[=+×·−<>≤≥∑∫]|(?<![A-Za-z])[-–])\s*$')
 _CONTINUES_NEXT = re.compile(r'(?:continued on (?:the )?next page|continued overleaf|\(continued\)\s*$|续下页|（未完）|未完待续)', re.I)
@@ -156,9 +156,9 @@ def boundary_signals(tail, head, tables_a, tables_b, h_a, h_b, page_index: int) 
 
 # ---------------------------------------------------------------- 划分
 def page_routes(kinds: list[str], route: str) -> list[str]:
-    """逐页路线。显式 digital_pdf / scanned_ocr：全部页同一路线（不合格页由该路线既有门拒绝）。
-    per_chunk：原生文字页 → digital_pdf，扫描页 → scanned_ocr，稀疏/无文字层页并入相邻同路线段。"""
-    if route in ('digital_pdf', 'scanned_ocr'):
+    """逐页路线。显式 digital_pdf：全部页同一路线（非原生页由该路线既有门拒绝）。
+    per_chunk：原生文字页 → digital_pdf，稀疏/无文字层页并入相邻段。"""
+    if route == 'digital_pdf':
         return [route] * len(kinds)
     if route != 'per_chunk':
         raise ValueError('unknown chunk route')
@@ -168,7 +168,7 @@ def page_routes(kinds: list[str], route: str) -> list[str]:
             routes[index] = routes[index - 1]
     for index in range(len(routes) - 1, -1, -1):
         if routes[index] is None:
-            routes[index] = routes[index + 1] if index + 1 < len(routes) else 'scanned_ocr'
+            routes[index] = routes[index + 1] if index + 1 < len(routes) else 'digital_pdf'
     return [str(value) for value in routes]
 
 
@@ -646,7 +646,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser('plan')
     p.add_argument('--input', type=Path, required=True)
     p.add_argument('--preflight', type=Path, required=True)
-    p.add_argument('--route', choices=('digital_pdf', 'scanned_ocr', 'per_chunk'), required=True)
+    p.add_argument('--route', choices=('digital_pdf', 'per_chunk'), required=True)
     p.add_argument('--output', type=Path, required=True)
     m = sub.add_parser('merge')
     m.add_argument('--plan', type=Path, required=True)

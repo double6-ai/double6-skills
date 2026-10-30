@@ -16,7 +16,7 @@ from typing import Any, Mapping
 GIB = 1024 ** 3
 MIB = 1024 ** 2
 LEGACY_CONTRACT = {'task_rss_bytes': 3 * GIB, 'per_job_seconds': 120, 'concurrency': 1}  # 旧 FREEZE 合同，按冻结值执行
-# RSS 口径的任务内存上限（所有路线共用：macOS 平台默认、scanned_ocr 推荐合同）。rc.8 由 3 GiB 调为 5 GiB：
+# RSS 口径的任务内存上限（所有路线共用：macOS 平台默认）。rc.8 由 3 GiB 调为 5 GiB：
 # pdf2zh 后端进程树 RSS 合计实测 2.5–3.3 GB（写时复制共享页按 RSS 重复计入），3 GiB 下真实扫描件被内存门停止。
 RSS_TASK_LIMIT_BYTES = 5 * GIB
 RSS_CONTRACT = {'task_rss_bytes': RSS_TASK_LIMIT_BYTES, 'per_job_seconds': 120, 'concurrency': 1, 'memory_metric': 'rss'}

@@ -5,7 +5,7 @@ from collections import Counter
 from decimal import Decimal
 import re
 import unicodedata
-from scanned_raster.scientific_integrity import canonical_math
+from scientific_integrity import canonical_math
 
 
 NUMBER = r"[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?"

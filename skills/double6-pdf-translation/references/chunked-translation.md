@@ -2,14 +2,14 @@
 
 `candidate` 只接受完整的 1–5 页文档（FREEZE 页门 `page_limit_exceeded`）。超过一个有界任务能力的长文档
 （单任务 120 s、5 GiB RSS、重任务并发 1）改用 `chunked-candidate`：按页范围切成一串有界块，**每块是一次普通
-`candidate`**（`digital_pdf` 或 `scanned_ocr` 原路线、原有全部门），全部完成后按原页序合并为一份输出。
+`candidate`**（`digital_pdf` 原路线、原有全部门），全部完成后按原页序合并为一份输出。
 分块不放宽任何门、不降阈值、不删公式、不遮挡正文；单份 `candidate` 的命令行、页门和输出不变。
 
 ## 用法
 
 ```bash
 python scripts/paper_translation_workflow.py chunked-candidate \
-  --input long.pdf --freeze FREEZE.json --route digital_pdf|scanned_ocr|per_chunk \
+  --input long.pdf --freeze FREEZE.json --route digital_pdf|per_chunk \
   --model <model> --base-url <endpoint> [--target-language en] \
   --output out/ --receipts receipts/        # 必须是新目录
 # 中断后在同一目录续跑：
@@ -24,8 +24,8 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
 |---|---|
 | `pages` | 从 1 开始的完整连续页，1–500 页（`CHUNKING_CONTRACT['max_document_pages']`），且等于实际页数 |
 | `chunking_contract` | 逐字等于 `chunked_translation.CHUNKING_CONTRACT`；改任何一项都要重新冻结 |
-| `route` / `routing_contract` | `digital_pdf` → `DIGITAL_ROUTING`；`scanned_ocr` → `OCR_ROUTING`；`per_chunk` → `PER_CHUNK_ROUTING` |
-| `implementation_refs` | 必须包含 `scripts/chunked_translation.py`（建议同时包含 `chunked_workflow.py`、`ocr_route.py`） |
+| `route` / `routing_contract` | `digital_pdf` → `DIGITAL_ROUTING`；`per_chunk` → `PER_CHUNK_ROUTING` |
+| `implementation_refs` | 必须包含 `scripts/chunked_translation.py`（建议同时包含 `chunked_workflow.py`） |
 | `source_cache_contract` | 不支持（拒绝） |
 
 每块的 FREEZE 由 parent 派生（`out/chunks/<id>/attempt-N/freeze/FREEZE.json`）：输入 = 块 PDF（逐 sha）、`pages`
@@ -38,15 +38,15 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
 
 ## 流程
 
-1. **整份输入预检**（有界子进程，60 s、1.5 GiB，最多 500 页）：逐页分类（原生文字 / 扫描 / 稀疏 / 无文字层）、源语言。
+1. **整份输入预检**（有界子进程，60 s、1.5 GiB，最多 500 页）：逐页分类（原生文字 / 稀疏 / 无文字层）、源语言；扫描图像页使整份在预检阶段拒绝。
    `digital_pdf` 路线要求全部原生文字页，否则在任何重任务前退出码 2。
 2. **计划**（有界任务 `chunk-plan`，冻结资源合同）：
-   - 每块页数上限：电子 4 页、扫描 2 页（实测电子约 17 s/页 + 固定开销，5 页 83 s；扫描另加 OCR 约 8 s/页）。
+   - 每块页数上限：电子 4 页（实测约 17 s/页 + 固定开销，5 页 83 s）。
    - 安全边界：在上限往前 1 页内选边界。hard 信号（不在此切）：表格跨页（上页表格到底、下页表格在顶）、
      续表/续图题注（“Table 2 (continued)”“续表”）与“continued on next page”、行尾开放运算符（`=`、`+`、`≤`…；
      连字符断词不算）。表格探测失败按“不安全”处理。段落未结束是软信号：尽量避开，避不开时切开并在
      `CHUNK_PLAN.json.cross_chunk_continuations` 记录（含上下文 sha）。页眉页脚（上下 12% 带、在 ≥30% 页面重复的行）不参与判断。
-   - `per_chunk`：原生文字页 → `digital_pdf`，扫描页 → `scanned_ocr`，稀疏/无文字层页并入相邻段；每块只含一种路线。
+   - `per_chunk`：原生文字页 → `digital_pdf`，稀疏/无文字层页并入相邻段；每块只含一种路线。
    - 写出每块源 PDF（`plan/chunks/cNNN.pdf`，sha 登记）、原文目录/页码标签/内部链接、整份文档术语上下文
      `DOCUMENT_TERM_CONTEXT.json`（与单份 candidate 相同的 `prepare_source` / `write_glossary` / `enrich_quality_artifacts`）。
    - 参考文献区跨块延续：在整份源文上用残留检查同一套标题判定（`render_residue_check.reference_region_open_pages`）
@@ -58,7 +58,7 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
 3. **逐块执行**：每次尝试先在 `CHUNKED_RUN_STATE.json`（原子替换）登记 `started`，再以普通 `candidate` 运行
    （编排进程内调用；块任务仍是独立的有界子进程树，拥有式计量、PID + create_time + nonce + 父链核验回收）。
    电子块的翻译后端不再每块重新拉起：整份文档共用一个已经加载版面模型的进程。某块碰到时间上限时，
-   这个进程随该块的连接断开而退出，下一块重新加载一次。扫描块不走这个进程。单份不超过 5 页的 `candidate` 仍是每份单独启动。
+   这个进程随该块的连接断开而退出，下一块重新加载一次。单份不超过 5 页的 `candidate` 仍是每份单独启动。
    - 资源停止（`task_timeout`、`whole_job_deadline_exceeded`、`task_memory_limit`、`backend_timeout`）：块二分（id 追加 `a`/`b`），
      直到单页；单页仍超限 → 该块 `chunk_page_exceeds_task_budget`（带实测），不放宽限制。`backend_timeout` = 后端在本任务时限内
      的内部超时（块 `out/render_manifest.json` 的 `errors` 含 `error_type=timeout`）。实测（NIST AI 100-1，4 页块）：后端 110 s
@@ -101,7 +101,7 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
    - 核对块顺序与覆盖（每页恰好一次）和每个产物的 sha；按页序拼接主版式译文（`<stem>.chunked.<lang>.mono.pdf`）
      与 QA 可读件（`final_readable.pdf`，每块一个书签）。
    - 逐页核对：块页数、合并页数、页面尺寸/旋转与原文一致，图片指纹与该块实际送入后端的源（电子块 = 块 PDF；
-     扫描块 = OCR 重建源）一致——检出缺页、重复页、错位。
+     一致——检出缺页、重复页、错位。
    - 恢复原文内部链接（拆块会丢掉跨块链接）、目录、页码标签，并以写出的文件核对每条内部链接都在。
    - 跨块一致性：各块主要目标语言字体相同；文档级术语表里带译法的术语，在出现源术语的每一块译文里都用同一译法。
 5. **合并综合质量**（`merged-N/comprehensive_quality.json`）：取最差的一块（`fail > unverified > pass`，缺失或未知状态按
@@ -130,7 +130,7 @@ python scripts/paper_translation_workflow.py chunked-candidate ...同上... --re
   归属未知、枚举不完整或回收未核实，任何一项即失败关闭（`owned_tree_cleanup_unconfirmed`，`STALE_RECLAIM.json` 的
   `unverified` 非空、带 `reason_codes`），不续跑。
 - 上次 `started` 未结束的尝试记为 `abandoned`，新尝试用新目录（`attempt-N+1`）；旧目录保留作证据。
-- 已完成块只有在块 PDF、块 FREEZE、主版式译文、QA 可读件、综合质量、渲染清单、块回执（扫描块另含 OCR 重建源）的
+- 已完成块只有在块 PDF、块 FREEZE、主版式译文、QA 可读件、综合质量、渲染清单、块回执的
   sha 全部一致时才复用；任何一个变化 → 记录 `invalidated.changed` 并重跑该块。
 - 每次调用的合并输出写到新的 `merged-N/`，不覆盖上一次。
 - 已登记的确定性失败（`failure.deterministic=true`，根因已核实）不重跑：续跑时比对登记的输入与配置身份（块 PDF、页范围、
