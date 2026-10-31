@@ -13,6 +13,7 @@ bash scripts/setup_venv.sh /absolute/new/venv
 ## 分层
 
 | 内容 | 用途 |
+| RapidOCR 1.4.4（rapidocr-onnxruntime 本体，--no-deps 安装） | Apache-2.0 | babeldoc 电子后端 docvision 布局模型所需；带界面 OpenCV 不装，图像库用 opencv-python-headless |
 | --- | --- |
 | Python、psutil、PyYAML、Pillow、jsonschema | 工作流、资源限制、配置与审校输入 |
 | PyMuPDF、fontTools、freetype-py、NumPy、reportlab、pypdf | 真实 PDF 读写、字形/布局/保护区和双语核验；reportlab/pypdf 也服务辅助渲染与诊断，不能因辅助工具缺失宣称所有主翻译路径失败 |

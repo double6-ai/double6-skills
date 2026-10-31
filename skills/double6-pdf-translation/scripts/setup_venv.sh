@@ -18,6 +18,9 @@ PYTHON_BIN="${PDFTR_PYTHON:-$(uv python find 3.12 --no-python-downloads)}"
 uv venv --python "$PYTHON_BIN" --no-python-downloads "$TARGET_ENV"
 ENV_PYTHON="$TARGET_ENV/bin/python"
 uv pip install --python "$ENV_PYTHON" --require-hashes -r "$SKILL_ROOT/requirements-runtime.lock"
+# babeldoc 电子后端的 docvision 布局模型需要 rapidocr-onnxruntime 本体；其声明依赖会带 GUI 版
+# opencv-python，故 --no-deps 单独装本体（运行锁已含 opencv-python-headless 等真实依赖）。
+uv pip install --python "$ENV_PYTHON" --require-hashes --no-deps -r "$SKILL_ROOT/requirements-rapidocr.lock"
 uv pip install --python "$ENV_PYTHON" --require-hashes --no-deps -r "$SKILL_ROOT/requirements-build.lock"
 uv pip install --python "$ENV_PYTHON" --no-deps --no-build-isolation "$SKILL_ROOT/vendor/pdfmathtranslate_next"
 # 打包 PDFMathTranslate 时用到的工具，运行时不再保留。tomlkit 与 packaging 在运行锁里。
@@ -39,7 +42,7 @@ env.update(OMP_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1', MKL_NUM_THREADS='1', V
 subprocess.run(
     [sys.executable, '-c', '''
 import importlib.metadata as metadata
-import cv2, onnx, onnxruntime, pymupdf, tomlkit
+import cv2, onnx, onnxruntime, pymupdf, rapidocr_onnxruntime, tomlkit
 from sklearn.cluster import DBSCAN
 from babeldoc.docvision.doclayout import OnnxModel
 from babeldoc.main import create_progress_handler
