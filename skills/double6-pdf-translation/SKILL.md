@@ -1,9 +1,9 @@
 ---
 name: double6-pdf-translation
-description: 电子版PDF英译中与中译英（要求全部页面为原生文字层；扫描/图像文字页整页保留原文并记录）。默认translate自动分页、冻结并续译，少量低置信或失败区域保留原文，其余继续；问题写独立审校记录，不插入正式正文。严重全局故障才停，支持resume。
+description: 电子版PDF英译中、中译英与日文横排译中（要求全部页面为原生文字层；扫描/图像文字页整页保留原文并记录）。默认translate自动分页、冻结并续译，少量低置信或失败区域保留原文，其余继续；问题写独立审校记录，不插入正式正文。严重全局故障才停，支持resume。
 metadata:
-  version: "3.0.0"
-  development_revision: "public-1"
+  version: "3.1.0"
+  development_revision: "public-2"
   source_contract_revision: "111-20261017"
   release_status: "stable"
   default_routes: "configs/default-routes.json"
@@ -20,6 +20,8 @@ python scripts/paper_translation_workflow.py translate --input /绝对路径/原
 
 中译英用 `--target-language en`。自动分页、路由、冻结输入与配置SHA、保存进度；不要求用户先手填FREEZE或人工验收材料。按用户提供的页范围处理，不宣称节选是完整作品。
 
+日文横排 PDF 译成中文：目标仍为 `--target-language zh`，源语言按输入前几页自动检测（假名占比），也可用环境变量 `PAPER_TRANSLATION_SOURCE_LANGUAGE=ja` 显式声明；提示词与残留检查自动切换为日译中口径，日文汉字词不照搬、译成自然简体中文。
+
 本公开版仅支持原生电子 PDF：全部页面须有可提取文字层。扫描图像页、图像内嵌文字页或文字转曲页会被识别并整页保留原文，原因写入审校记录；不做 OCR 重建。
 
 默认 DeepSeek-V4.1-Flash，官方模型 ID `deepseek-flash`、端点 `https://api.deepseek.com`，默认关闭思考、温度0.7；显式设置优先，不静默换模型。凭据经 `LOCAL_TRANSLATION_API_KEY` 或 `DEEPSEEK_API_KEY` 提供，不得进入命令、日志、缓存身份或PDF。显式选择智谱模型仍支持 `GLM_API_KEY`。安装见[运行依赖](references/runtime-dependencies.md)。
@@ -27,6 +29,8 @@ python scripts/paper_translation_workflow.py translate --input /绝对路径/原
 ## 写回前的事实核对
 
 写回前核对数值与单位的绑定、完整线路编号和标题关键概念；短专名单独真实生成本运行术语表并供后页复用，一致性不代替专名正确性复核。表格漏答、事实不符与排版溢出分别重试，仍受每页预算和两轮上限约束。每个候选的淘汰原因写入独立记录。
+
+每页译文审计通过后另做两类盲区抽查并只上浮结果：行尾截断守恒检查与写回墨迹覆盖率抽查（零墨迹/异常低墨迹行）。审计报警写入审校记录与 `receipts/audit/BLINDSPOT_AUDIT.json`，不改路由与交付判定；审计器自身故障只记 `blindspot_audit_unavailable` 不拦交付。同页型连续多次真实审计全通过的高置信页会显式标注跳过重核（`light_review_skipped`），跳过信息双留痕，不静默。
 
 ## 遇到问题继续翻译
 

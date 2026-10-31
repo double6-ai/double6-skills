@@ -10,6 +10,7 @@ import unicodedata
 from abc import ABC
 from abc import abstractmethod
 import multiprocessing as _multiprocessing
+import multiprocessing.shared_memory as _shared_memory  # rc.11：显式导入子模块（multiprocessing 顶层不自动带 shared_memory）
 
 # Double6 Skills rc.8: font-subset / clean-save helpers run in a *spawned* child instead of a
 # fork of the multi-GiB backend process. A forked child shares the parent's pages copy-on-write but
@@ -573,6 +574,175 @@ def _subset_fonts_process(pdf_path, output_path, reviewed_fallback=False):
         logger.error(f"Error in font subsetting subprocess: {e}")
         # 返回 1 表示失败
         os._exit(1)
+
+
+def _subset_fonts_shm_process(in_name, in_size, out_name, out_size, reviewed_fallback=False):
+    """Double6 Skills rc.11（T10-B4 免落盘）：spawn 子进程经共享内存做字体子集。
+
+    与 _subset_fonts_process 语义一致（open → subset_fonts → save 等价序列化），
+    只是输入输出都走 SharedMemory，不落盘。输出缓冲头部 8 字节（大端）编码结果
+    长度，其后为 PDF 字节。退出码：0 成功；3 输出超出预分配缓冲（父进程回退
+    落盘路径）；1 其它失败。两块共享内存均由父进程创建与回收。
+    """
+    try:
+        in_shm = _shared_memory.SharedMemory(name=in_name)
+        out_shm = _shared_memory.SharedMemory(name=out_name)
+        try:
+            data = bytes(in_shm.buf[:in_size])
+            pdf = pymupdf.open(stream=data, filetype="pdf")
+            del data
+            pdf.subset_fonts(fallback=reviewed_fallback)
+            result = pdf.tobytes()
+            pdf.close()
+            if len(result) + 8 > out_size:
+                os._exit(3)
+            out_shm.buf[:8] = len(result).to_bytes(8, "big")
+            out_shm.buf[8 : 8 + len(result)] = result
+        finally:
+            in_shm.close()
+            out_shm.close()
+        os._exit(0)
+    except Exception as e:
+        logger.error(f"Error in font subsetting subprocess (shm): {e}")
+        os._exit(1)
+
+
+def _subset_fonts_on_disk(
+    pdf: pymupdf.Document, translation_config: TranslationConfig, tag: str
+) -> pymupdf.Document:
+    """rc.8 原落盘路径（rc.11 起作为 shm 路径的回退与诊断开关路径，逻辑不变）。"""
+    original_pdf = pdf
+    # Create temporary file paths
+    temp_input = str(
+        translation_config.get_working_file_path(f"temp_subset_input_{tag}.pdf")
+    )
+    temp_output = str(
+        translation_config.get_working_file_path(f"temp_subset_output_{tag}.pdf")
+    )
+
+    # Save PDF to temporary file without subsetting
+    pdf.save(temp_input)
+
+    # Create and start subprocess
+    registry=_reviewed_style_registry()
+    process = Process(target=_subset_fonts_process, args=(temp_input, temp_output,registry is not None))
+    process.start()
+
+    # Wait for subprocess with timeout (1 minute)
+    timeout = 60  # 1 minutes in seconds
+    start_time = time.time()
+
+    while process.is_alive():
+        if time.time() - start_time > timeout:
+            logger.warning(
+                f"Font subsetting timeout after {timeout} seconds, terminating subprocess"
+            )
+            process.terminate()
+            try:
+                process.join(5)  # Give it 5 seconds to clean up
+                if process.is_alive():
+                    logger.warning("Subprocess did not terminate, killing it")
+                    process.kill()
+                    process.terminate()
+                    process.kill()
+                    process.terminate()
+                    process.kill()
+                    process.terminate()
+                    process.kill()
+            except Exception as e:
+                logger.error(f"Error terminating font subsetting process: {e}")
+
+            if registry is not None:raise ValueError('reviewed source font subset timed out')
+            return original_pdf
+
+        time.sleep(0.5)  # Check every half second
+
+    # Process completed, check exit code
+    exit_code = process.exitcode
+    success = exit_code == 0
+
+    # Check if subsetting was successful
+    if (
+        success
+        and Path(temp_output).exists()
+        and Path(temp_output).stat().st_size > 0
+    ):
+        logger.info("Font subsetting completed successfully")
+        reopened=pymupdf.open(temp_output)
+        if registry is not None:
+            from pdf_group_source_style import verify_source_fonts
+            verify_source_fonts(reopened,registry.source_fonts)
+        return reopened
+    else:
+        logger.warning(
+            f"Font subsetting failed with exit code {exit_code} or produced empty file"
+        )
+        if registry is not None:raise ValueError('reviewed source font subset failed')
+        return original_pdf
+
+
+def _subset_fonts_in_shm(pdf: pymupdf.Document, timeout: float = 60) -> "pymupdf.Document | None":
+    """共享内存版字体子集（Double6 Skills rc.11，T10-B4 免落盘）。
+
+    输入输出均走 SharedMemory（输出缓冲头部 8 字节大端编码结果长度），spawn 子进程
+    内做 open(stream) → subset_fonts → tobytes，与落盘路径的 save 默认参数等价。
+    返回 None 表示未产出（超时/失败/溢出），调用方回退落盘路径复现原语义；
+    reviewed 源样式合同的超时/失败也由落盘路径按原样 raise。
+    """
+    import struct
+
+    shared_memory = _shared_memory
+    data = pdf.tobytes()  # 与 pdf.save(temp_input) 默认参数（garbage=0/deflate=False）等价
+    in_shm = None
+    out_shm = None
+    try:
+        in_shm = shared_memory.SharedMemory(create=True, size=len(data))
+        in_shm.buf[: len(data)] = data
+        out_size = len(data) + max(8, len(data) // 8)  # 子集通常更小；+12.5% 裕度，溢出回退落盘
+        out_shm = shared_memory.SharedMemory(create=True, size=out_size)
+        process = Process(
+            target=_subset_fonts_shm_process,
+            args=(in_shm.name, len(data), out_shm.name, out_size,
+                  _reviewed_style_registry() is not None),
+        )
+        process.start()
+        start_time = time.time()
+        while process.is_alive():
+            if time.time() - start_time > timeout:
+                logger.warning(f"Font subsetting shm timeout after {timeout} seconds")
+                process.terminate()
+                try:
+                    process.join(5)
+                    if process.is_alive():
+                        process.kill()
+                except Exception as e:
+                    logger.error(f"Error terminating font subsetting shm process: {e}")
+                return None
+            time.sleep(0.2)
+        if process.exitcode != 0:
+            logger.warning(f"Font subsetting shm subprocess exit code {process.exitcode}")
+            return None
+        (length,) = struct.unpack_from(">Q", out_shm.buf, 0)
+        if not 0 < length <= out_size - 8:
+            logger.warning("Font subsetting shm produced invalid length header")
+            return None
+        result = bytes(out_shm.buf[8 : 8 + length])
+        if not result.startswith(b"%PDF-"):
+            logger.warning("Font subsetting shm output is not a PDF stream")
+            return None
+        logger.info("Font subsetting completed successfully (shm)")
+        return pymupdf.open(stream=result, filetype="pdf")
+    except Exception as e:
+        logger.error(f"Font subsetting shm path failed: {type(e).__name__}: {e}")
+        return None
+    finally:
+        for shm in (in_shm, out_shm):
+            if shm is not None:
+                try:
+                    shm.close()
+                    shm.unlink()
+                except Exception:
+                    pass
 
 
 def _save_pdf_clean_process(
@@ -1188,6 +1358,12 @@ class PDFCreater:
     ) -> pymupdf.Document:
         """Run font subsetting in a subprocess with timeout.
 
+        Double6 Skills rc.11（T10-B4 免落盘，2026-10-31）：默认经共享内存（仍为 spawn
+        子进程，与 rc.8 的 RSS 计量理由一致——不用 fork），不再把子集 PDF 写成
+        temp_subset_input/output_{tag}.pdf 的数百 MB 落盘往返。BABELDOC_SUBSET_DISK=1
+        保留落盘路径供诊断；内存路径溢出（子进程退出码 3）或异常时自动回退落盘路径
+        重试一次（reviewed 合同的超时/失败语义由落盘路径原样复现）。
+
         Args:
             pdf: The PDF document object
             translation_config: Translation configuration
@@ -1195,73 +1371,17 @@ class PDFCreater:
         Returns:
             Path to the PDF with subsetted fonts, or original path if subsetting failed or timed out
         """
-        original_pdf = pdf
-        # Create temporary file paths
-        temp_input = str(
-            translation_config.get_working_file_path(f"temp_subset_input_{tag}.pdf")
-        )
-        temp_output = str(
-            translation_config.get_working_file_path(f"temp_subset_output_{tag}.pdf")
-        )
-
-        # Save PDF to temporary file without subsetting
-        pdf.save(temp_input)
-
-        # Create and start subprocess
-        registry=_reviewed_style_registry()
-        process = Process(target=_subset_fonts_process, args=(temp_input, temp_output,registry is not None))
-        process.start()
-
-        # Wait for subprocess with timeout (1 minute)
-        timeout = 60  # 1 minutes in seconds
-        start_time = time.time()
-
-        while process.is_alive():
-            if time.time() - start_time > timeout:
-                logger.warning(
-                    f"Font subsetting timeout after {timeout} seconds, terminating subprocess"
-                )
-                process.terminate()
-                try:
-                    process.join(5)  # Give it 5 seconds to clean up
-                    if process.is_alive():
-                        logger.warning("Subprocess did not terminate, killing it")
-                        process.kill()
-                        process.terminate()
-                        process.kill()
-                        process.terminate()
-                        process.kill()
-                        process.terminate()
-                except Exception as e:
-                    logger.error(f"Error terminating font subsetting process: {e}")
-
-                if registry is not None:raise ValueError('reviewed source font subset timed out')
-                return original_pdf
-
-            time.sleep(0.5)  # Check every half second
-
-        # Process completed, check exit code
-        exit_code = process.exitcode
-        success = exit_code == 0
-
-        # Check if subsetting was successful
-        if (
-            success
-            and Path(temp_output).exists()
-            and Path(temp_output).stat().st_size > 0
-        ):
-            logger.info("Font subsetting completed successfully")
-            reopened=pymupdf.open(temp_output)
-            if registry is not None:
-                from pdf_group_source_style import verify_source_fonts
-                verify_source_fonts(reopened,registry.source_fonts)
-            return reopened
-        else:
-            logger.warning(
-                f"Font subsetting failed with exit code {exit_code} or produced empty file"
-            )
-            if registry is not None:raise ValueError('reviewed source font subset failed')
-            return original_pdf
+        if os.environ.get("BABELDOC_SUBSET_DISK") != "1":
+            reopened = _subset_fonts_in_shm(pdf)
+            if reopened is not None:
+                registry = _reviewed_style_registry()
+                if registry is not None:
+                    from pdf_group_source_style import verify_source_fonts
+                    verify_source_fonts(reopened, registry.source_fonts)
+                return reopened
+            # 内存路径未产出（溢出/失败/超时）：回退落盘路径，行为与 rc.8 完全一致。
+            logger.warning("Font subsetting shm path unavailable, falling back to disk")
+        return _subset_fonts_on_disk(pdf, translation_config, tag)
 
     @staticmethod
     def save_pdf_with_timeout(

@@ -27,8 +27,9 @@ def _load_fitz():
 
 # 标准双语页合同：左页恒为源文页、右页恒为译文页（页序不随语言变化）。
 # 文件名与清单中的语言标注只取调用方已知的翻译方向；方向未知时不猜，使用中性名称。
-SUPPORTED_DIRECTIONS = {("en", "zh"), ("zh", "en")}
-LANGUAGE_LABELS = {"en": "英文", "zh": "中文"}
+# 多语言（3.1.0）：补 ja/ko 源 → zh 目标方向（横排日文/韩文源，页序合同不变）。
+SUPPORTED_DIRECTIONS = {("en", "zh"), ("zh", "en"), ("ja", "zh"), ("ko", "zh")}
+LANGUAGE_LABELS = {"en": "英文", "zh": "中文", "ja": "日文", "ko": "韩文"}
 NEUTRAL_LAYOUT = "source_left_translation_right"
 NEUTRAL_NAME_INFIX = "source-left.translation-right"
 

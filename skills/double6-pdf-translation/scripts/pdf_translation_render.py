@@ -75,6 +75,30 @@ def digital_route_manifest(input_pdf: Path, *, explicit_override=None) -> dict:
     }
 
 
+def resolve_input_source_language(input_pdf: Path, target_language: str, *, max_pages: int = 3) -> str | None:
+    """电子路线源语言解析（lane/d，T6 多语言第一阶段）：显式声明优先，其次按输入前几页文字检测。
+
+    只在目标语言为 zh 时返回非 en 源（ja/ko 横排）；检测失败或结果不在支持集内返回 None，
+    调用方回落到 TARGET_SOURCE_LANGUAGE 默认（en→zh）。en 目标固定 zh 源，不经此函数。
+    """
+    if target_language != "zh":
+        return None
+    declared = os.environ.get(SOURCE_LANGUAGE_ENV, "").strip().lower()
+    if declared in ("ja", "ko", "en"):
+        return declared
+    try:
+        import fitz
+        from pdf_input_preflight import detect_language
+        chunks: list[str] = []
+        with fitz.open(input_pdf) as doc:
+            for index in range(min(len(doc), max_pages)):
+                chunks.append(doc[index].get_text())
+        detected = str(detect_language("\n".join(chunks)).get("language") or "")
+    except Exception:
+        return None
+    return detected if detected in ("ja", "ko") else None
+
+
 def _run_render(args: argparse.Namespace) -> dict[str, Any]:
     from pdf_translation_artifacts import build_standard_bilingual_output, collect_pdfs, enrich_quality_artifacts, extract_pdf_text, maybe_build_visual_repair_output, mirror_latex_direct_bilingual_output, relocate_backend_dual_intermediate, render_qa_repaired_pdf, run_quality_check, select_pdf_outputs, write_glossary, write_layout_map, write_translation_artifacts
     from pdf_translation_backend_quality import annotate_backend_quality_origin, copy_backend_tracking_artifact, enrich_translation_cache_stats, fallback_to_text_path, maybe_run_cloud_layout, parse_backend_quality, parse_translation_cache_stats, refine_backend_quality_with_retry_failures, resolve_backend_quality_with_pdf_direct_repairs
@@ -183,6 +207,9 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
     quality_artifacts = enrich_quality_artifacts(output_dir, prepare_manifest, glossary_path)
     context_file = output_dir / "document_memory.json"
     target_language = getattr(args, "target_language", "zh") or "zh"
+    # 源语言解析（lane/d）：目标 zh 时按声明/检测覆盖默认 en 源；None 表示沿用既有英译中方向。
+    resolved_source_language = resolve_input_source_language(input_pdf, target_language)
+    args.resolved_source_language = resolved_source_language
     document_context = load_document_term_context(args)
     # 原文保留降级的整份上限：分块（已按 SHA-256 绑定的块上下文带 chunk 字段）时推迟到合并统一执行；
     # 其它情况一律在本份文档执行（清掉可能从外部继承的同名变量）。
@@ -190,7 +217,8 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
     if isinstance(document_context, dict) and isinstance(document_context.get("chunk"), dict):
         env["DOUBLE6_OVERFLOW_FALLBACK_DOCUMENT_CAP"] = "chunk_merge"
     args.custom_system_prompt = build_backend_system_prompt(
-        resolve_system_prompt(args.custom_system_prompt, target_language), output_dir, target_language=target_language,
+        resolve_system_prompt(args.custom_system_prompt, target_language, resolved_source_language), output_dir,
+        target_language=target_language, source_language=resolved_source_language,
         **({'document_context': document_context} if document_context is not None else {}))
     args.resolved_pdf_layout_profile = resolve_pdf_layout_profile(args, input_pdf)
     original_base_url = args.base_url
@@ -435,7 +463,7 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
         enabled=bool(args.dual and args.bilingual_layout == "en-left-zh-right"),
         render_mode=args.bilingual_render_mode,
         raster_dpi=args.bilingual_raster_dpi,
-        source_language=TARGET_SOURCE_LANGUAGE.get(target_language),
+        source_language=resolved_source_language or TARGET_SOURCE_LANGUAGE.get(target_language),
         target_language=target_language,
         direction_basis="declared_target_language",
     )
@@ -654,7 +682,9 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
         "backend_debug_artifacts": bool(getattr(args, "backend_debug_artifacts", True)),
         "translation_cache": translation_cache,
         "target_language": target_language,
-        "source_language": TARGET_SOURCE_LANGUAGE.get(target_language),
+        "source_language": resolved_source_language or TARGET_SOURCE_LANGUAGE.get(target_language),
+        "source_language_basis": ("declared_env" if os.environ.get(SOURCE_LANGUAGE_ENV, "").strip()
+                                  else "input_detection") if resolved_source_language else "default_target_mapping",
         "direction_basis": "declared_target_language",
         "model": args.model,
         "base_url": original_base_url,
@@ -755,6 +785,9 @@ def _run_render(args: argparse.Namespace) -> dict[str, Any]:
         "ignore_translation_cache": bool(getattr(args, "ignore_translation_cache", False)),
         "backend_debug_artifacts": bool(getattr(args, "backend_debug_artifacts", True)),
         "translation_cache": translation_cache,
+        "source_language": resolved_source_language or TARGET_SOURCE_LANGUAGE.get(target_language),
+        "source_language_basis": ("declared_env" if os.environ.get(SOURCE_LANGUAGE_ENV, "").strip()
+                                  else "input_detection") if resolved_source_language else "default_target_mapping",
         "hymt_compat_proxy": proxy_info,
         "hymt_proxy_stats": str(hymt_proxy_stats_path),
         "backend_retry_failures": str(backend_retry_failures_path),

@@ -1,6 +1,6 @@
 # double6-pdf-translation
 
-电子版 PDF 英译中与中译英，尽量保留原版式，生成单语与源左译右双语 PDF。正式版本为 **3.0.0**。
+电子版 PDF 英译中、中译英与日文横排译中，尽量保留原版式，生成单语与源左译右双语 PDF。正式版本为 **3.1.0**。
 
 默认 `translate` 自动处理电子与长文档：分页、保存进度并支持恢复。少量不可靠公式或坏编号按完整段落保留原图，无法可靠处理的坏页保留原页，继续后页；原文保留位置和问题写入独立附件。正式 PDF 不加入执行者批注或审校提醒。
 
@@ -18,7 +18,7 @@ export LOCAL_TRANSLATION_API_KEY='你的API凭据'
 /absolute/new/venv/bin/python scripts/paper_translation_workflow.py translate --input /absolute/source.pdf --output /absolute/new-output --target-language zh
 ```
 
-中译英用 `--target-language en`；中断后同命令加 `--resume`；代码身份变更时会开启新运行。默认模型为 DeepSeek-V4.1-Flash（`deepseek-flash`），使用 `DEEPSEEK_API_KEY` 或 `LOCAL_TRANSLATION_API_KEY`；显式模型和端点优先。凭据不进入命令参数或 PDF。
+中译英用 `--target-language en`；日文横排件译中保持 `--target-language zh`（源语言自动检测，也可用 `PAPER_TRANSLATION_SOURCE_LANGUAGE=ja` 显式声明）；中断后同命令加 `--resume`；代码身份变更时会开启新运行。默认模型为 DeepSeek-V4.1-Flash（`deepseek-flash`），使用 `DEEPSEEK_API_KEY` 或 `LOCAL_TRANSLATION_API_KEY`；显式模型和端点优先。凭据不进入命令参数或 PDF。
 
 复杂表格、多栏与密集公式仍可能局部或整页保留原文，无法承诺逐页完整翻译或像素级复现。无效鉴权/额度、损坏输入、全局资源异常等严重问题会停止并保存进度。每页沿用资源上限。软件发布不代表每份译文通过语义审校或用户验收；详见[续译策略](references/translation-continuation.md)。显式严格路线继续保留。
 

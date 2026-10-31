@@ -53,6 +53,15 @@ PAGE_HIGH = 0.60
 PAGE_MEDIUM = 0.30
 DOCUMENT_HIGH = 0.50
 
+# 日译中假名残留检查（lane/d，T6 多语言第一阶段）：阈值对齐中译英的中文残留口径
+# （中文译文里合理保留的假名几乎为零，不像英译中要保留人名与公式变量，因此从严）。
+# 假名集合与 pdf_input_preflight.detect_language 一致，另加长音符ー与中点・（只出现在日文文本里）。
+KANA = re.compile(r'[\u3041-\u3096\u309d-\u309f\u30a1-\u30fa\u30fd-\u30ff\u31f0-\u31ff\uff66-\uff9f\u30fc\u30fb]')
+JA_PAGE_HIGH = 0.30
+JA_PAGE_MEDIUM = 0.10
+JA_DOCUMENT_HIGH = 0.25
+JA_MIN_SOURCE_CHARS = 50
+
 
 # 参考文献标题：整行只有标题（可带章节号）。
 REFERENCE_HEADING = re.compile(
@@ -1062,12 +1071,67 @@ def reference_exclusion_summary(audit: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
+def page_kana_residue(source_text: str, target_text: str) -> dict[str, Any]:
+    """日译中单页假名残留：r = 译文假名 / 源文假名。"""
+    source_kana = len(KANA.findall(source_text))
+    target_kana = len(KANA.findall(target_text))
+    ratio = target_kana / source_kana if source_kana else 0.0
+    severity = ('high' if source_kana >= JA_MIN_SOURCE_CHARS and ratio >= JA_PAGE_HIGH
+                else 'medium' if source_kana >= JA_MIN_SOURCE_CHARS and ratio >= JA_PAGE_MEDIUM else 'ok')
+    return {'source_kana_chars': source_kana, 'target_kana_chars': target_kana,
+            'residue_ratio': round(ratio, 4), 'evaluated': source_kana >= JA_MIN_SOURCE_CHARS,
+            'severity': severity}
+
+
+def check_japanese_residue(source_pdf, target_pdf) -> dict[str, Any]:
+    """日译中：基于最终 PDF 的假名残留检查（不依赖 translation blocks 自报）。
+
+    中文译文里合理保留的假名几乎为零（整段未翻译的日文原文是主要缺陷形态），
+    阈值因此对齐中译英的中文残留口径。汉字不计入：日文汉字词的中文改写由
+    译文质量审校负责，残留检查只盯"假名正文原样留下"这一结构信号。
+    """
+    import fitz
+
+    result: dict[str, Any] = {'schema_version': 1, 'check': 'render_japanese_residue', 'target_language': 'zh',
+                              'source_language': 'ja',
+                              'source': str(source_pdf), 'target': str(target_pdf) if target_pdf else None,
+                              'thresholds': {'page_high': JA_PAGE_HIGH, 'page_medium': JA_PAGE_MEDIUM,
+                                             'document_high': JA_DOCUMENT_HIGH,
+                                             'min_source_chars': JA_MIN_SOURCE_CHARS},
+                              'pages': []}
+    if not target_pdf or not Path(target_pdf).is_file():
+        result.update(status='not_evaluated', severity='ok', reason='target_pdf_missing')
+        return result
+    with fitz.open(source_pdf) as source, fitz.open(target_pdf) as target:
+        count = min(len(source), len(target))
+        result['page_count_source'], result['page_count_target'] = len(source), len(target)
+        for index in range(count):
+            row = page_kana_residue(source[index].get_text(), target[index].get_text())
+            row['page'] = index + 1
+            result['pages'].append(row)
+    evaluated = [p for p in result['pages'] if p['evaluated']]
+    total_source = sum(p['source_kana_chars'] for p in evaluated)
+    total_target = sum(p['target_kana_chars'] for p in evaluated)
+    overall = total_target / total_source if total_source else 0.0
+    high_pages = [p['page'] for p in result['pages'] if p['severity'] == 'high']
+    medium_pages = [p['page'] for p in result['pages'] if p['severity'] == 'medium']
+    severity = 'high' if (evaluated and overall >= JA_DOCUMENT_HIGH) or high_pages else 'medium' if medium_pages else 'ok'
+    result.update(status='evaluated' if evaluated else 'not_evaluated',
+                  overall_residue_ratio=round(overall, 4), high_pages=high_pages, medium_pages=medium_pages,
+                  severity=severity, quality_fail=severity == 'high')
+    return result
+
+
 def check_render_residue(source_pdf, target_pdf, *, target_language: str = 'zh',
-                         region_open_at_start: bool = False) -> dict[str, Any]:
+                         region_open_at_start: bool = False, source_language: str | None = None) -> dict[str, Any]:
     import fitz
 
     if target_language == 'en':
         return check_chinese_residue(source_pdf, target_pdf)
+    # lane/d（T6）：日译中（源=ja、目标=zh）改查假名残留；拉丁词残留口径不适用
+    # （日文源本身拉丁词就少，译文保留技术词属正常）。source_language 缺省时行为与旧版完全一致。
+    if str(source_language or '').strip().lower() == 'ja':
+        return check_japanese_residue(source_pdf, target_pdf)
 
     result: dict[str, Any] = {'schema_version': 1, 'check': 'render_english_residue', 'target_language': target_language,
                               'source': str(source_pdf), 'target': str(target_pdf) if target_pdf else None,
@@ -1140,8 +1204,11 @@ def main(argv=None):
     parser.add_argument('--target', type=Path, required=True)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--target-language', choices=('zh', 'en'), default='zh')
+    parser.add_argument('--source-language', default=None,
+                        help='源语言（ja 时目标 zh 改查假名残留；缺省沿用按目标语言的既有口径）')
     args = parser.parse_args(argv)
-    result = check_render_residue(args.source, args.target, target_language=args.target_language)
+    result = check_render_residue(args.source, args.target, target_language=args.target_language,
+                                  source_language=args.source_language)
     text = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:
         args.output.write_text(text + '\n', encoding='utf-8')

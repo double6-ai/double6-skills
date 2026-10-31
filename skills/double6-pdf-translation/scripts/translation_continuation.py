@@ -12,6 +12,81 @@ import time
 
 POLICY = 'local_preserve_v1'
 
+# B6（编排优化，2026-10-31）：高置信电子页分层跳过——仅对"多信号合取高置信 +
+# 页型历史全通过"的原生电子页跳过盲区审计与 usable_candidate 重核。
+LIGHT_REVIEW_MIN_HISTORY = 3
+
+
+def _light_review_history_path():
+    from runtime_paths import workspace_root
+    return workspace_root() / 'projects/paper-translation/light-review-history.jsonl'
+
+
+def _light_review_history(profile):
+    """页型历史（真实审计记录，跳过页不计入）：次数与盲区命中数。文件缺失/损坏视为无历史。"""
+    path = _light_review_history_path()
+    count = blindspot_hits = 0
+    try:
+        for line in path.read_text().splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if tuple(row.get('profile') or ()) == tuple(profile):
+                count += 1
+                if row.get('blindspot_codes'):
+                    blindspot_hits += 1
+    except (OSError, ValueError, TypeError):
+        return {'count': 0, 'blindspot_hits': 0}
+    return {'count': count, 'blindspot_hits': blindspot_hits}
+
+
+def _record_light_review(profile, blindspot_codes):
+    """追加一条真实审计历史（append-only；单任务串行写，无并发争用）。"""
+    path = _light_review_history_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps({'profile': list(profile),
+                                     'blindspot_codes': list(blindspot_codes),
+                                     'at': datetime.now().isoformat(timespec='seconds')},
+                                    ensure_ascii=False) + '\n')
+    except OSError:
+        pass  # 历史记录失败只影响后续跳过资格，不影响本次审计行为
+
+
+def _light_review_decision(output_dir, args):
+    """高置信门（保守多信号合取）。返回跳过依据；None 表示照常全量审计。
+
+    显式标注（不可静默）：跳过信息写入页 row 的 light_review_skipped 字段与审校记录。"""
+    if os.environ.get('PAPER_TRANSLATION_DISABLE_LIGHT_REVIEW') == '1':
+        return None
+    facts = getattr(args, 'page_preflight_facts', None)
+    if not facts or facts.get('kind') != 'native_text':
+        return None
+    try:
+        quality = read(Path(output_dir) / 'comprehensive_quality.json')
+    except (OSError, ValueError):
+        return None
+    tech = quality.get('technical_check') or {}
+    residue = quality.get('render_residue_check') or {}
+    hot_residue = [p for p in residue.get('pages', [])
+                   if p.get('evaluated') and p.get('severity') in ('high', 'medium')]
+    fallback_count = (quality.get('overflow_source_fallback_check') or {}).get('count')
+    if (quality.get('issues') or []) or (tech.get('issues') or []) or (tech.get('pending') or []) or hot_residue:
+        return None
+    if (quality.get('formula_structure_check') or {}).get('severity') != 'ok':
+        return None
+    if (quality.get('readable_output') or {}).get('status') != 'ok':
+        return None
+    if fallback_count:
+        return None
+    profile = ('digital_pdf', 'native_text', (facts.get('source_language') or {}).get('language'))
+    history = _light_review_history(profile)
+    if history['count'] < LIGHT_REVIEW_MIN_HISTORY or history['blindspot_hits']:
+        return None
+    return {'profile': list(profile), 'history_pass': history['count'],
+            'gate': 'b6_high_confidence_v1', 'skipped': ['usable_candidate_recheck', 'audit_blindspots']}
+
 
 def reference(path):
     path = Path(path).resolve()
@@ -28,6 +103,39 @@ def write(path, value):
 
 def read(path):
     return json.loads(Path(path).read_text())
+
+
+# 终局双语件方向不得按目标语言反推源语言。依据优先级：① 各页 render_manifest 的
+# source_language（取多数）→ ② 显式声明环境变量 → ③ 输入文字脚本检测 →
+# ④ 都没有时沿用旧默认（目标 zh 视源 en），保证既有 en/zh 流程逐字不变。
+def _resolved_document_source_language(document, rows, target_language):
+    votes: dict[str, int] = {}
+    for row in rows:
+        language = None
+        if row.get('target'):
+            render = Path(row['target']['path']).parent / 'render_manifest.json'
+            if render.is_file():
+                try:
+                    language = read(render).get('source_language')
+                except (OSError, ValueError, TypeError):
+                    language = None
+        if language in {'ja', 'ko', 'en', 'zh'}:
+            votes[language] = votes.get(language, 0) + 1
+    if votes:
+        best = max(sorted(votes), key=lambda key: votes[key])
+        return best, 'page_manifests', {'votes': votes}
+    declared = os.environ.get('PAPER_TRANSLATION_SOURCE_LANGUAGE', '').strip().lower()
+    if declared in {'ja', 'ko', 'en', 'zh'}:
+        return declared, 'declared_env', None
+    try:
+        from pdf_input_preflight import detect_language
+        text = '\n'.join(document[index].get_text() for index in range(min(3, len(document))))
+        language = detect_language(text).get('language')
+    except Exception:
+        language = None
+    if language in {'ja', 'ko', 'en', 'zh'}:
+        return language, 'input_detection', None
+    return ('en' if target_language == 'zh' else 'zh'), 'target_default', None
 
 
 def fatal_reason(result, job):
@@ -83,11 +191,23 @@ def run_page(page_pdf, directory, args, closure):
     write(scope, {'pages': [1], 'complete_semantic_scope': True,
                   'document_page': args.document_page, 'source_ref': reference(page_pdf),
                   'scope': '本页全部可见内容；跨页句子可保持未完成，不补入说明。'})
+    # B5（编排优化，2026-10-31）：translate 主进程拆页时的 classify_page/detect_language
+    # 结论写入页级预检事实文件并冻结引用——candidate 侧据此跳过对同一页 PDF 的预检
+    # 子进程重跑（页任务首页仍真跑子进程预检作抽样复核，见 candidate_input_preflight
+    # 的复用门）。拒绝语义不变：密码件/页数超限/数字页在首次进入（主进程与首页子进程）
+    # 拦截，逐字同码。
+    preflight_facts = getattr(args, 'page_preflight_facts', None)
+    facts_path = directory / 'input-preflight-facts.json'
+    if preflight_facts is not None:
+        write(facts_path, {'input': reference(page_pdf), 'page_count': 1,
+                           'document_page': args.document_page,
+                           'target_language': args.target_language, **preflight_facts})
     fingerprint = directory / 'model.json'
     write(fingerprint, {'model_id': args.model, 'endpoint': args.base_url})
     frozen = {'input': reference(page_pdf), 'pages': [1], 'complete_semantic_scope': True,
               'scope_evidence': reference(scope), 'route': route, 'model': args.model,
               'target_language': args.target_language,
+              **({'preflight_facts_ref': reference(facts_path)} if preflight_facts is not None else {}),
               'hymt_proxy_mode': str(getattr(args, 'hymt_compat_proxy', 'auto') or 'auto'),
               'routing_contract': workflow.DIGITAL_ROUTING,
               'model_fingerprint_ref': reference(fingerprint),
@@ -128,14 +248,46 @@ def run_page(page_pdf, directory, args, closure):
     if job.get('status') == 'stopped' or result.get('status') not in {'succeeded', 'candidate', 'ready'}:
         target, error = None, result.get('error_code') or job.get('stop_reason') or 'page_translation_unavailable'
     else:
-        target, error = usable_candidate(directory/'output', None)
+        # B6：高置信电子页（多信号合取 + 页型历史全通过）跳过 usable_candidate 重核，
+        # 只保留候选存在性与身份一致性（reference 可算即文件未被改动）。
+        light = _light_review_decision(directory/'output', args)
+        if light is not None:
+            candidates = sorted(Path(directory/'output').glob('*.no_watermark.*.mono.pdf'))
+            if not candidates:
+                target, error = None, 'page_translation_unavailable'
+            else:
+                target, error = candidates[0], None
+                reference(target)  # 存在性与 sha256 一致性锚点（读取失败即抛，等同原文保留路径）
+                result['light_review_skipped'] = light
+        else:
+            target, error = usable_candidate(directory/'output', None)
     issues = []
     if error:
         issues.append(result.get('error_code') or error)
     if result.get('quality_status') == 'fail':
         issues.append('quality_review_required')
+    # 审计盲区检查（2026-10-31）：行尾截断守恒 + 写回墨迹覆盖率抽查。
+    # 只上浮 issue code 进审校记录与详表回执,不改路由/重试/交付判定。
+    # B6：高置信页跳过盲区审计（light_review_skipped 显式标注，历史只记真实审计）。
+    if target and not result.get('light_review_skipped'):
+        try:
+            from audit_blindspots import audit_page_blindspots
+            blindspot = audit_page_blindspots(str(target), 1)
+            if getattr(args, 'page_preflight_facts', None) \
+                    and args.page_preflight_facts.get('kind') == 'native_text':
+                profile = ('digital_pdf', 'native_text',
+                           (args.page_preflight_facts.get('source_language') or {}).get('language'))
+                _record_light_review(profile, blindspot['codes'])
+            if blindspot['codes']:
+                issues += blindspot['codes']
+                write(directory / 'receipts/audit/BLINDSPOT_AUDIT.json', blindspot)
+        except Exception:
+            # 审计器自身故障不拦交付,但显式留痕,防静默失效
+            issues.append('blindspot_audit_unavailable')
     return {'status': 'translated' if target else 'original_preserved',
-            'target': reference(target) if target else None, 'issues': list(dict.fromkeys(issues))}
+            'target': reference(target) if target else None, 'issues': list(dict.fromkeys(issues)),
+            # B6：高置信跳过标注随页返回（审校记录与页 row 双留痕，不可静默）
+            **({'light_review_skipped': result['light_review_skipped']} if result.get('light_review_skipped') else {})}
 
 
 def run(args, page_runner=None):
@@ -203,6 +355,11 @@ def run(args, page_runner=None):
                     continue
             page = document[index]
             facts = classify_page(page)
+            # B5：主进程拆页事实（页分类 + 源语言判定）随页传递，供 candidate 侧预检复用
+            # （首页 first_page=True 仍真跑子进程预检，非首页跳过重跑；拒绝语义见 run_page）。
+            args.page_preflight_facts = {'kind': facts['kind'],
+                                         'source_language': detect_language(page.get_text()),
+                                         'first_page': index == 0}
             blank = not page.get_text().strip() and not page.get_images() and not page.get_drawings()
             if blank or (facts['kind'] == 'native_text' and detect_language(page.get_text())['language'] == args.target_language):
                 result = {'status': 'blank_preserved' if blank else 'already_target_language', 'issues': []}
@@ -253,9 +410,43 @@ def run(args, page_runner=None):
         from build_bilingual_pdf import build_en_left_zh_right_pdf, bilingual_direction
         dual = output/'原文左-译文右.pdf'
         bilingual_options = {'source_page_map': bilingual_page_map} if len(bilingual_page_map) != len(document) else {}
-        build_en_left_zh_right_pdf(source, formal, dual, mode='vector',
-                                 direction=bilingual_direction('en' if args.target_language=='zh' else 'zh', args.target_language),
-                                 **bilingual_options)
+        # B1（编排优化，2026-10-31）：单页任务直接提升页级 dual 为任务级双语件。
+        # 页任务 backend 已产出 source.*.dual.pdf；任务级 build_en_left_zh_right_pdf 用
+        # 译文.pdf+原文重建一遍，实测两者同源配对。复用条件（保守）：单页、无页映射
+        # 重排、目标 zh、render_manifest 登记的 translated_pdf 与本页 target 为同一文件
+        # （dual 与 mono 同源配对，防 QA 重渲染错配）。不满足或核对失败一律回退原构建
+        # 路径；PAPER_TRANSLATION_DISABLE_DUAL_REUSE=1 可关。
+        dual_reuse = None
+        if (len(document) == 1 and not bilingual_options and rows
+                and args.target_language == 'zh'
+                and os.environ.get('PAPER_TRANSLATION_DISABLE_DUAL_REUSE') != '1'):
+            target_ref = rows[0].get('target')
+            if target_ref:
+                try:
+                    outputs = (read(Path(target_ref['path']).parent / 'render_manifest.json').get('outputs') or {})
+                    backend_dual = outputs.get('dual_pdf')
+                    if (backend_dual and outputs.get('translated_pdf')
+                            and Path(outputs['translated_pdf']).resolve() == Path(target_ref['path']).resolve()
+                            and Path(backend_dual).is_file()):
+                        dual_reuse = Path(backend_dual)
+                except (OSError, ValueError, KeyError, TypeError):
+                    dual_reuse = None
+        # 终局双语件方向按实际源语言取（页 render_manifest 多数 > 声明环境变量 > 输入
+        # 检测 > 旧默认），ja/ko 源不再被错标"英文原文"；页序合同（左源右译）不变。
+        # 证据随终局回执留痕。
+        doc_source_language, source_basis, source_votes = _resolved_document_source_language(document, rows, args.target_language)
+        bilingual_direction_evidence = {'source_language': doc_source_language, 'basis': source_basis,
+                                        'detail': source_votes}
+        if dual_reuse is not None:
+            import shutil
+            shutil.copyfile(dual_reuse, dual)
+            rows[0]['bilingual_reuse'] = {'source_ref': reference(dual_reuse),
+                                          'basis': 'single_page_backend_dual_identity'}
+        else:
+            build_en_left_zh_right_pdf(source, formal, dual, mode='vector',
+                                     direction=bilingual_direction(doc_source_language, args.target_language,
+                                                                   basis='resolved_document_source_language'),
+                                     **bilingual_options)
         retained = sum(r['status']=='original_preserved' for r in rows)
         partial = sum(r['status']=='partially_translated' for r in rows)
         warnings = retained or partial or any(r['issues'] for r in rows)
@@ -265,6 +456,7 @@ def run(args, page_runner=None):
                   'partially_translated_pages': partial, 'page_count': len(rows), 'pages': rows,
                   'output_pdf': reference(formal), 'translated_pdf': reference(formal) if translated else None,
                   'preserved_pdf': reference(formal) if not translated else None, 'bilingual_pdf': reference(dual),
+                  'bilingual_direction_source': bilingual_direction_evidence,
                   'source_scope_complete': True, 'translation_complete': retained==partial==0,
                   'quality_status': 'unverified', 'human_acceptance': False, 'strict_delivery': False,
                   'output': str(output), 'resume_supported': True}
@@ -274,6 +466,12 @@ def run(args, page_runner=None):
         lines = ['# 翻译审校记录', '', f'共{len(rows)}页，翻译{translated}页，局部保留原文{partial}页，整页保留原文{retained}页。',
                  '这些记录不插入正式译文。', '']
         lines += [f'- 第{r["page"]}页：{r["status"]}；'+'、'.join(r['issues']) for r in rows if r['issues']]
+        # B6：高置信跳过页显式披露（不进 issues，避免把高置信页误标 completed_with_warnings；
+        # 审校记录与页 row 的 light_review_skipped 字段双留痕，供人工抽查，不可静默）。
+        lines += [f'- 第{r["page"]}页：高置信跳过盲区审计与候选重核（light_review_skipped；'
+                  f'页型 {"/".join(str(x) for x in r["light_review_skipped"]["profile"])}，'
+                  f'历史真实审计通过 {r["light_review_skipped"]["history_pass"]} 次）'
+                  for r in rows if r.get('light_review_skipped')]
         (output/'翻译审校记录.md').write_text('\n'.join(lines)+'\n')
         return result
 

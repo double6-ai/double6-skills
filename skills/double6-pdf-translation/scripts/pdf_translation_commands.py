@@ -112,7 +112,8 @@ def _document_policy_items(document_context: dict[str, Any] | None, name: str) -
 
 
 def build_backend_system_prompt(base_prompt: str, output_dir: Path, target_language: str = "zh",
-                                document_context: dict[str, Any] | None = None) -> str:
+                                document_context: dict[str, Any] | None = None,
+                                source_language: str | None = None) -> str:
     """document_context（分块翻译）：整份文档的术语/专名策略排在前面、各块相同，块内新出现的条目随后；
     不传时与单份翻译完全相同。"""
     sections: list[str] = []
@@ -168,13 +169,19 @@ def build_backend_system_prompt(base_prompt: str, output_dir: Path, target_langu
             )
     if not sections:
         return base_prompt
+    # 尾部方向指令按翻译方向选择（lane/d：日译中时把"英文正文全部译出"换成"日文正文全部译出且汉字词不可照搬"）。
+    if target_language == "en":
+        tail = "\nTranslate all Chinese prose completely into English. Preserve protected spans verbatim."
+    elif str(source_language or "").strip().lower() == "ja":
+        tail = ("\nTranslate all Japanese prose completely into Chinese; do not copy Japanese Kanji words "
+                "verbatim. Preserve protected spans verbatim.")
+    else:
+        tail = "\nTranslate ordinary English prose completely. Preserve protected spans verbatim."
     return (
         base_prompt.rstrip()
         + "\n\nDocument-level constraints from paper-translation QA artifacts:\n"
         + "\n\n".join(sections)
-        + ("\nTranslate all Chinese prose completely into English. Preserve protected spans verbatim."
-           if target_language == "en" else
-           "\nTranslate ordinary English prose completely. Preserve protected spans verbatim.")
+        + tail
     )
 
 def build_pdf2zh_command(args: argparse.Namespace, output_dir: Path, context_file: Path | None = None) -> list[str]:
@@ -189,9 +196,15 @@ def build_pdf2zh_command(args: argparse.Namespace, output_dir: Path, context_fil
         "zh",
     ]
     target_language = getattr(args, "target_language", "zh") or "zh"
-    if target_language != "zh":
-        # 中译英：显式声明源/目标语言；英译中保持既有命令行逐字不变（pdf2zh 默认 lang-in=en）。
-        command[-2:] = ["--lang-in", TARGET_SOURCE_LANGUAGE[target_language], "--lang-out", target_language]
+    # 源语言解析（lane/d，T6 多语言）：目标 zh 且渲染层已解析出非 en 源（ja/ko 横排）时显式声明
+    # --lang-in；中译英显式声明源/目标语言；纯英译中保持既有命令行逐字不变（pdf2zh 默认 lang-in=en）。
+    source_language = TARGET_SOURCE_LANGUAGE.get(target_language)
+    if target_language == "zh":
+        resolved = getattr(args, "resolved_source_language", None)
+        if resolved in ("ja", "ko"):
+            source_language = resolved
+    if source_language in ("zh", "ja", "ko"):
+        command[-2:] = ["--lang-in", source_language, "--lang-out", target_language]
     if bool(getattr(args, "backend_debug_artifacts", True)):
         command.extend(["--working-dir", str(output_dir / "_backend_working")])
     if getattr(args,'source_cache_mode',None) or bool(getattr(args, "ignore_translation_cache", False)):

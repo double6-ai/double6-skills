@@ -108,7 +108,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         review_ref={"path": str(Path(review).resolve()), "sha256": digest} if review else None,
         target_language=getattr(args, "target_language", "zh") or "zh",
         region_open_at_start=chunk_context.get("reference_region_open_at_start") is True,
-        chunk_mode=isinstance(chunk_context.get("chunk"), dict))
+        chunk_mode=isinstance(chunk_context.get("chunk"), dict),
+        source_language=getattr(args, "resolved_source_language", None))
     result["cost_ledger"] = fold_quality_check(output_dir, extra_seconds=time.perf_counter() - quality_started, input_pdf=source)
     if invocation_ref:bind_final_group_artifact(args,output_dir,result,invocation_ref)
     return result

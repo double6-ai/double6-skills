@@ -993,13 +993,86 @@ def input_preflight_guidance(report, action, route, target_language='zh'):
     return None
 
 
+def _preflight_report_from_facts(args, facts):
+    """B5（编排优化，2026-10-31）：用 translate 主进程拆页时冻结的事实构造等价预检报告。
+
+    仅用于单页续译 piece 且非首页（首页由 bounded_input_preflight 子进程真跑抽样复核）。
+    拒绝码逐字对齐 inspect_pdf 单页分支：source_language_matches_target（error）、
+    source_language_mixed/unknown（warning/info）、non_digital_pages（error，digital 路线）。
+    密码件/页数超限/损坏件在主进程与首页子进程首次进入时拦截，本函数不再构造。
+    身份不匹配（facts 非 FREEZE 冻结引用、input sha 不符）返回 None，调用方回退子进程。
+    """
+    from pdf_input_preflight import LANGUAGE_NAMES
+    target = getattr(args, 'target_language', 'zh') or 'zh'
+    if (facts.get('page_count') != 1 or facts.get('document_page') in (None, 1)
+            or facts.get('target_language', target) != target
+            or facts.get('input') != ref(args.input)):
+        return None
+    language = facts.get('source_language') or {}
+    pages_facts = [{'page': 1, 'kind': facts.get('kind')}]
+    findings = []
+    code = language.get('language')
+    if code == target:
+        name = LANGUAGE_NAMES[target]
+        findings.append(finding('source_language_matches_target',
+                                f'源文主要语言已经是目标语言（{name}）；当前版本支持英译中（en→zh）与中译英（zh→en），'
+                                f'不会静默输出{name}原文。', target_language=target, **language))
+    elif code == 'mixed':
+        findings.append(finding('source_language_mixed', **language))
+    elif code == 'unknown':
+        findings.append(finding('source_language_unknown'))
+    if args.route == 'digital_pdf' and facts.get('kind') not in (None, 'native_text'):
+        findings.append(finding('non_digital_pages', pages=[{'page': 1, 'kind': facts.get('kind')}]))
+    errors = [f for f in findings if f['severity'] == 'error']
+    # 键集与 pdf_input_preflight.summarize 输出对齐（dispatch 尾部按 status/warnings/
+    # source_language/page_count 取键；首版漏 warnings 曾致复用页 KeyError→整页误保留）。
+    report = {'schema_version': 1, 'status': 'blocked' if errors else 'ok',
+              'error_code': errors[0]['code'] if errors else None,
+              'warnings': [f['code'] for f in findings if f['severity'] == 'warning'],
+              'findings': findings, 'input': str(Path(args.input).resolve()), 'page_count': 1,
+              'max_pages': DIGITAL_MAX_PAGES, 'pages': pages_facts, 'source_language': language,
+              'encryption': None, 'target_language': target,
+              'preflight_reused': {'from': 'translate_main_split_facts', 'document_page': facts.get('document_page')}}
+    return report
+
+
+def _frozen_preflight_facts(args):
+    """读 FREEZE 冻结的页级预检事实（B5）；无引用或身份校验失败返回 None。"""
+    if os.environ.get('PAPER_TRANSLATION_DISABLE_PREFLIGHT_REUSE') == '1':
+        return None
+    try:
+        freeze = read_json(args.freeze)
+        facts_ref = freeze.get('preflight_facts_ref')
+        if not facts_ref:
+            return None
+        if freeze.get('input') != ref(args.input):
+            return None
+        facts = bound_json(facts_ref)
+        if facts.get('input') != freeze.get('input'):
+            return None
+        return facts
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def candidate_input_preflight(args):
-    """candidate/collect 在验证 FREEZE 与启动重任务前先做轻量结构化输入预检。"""
+    """candidate/collect 在验证 FREEZE 与启动重任务前先做轻量结构化输入预检。
+
+    B5：FREEZE 带 preflight_facts_ref（translate 单页续译、非首页）时跳过预检子进程
+    重跑，直接用主进程拆页事实构造等价报告；首页仍真跑子进程预检作抽样复核。"""
     receipts = Path(args.receipts)
     receipts.mkdir(parents=True, exist_ok=True)
     path = receipts / 'WORKFLOW_INPUT_PREFLIGHT.json'
-    report = bounded_input_preflight(args.input, receipts, require_digital=args.route == 'digital_pdf',
-                                     target_language=getattr(args, 'target_language', 'zh'))
+    report = None
+    if args.action == 'candidate' and getattr(args, 'freeze', None) is not None:
+        facts = _frozen_preflight_facts(args)
+        if facts is not None:
+            report = _preflight_report_from_facts(args, facts)
+            if report is not None:
+                report['preflight_guard'] = {'status': 'skipped', 'reason': 'reused_translated_split_facts'}
+    if report is None:
+        report = bounded_input_preflight(args.input, receipts, require_digital=args.route == 'digital_pdf',
+                                         target_language=getattr(args, 'target_language', 'zh'))
     if report['status'] == 'blocked':
         guidance = input_preflight_guidance(report, args.action, args.route, getattr(args, 'target_language', None))
         if guidance is not None:

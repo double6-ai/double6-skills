@@ -26,7 +26,6 @@ from backend_session import (  # noqa: E402
     SESSION_ENV,
     BackendSession,
     invoke_backend_session,
-    open_document_backend,
     vendored_pdf2zh_command,
 )
 from pdf2zh_next.high_level import translate_in_process  # noqa: E402
@@ -240,9 +239,10 @@ def test_dead_worker_is_started_again() -> None:
             session.close()
 
 
-def test_scanned_route_does_not_start_a_worker_and_missing_socket_falls_back() -> None:
+def test_missing_socket_and_non_vendor_command_fall_back() -> None:
+    # 3.1.0：公开版仅电子路线，open_document_backend 不再按 route 分支
+    # （3.0.0 起本用例首条断言的旧扫描路线行为已不存在，此处只保留回退部分）。
     with tempfile.TemporaryDirectory() as tmp:
-        assert open_document_backend(Path(tmp), "scanned_ocr") is None
         assert SESSION_ENV not in os.environ
         assert vendored_pdf2zh_command(["/usr/bin/false", "/tmp/pdf2zh"]) is False
         previous = os.environ.get(SESSION_ENV)

@@ -40,9 +40,16 @@ CODES: dict[str, tuple[str, str]] = {
 }
 
 # 支持的目标语言及其对应源语言：zh 目标 = 英译中，en 目标 = 中译英。
+# lane/d（T6 多语言第一阶段）：zh 目标额外接受日文横排源（ja→zh 由电子路线渲染层处理，
+# 见 run_pdf_translation_context.resolve_system_prompt 与 pdf_translation_commands 的 --lang-in 解析）。
 SUPPORTED_TARGETS = {'zh': 'en', 'en': 'zh'}
-LANGUAGE_NAMES = {'zh': '中文', 'en': '英文'}
+LANGUAGE_NAMES = {'zh': '中文', 'en': '英文', 'ja': '日文', 'ko': '韩文'}
 _CJK = re.compile(r'[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]')
+# 假名（平假名 + 片假名，含半角片假名）与谚文兼容/字母区块：日文/韩文的书写系统专属证据。
+# 汉字（_CJK）中日韩共用，单独不能区分 zh/ja；假名与谚文分别只出现在日文/韩文文本里。
+_HIRAGANA = re.compile(r'[\u3041-\u3096\u309d-\u309f]')
+_KATAKANA = re.compile(r'[\u30a1-\u30fa\u30fd-\u30ff\u31f0-\u31ff\uff66-\uff9f]')
+_HANGUL = re.compile(r'[\uac00-\ud7a3\u1100-\u11ff\u3130-\u318f]')
 _LATIN_WORD = re.compile(r'[A-Za-z]{2,}')
 
 
@@ -80,19 +87,32 @@ def blocked_result(findings: list[dict[str, Any]], **extra: Any) -> dict[str, An
 
 
 def detect_language(text: str) -> dict[str, Any]:
-    """按 CJK 字符与拉丁词数量粗判源语言；只区分 zh/en/mixed/unknown。"""
+    """按书写系统区块粗判源语言：ja（假名）、ko（谚文）、zh/en/mixed/unknown。
+
+    判定顺序与阈值（lane/d，T6 多语言第一阶段）：
+    1. 假名（平假名+片假名）≥10 且占汉字+假名的 ≥10% → ja（中文文本不含假名；
+       日文横排实测假名约占汉字+假名的 30-45%，10% 阈值对中文侧零误伤）；
+    2. 谚文 ≥20、≥3 倍（汉字+假名）、≥1.5 倍拉丁词 → ko（韩文文本谚文占绝对主体）；
+    3. 其余沿用既有 zh/en/mixed 判定（无假名/谚文时行为与旧版完全一致）。
+    """
     cjk = len(_CJK.findall(text))
+    kana = len(_HIRAGANA.findall(text)) + len(_KATAKANA.findall(text))
+    hangul = len(_HANGUL.findall(text))
     words = len(_LATIN_WORD.findall(text))
-    if cjk + words < 40:
+    if cjk + kana + hangul + words < 40:
         language = 'unknown'
+    elif hangul >= 20 and hangul >= 3 * (cjk + kana) and hangul >= 1.5 * words:
+        language = 'ko'
+    elif kana >= 10 and kana >= 0.1 * (cjk + kana):
+        language = 'ja'
     elif cjk >= 1.5 * words:
         language = 'zh'
     elif cjk <= 0.2 * words:
         language = 'en'
     else:
         language = 'mixed'
-    return {'language': language, 'cjk_chars': cjk, 'latin_words': words,
-            'method': 'cjk_char_vs_latin_word_count'}
+    return {'language': language, 'cjk_chars': cjk, 'kana_chars': kana, 'hangul_chars': hangul,
+            'latin_words': words, 'method': 'script_block_counts'}
 
 
 def classify_page(page) -> dict[str, Any]:

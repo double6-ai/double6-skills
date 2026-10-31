@@ -1,5 +1,13 @@
 # 变更记录
 
+## 3.1.0（2026-10-31）
+
+- **审计盲区自动化**：新增行尾截断守恒检查与写回墨迹覆盖率抽查（`scripts/audit_blindspots.py` + `scripts/ink_metrics.py`）。每页译文审计通过后自动执行，报警（`trailing_truncation_suspect` / `writeback_zero_ink_line` / `writeback_low_ink_line`）只上浮进翻译审校记录并写 `receipts/audit/BLINDSPOT_AUDIT.json` 回执，不改路由、重试与交付判定；审计器自身故障只记 `blindspot_audit_unavailable` 不拦交付。
+- **日文横排（ja→zh，电子路线）**：源语言检测扩展假名/谚文书写系统区块（无假名/谚文时 zh/en/mixed/unknown 判定逐字不变），日文横排件以目标 zh 预检放行；新增日译中默认提示词（日文汉字词不照搬）与 `PAPER_TRANSLATION_SOURCE_LANGUAGE` 显式声明，`--lang-in` 自动随源；质量门新增假名残留检查（阈值对齐中译英中文残留口径）；`configs/model-profiles.json` 两档案登记 `translation_directions` 能力标注。韩文横排件的源语言可被识别与声明，端到端译中尚未校准。
+- **编排优化**（均可用环境变量关闭并显式留痕）：单页任务复用页级双语件跳过任务级重建（`PAPER_TRANSLATION_DISABLE_DUAL_REUSE`）；babeldoc 字体子集默认走共享内存免落盘、失败自动回退（`BABELDOC_SUBSET_DISK` 保留落盘诊断路径）；续译第 2 页起复用主进程拆页预检事实跳过预检子进程、首页保留抽样复核（`PAPER_TRANSLATION_DISABLE_PREFLIGHT_REUSE`）；同页型连续多次真实盲区审计全通过的高置信页跳过候选重核与盲区审计，跳过信息写入审校记录与页记录（`PAPER_TRANSLATION_DISABLE_LIGHT_REVIEW`）。
+- **双语方向修正**：终局双语件方向按实际源语言解析（页 render_manifest 多数 > 显式声明 > 输入检测 > 旧默认）并随 `翻译报告.json` 留痕 `bilingual_direction_source`；日文/韩文源页签与文件名不再错标英文，既有 en/zh 流程行为不变。
+- 新增测试：`test_audit_blindspots.py`（8 例）、`test_multilang_preflight.py`（9 例）、`test_multilang_render.py`（4 例）、`test_bilingual_direction_multilang.py`（5 例）。
+
 ## 3.0.0（2026-10-30）
 
 - 公开包重构为**仅电子版**：移除扫描 OCR 路线（scanned_ocr、扫描版式重排、印章/名单/密集表处理、OCR 复核与相关严格入口）及对应测试与文档。扫描图像页、图像内嵌文字页与文字转曲页整页保留原文并记录原因，不做 OCR 重建。

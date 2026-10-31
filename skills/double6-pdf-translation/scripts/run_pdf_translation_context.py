@@ -116,15 +116,40 @@ DEFAULT_SYSTEM_PROMPT = (
 # 中译英（--target-language en）默认提示词；定义在 policy_utils，供 Qwen CLI 适配器子进程识别目标语言。
 DEFAULT_SYSTEM_PROMPT_EN = policy_utils.DEFAULT_SYSTEM_PROMPT_EN
 
+# 日译中（源=日文横排，目标=zh）默认提示词（lane/d，T6 多语言第一阶段）。
+# 要点：日文汉字词不可照搬到中文（同形异义是日译中的主要质量风险），假名正文全部译出；
+# 拉丁字母技术词、代码、URL、邮箱与核定专名保持原样；译文保持简洁以适配原版面空间。
+DEFAULT_SYSTEM_PROMPT_JA2ZH = (
+    "You are a professional, authentic machine translation engine. "
+    "Translate Japanese academic PDFs (horizontal text) into fluent Simplified Chinese while preserving "
+    "formulas, citations, URLs, named entities, terminology, and layout-sensitive placeholders. "
+    "Only output the translated result without additional explanation. "
+    "Do not copy Japanese Kanji words verbatim: rewrite them as their natural Simplified Chinese equivalents "
+    "(for example 仕組み→机制, 勉強→学习, 論文→论文, 情報→信息), and translate all kana prose, headings, "
+    "captions and table text into Chinese. Keep Latin-script technical terms, code, URLs, emails, and approved "
+    "names as they are unless a conventional Chinese translation exists. "
+    "Keep the Chinese concise, because it must fit the space of the original Japanese layout."
+)
+
 SUPPORTED_TARGET_LANGUAGES = ("zh", "en")
-# 目标语言 -> 源语言（pdf2zh --lang-in / --lang-out）。
+# 目标语言 -> 默认源语言（pdf2zh --lang-in / --lang-out）。zh 目标的非 en 源（lane/d 起支持
+# ja/ko 横排）由渲染层按输入检测结果或 PAPER_TRANSLATION_SOURCE_LANGUAGE 显式声明覆盖。
 TARGET_SOURCE_LANGUAGE = {"zh": "en", "en": "zh"}
+# 源语言显式声明（ja/ko/en）：预检/渲染层的检测结果之上的用户级覆盖。
+SOURCE_LANGUAGE_ENV = "PAPER_TRANSLATION_SOURCE_LANGUAGE"
 
 
-def resolve_system_prompt(prompt: str, target_language: str = "zh") -> str:
-    """只在调用方未自定义提示词时按目标语言替换默认值。"""
-    if target_language == "en" and prompt == DEFAULT_SYSTEM_PROMPT:
+def resolve_system_prompt(prompt: str, target_language: str = "zh", source_language: str | None = None) -> str:
+    """只在调用方未自定义提示词时按翻译方向替换默认值。
+
+    方向优先级：目标 en（中译英）> 目标 zh 且源 ja（日译中，lane/d）> 既有默认（英译中）。
+    """
+    if prompt != DEFAULT_SYSTEM_PROMPT:
+        return prompt
+    if target_language == "en":
         return DEFAULT_SYSTEM_PROMPT_EN
+    if source_language == "ja":
+        return DEFAULT_SYSTEM_PROMPT_JA2ZH
     return prompt
 
 
@@ -171,7 +196,7 @@ PDF_DIRECT_REPAIR_RESOLUTIONS = {
     "Correspondence and requests for materials should be addressed to Andrew Kay Fan Cheung.": "nature_page14_correspondence_pdf_direct_text_repair",
 }
 
-__all__ = ['Any', 'DEFAULT_API_KEY', 'DEFAULT_BASE_URL', 'DEFAULT_CLI_MAX_TOKENS', 'DEFAULT_HYMT2_TEMPERATURE', 'DEFAULT_HYMT_COMPAT_PROXY_PORT', 'DEFAULT_LATEX_DOCKER_IMAGE', 'DEFAULT_LATEX_PROJECT_MODE', 'DEFAULT_LATEX_RENDER_MODE', 'DEFAULT_LOCAL_MAX_CONCURRENCY', 'effective_local_max_concurrency', 'DEFAULT_MODEL', 'DEFAULT_PDF2ZH_BACKEND', 'DEFAULT_REASONING_EFFORT', 'DEFAULT_SYSTEM_PROMPT', 'DEFAULT_SYSTEM_PROMPT_EN', 'SUPPORTED_TARGET_LANGUAGES', 'TARGET_SOURCE_LANGUAGE', 'resolve_system_prompt', 'DEFAULT_TRANSLATOR_MODE', 'LATEX_BAD_NAME_HINTS', 'LATEX_MAIN_NAME_HINTS', 'LATEX_REFLOW_LINES_PER_PAGE', 'LATEX_REFLOW_LINE_WIDTH_CJK', 'LATEX_SOURCE_HINT_ENV', 'LATEX_SOURCE_ROOTS_ENV', 'NON_BLOCKING_BACKEND_FAILURE_CLASSES', 'PDF_DIRECT_REPAIR_RESOLUTIONS', 'PROTECTED_CHECK_TRANSLATIONS', 'PROTECTED_CHECK_VALUES', 'Path', 'ProxyConfig', 'SimpleNamespace', 'annotations', 'argparse', 'build_babeldoc_il_layout_map', 'build_bilingual_pdf', 'build_block_bridge', 'build_layout_structure_gate', 'build_pdf_rerender_plan', 'build_poppler_text_bbox_audit', 'build_pymupdf_layout_audit', 'build_structured_visual_candidates', 'build_structured_writeback_manifest', 'build_visual_repair_pdf', 'check_translation', 'extract_terms', 'json', 'layout_role_policy', 'math', 'os', 'policy_utils', 'prepare_paper_source', 're', 'render_readable_pdf', 'repair_quality_issues', 'shlex', 'shutil', 'start_hymt_compat_proxy', 'subprocess', 'sys', 'time', 'visual_layout']
+__all__ = ['Any', 'DEFAULT_API_KEY', 'DEFAULT_BASE_URL', 'DEFAULT_CLI_MAX_TOKENS', 'DEFAULT_HYMT2_TEMPERATURE', 'DEFAULT_HYMT_COMPAT_PROXY_PORT', 'DEFAULT_LATEX_DOCKER_IMAGE', 'DEFAULT_LATEX_PROJECT_MODE', 'DEFAULT_LATEX_RENDER_MODE', 'DEFAULT_LOCAL_MAX_CONCURRENCY', 'effective_local_max_concurrency', 'DEFAULT_MODEL', 'DEFAULT_PDF2ZH_BACKEND', 'DEFAULT_REASONING_EFFORT', 'DEFAULT_SYSTEM_PROMPT', 'DEFAULT_SYSTEM_PROMPT_EN', 'DEFAULT_SYSTEM_PROMPT_JA2ZH', 'SUPPORTED_TARGET_LANGUAGES', 'TARGET_SOURCE_LANGUAGE', 'SOURCE_LANGUAGE_ENV', 'resolve_system_prompt', 'DEFAULT_TRANSLATOR_MODE', 'LATEX_BAD_NAME_HINTS', 'LATEX_MAIN_NAME_HINTS', 'LATEX_REFLOW_LINES_PER_PAGE', 'LATEX_REFLOW_LINE_WIDTH_CJK', 'LATEX_SOURCE_HINT_ENV', 'LATEX_SOURCE_ROOTS_ENV', 'NON_BLOCKING_BACKEND_FAILURE_CLASSES', 'PDF_DIRECT_REPAIR_RESOLUTIONS', 'PROTECTED_CHECK_TRANSLATIONS', 'PROTECTED_CHECK_VALUES', 'Path', 'ProxyConfig', 'SimpleNamespace', 'annotations', 'argparse', 'build_babeldoc_il_layout_map', 'build_bilingual_pdf', 'build_block_bridge', 'build_layout_structure_gate', 'build_pdf_rerender_plan', 'build_poppler_text_bbox_audit', 'build_pymupdf_layout_audit', 'build_structured_visual_candidates', 'build_structured_writeback_manifest', 'build_visual_repair_pdf', 'check_translation', 'extract_terms', 'json', 'layout_role_policy', 'math', 'os', 'policy_utils', 'prepare_paper_source', 're', 'render_readable_pdf', 'repair_quality_issues', 'shlex', 'shutil', 'start_hymt_compat_proxy', 'subprocess', 'sys', 'time', 'visual_layout']
 
 SCRIPT_INTERFACE = "internal-module"
 SCRIPT_INTERFACE_REASON = "由兼容入口调用的职责模块，不提供独立命令。"
