@@ -90,9 +90,10 @@ def excel_model(data, include_formats=False):
     package(data)
     try:
         wb=load_workbook(io.BytesIO(data),data_only=False,keep_links=False)
-        values=load_workbook(io.BytesIO(data),data_only=True,keep_links=False)
         themes=cell_display.theme_colors(wb.loaded_theme)
         model=[];removed={'hidden_sheets':0,'hidden_rows':0,'hidden_columns':0,'hidden_format_cells':0,'formulas':0,'uncached_formulas':0};total=0
+        # 公式缓存值按需读取：没有公式的常见工作簿不再整册二次解析。
+        pending=[]
         for ws in wb:
             if ws.sheet_state!='visible':removed['hidden_sheets']+=1;continue
             if len(ws.conditional_formatting):raise Rejected('工作表含条件格式，可能改变显示或隐藏内容；当前停止而非猜测可见性。')
@@ -113,15 +114,27 @@ def excel_model(data, include_formats=False):
                     cell_display.check_font(cell,themes,wb._colors)
                     value=cell.value
                     if cell.data_type=='f':
-                        removed['formulas']+=1;value=values[ws.title][cell.coordinate].value
-                        if value is None:removed['uncached_formulas']+=1;continue
+                        removed['formulas']+=1
+                        pending.append((ws.title,cell.coordinate,len(cells)))
+                        cells.append((cell.row,cell.column,None,cell.number_format))
+                        continue
                     if not isinstance(value,(str,bool,int,float,date,datetime,time)):raise Rejected('工作表含不支持的单元格值。')
                     cell_display.display(value,cell.number_format)
                     cells.append((cell.row,cell.column,value,cell.number_format))
             total+=len(cells)
             if total>MAX_CELLS:raise Rejected('工作簿总单元格超过10万格。')
             model.append(cells)
-        wb.close();values.close()
+        wb.close()
+        if pending:
+            values=load_workbook(io.BytesIO(data),data_only=True,keep_links=False)
+            for title,coordinate,position in pending:
+                value=values[title][coordinate].value
+                if value is None:removed['uncached_formulas']+=1;continue
+                if not isinstance(value,(str,bool,int,float,date,datetime,time)):raise Rejected('工作表含不支持的单元格值。')
+                row,column,_none,number_format=cells[position]
+                cell_display.display(value,number_format)
+                cells[position]=(row,column,value,number_format)
+            values.close()
     except Rejected:raise
     except Exception as exc:raise Rejected('Excel无法安全读取；旧版、加密或复杂无效文件需单独处理。')from exc
     if not model or not any(model):raise Rejected('没有支持的可见单元格内容。')
@@ -181,9 +194,10 @@ def pdf_info(data):
         raise Rejected('PDF无法安全解析。')from exc
 
 
-def pdf_image(data,index):
+def pdf_image(data,index,sizes=None):
     import pypdfium2 as pdfium
-    sizes=pdf_info(data)
+    # sizes 已由调用方用 pdf_info 算好时直接复用，避免逐页渲染时反复整册校验。
+    if sizes is None:sizes=pdf_info(data)
     if type(index)is not int or not 0<=index<len(sizes):raise Rejected('PDF页码无效。')
     with pdfium.PdfDocument(data)as doc:
         # 表单值与批注按当前可见外观渲染，输出不复制可交互对象。
@@ -251,7 +265,7 @@ def export(data,category,plan):
     if category=='pdf':
         sizes=pdf_info(data);boxes=pdf_boxes(plan,sizes);images=[]
         for k in range(len(sizes)):
-            im=pdf_image(data,k)
+            im=pdf_image(data,k,sizes)
             for b in boxes.get(k+1,[]):im.paste((0,0,0),b)
             images.append(im)
         output=make_pdf(images)
@@ -412,7 +426,7 @@ def verify(data,category,plan,source=None):
         return verify_pdf(data,plan,source)
     checks={}
     info=inspect(data,category,plan.get('_verify_encoding',plan.get('input_encoding')));preview=info['preview'];terms=engine.terms_checked(plan.get('terms',[]))
-    checks['selected_strings_absent']=not any(engine.term_remains(preview, x) for x in terms)
+    checks['selected_strings_absent']=engine.strings_absent([preview], terms)
     keep=engine.keep_checked(plan.get('keep',[]))
     if keep and category in ('csv','tsv'):
         output_encoding=plan.get('_verify_encoding',plan.get('input_encoding'))
@@ -431,7 +445,7 @@ def verify(data,category,plan,source=None):
         for n,b in parts.items():
             if n.endswith(('.xml','.rels')):
                 root=engine.parse_xml(b);strings.append(''.join(root.itertext())+' '.join(v for el in root.iter()for v in el.attrib.values()))
-        checks['selected_strings_absent']=not any(engine.term_remains(s, x) for x in terms for s in strings)
+        checks['selected_strings_absent']=engine.strings_absent(strings, terms)
         checks['hidden_carriers_absent']=not any('/media/'in n or '/embeddings/'in n or'comment'in n.lower()or'vba'in n.lower()or n.startswith('customXml/')or'/notesSlides/'in n for n in parts)
         checks['external_links_absent']=not any(el.get('TargetMode')=='External'for n,b in parts.items()if n.endswith('.rels')for el in engine.parse_xml(b))
         checks['original_properties_absent']=not any(''.join(engine.parse_xml(parts[n]).itertext()).strip()for n in ['docProps/custom.xml']if n in parts)
@@ -458,7 +472,7 @@ def verify_pdf(data,plan,source):
             if set(image)!={'/Type','/Subtype','/Width','/Height','/ColorSpace','/BitsPerComponent','/Filter'}or image['/Width']!=w or image['/Height']!=h or image['/ColorSpace']!='/DeviceRGB'or image['/BitsPerComponent']!=8:raise Rejected('PDF图像结构不符。')
             raw=image.get_data()
             if len(raw)!=w*h*3:raise Rejected('PDF图像长度不符。')
-            out=Image.frombytes('RGB',(w,h),raw);expected=pdf_image(source,k)
+            out=Image.frombytes('RGB',(w,h),raw);expected=pdf_image(source,k,sizes)
             for b in boxes.get(k+1,[]):expected.paste((0,0,0),b)
             expected_images.append(expected)
             if ImageChops.difference(out,expected).getbbox()is not None:raise Rejected('PDF遮盖或框外像素不一致。')

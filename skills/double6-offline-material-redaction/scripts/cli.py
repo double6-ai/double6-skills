@@ -51,6 +51,8 @@ def load_plan(path, expected):
     if not isinstance(plan, dict) or set(plan) - allowed or type(plan.get('version')) is not int or plan.get('version') != 1 or plan.get('kind') != expected or plan.get('reviewed') is not True:
         raise Failure('计划需声明version=1、对应kind与reviewed=true，且不能有未知字段。')
     plan['keep'] = engine.keep_checked(plan.get('keep', []))
+    if expected == 'image' and plan['keep']:
+        raise Failure('图片副本没有可搜索文字，keep 保留项不会被检查；请删除该字段，或改用可搜索文字的格式。')
     if expected == 'pdf' and 'clear_annotations' in plan and plan['clear_annotations'] is not True and plan['clear_annotations'] is not False:
         raise Failure('「一并清除批注」只能选择打开或关闭。')
     if expected not in {'image','pdf'}:

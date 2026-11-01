@@ -47,8 +47,20 @@ def display(value, fmt):
     except (InvalidOperation, ValueError): raise Rejected('该数值无法按原格式安全显示。')
 
 
+# Excel/LibreOffice 的区域货币写法：[$¥-804]#,##0.00。显示规则仍是“符号 + 数字”。
+_LOCALE_CURRENCY = re.compile(r'^\[\$([^-\]]+)(?:-[0-9A-Za-z]+)?\]')
+
+
 def validate_numeric_format(fmt):
     symbol = ''
+    match = _LOCALE_CURRENCY.match(fmt)
+    if match:
+        symbol = match.group(1)
+        fmt = fmt[match.end():]
+    elif fmt.startswith('\\') and len(fmt) >= 2 and fmt[1] in '¥￥$€£':
+        # LibreOffice 常把 ¥/$ 写成反斜杠转义的单个字面字符。
+        symbol = fmt[1]
+        fmt = fmt[2:]
     for prefix in ('"¥"', '"￥"', '"$"', '¥', '￥', '$'):
         if fmt.startswith(prefix): symbol = prefix.strip('"'); fmt = fmt[len(prefix):]; break
     percent = fmt.endswith('%')

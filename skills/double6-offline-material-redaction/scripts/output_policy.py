@@ -68,8 +68,6 @@ def native_odf(data, ext):
                 if isinstance(value,(int,float)) and not isinstance(value,bool):attrs={O+'value-type':'float',O+'value':str(value)}
                 cell=ET.SubElement(tr,A+'table-cell',attrs);paragraph(cell,'' if value is None else value)
     if ext=='.odt':
-        from docx import Document
-        doc=Document(io.BytesIO(data))
         for block in engine.inspect_docx(data)['blocks']:
             if block['kind']=='paragraph':paragraph(body,block['text'])
             else:table(body,block['rows'])
@@ -143,7 +141,7 @@ def verify(data, ext, plan, source=None):
         info=engine.inspect_docx(normalized) if kind=='word' else formats.inspect(normalized,kind)
         preview=info['preview'];terms=engine.terms_checked(plan.get('terms',[]));keep=engine.keep_checked(plan.get('keep',[]))
         raw_text=' '.join(formats.package(data)[n].decode('utf-8') for n in ('content.xml','styles.xml'))
-        checks={'selected_strings_absent':not any(engine.term_remains(raw_text, x) for x in terms),'odf_clean_container':not detail.get('hidden_nodes_removed'),'odf_reopened':True}
+        checks={'selected_strings_absent':engine.strings_absent([raw_text], terms),'odf_clean_container':not detail.get('hidden_nodes_removed'),'odf_reopened':True}
         source_preview=None
         if source is not None:
             try:

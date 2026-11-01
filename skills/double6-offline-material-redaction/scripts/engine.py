@@ -15,7 +15,7 @@ from xml.etree import ElementTree as ET
 from PIL import Image, ImageChops, ImageOps
 from docx import Document
 
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 MAX_BYTES = 20 * 1024 * 1024
 MAX_PIXELS = 24_000_000
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
@@ -396,8 +396,51 @@ def _number_key(term):
     return runs[0]
 
 
+class TermScanner:
+    """整段文本的折叠与数字切分只算一次，供逐词复检复用。
+
+    大文档逐词调用 term_remains 会把同一文本反复折叠和切分；这里把
+    文本侧的开销摊到一份，词侧仍然逐词判断，判定结果和逐次调用一致。
+    """
+
+    def __init__(self, text):
+        self.text = text
+        self.folded = _fold_marks(text)
+        self.digit_runs = _digit_runs(text)
+        self.loose_runs = _loose_digit_runs(text)
+
+    def remains(self, term):
+        """补选词只要还在，包括嵌在更长数字里、换了分隔符或数字字形，都不能当成已经不在。"""
+        if term in self.text:
+            return True
+        folded = _fold_marks(term)
+        if folded and folded in self.folded:
+            return True
+        key = _number_key(term) or (folded if folded.isdigit() else "")
+        if not key:
+            return False
+        if any(key in run for run in self.digit_runs):
+            return True
+        return any(key in run for run in self.loose_runs)
+
+    def alternate(self, term):
+        """同一号码的另一种写法是否留在文本里。"""
+        key = _number_key(term)
+        return bool(key) and any(key in run for run in self.loose_runs)
+
+
+def strings_absent(strings, terms):
+    """任一段文字里留有任一补选词都算未通过；每段文字只折叠和切分一次。"""
+    for value in strings:
+        scanner = TermScanner(value)
+        for term in terms:
+            if scanner.remains(term):
+                return False
+    return True
+
+
 def term_remains(text, term):
-    """补选词只要还在，包括嵌在更长数字里、换了分隔符或数字字形，都不能当成已经不在。两个方向都算。"""
+    """单次查询入口；同一文本要查多个词时请用 TermScanner 复用。"""
     if term in text:
         return True
     folded = _fold_marks(term)
@@ -449,14 +492,17 @@ def phrases_kept(source_text, output_text, keep):
 
 
 def rewrite(text, terms, mapping):
+    # 先看首字符再逐词比较；判定结果和逐词扫描一致，长文本上快一个量级。
+    firsts = {term[0] for term in terms}
     parts = []
     index = 0
     while index < len(text):
         hit = None
-        for term in terms:
-            if _bounded(text, index, term):
-                hit = term
-                break
+        if text[index] in firsts:
+            for term in terms:
+                if _bounded(text, index, term):
+                    hit = term
+                    break
         if hit is None:
             parts.append(text[index])
             index += 1
@@ -478,8 +524,9 @@ def prepare_replacement(preview, terms, missing_message=None):
     reject_partial_business_numbers(preview, terms)
     mapping = {term: mark for term, mark in zip(terms, markers_for(terms, preview))}
     rewritten = rewrite(preview, terms, mapping)
-    if any(term_remains(rewritten, term) for term in terms):
-        if any(alternate_spelling_remains(rewritten, term) for term in terms):
+    scanner = TermScanner(rewritten)
+    if any(scanner.remains(term) for term in terms):
+        if any(scanner.alternate(term) for term in terms):
             raise Rejected("同一号码还有另一种写法留在正文里。空格、连字符、点号、斜杠、下划线、变体选择符、其它不可见字符或不同的数字字形都算。请把同一种号码的各种写法一起补选。已停止，未交付副本。")
         raise Rejected("替换后补选内容仍留在正文里，已停止，未交付副本。")
     return lambda text: rewrite(text, terms, mapping)
@@ -682,4 +729,4 @@ def verify_docx(data, terms):
             history |= any(el.tag in {W + x for x in ["del", "ins", "moveFrom", "moveTo", "vanish", "webHidden"]} for el in root.iter())
     doc = Document(io.BytesIO(data))
     props = doc.core_properties
-    return {"selected_strings_absent": not any(term_remains(s, v) for s in strings for v in terms), "media_embeddings_comments_absent": not any(n.startswith(("word/media/", "word/embeddings/", "customXml/")) or "comment" in n.lower() for n in parts), "external_relationships_absent": not external, "revision_hidden_markup_absent": not history, "original_properties_absent": not any(getattr(props, f) for f in ["author", "last_modified_by", "title", "subject", "keywords", "comments"]), "internal_relationships_valid": not missing_targets(parts), "editable_document_reopened": doc._element.body is not None}
+    return {"selected_strings_absent": strings_absent(strings, terms), "media_embeddings_comments_absent": not any(n.startswith(("word/media/", "word/embeddings/", "customXml/")) or "comment" in n.lower() for n in parts), "external_relationships_absent": not external, "revision_hidden_markup_absent": not history, "original_properties_absent": not any(getattr(props, f) for f in ["author", "last_modified_by", "title", "subject", "keywords", "comments"]), "internal_relationships_valid": not missing_targets(parts), "editable_document_reopened": doc._element.body is not None}

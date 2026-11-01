@@ -1,6 +1,6 @@
 # 本地材料脱敏
 
-当前正式源码版本：**0.7.1**。下载包与校验文件见 [GitHub Release](https://github.com/double6-ai/double6-skills/releases/tag/double6-offline-material-redaction-v0.7.1)。
+当前正式源码版本：**0.7.2**。0.7.1 的下载包与校验文件见 [GitHub Release](https://github.com/double6-ai/double6-skills/releases/tag/double6-offline-material-redaction-v0.7.1)；0.7.2 起以仓库源码与安装验收为准，发布包另行更新。
 
 在上传AI材料前，用本机工具生成脱敏副本。用户补选敏感文字或区域，工具清理支持的隐藏内容，再核对必须保留的业务内容。原件、计划和已有结果都不覆盖。
 

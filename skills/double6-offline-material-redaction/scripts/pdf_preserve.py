@@ -1346,7 +1346,7 @@ def _open_content_page(page):
     return scratch
 
 
-def _content_image(data, index):
+def _content_image(data, index, size=None):
     """去掉批注后再渲染。用来确认框内已经涂实，不被留在上面的删除线、高亮干扰。"""
     import formats
     fitz = backend()
@@ -1360,7 +1360,7 @@ def _content_image(data, index):
             raw = scratch.tobytes(garbage=1, deflate=True, no_new_id=True)
         finally:
             scratch.close()
-    return formats.pdf_image(raw, 0)
+    return formats.pdf_image(raw, 0, [size] if size else None)
 
 
 def _content_hides_text(page):
@@ -1540,7 +1540,18 @@ def export(data, plan, _verify=True):
                         raise engine.Rejected('PDF含不可见或半透明文字，原生路线无法保证隐藏层清理，已停止。')
                 if _content_hides_text(page):
                     raise engine.Rejected('PDF文字被后绘制的图形/图片遮住，存在可恢复的隐藏内容；原生路线停止。')
-                pdf_visibility.redaction_graphics(page,boxes)
+                # get_drawings 会把批注外观也算进来。默认保留批注时，批注整体留在副本上，
+                # 不存在“部分矢量被盖住可恢复”的问题；矢量检查只看页面内容。
+                scratch = None
+                content_page = page
+                if not clearing and (list(page.annots() or []) or _annots_array(page)):
+                    scratch = _open_content_page(page)
+                    content_page = scratch[0]
+                try:
+                    pdf_visibility.redaction_graphics(content_page, boxes)
+                finally:
+                    if scratch is not None:
+                        scratch.close()
                 for box in boxes:
                     page.add_redact_annot(box, fill=(0, 0, 0), cross_out=False)
                 if boxes:
@@ -1629,10 +1640,10 @@ def verify(data, plan, source):
                         checks['pdf_hidden_objects_absent'] = False
                     # 明确清除批注时，基准仍是去掉批注、尚未涂黑的页面，用来看涂黑有没有切到框外字形。
                     # 默认保留批注时，基准就是原页面（只提前去掉因命中补选词而删除的那几条）。
-                    old = formats.pdf_image(pixel_source, index)
-                    new = formats.pdf_image(data, index)
+                    old = formats.pdf_image(pixel_source, index, sizes)
+                    new = formats.pdf_image(data, index, sizes)
                     # 默认留下的删除线、高亮画在涂黑上面。框内是否涂实，要看拿掉这些批注后的正文。
-                    solid = _content_image(data, index) if not clearing else None
+                    solid = _content_image(data, index, sizes[index]) if not clearing else None
                     if solid is not None and solid.size != new.size:
                         checks['selected_regions_solid'] = False
                         solid = new
@@ -1649,7 +1660,7 @@ def verify(data, plan, source):
                     if delta.getbbox() is not None:
                         checks['outside_page_pixels_preserved'] = False
                     if clearing:
-                        source_image = formats.pdf_image(source, index)
+                        source_image = formats.pdf_image(source, index, sizes)
                         baseline_page = stripped[index] if stripped is not None else None
                         detail = annotation_change_reason(original, baseline_page, pixel_boxes, source_image, old, page_number=index + 1)
                     else:

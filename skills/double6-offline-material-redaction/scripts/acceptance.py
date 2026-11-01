@@ -115,6 +115,18 @@ def run():
             notes=[(a.info or {}).get('content') or '' for a in (doc[0].annots() or [])]
             return ext=='.pdf' and SECRET not in doc[0].get_text() and KEEP in doc[0].get_text() and any('页边便签甲乙丙' in note for note in notes) and '默认保留批注' in r['scope']
     case('PDF默认保留高亮和便签','positive',kept_markup)
+    def highlight_over_selection():
+        # 高亮盖住要框选的词是常见办公场景：正文删除，高亮整体保留；批注外观不算页面矢量。
+        f=__import__('pdf_preserve').backend();d=f.open();p=d.new_page(width=300,height=200)
+        p.insert_text((20,40),KEEP);p.insert_text((20,100),SECRET)
+        p.add_highlight_annot(p.search_for(SECRET)[0]).update()
+        found=p.search_for(SECRET)[0];raw=d.tobytes();d.close()
+        box=[(found.x0-1)*2,(found.y0-1)*2,(found.x1+1)*2,(found.y1+1)*2]
+        plan={'reviewed_pages':[1],'pages':[{'page':1,'rectangles':[box]}],'keep':[KEEP]}
+        out,r,ext=policy.export(raw,'.pdf',plan)
+        with f.open(stream=out,filetype='pdf') as doc:
+            return ext=='.pdf' and SECRET not in doc[0].get_text() and KEEP in doc[0].get_text() and any(a.type[1]=='Highlight' for a in (doc[0].annots() or [])) and '默认保留批注' in r['scope']
+    case('PDF默认保留盖住框选词的高亮','positive',highlight_over_selection)
     def unreadable_attachment():
         f=__import__('pdf_preserve').backend();d=f.open();p=d.new_page(width=300,height=200)
         p.insert_text((20,40),KEEP);p.insert_text((20,100),SECRET)
