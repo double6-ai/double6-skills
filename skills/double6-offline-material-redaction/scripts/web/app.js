@@ -2,15 +2,36 @@ const $ = (id) => document.getElementById(id);
 let job = null, picture = null, boxes = [], start = null, busy = false, pdfBoxes = {}, visited = new Set(), currentPage = 1;
 let revoking=Promise.resolve();
 const canvas = $('canvas'), ctx = canvas.getContext('2d');
-const checkNames = {neutral_output_filename:'下载使用中性新文件名，未带出原文件名',deterministic_pdf_matches_source_plan:'实际PDF与原件和补选计划的重建结果一致',text_encoding_readable:'原编码可重新读取',utf8_readable:'文本可用UTF-8重新读取',keep_phrases_preserved:'关键保留句仍在副本中',formula_text_neutralized:'公式样式文本已转为普通文字',hidden_carriers_absent:'未带入图片、备注、批注或嵌入对象',external_links_absent:'外部链接已移除',formulas_hidden_absent:'公式与隐藏表行列已移除',hidden_slides_absent:'隐藏幻灯片未带入',image_only_pdf:'按明确选择生成图像化PDF',pdf_not_rasterized:'PDF未整页图像化',selected_text_removed:'框内原文字已删除',outside_text_positions_preserved:'框外文字与位置保留',outside_page_pixels_preserved:'框外页面像素保留',pdf_hidden_objects_absent:'已支持的隐藏PDF对象清理',output_format_matches_request:'实际编码符合选择的输出格式',outside_pixels_within_jpeg_tolerance:'JPEG框外误差在明确容差内',odf_clean_container:'ODF原容器未复制',odf_reopened:'ODF副本可重新读取',original_objects_absent:'原PDF对象和隐藏附件未带入',metadata_removed:'图片元数据已移除',selected_regions_solid:'框选区域已实色覆盖',outside_pixels_preserved:'框选之外的像素保留',selected_strings_absent:'补选原文未在导出包中检出',media_embeddings_comments_absent:'图片、嵌入文件、批注与自定义 XML 未带入',external_relationships_absent:'外部超链接关系已移除',revision_hidden_markup_absent:'修订和隐藏文字标记已移除',original_properties_absent:'作者与文档属性已清理',internal_relationships_valid:'内部文件引用完整',editable_document_reopened:'可编辑 Word 结构可重新读取'};
-function status(message='') { $('status').textContent=message; }
+const checkNames = {covered_text_not_revealed:'删除后未露出原先被遮盖的文字',neutral_output_filename:'下载使用中性新文件名，未带出原文件名',deterministic_pdf_matches_source_plan:'实际PDF与原件和补选计划的重建结果一致',text_encoding_readable:'原编码可重新读取',utf8_readable:'文本可用UTF-8重新读取',keep_phrases_preserved:'关键保留句仍在副本中',formula_text_neutralized:'公式样式文本已转为普通文字',hidden_carriers_absent:'未带入图片、备注、批注或嵌入对象',external_links_absent:'外部链接已移除',formulas_hidden_absent:'公式与隐藏表行列已移除',hidden_slides_absent:'隐藏幻灯片未带入',image_only_pdf:'按明确选择生成图像化PDF',pdf_not_rasterized:'PDF未整页图像化',selected_text_removed:'框内原文字已删除',outside_text_positions_preserved:'框外文字与位置保留',outside_page_pixels_preserved:'框外页面像素保留',pdf_hidden_objects_absent:'已支持的隐藏PDF对象清理',output_format_matches_request:'实际编码符合选择的输出格式',outside_pixels_within_jpeg_tolerance:'JPEG框外误差在明确容差内',odf_clean_container:'ODF原容器未复制',odf_reopened:'ODF副本可重新读取',original_objects_absent:'原PDF对象和隐藏附件未带入',metadata_removed:'图片元数据已移除',selected_regions_solid:'框选区域已实色覆盖',outside_pixels_preserved:'框选之外的像素保留',selected_strings_absent:'补选原文未在导出包中检出',media_embeddings_comments_absent:'图片、嵌入文件、批注与自定义 XML 未带入',external_relationships_absent:'外部超链接关系已移除',revision_hidden_markup_absent:'修订和隐藏文字标记已移除',original_properties_absent:'作者与文档属性已清理',internal_relationships_valid:'内部文件引用完整',editable_document_reopened:'可编辑 Word 结构可重新读取'};
+function status(message='', tone='error') {
+  $('status').textContent=message;
+  $('status').hidden=!message;
+  $('status').dataset.tone=tone;
+  if(message && tone==='error')$('status').scrollIntoView({block:'nearest',behavior:'instant'});
+}
+function syncWorkspace() {
+  const ready=Boolean(job), complete=ready&&!$('result').hidden;
+  $('empty-state').hidden=ready;
+  $('selected-file').hidden=!ready;
+  $('clear').disabled=busy;
+  const current=complete?2:ready?1:0;
+  ['step-import','step-review','step-export'].forEach((id,index)=>{
+    $(id).classList.toggle('is-current',index===current);
+    $(id).classList.toggle('is-done',index<current);
+    if(index===current)$(id).setAttribute('aria-current','step');else $(id).removeAttribute('aria-current');
+  });
+}
 function setBusy(value) {
   busy=value;
+  $('work').setAttribute('aria-busy',String(value));
+  $('dropzone').classList.toggle('is-disabled',value);
+  $('export').textContent=value?'处理中…':'导出并复检 →';
   for(const id of ['stop','file','clear','undo','terms','keep','clean-only','loss','reviewed','add-selection','export','encoding','pdf-page','pdf-loss','pdf-mode','pdf-keep','clear-annotations','output-format'])$(id).disabled=value;
   for(const button of $('suggestions').querySelectorAll('button'))button.disabled=value;
   if(!value){const raster=$('pdf-mode').value==='rasterize';$('pdf-keep').disabled=raster;$('clear-annotations').disabled=raster;}
+  syncWorkspace();
 }
-function invalidate() { const had=$('download').hasAttribute('href'),id=job?.id;$('download').removeAttribute('href');$('result').hidden=true; $('reviewed').checked=false;if(had&&id){revoking=request('api/invalidate',JSON.stringify({id}),{'Content-Type':'application/json'});revoking.catch(()=>status('旧下载撤销未确认，请先清空会话。'));} }
+function invalidate() { const had=$('download').hasAttribute('href'),id=job?.id;$('download').removeAttribute('href');$('result').hidden=true; $('reviewed').checked=false;syncWorkspace();if(had&&id){revoking=request('api/invalidate',JSON.stringify({id}),{'Content-Type':'application/json'});revoking.catch(()=>status('旧下载撤销未确认，请先清空会话。'));} }
 async function request(path, body, headers={}) {
   const response=await fetch(path,{method:'POST',body,headers});
   const data=await response.json();
@@ -44,7 +65,7 @@ canvas.addEventListener('pointerup',async e=>{
   setBusy(true);
   try{
     if(job?.kind==='pdf'&&$('pdf-mode').value==='preserve'){
-      const result=await request('api/snap-pdf',JSON.stringify({id:job.id,page:currentPage,rectangle:region}),{'Content-Type':'application/json'});region=result.rectangle;status('已对齐完整字符，请核对黑块显示的实际范围。');
+      const result=await request('api/snap-pdf',JSON.stringify({id:job.id,page:currentPage,rectangle:region}),{'Content-Type':'application/json'});region=result.rectangle;status('已对齐完整字符，请核对黑块显示的实际范围。','info');
     }
     boxes.push(region);invalidate();draw();
   }catch(error){status(error.message);draw();}finally{setBusy(false);}
@@ -57,18 +78,19 @@ $('output-format').onchange=()=>{invalidate();$('format-notice').textContent=$('
 $('pdf-mode').onchange=()=>{invalidate();const raster=$('pdf-mode').value==='rasterize';$('pdf-loss-label').hidden=!raster;$('pdf-keep').disabled=raster;$('clear-annotations').disabled=raster;if(raster){$('pdf-keep').value='';$('clear-annotations').checked=false;}};
 async function loadPdfPage(number){pdfBoxes[currentPage]=boxes;currentPage=number;boxes=pdfBoxes[number]||[];picture=new Image();picture.src=`file/${job.id}/page/${number}`;await picture.decode();canvas.width=picture.width;canvas.height=picture.height;visited.add(number);draw();invalidate();}
 $('pdf-page').onchange=async()=>{if(busy||!job)return;setBusy(true);try{await loadPdfPage(Number($('pdf-page').value));}catch(e){status(e.message);}finally{setBusy(false);}};
-$('encoding').onchange=()=>{resetWorkspace();status('编码已改变，请重新选择原文件。');};
+$('encoding').onchange=()=>{resetWorkspace();status('编码已改变，请重新选择原文件。','info');};
 $('add-selection').onclick=()=>{const sel=window.getSelection();if(sel&&$('word-preview').contains(sel.anchorNode)&&$('word-preview').contains(sel.focusNode))addTerm(sel.toString());else status('请先在预览中选中需要隐去的文字。');};
 $('file').onchange=async()=>{
   if(busy)return;
   const file=$('file').files[0];if(!file)return;
-  invalidate();$('work').hidden=true;status('正在本机读取文件…');setBusy(true);
+  invalidate();$('work').hidden=true;status('正在本机读取文件…','busy');setBusy(true);
   try{
     const ext=file.name.split('.').pop().toLowerCase();const kind=({docx:'word',doc:'word',rtf:'word',odt:'word',xls:'excel',ods:'excel',ppt:'pdf',odp:'slides',txt:'text',md:'markdown',markdown:'markdown',csv:'csv',tsv:'tsv',pdf:'pdf',xlsx:'excel',xlsm:'excel',pptx:'slides'})[ext]||'image';
     const legacy={doc:'.docx',rtf:'.docx',xls:'.xlsx',ppt:'.pdf'};let conversion='';
     if(legacy[ext]){if(!window.confirm(`此原格式暂不能安全导出。是否明确选择转换为${legacy[ext]}并读取预览？会调用本机LibreOffice，原件不改动。`))throw new Error('未同意转换，未读取旧格式内容。');conversion=legacy[ext];}
     job=await request('api/import',file,{'Content-Type':'application/octet-stream','X-File-Kind':kind,'X-File-Extension':'.'+ext,'X-Text-Encoding':$('encoding').value,'X-File-Name':encodeURIComponent(file.name),'X-Convert-To':conversion});
     $('filename').textContent=file.name;
+    $('file-meta').textContent=`${file.size<1048576?(file.size/1024).toFixed(1)+' KB':(file.size/1048576).toFixed(1)+' MB'} · ${ext.toUpperCase()}`;
     $('output-format').replaceChildren(...job.output_options.map(ext=>{const o=document.createElement('option');o.value=ext;o.textContent=ext===job.input_extension?'保持原格式 '+ext:'明确转换为 '+ext;return o;}));
     if(conversion)$('output-format').value=conversion;
     $('format-notice').textContent=conversion?'已明确选择转换，原件保持不变。':job.original_format_supported?'默认保持原格式，生成新文件。':'此旧格式暂不能安全原格式导出；只有明确选择转换格式才会导出。';
@@ -87,30 +109,42 @@ $('file').onchange=async()=>{
       for(const text of job.suggestions){const b=document.createElement('button');b.type='button';b.textContent=`补选：${text}`;b.onclick=()=>addTerm(text);$('suggestions').append(b);}
       if(!job.suggestions.length)$('suggestions').textContent='未发现电话、邮箱、身份证或银行卡格式；请自行检查姓名、机构和其它敏感文字。建议不会自动套用。';
     }
-    $('work').hidden=false;status();
-  }catch(e){job=null;status(e.message);}finally{setBusy(false);}
+    $('work').hidden=false;syncWorkspace();status();
+    if(window.matchMedia('(max-width: 760px)').matches)$('work').scrollIntoView({block:'start',behavior:'instant'});
+  }catch(e){resetWorkspace();status(e.message);}finally{setBusy(false);}
 };
+$('dropzone').addEventListener('dragover',event=>{event.preventDefault();if(!busy)$('dropzone').classList.add('is-dragging');});
+$('dropzone').addEventListener('dragleave',event=>{if(!$('dropzone').contains(event.relatedTarget))$('dropzone').classList.remove('is-dragging');});
+$('dropzone').addEventListener('drop',event=>{
+  event.preventDefault();$('dropzone').classList.remove('is-dragging');
+  if(busy)return;
+  const files=event.dataTransfer.files;
+  if(files.length!==1){status('请每次选择一份材料。');return;}
+  $('file').files=files;$('file').onchange();
+});
+for(const id of ['help-link','privacy-link'])$(id).onclick=()=>{$('usage').open=true;};
 $('export').onclick=async()=>{
-  if(!job||busy)return;setBusy(true);$('result').hidden=true;status('正在本机导出并复检…');
+  if(!job||busy)return;setBusy(true);$('result').hidden=true;status('正在本机导出并复检…','busy');
   try{
     await revoking;
     if(job.kind==='pdf'){pdfBoxes[currentPage]=boxes;if(visited.size!==job.pages.length)throw new Error('请先逐页查看全部PDF，再导出。');}
     const data=await request('api/export',JSON.stringify({id:job.id,output_format:$('output-format').value,pdf_mode:$('pdf-mode').value,clear_annotations:job.kind==='pdf'&&$('clear-annotations').checked,rectangles:boxes,terms:decodeTerms($('terms').value),keep:(job.kind==='pdf'?$('pdf-keep'):$('keep')).value.split('\n').map(x=>x.trim()).filter(Boolean),reviewed:$('reviewed').checked,acknowledge_loss:job.kind==='pdf'?$('pdf-loss').checked:$('loss').checked,pages:Object.entries(pdfBoxes).filter(([,v])=>v.length).map(([page,rectangles])=>({page:Number(page),rectangles})),reviewed_pages:[...visited],clean_only:$('clean-only').checked}),{'Content-Type':'application/json'});
     $('report-scope').textContent=data.report.scope;$('checks').replaceChildren();
     for(const [key,ok] of Object.entries(data.report.checks)){const li=document.createElement('li');li.textContent=(ok?'✓ ':'× ')+(checkNames[key]||key);$('checks').append(li);}
-    for(const key of data.report.not_checked||[]){const li=document.createElement('li');li.textContent='未检查：'+(key==='keep_phrases_preserved'?'未声明关键保留项，请打开副本核对业务内容':key);$('checks').append(li);}
+    for(const key of data.report.not_checked||[]){const li=document.createElement('li');li.className='not-checked';li.textContent='未检查：'+(key==='keep_phrases_preserved'?'未声明关键保留项，请打开副本核对业务内容':key);$('checks').append(li);}
     $('download').href=data.download;$('result').hidden=false;status();$('result').scrollIntoView({block:'start',behavior:'instant'});
   }catch(e){status(e.message);}finally{setBusy(false);}
 };
 function resetWorkspace(){
   job=null;revoking=Promise.resolve();picture=null;boxes=[];start=null;pdfBoxes={};visited=new Set();currentPage=1;$('pdf-page').replaceChildren();$('pdf-progress').textContent='';$('pdf-loss').checked=false;$('pdf-mode').value='preserve';$('pdf-keep').value='';$('clear-annotations').checked=false;$('clear-annotations').disabled=false;$('output-format').replaceChildren();$('format-notice').textContent='';canvas.width=1;canvas.height=1;
-  $('file').value='';$('filename').textContent='';$('terms').value='';$('keep').value='';$('word-preview').textContent='';$('suggestions').replaceChildren();$('word-notice').textContent='';$('word-counts').textContent='';$('loss').checked=false;$('clean-only').checked=false;$('reviewed').checked=false;$('download').removeAttribute('href');$('work').hidden=true;$('result').hidden=true;
+  $('file').value='';$('filename').textContent='';$('file-meta').textContent='';$('terms').value='';$('keep').value='';$('word-preview').textContent='';$('suggestions').replaceChildren();$('word-notice').textContent='';$('word-counts').textContent='';$('loss').checked=false;$('clean-only').checked=false;$('reviewed').checked=false;$('download').removeAttribute('href');$('work').hidden=true;$('result').hidden=true;syncWorkspace();
 }
-$('clear').onclick=async()=>{if(busy)return;setBusy(true);try{await request('api/clear','{}',{'Content-Type':'application/json'});resetWorkspace();status('会话已清空。');}catch(e){status(e.message);}finally{setBusy(false);}};
+$('clear').onclick=async()=>{if(busy)return;setBusy(true);try{await request('api/clear','{}',{'Content-Type':'application/json'});resetWorkspace();status('会话已清空。','info');}catch(e){status(e.message);}finally{setBusy(false);}};
 
 $('stop').onclick=async()=>{
   if(busy||!window.confirm('结束工具并清空本次材料？已下载的副本仍保存在下载目录。'))return;
   setBusy(true);
-  try{await request('api/stop','{}',{'Content-Type':'application/json'});resetWorkspace();status('工具已结束，可关闭此标签页。下次双击安装生成的启动文件即可重新打开。');}
+  try{await request('api/stop','{}',{'Content-Type':'application/json'});resetWorkspace();status('工具已结束，可关闭此标签页。下次双击安装生成的启动文件即可重新打开。','info');}
   catch(e){status('工具未能确认结束，请关闭启动进程后重新打开。');setBusy(false);}
 };
+syncWorkspace();

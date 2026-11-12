@@ -1,11 +1,86 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>本地材料脱敏</title><link rel="stylesheet" href="style.css"><script src="app.js" defer></script></head>
-<body><main><header><p class="eyebrow">本地工具 · __VERSION__</p><h1>在本机处理上传材料</h1><p>在这台电脑中生成脱敏副本。常规格式在本地进程内处理；旧DOC/XLS/PPT、RTF兼容转换会在私有临时目录写入原件副本和转换文件，正常结束后删除，异常退出可能残留。清空会话释放工具中的材料；下载的副本仍在下载目录。</p></header>
-<section><h2>1. 选择文件</h2><p>支持 __SUPPORTED_INPUTS__。旧二进制Office及RTF需本机LibreOffice；最大20MB，PDF最多20页。</p><label class="file">选择材料<input id="file" type="file" accept=".png,.jpg,.jpeg,.webp,.docx,.txt,.md,.markdown,.csv,.tsv,.pdf,.xlsx,.xlsm,.pptx,.doc,.xls,.ppt,.rtf,.odt,.ods,.odp"></label><span id="filename"></span><label>文本编码<select id="encoding"><option value="">UTF-8 / UTF-16 BOM</option><option value="gb18030">GB18030（明确知道原编码时）</option></select></label><button id="clear" type="button">清空会话</button></section>
-<section id="work" hidden><h2>2. 补选需要隐去的内容</h2><label>输出格式<select id="output-format"></select></label><p id="format-notice"></p>
-<div id="image-work" hidden><p>拖动框选姓名、班级、联系方式等。可以框选多处；导出为实色覆盖的 PNG，透明区域铺白底。</p><div id="pdf-controls" hidden><p>默认只删除框选的正文，高亮、下划线、便签会留下来。保留文字模式下，新框会对齐完整字符；黑块显示实际处理范围，请确认后再导出。</p><label>PDF页码<select id="pdf-page"></select></label><p id="pdf-progress" role="status"></p><label>PDF处理方式<select id="pdf-mode"><option value="preserve">保留文字和页面（默认）</option><option value="rasterize">明确转为图像化PDF</option></select></label><label>必须保留的可搜索文字（每行一项）<textarea id="pdf-keep" rows="2"></textarea></label><label class="check"><input id="clear-annotations" type="checkbox">一并清除批注（默认不勾选）。只有勾选后才去掉批注。勾选后按严格规则检查：这块范围里只要画面有变化，或还有没框选的文字、线条、图片，就停止，并请先去掉遮盖类批注。</label></div><div class="canvas-wrap"><canvas id="canvas" aria-label="图片框选区域"></canvas></div><p id="region-count" role="status">已框选 0 处</p><button id="undo" type="button">撤销上一处</button></div>
-<div id="word-work" hidden><p id="word-notice"></p><p id="word-counts"></p><h3>待补选内容预览</h3><pre id="word-preview" tabindex="0"></pre><button id="add-selection" type="button">将选中文字加入补选</button><h3>可能需要处理的内容</h3><div id="suggestions"></div><label for="terms">补选原文，每行一项。一行里的 \n 表示原文中的换行，不会拆成两项。姓名和机构名请自行检查。</label><textarea id="terms" rows="5" placeholder="林芩澄&#10;qin.test@example.invalid"></textarea><label for="keep">必须保留的关键内容，每行一项（例如完整业务句、15%、00123）。未填写时不检查此项。</label><textarea id="keep" rows="3" placeholder="整理120条活动反馈"></textarea><label class="check"><input id="clean-only" type="checkbox">只清理隐藏内容，正文不做替换（补选栏需留空）</label><label class="check"><input id="loss" type="checkbox">我已核对预览，接受上方说明的清理和重建方式</label></div>
-<label class="check" id="pdf-loss-label" hidden><input id="pdf-loss" type="checkbox">接受纯图像PDF：原文字层、签名及交互移除</label><label class="check"><input id="reviewed" type="checkbox">我已检查敏感内容，并完成补选（PDF需逐页检查）</label><button id="export" class="primary" type="button">3. 导出并复检</button></section>
-<section id="result" hidden><h2>导出复检完成</h2><p id="report-scope"></p><ul id="checks"></ul><a id="download" class="primary" download>下载脱敏副本</a><p>打开下载文件，确认遮盖范围、文字和表格仍适合后续任务。</p></section>
-<p id="status" role="status" aria-live="polite"></p><footer>PDF预览按144dpi渲染。默认保留批注，只删除框选正文；要去掉批注，须勾选「一并清除批注」。图像化须另外明确选择，不会自动把批注烧进页面。无OCR。Office按支持的文字、值和表格重建，批注部件不带入，这和 PDF 保留批注不是同一条规则。复杂对象或无法确定的显示规则会停止。旧DOC/XLS/PPT/RTF暂不能安全保持原容器，导出须明确选择支持的转换格式。框选或补选是否完整，需要本人核对。</footer><p><button id="stop" type="button">结束工具并清空会话</button></p>
-</main></body></html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>本地材料脱敏</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="#" aria-label="本地材料脱敏首页"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>本地材料脱敏</span></a>
+    <div class="header-actions"><span class="local-badge"><span aria-hidden="true"></span>本机运行</span><a id="help-link" href="#usage">使用说明</a><span class="version">v__VERSION__</span></div>
+  </header>
+
+  <main>
+    <div class="page-heading"><div><p class="eyebrow">上传 AI 前，先处理敏感信息</p><h1>安心准备每一份材料</h1><p class="intro">选择文件，补选需要隐去的内容，在本机生成脱敏副本。</p></div><p class="heading-note">原件保留<span>默认生成同格式新副本</span></p></div>
+
+    <ol class="steps" aria-label="处理进度">
+      <li id="step-import" class="is-current" aria-current="step"><span class="step-number">01</span><span>选择材料<small>从这台电脑中打开文件</small></span></li>
+      <li id="step-review"><span class="step-number">02</span><span>核对与补选<small>标出需要隐去的内容</small></span></li>
+      <li id="step-export"><span class="step-number">03</span><span>导出副本<small>自动复检后下载</small></span></li>
+    </ol>
+
+    <div class="workspace">
+      <aside class="sidebar" aria-label="材料与会话">
+        <section class="panel import-panel" aria-labelledby="import-title">
+          <div class="panel-heading"><h2 id="import-title">选择材料</h2><button id="clear" class="text-button" type="button">清空会话</button></div>
+          <label class="file" id="dropzone">
+            <span class="upload-icon" aria-hidden="true">↑</span>
+            <strong>将文件拖到这里</strong><span class="file-subtitle">或点击选择本机文件</span>
+            <span class="choose-file">选择文件 <span aria-hidden="true">↗</span></span>
+            <input id="file" type="file" aria-label="选择本机材料" accept=".png,.jpg,.jpeg,.webp,.docx,.txt,.md,.markdown,.csv,.tsv,.pdf,.xlsx,.xlsm,.pptx,.doc,.xls,.ppt,.rtf,.odt,.ods,.odp">
+          </label>
+          <div id="selected-file" class="selected-file" hidden><span class="file-symbol" aria-hidden="true"></span><div><strong id="filename"></strong><span id="file-meta"></span></div></div>
+          <div class="format-tags" aria-label="支持的材料类型"><span>PDF</span><span>Word</span><span>图片</span><span>表格</span><span>PPT</span><span>文本</span></div>
+          <p class="file-limit">单个文件最大 20 MB · PDF 最多 20 页</p>
+          <details class="file-options"><summary>格式与编码设置</summary><div class="details-body"><label for="encoding">文本编码</label><select id="encoding"><option value="">UTF-8 / UTF-16 BOM</option><option value="gb18030">GB18030（明确知道原编码时）</option></select><p>支持 __SUPPORTED_INPUTS__。旧二进制 Office 及 RTF 需本机 LibreOffice，并明确选择转换格式。</p></div></details>
+        </section>
+        <div class="local-note"><span class="note-icon" aria-hidden="true"></span><div><h3>材料在本机处理</h3><p>无需上传原件。完成后可清空会话，已下载的副本仍会保留。</p><a id="privacy-link" href="#usage">了解处理与清理范围 <span aria-hidden="true">↗</span></a></div></div>
+      </aside>
+
+      <div class="editor-column">
+        <p id="status" role="status" aria-live="polite" hidden></p>
+        <section id="empty-state" class="panel empty-panel" aria-labelledby="empty-title">
+          <div class="panel-heading"><h2>预览与补选</h2><span class="state-label">等待选择文件</span></div>
+          <div class="empty-content"><div class="document-art" aria-hidden="true"><div class="paper-back"></div><div class="paper-front"><span class="paper-corner"></span><span class="paper-line line-short"></span><span class="paper-line"></span><span class="redacted-line"></span><span class="paper-line"></span><span class="paper-line line-medium"></span><span class="redacted-line line-short"></span></div><span class="art-check">✓</span></div><h2 id="empty-title">先选择一份材料</h2><p>预览文件后，由你决定哪些内容需要隐去。</p></div>
+          <div class="preview-guide"><div><span class="guide-icon" aria-hidden="true">▧</span><h3>图片与 PDF</h3><p>拖动框选敏感区域，逐页核对。</p></div><div><span class="guide-icon text-icon" aria-hidden="true">T</span><h3>文档、表格与 PPT</h3><p>选中文字或填写原文，保留所需内容。</p></div></div>
+          <div class="empty-footer">导出后会复检已选内容，请再打开副本核对。</div>
+        </section>
+
+        <section id="work" class="panel work-panel" hidden aria-labelledby="work-title">
+          <div class="panel-heading"><div><h2 id="work-title">核对与补选</h2><p>请检查预览，补全需要隐去的内容。</p></div><span class="state-label active-label">正在编辑</span></div>
+          <div class="work-body">
+            <div class="output-settings"><label for="output-format">输出格式<select id="output-format"></select></label><p id="format-notice"></p></div>
+            <div id="image-work" hidden>
+              <p class="callout">拖动框选敏感区域，可框选多处。</p>
+              <div id="pdf-controls" hidden>
+                <p class="field-help">默认只删除框选的正文，高亮、下划线、便签会留下来。保留文字模式下，新框会对齐完整字符；黑块显示实际处理范围，请确认后再导出。</p>
+                <div class="field-grid"><label for="pdf-page">PDF 页码<select id="pdf-page"></select></label><label for="pdf-mode">PDF 处理方式<select id="pdf-mode"><option value="preserve">保留文字和页面（默认）</option><option value="rasterize">明确转为图像化PDF</option></select></label></div>
+                <p id="pdf-progress" class="field-help" role="status"></p>
+                <details class="advanced-options"><summary>保留文字与批注设置</summary><div class="details-body"><label for="pdf-keep">必须保留的可搜索文字<span class="label-hint">每行一项</span></label><textarea id="pdf-keep" rows="2"></textarea><label class="check"><input id="clear-annotations" type="checkbox"><span>一并清除批注（默认不勾选）。只有勾选后才去掉批注。勾选后按严格规则检查：这块范围里只要画面有变化，或还有没框选的文字、线条、图片，就停止，并请先去掉遮盖类批注。</span></label></div></details>
+              </div>
+              <div class="canvas-wrap"><canvas id="canvas" aria-label="图片框选区域"></canvas></div>
+              <div class="canvas-toolbar"><p id="region-count" role="status">已框选 0 处</p><button id="undo" class="secondary small" type="button">撤销上一处</button></div>
+            </div>
+            <div id="word-work" hidden>
+              <details class="processing-notice" open><summary>本次文件的处理说明</summary><div class="details-body"><p id="word-notice"></p><p id="word-counts"></p></div></details>
+              <div class="text-workspace"><div class="preview-column"><div class="section-heading"><h3>原文预览</h3><span>选中文字后加入补选</span></div><pre id="word-preview" tabindex="0" aria-label="待补选内容预览"></pre><button id="add-selection" class="secondary" type="button">＋ 将选中文字加入补选</button></div>
+                <div class="selection-column"><h3>需要隐去的内容</h3><p class="field-help">点击下方建议加入补选，姓名和机构名请自行检查。</p><div id="suggestions"></div><label for="terms">补选原文<span class="label-hint">每行一项</span></label><textarea id="terms" rows="5" placeholder="填写姓名、电话或其他敏感原文"></textarea><p class="field-help">一行里的 \n 表示原文中的换行，不会拆成两项。</p><label for="keep">必须保留的关键内容<span class="label-hint">选填，每行一项</span></label><textarea id="keep" rows="3" placeholder="例如：整理120条活动反馈、15%、00123"></textarea><p class="field-help">填写完整业务句或重要数字，导出时一并复检；未填写则不检查此项。</p></div></div>
+              <label class="check"><input id="clean-only" type="checkbox"><span>只清理隐藏内容，正文不做替换（补选栏需留空）</span></label><label class="check"><input id="loss" type="checkbox"><span>我已核对预览，接受上方说明的清理和重建方式</span></label>
+            </div>
+            <div class="export-area"><label class="check" id="pdf-loss-label" hidden><input id="pdf-loss" type="checkbox"><span>接受纯图像PDF：原文字层、签名及交互移除</span></label><label class="check review-check"><input id="reviewed" type="checkbox"><span>我已检查敏感内容，并完成补选（PDF需逐页检查）</span></label><div class="export-actions"><p>生成新副本后，自动复检已选内容。</p><button id="export" class="primary" type="button">导出并复检 <span aria-hidden="true">→</span></button></div></div>
+          </div>
+        </section>
+
+        <section id="result" class="panel result-panel" hidden aria-labelledby="result-title"><div class="result-heading"><span class="result-icon" aria-hidden="true">✓</span><div><p class="eyebrow">副本已生成</p><h2 id="result-title">导出复检完成</h2></div></div><p id="report-scope"></p><ul id="checks"></ul><div class="result-actions"><p>请打开副本，核对遮盖范围、文字和表格。</p><a id="download" class="primary" download>下载脱敏副本 <span aria-hidden="true">↓</span></a></div></section>
+      </div>
+    </div>
+
+    <details id="usage" class="usage"><summary>使用说明与格式边界<span>了解本机处理、PDF 批注和导出限制</span></summary><div class="usage-content"><div><h3>材料与会话</h3><p>在这台电脑中生成脱敏副本。常规格式在本地进程内处理；旧DOC/XLS/PPT、RTF兼容转换会在私有临时目录写入原件副本和转换文件，正常结束后删除，异常退出可能残留。清空会话释放工具中的材料；下载的副本仍在下载目录。关标签页不结束服务，请使用下方「结束工具并清空会话」。</p></div><div><h3>PDF 处理</h3><p>PDF预览按144dpi渲染。默认保留批注，只删除框选正文；要去掉批注，须勾选「一并清除批注」。图像化须另外明确选择，不会自动把批注烧进页面。无OCR。</p></div><div><h3>Office 与人工核对</h3><p>Office按支持的文字、值和表格重建，批注部件不带入，这和 PDF 保留批注不是同一条规则。复杂对象或无法确定的显示规则会停止。旧DOC/XLS/PPT/RTF暂不能安全保持原容器，导出须明确选择支持的转换格式。框选或补选是否完整，需要本人核对。</p></div></div></details>
+    <footer><span>本地材料脱敏 <span class="footer-divider">/</span> 为下一步分享做好准备</span><button id="stop" class="text-button" type="button">结束工具并清空会话 <span aria-hidden="true">↗</span></button></footer>
+  </main>
+</body>
+</html>
