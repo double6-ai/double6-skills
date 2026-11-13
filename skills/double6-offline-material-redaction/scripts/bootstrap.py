@@ -27,7 +27,7 @@ def main():
     if a.wheelhouse and not a.wheelhouse.is_dir():p.error('wheel目录不存在。')
     root=Path(__file__).resolve().parents[1];lock=root/'requirements-runtime.lock'
     dest=a.venv.expanduser().absolute();receipt=dest/'.redaction-install.json'
-    identity={'version':'0.7.2','lock_sha256':hashlib.sha256(lock.read_bytes()).hexdigest(),'python_minor':list(sys.version_info[:2]),'machine':platform.machine().lower()}
+    identity={'version':'0.8.0','lock_sha256':hashlib.sha256(lock.read_bytes()).hexdigest(),'python_minor':list(sys.version_info[:2]),'machine':platform.machine().lower()}
     python=dest/('Scripts/python.exe'if sys.platform=='win32'else'bin/python')
     if dest.exists():
         if not receipt.is_file()or json.loads(receipt.read_text(encoding='utf-8'))!=identity or not python.is_file():
@@ -58,7 +58,7 @@ def main():
         filename.write_text('#!/bin/sh\nexec '+shlex.quote(str(python))+' '+shlex.quote(str(starter))+' "$@"\n',encoding='utf-8');filename.chmod(0o700)
         command=shlex.quote(str(python))+' '+shlex.quote(str(root/'scripts/cli.py'))+' gui'
     guide=run/'离线使用说明.md'
-    guide.write_text('# 本机材料脱敏\n\n正例 '+str(tested['positive']['passed'])+'/'+str(tested['positive']['total'])+'，反例 '+str(tested['negative']['passed'])+'/'+str(tested['negative']['total'])+' 已通过。\n\n双击同目录launchers文件夹中的 '+filename.name+' 启动；首次系统提示按正常方式打开，不关闭系统安全检查。工具会打开本机浏览器。选择文件，补选敏感内容，声明必须保留的内容，然后导出复检。默认新建同格式副本；不支持的原格式会停止，转换和PDF图像化须明确选择。\n\n也可离线执行：\n\n```text\n'+command+'\n```\n\n关闭标签页不会结束服务；请点击“结束工具并清空会话”。已下载副本保留，需自行在本机打开核对。真实文件、原文和补选词不要发给在线Agent。\n\n旧DOC/XLS/PPT/RTF转换依赖尚未在本次安装验收执行；如有需要按Skill兼容指引另行验证。\n',encoding='utf-8')
+    guide.write_text('# 本机材料脱敏\n\n正例 '+str(tested['positive']['passed'])+'/'+str(tested['positive']['total'])+'，反例 '+str(tested['negative']['passed'])+'/'+str(tested['negative']['total'])+' 已通过。\n\n双击同目录launchers文件夹中的 '+filename.name+' 启动；首次系统提示按正常方式打开，不关闭系统安全检查。工具会打开本机浏览器。选择文件，等待本地检测，核对分类建议、取消误报并补选遗漏，声明必须保留的内容，然后导出复检。默认新建同格式副本；不支持的原格式会停止，转换和PDF图像化须明确选择。\n\n也可离线执行：\n\n```text\n'+command+'\n```\n\n关闭标签页不会结束服务；请点击“结束工具并清空会话”。已下载副本保留，需自行在本机打开核对。真实文件、原文和补选词不要发给在线Agent。\n\n旧DOC/XLS/PPT/RTF转换依赖尚未在本次安装验收执行；如有需要按Skill兼容指引另行验证。\n',encoding='utf-8')
     if not receipt.exists():
         with receipt.open('x',encoding='utf-8')as f:json.dump(identity,f)
     print(json.dumps({'ok':True,'version':identity['version'],'python':str(python),'acceptance':str(report),'positive':tested['positive'],'negative':tested['negative'],'launcher':str(filename),'offline_guide':str(guide),'offline_command':command,'first_install_may_require_network':not bool(a.wheelhouse),'materials_uploaded':False},ensure_ascii=False))

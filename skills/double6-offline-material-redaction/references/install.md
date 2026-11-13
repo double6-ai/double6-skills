@@ -24,9 +24,13 @@ py -3.10 scripts/bootstrap.py --venv C:\absolute\new\redaction-venv
 
 安装会创建独立venv，用`--require-hashes --only-binary=:all:`从PyPI取得固定版本wheel，不自动源码编译。完成pip check、环境诊断、适配器自检和合成正反例验收后，才创建安装完成回执与本次启动入口。解释器的小版本和架构写入回执；不同版本不共用同一venv。
 
+## 本地 OCR 准备
+
+图片与 PDF 的自动检测需要本机 OCR。macOS 优先使用系统 Vision：安装 Apple Command Line Tools 后，首次识别会在用户级缓存中编译随 Skill 提供的 Swift 源码。Windows 请从 Tesseract 官方文档指向的分发来源安装本机程序及 `chi_sim`、`eng` 语言包，并加入 PATH，或将 `REDACTION_TESSERACT` 设为程序的绝对路径。详见[检测与 OCR](local-detection.md)。OCR 缺失或失败会在页面显示检测不完整，基础文档处理仍可使用，不能将基础安装通过当作 OCR 已验收。
+
 ## 自动验收与交付
 
-基础安装自动执行29个正例、32个反例，包括同格式图片/Word/表格/PPT/ODF、PDF文字保留、显式转换，以及禁止覆盖、保留项缺失、越界框选、伪装扩展名、旧格式未经授权转换、PDF加密/不可见文字/遮盖后仍可恢复文字等拒绝场景。反例必须按预期拒绝，意外崩溃不能算通过。
+基础安装自动执行30个正例、32个反例，包括同格式图片/Word/表格/PPT/ODF、PDF文字保留、显式转换，以及禁止覆盖、保留项缺失、越界框选、伪装扩展名、旧格式未经授权转换、PDF加密/不可见文字/遮盖后仍可恢复文字等拒绝场景。反例必须按预期拒绝，意外崩溃不能算通过。
 
 输出`acceptance.json`列出每例结果、实际系统/架构/Python版本及未测试范围。旧Office兼容引擎的执行、真实材料补选完整性和可见桌面操作不列为基础验收通过。
 

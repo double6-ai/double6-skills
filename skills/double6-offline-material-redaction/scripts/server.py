@@ -9,6 +9,7 @@ import urllib.parse
 import formats
 import compat
 import output_policy
+import detection
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -134,6 +135,8 @@ class Handler(BaseHTTPRequestHandler):
                     preview=None;plan=formats.inspect(data,kind,self.headers.get("X-Text-Encoding")or None)
                 else:
                     raise Rejected("文件格式不在当前支持范围。")
+                if kind not in {'image', 'pdf'}:
+                    plan['detection'] = detection.text_detection(plan['preview'])
                 ident = secrets.token_urlsafe(18)
                 with self.server.lock:
                     # 超过容量时明确要求清空，不静默移除另一个下载会话。
@@ -154,6 +157,15 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(200, {"stopped": True})
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return
+            if path == 'api/detect':
+                job = self.job(values.get('id'))
+                number = values.get('page', 1)
+                if type(number) is not int:
+                    raise Rejected('检测页码无效。')
+                cache = job.setdefault('detections', {})
+                if number not in cache:
+                    cache[number] = detection.page_detection(job['data'], job['kind'], number)
+                return self.send(200, cache[number])
             if path == "api/snap-pdf":
                 job=self.job(values.get('id'))
                 if job['kind']!='pdf':raise Rejected('整字对齐只适用于PDF。')

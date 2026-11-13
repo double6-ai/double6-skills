@@ -86,7 +86,7 @@ def doctor():
     assets = Path(__file__).parent / 'web'
     checks = {'python_runtime': (3,10) <= sys.version_info[:2] <= (3,14), 'web_assets': all((assets / n).is_file() for n in ['index.html', 'app.js', 'style.css']), 'supported_platform': sys.platform in {'darwin', 'win32'}}
     if not all(checks.values()): raise Failure('运行环境不完整或平台未纳入支持，请重新安装对应版本。', 4)
-    return {'version': engine.VERSION, 'platform': platform.system(), 'machine': platform.machine(), 'python': platform.python_version(), 'self_contained': False, 'checks': checks, 'package': {'mode':'open_source','dependency_integrity':'use hash-locked bootstrap'}, 'processing_network': 'not_required', 'ocr': False, 'formats': ['PNG/JPEG/WebP','DOCX',*formats.EXTENSIONS], 'pdf_dpi':144, 'compatibility':compat.status(), 'compatibility_formats':list(compat.KINDS)}
+    return {'version': engine.VERSION, 'platform': platform.system(), 'machine': platform.machine(), 'python': platform.python_version(), 'self_contained': False, 'checks': checks, 'package': {'mode':'open_source','dependency_integrity':'use hash-locked bootstrap'}, 'processing_network': 'not_required', 'ocr': __import__('local_ocr').status(), 'formats': ['PNG/JPEG/WebP','DOCX',*formats.EXTENSIONS], 'pdf_dpi':144, 'compatibility':compat.status(), 'compatibility_formats':list(compat.KINDS)}
 
 
 def selftest():
@@ -125,6 +125,7 @@ def selftest():
     with fitz.open(stream=kept,filetype='pdf') as opened:
         notes=[(a.info or {}).get('content') or '' for a in (opened[0].annots() or [])]
         checks['pdf_default_keeps_annotations']=all(kept_report['checks'].values()) and any('页边便签甲乙丙' in note for note in notes) and '示例姓名' not in opened[0].get_text() and '默认保留批注' in kept_report['scope']
+    checks['local_sensitive_detection'] = {item['type'] for item in __import__('detection').text_detection('姓名：示例姓名\n手机：13800000000\n邮箱：demo@example.invalid')['candidates']} == {'name','phone','email'}
     checks.update(compat.selftest())
     if not all(checks.values()): raise Failure('自检未通过，请停止处理材料。', 4)
     return {'version': engine.VERSION, 'checks': checks, 'synthetic_only': True, 'native_office_tested': False, 'legacy_converter_tested':False}

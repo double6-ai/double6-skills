@@ -1,8 +1,8 @@
 # 本地材料脱敏
 
-当前正式源码版本：**0.7.2**。0.7.1 的下载包与校验文件见 [GitHub Release](https://github.com/double6-ai/double6-skills/releases/tag/double6-offline-material-redaction-v0.7.1)；0.7.2 起以仓库源码与安装验收为准，发布包另行更新。
+当前正式源码版本：**0.8.0**。0.7.1 的下载包与校验文件见 [GitHub Release](https://github.com/double6-ai/double6-skills/releases/tag/double6-offline-material-redaction-v0.7.1)；0.7.2 起以仓库源码与安装验收为准，发布包另行更新。
 
-在上传AI材料前，用本机工具生成脱敏副本。用户补选敏感文字或区域，工具清理支持的隐藏内容，再核对必须保留的业务内容。原件、计划和已有结果都不覆盖。
+在上传AI材料前，用本机工具生成脱敏副本。工具先在本机检测疑似敏感文字或区域，按类型列出并在预览中标记；用户勾选、取消误报或手动补选，导出时清理支持的隐藏内容并核对必须保留的业务内容。原件、计划和已有结果都不覆盖。
 
 支持Windows x64、Apple芯片macOS，兼容Python3.10–3.14。新装推荐Python3.14；3.10仅兼容已有环境，3.15未验证。优先复用已有兼容Python；首次安装按哈希清单下载依赖，材料处理可以离线完成。原格式无法安全导出时停止，转换须明确选择。
 
@@ -26,9 +26,9 @@ powershell -NoProfile -File scripts/setup-windows.ps1 -Venv C:\absolute\new\reda
 
 ## 以后离线使用
 
-安装成功返回验收报告、`Start-Redaction.command`或`Start-Redaction.cmd`及本机使用说明。双击启动文件，工具会打开系统浏览器中的本地HTML页面。选择文件、补选、填写业务保留项、导出并复检，最后打开实际副本核对。也可以复制安装返回的完整离线命令运行。
+安装成功返回验收报告、`Start-Redaction.command`或`Start-Redaction.cmd`及本机使用说明。双击启动文件，工具会打开系统浏览器中的本地HTML页面。选择文件、等待本地检测、核对勾选并补选遗漏、填写业务保留项、导出并复检，最后打开实际副本核对。也可以复制安装返回的完整离线命令运行。
 
-界面与处理服务都在本机，不需要在线Agent、模型或API。HTML页面由本机Python服务提供，不能只双击源码中的index.html。退出请点击“结束工具并清空会话”；关闭标签页不结束服务，已下载副本仍保留。
+界面与处理服务都在本机，不需要在线 Agent 或 API。macOS 使用本机 Vision，Windows 使用本机 Tesseract 及语言包，详见[本地检测与 OCR](references/local-detection.md)。HTML页面由本机Python服务提供，不能只双击源码中的index.html。退出请点击“结束工具并清空会话”；关闭标签页不结束服务，已下载副本仍保留。
 
 ## 格式和许可
 

@@ -21,3 +21,9 @@ Double6原创代码按本Skill目录的[MIT许可](../LICENSE)发布。原生PDF
 Python本身及其本机依赖由用户从正规Python分发取得，适用对应分发条款。LibreOffice只在DOC/XLS/PPT/RTF路径使用，由用户独立安装，适用其MPL/LGPL等许可；本Skill未修改或打包Office。每次兼容转换创建私有配置并禁用活动内容，Windows另外要求专用引擎的出站隔离规则；这不构成恶意文件的完整沙盒。
 
 源码发布不需要申请本工具的Apple Developer ID或Windows代码签名证书。以后若另外提供预编译安装包，需要重新核对其签名、系统信任和二进制再分发许可，不能自动继承本源码包的发布结论。
+
+## 本地 OCR 外部组件
+
+- macOS Vision 是系统框架，适用 Apple 系统与 SDK 条款；本包仅提供原创 Swift 调用源码，首次使用以本机 Command Line Tools 编译，不分发 Apple 二进制或模型。
+- Windows 或备用路线使用用户独立安装的 [Tesseract](https://tesseract-ocr.github.io/tessdoc/Installation.html) 与本地 `chi_sim` / `eng` 语言数据，适用相应 Apache-2.0 许可；本包不打包或自动下载引擎、语言数据。
+- 图像经标准输入传给 OCR，识别结果经标准输出返回；不将材料写入 OCR 临时图片，不向外部网站发送材料。操作系统缓存不属于本工具可保证清除的范围。

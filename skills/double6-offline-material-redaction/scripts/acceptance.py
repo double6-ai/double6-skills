@@ -275,12 +275,19 @@ def run():
         import pdf_preserve
         f=pdf_preserve.backend();raw=object_metadata();doc=f.open(stream=raw,filetype='pdf');xref=next(x for x in range(1,doc.xref_length())if doc.xref_get_key(x,'Subtype')[1]=='/Form');doc.xref_set_key(xref,'Group','<</S /Transparency /CS /DeviceRGB /Private (HIDDEN_GROUP_782)>>');raw=doc.tobytes();doc.close();return raw
     case('PDF混合组隐藏字段','negative',lambda:rejected(lambda:policy.export(group_private(),'.pdf',pdf_plan()),'混合组'))
-    files=sorted(Path(__file__).parent.rglob('*.py'))+sorted((Path(__file__).parent/'web').glob('*'))
+    def local_candidates():
+        import detection
+        text='😀姓名：示例姓名\n电话：13800000000\n邮箱：demo@example.invalid'
+        result=detection.text_detection(text)
+        encoded=text.encode('utf-16-le')
+        return {item['type'] for item in result['candidates']}=={'name','phone','email'} and all(encoded[span['start']*2:span['end']*2].decode('utf-16-le')==item['text'] for item in result['candidates'] for span in item['spans'])
+    case('本地规则检测与预览定位','positive',local_candidates)
+    files=sorted(Path(__file__).parent.rglob('*.swift'))+sorted(Path(__file__).parent.rglob('*.py'))+sorted((Path(__file__).parent/'web').glob('*'))
     source_sha=engine.digest('\n'.join(p.relative_to(Path(__file__).parents[1]).as_posix()+':'+engine.digest(p.read_bytes())for p in files if p.is_file()).encode())
     return {'ok':all(c['passed']for c in cases),'version':engine.VERSION,'source_sha256':source_sha,'lock_sha256':engine.digest((Path(__file__).parents[1]/'requirements-runtime.lock').read_bytes()),'python':platform.python_version(),'platform':platform.system(),'machine':platform.machine(),
             'positive':{'passed':sum(c['passed']for c in cases if c['kind']=='positive'),'total':sum(c['kind']=='positive'for c in cases)},
             'negative':{'passed':sum(c['passed']for c in cases if c['kind']=='negative'),'total':sum(c['kind']=='negative'for c in cases)},
-            'cases':cases,'synthetic_only':True,'not_tested':['旧DOC/XLS/PPT/RTF转换依赖的原生Office执行','任意真实材料的补选完整性','可见桌面双击行为']}
+            'cases':cases,'synthetic_only':True,'not_tested':['旧DOC/XLS/PPT/RTF转换依赖的原生Office执行','任意真实材料的补选完整性','可见桌面双击行为','本地OCR的中英文识别与实际坐标（需另外合成图片实测）']}
 
 
 def main():

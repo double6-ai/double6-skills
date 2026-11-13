@@ -1,6 +1,9 @@
 """回归：0.7.0 离线实测里确认过的脱敏问题。材料全部是虚构示例。"""
 import io
 import math
+import shutil
+import subprocess
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -136,9 +139,11 @@ class WrappedTermTests(unittest.TestCase):
 
     def test_web_client_keeps_a_wrapped_selection_as_one_term(self):
         script = Path(__file__).parents[1].joinpath("web", "app.js").read_text(encoding="utf-8")
-        self.assertIn("function decodeTerms", script)
-        self.assertIn("terms:decodeTerms($('terms').value)", script)
-        self.assertNotIn("terms:$('terms').value.split('\\n')", script)
+        node = shutil.which('node')
+        if node:
+            from test_detection import client_probe
+            actual = client_probe("$('terms').value=encodeTerm('1380000\\n0000')+'\\n'+encodeTerm('整理120条活动反馈'); JSON.stringify(exportTerms())")
+            self.assertEqual(actual, ['1380000\n0000', '整理120条活动反馈'])
         # 与网页 encode/decode 同一规则：跨行选区写成一行里的 \\n，读回仍是一项。
         shown = "1380000\\n0000\n整理120条活动反馈"
         items = []

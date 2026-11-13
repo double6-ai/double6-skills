@@ -15,11 +15,11 @@
   </header>
 
   <main>
-    <div class="page-heading"><div><p class="eyebrow">上传 AI 前，先处理敏感信息</p><h1>安心准备每一份材料</h1><p class="intro">选择文件，补选需要隐去的内容，在本机生成脱敏副本。</p></div><p class="heading-note">原件保留<span>默认生成同格式新副本</span></p></div>
+    <div class="page-heading"><div><p class="eyebrow">上传 AI 前，先处理敏感信息</p><h1>安心准备每一份材料</h1><p class="intro">本地检测疑似敏感信息，核对勾选后生成脱敏副本。</p></div><p class="heading-note">原件保留<span>默认生成同格式新副本</span></p></div>
 
     <ol class="steps" aria-label="处理进度">
       <li id="step-import" class="is-current" aria-current="step"><span class="step-number">01</span><span>选择材料<small>从这台电脑中打开文件</small></span></li>
-      <li id="step-review"><span class="step-number">02</span><span>核对与补选<small>标出需要隐去的内容</small></span></li>
+      <li id="step-review"><span class="step-number">02</span><span>核对与补选<small>核对检测结果并补选</small></span></li>
       <li id="step-export"><span class="step-number">03</span><span>导出副本<small>自动复检后下载</small></span></li>
     </ol>
 
@@ -45,19 +45,25 @@
         <p id="status" role="status" aria-live="polite" hidden></p>
         <section id="empty-state" class="panel empty-panel" aria-labelledby="empty-title">
           <div class="panel-heading"><h2>预览与补选</h2><span class="state-label">等待选择文件</span></div>
-          <div class="empty-content"><div class="document-art" aria-hidden="true"><div class="paper-back"></div><div class="paper-front"><span class="paper-corner"></span><span class="paper-line line-short"></span><span class="paper-line"></span><span class="redacted-line"></span><span class="paper-line"></span><span class="paper-line line-medium"></span><span class="redacted-line line-short"></span></div><span class="art-check">✓</span></div><h2 id="empty-title">先选择一份材料</h2><p>预览文件后，由你决定哪些内容需要隐去。</p></div>
-          <div class="preview-guide"><div><span class="guide-icon" aria-hidden="true">▧</span><h3>图片与 PDF</h3><p>拖动框选敏感区域，逐页核对。</p></div><div><span class="guide-icon text-icon" aria-hidden="true">T</span><h3>文档、表格与 PPT</h3><p>选中文字或填写原文，保留所需内容。</p></div></div>
+          <div class="empty-content"><div class="document-art" aria-hidden="true"><div class="paper-back"></div><div class="paper-front"><span class="paper-corner"></span><span class="paper-line line-short"></span><span class="paper-line"></span><span class="redacted-line"></span><span class="paper-line"></span><span class="paper-line line-medium"></span><span class="redacted-line line-short"></span></div><span class="art-check">✓</span></div><h2 id="empty-title">先选择一份材料</h2><p>自动检测疑似敏感内容，再由你勾选、取消或补选。</p></div>
+          <div class="preview-guide"><div><span class="guide-icon" aria-hidden="true">▧</span><h3>图片与 PDF</h3><p>本地 OCR 定位疑似区域，可勾选或补画。</p></div><div><span class="guide-icon text-icon" aria-hidden="true">T</span><h3>文档、表格与 PPT</h3><p>按类型查看检测结果，点击定位原文。</p></div></div>
           <div class="empty-footer">导出后会复检已选内容，请再打开副本核对。</div>
         </section>
 
         <section id="work" class="panel work-panel" hidden aria-labelledby="work-title">
-          <div class="panel-heading"><div><h2 id="work-title">核对与补选</h2><p>请检查预览，补全需要隐去的内容。</p></div><span class="state-label active-label">正在编辑</span></div>
+          <div class="panel-heading"><div><h2 id="work-title">核对与补选</h2><p>请确认检测建议，取消误报，并补全遗漏内容。</p></div><span class="state-label active-label">正在编辑</span></div>
           <div class="work-body">
             <div class="output-settings"><label for="output-format">输出格式<select id="output-format"></select></label><p id="format-notice"></p></div>
+            <section class="detection-panel" aria-labelledby="detection-title">
+              <div class="detection-heading"><div><h3 id="detection-title">本地检测结果</h3><p id="detection-summary" role="status">正在准备检测…</p></div><div class="detection-actions"><button id="select-all" class="secondary small" type="button">全部勾选</button><button id="deselect-all" class="text-button" type="button">全部取消</button></div></div>
+              <p class="field-help">建议默认勾选，只有勾选项会被处理。可按类型取消，或点击「定位」核对原文；同值文本的全部出现会一并替换。</p>
+              <div id="detection-warnings" class="detection-warnings" role="alert" hidden></div>
+              <div id="suggestions" class="candidate-groups"></div>
+            </section>
             <div id="image-work" hidden>
-              <p class="callout">拖动框选敏感区域，可框选多处。</p>
+              <p class="callout">彩色框为检测建议，勾选后导出时实色覆盖；可继续拖动补画敏感区域。</p>
               <div id="pdf-controls" hidden>
-                <p class="field-help">默认只删除框选的正文，高亮、下划线、便签会留下来。保留文字模式下，新框会对齐完整字符；黑块显示实际处理范围，请确认后再导出。</p>
+                <p class="field-help">默认只删除框选的正文，高亮、下划线、便签会留下来。保留文字模式下，新框会对齐完整字符；手动黑块与彩色建议框显示实际处理范围，请确认后再导出。</p>
                 <div class="field-grid"><label for="pdf-page">PDF 页码<select id="pdf-page"></select></label><label for="pdf-mode">PDF 处理方式<select id="pdf-mode"><option value="preserve">保留文字和页面（默认）</option><option value="rasterize">明确转为图像化PDF</option></select></label></div>
                 <p id="pdf-progress" class="field-help" role="status"></p>
                 <details class="advanced-options"><summary>保留文字与批注设置</summary><div class="details-body"><label for="pdf-keep">必须保留的可搜索文字<span class="label-hint">每行一项</span></label><textarea id="pdf-keep" rows="2"></textarea><label class="check"><input id="clear-annotations" type="checkbox"><span>一并清除批注（默认不勾选）。只有勾选后才去掉批注。勾选后按严格规则检查：这块范围里只要画面有变化，或还有没框选的文字、线条、图片，就停止，并请先去掉遮盖类批注。</span></label></div></details>
@@ -68,10 +74,10 @@
             <div id="word-work" hidden>
               <details class="processing-notice" open><summary>本次文件的处理说明</summary><div class="details-body"><p id="word-notice"></p><p id="word-counts"></p></div></details>
               <div class="text-workspace"><div class="preview-column"><div class="section-heading"><h3>原文预览</h3><span>选中文字后加入补选</span></div><pre id="word-preview" tabindex="0" aria-label="待补选内容预览"></pre><button id="add-selection" class="secondary" type="button">＋ 将选中文字加入补选</button></div>
-                <div class="selection-column"><h3>需要隐去的内容</h3><p class="field-help">点击下方建议加入补选，姓名和机构名请自行检查。</p><div id="suggestions"></div><label for="terms">补选原文<span class="label-hint">每行一项</span></label><textarea id="terms" rows="5" placeholder="填写姓名、电话或其他敏感原文"></textarea><p class="field-help">一行里的 \n 表示原文中的换行，不会拆成两项。</p><label for="keep">必须保留的关键内容<span class="label-hint">选填，每行一项</span></label><textarea id="keep" rows="3" placeholder="例如：整理120条活动反馈、15%、00123"></textarea><p class="field-help">填写完整业务句或重要数字，导出时一并复检；未填写则不检查此项。</p></div></div>
-              <label class="check"><input id="clean-only" type="checkbox"><span>只清理隐藏内容，正文不做替换（补选栏需留空）</span></label><label class="check"><input id="loss" type="checkbox"><span>我已核对预览，接受上方说明的清理和重建方式</span></label>
+                <div class="selection-column"><h3>人工补选</h3><p class="field-help">检测可能有遗漏，请选中原文或在下方填写。补选内容会与已勾选建议一起处理。</p><label for="terms">手动补选原文<span class="label-hint">每行一项</span></label><textarea id="terms" rows="5" placeholder="填写姓名、电话或其他敏感原文"></textarea><p class="field-help">一行里的 \n 表示原文中的换行，不会拆成两项。</p><label for="keep">必须保留的关键内容<span class="label-hint">选填，每行一项</span></label><textarea id="keep" rows="3" placeholder="例如：整理120条活动反馈、15%、00123"></textarea><p class="field-help">填写完整业务句或重要数字，导出时一并复检；未填写则不检查此项。</p></div></div>
+              <label class="check"><input id="clean-only" type="checkbox"><span>只清理隐藏内容，正文不做替换（须取消所有检测项，并清空补选栏）</span></label><label class="check"><input id="loss" type="checkbox"><span>我已核对预览，接受上方说明的清理和重建方式</span></label>
             </div>
-            <div class="export-area"><label class="check" id="pdf-loss-label" hidden><input id="pdf-loss" type="checkbox"><span>接受纯图像PDF：原文字层、签名及交互移除</span></label><label class="check review-check"><input id="reviewed" type="checkbox"><span>我已检查敏感内容，并完成补选（PDF需逐页检查）</span></label><div class="export-actions"><p>生成新副本后，自动复检已选内容。</p><button id="export" class="primary" type="button">导出并复检 <span aria-hidden="true">→</span></button></div></div>
+            <div class="export-area"><label class="check" id="pdf-loss-label" hidden><input id="pdf-loss" type="checkbox"><span>接受纯图像PDF：原文字层、签名及交互移除</span></label><label class="check review-check"><input id="reviewed" type="checkbox"><span>我已核对检测建议、取消误报并补全遗漏（PDF需逐页检查）</span></label><div class="export-actions"><p>生成新副本后，自动复检已选内容。</p><button id="export" class="primary" type="button">导出并复检 <span aria-hidden="true">→</span></button></div></div>
           </div>
         </section>
 
@@ -79,7 +85,7 @@
       </div>
     </div>
 
-    <details id="usage" class="usage"><summary>使用说明与格式边界<span>了解本机处理、PDF 批注和导出限制</span></summary><div class="usage-content"><div><h3>材料与会话</h3><p>在这台电脑中生成脱敏副本。常规格式在本地进程内处理；旧DOC/XLS/PPT、RTF兼容转换会在私有临时目录写入原件副本和转换文件，正常结束后删除，异常退出可能残留。清空会话释放工具中的材料；下载的副本仍在下载目录。关标签页不结束服务，请使用下方「结束工具并清空会话」。</p></div><div><h3>PDF 处理</h3><p>PDF预览按144dpi渲染。默认保留批注，只删除框选正文；要去掉批注，须勾选「一并清除批注」。图像化须另外明确选择，不会自动把批注烧进页面。无OCR。</p></div><div><h3>Office 与人工核对</h3><p>Office按支持的文字、值和表格重建，批注部件不带入，这和 PDF 保留批注不是同一条规则。复杂对象或无法确定的显示规则会停止。旧DOC/XLS/PPT/RTF暂不能安全保持原容器，导出须明确选择支持的转换格式。框选或补选是否完整，需要本人核对。</p></div></div></details>
+    <details id="usage" class="usage"><summary>使用说明与格式边界<span>了解本机处理、PDF 批注和导出限制</span></summary><div class="usage-content"><div><h3>材料与会话</h3><p>在这台电脑中生成脱敏副本。常规格式在本地进程内处理；旧DOC/XLS/PPT、RTF兼容转换会在私有临时目录写入原件副本和转换文件，正常结束后删除，异常退出可能残留。清空会话释放工具中的材料；下载的副本仍在下载目录。关标签页不结束服务，请使用下方「结束工具并清空会话」。</p></div><div><h3>PDF 处理</h3><p>图片与 PDF 使用本地 OCR 检测，PDF 同时检查文字层。检测可能有误报、漏报；没有检测结果不等于没有敏感信息。OCR 不可用或失败会明确提示。PDF预览按144dpi渲染。默认保留批注，只删除框选正文；要去掉批注，须勾选「一并清除批注」。图像化须另外明确选择，不会自动把批注烧进页面。识别只用于发现疑似区域，不向导出副本新增 OCR 文字层。</p></div><div><h3>Office 与人工核对</h3><p>Office按支持的文字、值和表格重建，批注部件不带入，这和 PDF 保留批注不是同一条规则。复杂对象或无法确定的显示规则会停止。旧DOC/XLS/PPT/RTF暂不能安全保持原容器，导出须明确选择支持的转换格式。框选或补选是否完整，需要本人核对。</p></div></div></details>
     <footer><span>本地材料脱敏 <span class="footer-divider">/</span> 为下一步分享做好准备</span><button id="stop" class="text-button" type="button">结束工具并清空会话 <span aria-hidden="true">↗</span></button></footer>
   </main>
 </body>

@@ -1693,26 +1693,42 @@ def verify(data, plan, source):
         raise engine.Rejected('PDF实际副本原生复检失败。') from exc
 
 
-def snap_region(data,number,region):
-    """在预览中对齐完整字符；仅返回范围，不返回原文。"""
+def snap_regions(data, number, regions):
+    """一页内复用字形坐标，对齐多个预览区域。"""
     import formats
-    sizes=formats.pdf_info(data)
-    if type(number)is not int or not 1<=number<=len(sizes):raise engine.Rejected('PDF页码无效。')
-    target=list(engine.rectangles([region],sizes[number-1])[0]);fitz=backend()
-    with fitz.open(stream=data,filetype='pdf')as doc:
-        page=doc[number-1];glyphs=[]
+    sizes = formats.pdf_info(data)
+    if type(number) is not int or not 1 <= number <= len(sizes):
+        raise engine.Rejected('PDF页码无效。')
+    targets = [list(row) for row in engine.rectangles(regions, sizes[number-1])]
+    fitz = backend()
+    with fitz.open(stream=data, filetype='pdf') as doc:
+        page = doc[number-1]; glyphs = []
+        sx, sy = _pixel_scale(page, sizes[number-1])
+        matrix = _display_matrix(page)
         for span in page.get_texttrace():
             for char in span['chars']:
                 if chr(char[0]).strip():
-                    r=fitz.Rect(char[3])*_display_matrix(page)
-                    sx,sy=_pixel_scale(page,sizes[number-1]);glyphs.append(fitz.Rect(r.x0*sx,r.y0*sy,r.x1*sx,r.y1*sy))
-        if len(glyphs)>200000:raise engine.Rejected('PDF字形超出对齐范围。')
-        for _ in range(64):
-            previous=target[:];rect=fitz.Rect(target)
-            for glyph in glyphs:
-                if glyph.intersects(rect):target=[min(target[0],math.floor(glyph.x0)),min(target[1],math.floor(glyph.y0)),max(target[2],math.ceil(glyph.x1)),max(target[3],math.ceil(glyph.y1))]
-            if target==previous:return list(engine.rectangles([target],sizes[number-1])[0])
-    raise engine.Rejected('整字范围无法稳定对齐，请在预览调整框选。')
+                    r = fitz.Rect(char[3]) * matrix
+                    glyphs.append(fitz.Rect(r.x0*sx, r.y0*sy, r.x1*sx, r.y1*sy))
+        if len(glyphs) > 200000:
+            raise engine.Rejected('PDF字形超出对齐范围。')
+        result = []
+        for target in targets:
+            for _ in range(64):
+                previous = target[:]; rect = fitz.Rect(target)
+                for glyph in glyphs:
+                    if glyph.intersects(rect):
+                        target = [min(target[0], math.floor(glyph.x0)), min(target[1], math.floor(glyph.y0)), max(target[2], math.ceil(glyph.x1)), max(target[3], math.ceil(glyph.y1))]
+                if target == previous:
+                    result.append(list(engine.rectangles([target], sizes[number-1])[0])); break
+            else:
+                raise engine.Rejected('整字范围无法稳定对齐，请在预览调整框选。')
+        return result
+
+
+def snap_region(data, number, region):
+    """在预览中对齐完整字符；仅返回范围，不返回原文。"""
+    return snap_regions(data, number, [region])[0]
 
 
 def effective_plan(data,plan):
