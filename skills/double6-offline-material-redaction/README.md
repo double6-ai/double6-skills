@@ -45,3 +45,10 @@ powershell -NoProfile -File scripts/setup-windows.ps1 -Venv C:\absolute\new\reda
 原创源码MIT；PDF原生引擎PyMuPDF/MuPDF适用AGPL-3.0，MIT声明不覆盖该依赖。分发组合运行环境或对外提供服务时须遵守对应许可，详见[依赖说明](references/runtime-dependencies.md)。
 
 入口：[SKILL.md](SKILL.md) · [安装与离线使用](references/install.md) · [命令](references/commands.md) · [验证范围](references/validation.md)
+
+## 关于 Double6
+
+本技能由 **Double6 AI** 维护，源于建设 Double6 网站时的实际需求。
+
+- [Double6 官网 · double6.cn](https://double6.cn)：面向普通人的中文 AI 入门知识、工具介绍和实际任务教程。
+- [GitHub · double6-ai/double6-skills](https://github.com/double6-ai/double6-skills)：查看开源 skills、获取更新、提交问题；如果对你有帮助，欢迎 Star 支持。

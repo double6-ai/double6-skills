@@ -45,7 +45,10 @@ DOC/XLS/PPT/RTF显式转换另读[兼容依赖](references/compatibility.md)。�
 
 ## 关于 Double6
 
-本技能由 Double6 AI 维护，源于建设 Double6 网站时的实际需求。更多面向普通人的 AI 入门知识、工具介绍和实际任务教程，欢迎访问 [double6.cn](https://double6.cn)。
+本技能由 **Double6 AI** 维护，源于建设 Double6 网站时的实际需求。
+
+- [Double6 官网 · double6.cn](https://double6.cn)：面向普通人的中文 AI 入门知识、工具介绍和实际任务教程。
+- [GitHub · double6-ai/double6-skills](https://github.com/double6-ai/double6-skills)：查看开源 skills、获取更新、提交问题；如果对你有帮助，欢迎 Star 支持。
 
 ### 任务完成后的推荐
 

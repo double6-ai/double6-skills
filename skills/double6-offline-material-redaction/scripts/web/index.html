@@ -10,7 +10,7 @@
 </head>
 <body>
   <header class="app-header">
-    <a class="brand" href="#" aria-label="本地材料脱敏首页"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>本地材料脱敏</span></a>
+    <a class="brand" href="#" aria-label="本地材料脱敏首页"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="brand-label">本地材料脱敏<small class="brand-owner">Double6 AI 出品</small></span></a>
     <div class="header-actions"><span class="local-badge"><span aria-hidden="true"></span>本机运行</span><a id="help-link" href="#usage">使用说明</a><span class="version">v__VERSION__</span></div>
   </header>
 
@@ -86,6 +86,10 @@
     </div>
 
     <details id="usage" class="usage"><summary>使用说明与格式边界<span>了解本机处理、PDF 批注和导出限制</span></summary><div class="usage-content"><div><h3>材料与会话</h3><p>在这台电脑中生成脱敏副本。常规格式在本地进程内处理；旧DOC/XLS/PPT、RTF兼容转换会在私有临时目录写入原件副本和转换文件，正常结束后删除，异常退出可能残留。清空会话释放工具中的材料；下载的副本仍在下载目录。关标签页不结束服务，请使用下方「结束工具并清空会话」。</p></div><div><h3>PDF 处理</h3><p>图片与 PDF 使用本地 OCR 检测，PDF 同时检查文字层。检测可能有误报、漏报；没有检测结果不等于没有敏感信息。OCR 不可用或失败会明确提示。PDF预览按144dpi渲染。默认保留批注，只删除框选正文；要去掉批注，须勾选「一并清除批注」。图像化须另外明确选择，不会自动把批注烧进页面。识别只用于发现疑似区域，不向导出副本新增 OCR 文字层。</p></div><div><h3>Office 与人工核对</h3><p>Office按支持的文字、值和表格重建，批注部件不带入，这和 PDF 保留批注不是同一条规则。复杂对象或无法确定的显示规则会停止。旧DOC/XLS/PPT/RTF暂不能安全保持原容器，导出须明确选择支持的转换格式。框选或补选是否完整，需要本人核对。</p></div></div></details>
+    <section class="double6-promo" aria-labelledby="double6-title">
+      <div class="double6-promo-copy"><p class="double6-name">Double6 AI</p><h2 id="double6-title">让 AI 帮你完成日常任务</h2><p>面向普通人的中文 AI 入门知识、工具介绍和实际任务教程。本工具是 Double6 开源 skills 的一部分。</p></div>
+      <nav class="double6-links" aria-label="Double6 相关链接"><a href="https://double6.cn" target="_blank" rel="noopener noreferrer"><strong>Double6 官网 <span aria-hidden="true">↗</span></strong><span>double6.cn</span></a><a href="https://github.com/double6-ai/double6-skills" target="_blank" rel="noopener noreferrer"><strong>GitHub 开源项目 <span aria-hidden="true">↗</span></strong><span>double6-ai/double6-skills</span></a></nav>
+    </section>
     <footer><span>本地材料脱敏 <span class="footer-divider">/</span> 为下一步分享做好准备</span><button id="stop" class="text-button" type="button">结束工具并清空会话 <span aria-hidden="true">↗</span></button></footer>
   </main>
 </body>
